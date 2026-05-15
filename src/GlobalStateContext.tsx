@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
-  Cliente, Produto, Pedido, Orcamento, Despesa, Comissao, Producao, User, MetaRepresentante 
+  Cliente, Produto, Pedido, Orcamento, Despesa, Comissao, Producao, User 
 } from './types';
 import { supabase } from './supabaseClient';
 
@@ -13,17 +13,12 @@ interface GlobalStateContextType {
   comissoes: Comissao[];
   producao: Producao[];
   usuarios: User[];
-  metas: MetaRepresentante[];
   isLoading: boolean;
   
   // Actions
   addUsuario: (u: Omit<User, 'id'>) => void;
   updateUsuario: (id: string, u: Partial<User>) => void;
   deleteUsuario: (id: string) => void;
-
-  addMeta: (m: Omit<MetaRepresentante, 'id'>) => void;
-  updateMeta: (id: string, m: Partial<MetaRepresentante>) => void;
-  deleteMeta: (id: string) => void;
 
   addCliente: (c: Omit<Cliente, 'id'>) => void;
   updateCliente: (id: string, c: Partial<Cliente>) => void;
@@ -61,7 +56,6 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [comissoes, setComissoes] = useState<Comissao[]>([]);
   const [producao, setProducao] = useState<Producao[]>([]);
   const [usuarios, setUsuarios] = useState<User[]>([]);
-  const [metas, setMetas] = useState<MetaRepresentante[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -76,18 +70,16 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
           { data: despesasData },
           { data: comissoesData },
           { data: producaoData },
-          { data: usuariosData },
-          { data: metasData }
+          { data: usuariosData }
         ] = await Promise.all([
           supabase.from('clientes').select('*'),
-          supabase.from('produtos').select(`*, custos_detalhados:produtos_custos(*)`),
-          supabase.from('pedidos').select(`*, items:itens_pedido(*)`),
-          supabase.from('orcamentos').select(`*, items:itens_orcamento(*)`),
-          supabase.from('despesas').select('*'),
+          supabase.from('produtos').select(`*, custos_detalhados:produtos_custos(*)`).order('nome'),
+          supabase.from('pedidos').select(`*, items:pedidos_itens(*)`).order('data', { ascending: false }),
+          supabase.from('orcamentos').select(`*, items:orcamentos_itens(*)`).order('data', { ascending: false }),
+          supabase.from('despesas').select('*').order('vencimento'),
           supabase.from('comissoes').select('*'),
           supabase.from('producao').select('*'),
-          supabase.from('usuarios').select('*'),
-          supabase.from('metas_representantes').select('*')
+          supabase.from('usuarios').select('*')
         ]);
 
         if (clientesData) setClientes(clientesData as any);
@@ -98,7 +90,6 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
         if (comissoesData) setComissoes(comissoesData as any);
         if (producaoData) setProducao(producaoData as any);
         if (usuariosData) setUsuarios(usuariosData as any);
-        if (metasData) setMetas(metasData as any);
         
       } catch (err) {
         console.error("Erro ao carregar dados do Supabase:", err);
@@ -150,37 +141,6 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   };
 
-  const addMeta = async (m: Omit<MetaRepresentante, 'id'>) => {
-    const newMeta = { ...m, id: generateId() };
-    setMetas(prev => [...prev, newMeta]);
-    try {
-      const { error } = await supabase.from('metas_representantes').insert([newMeta]);
-      if (error) throw error;
-    } catch (err) {
-      console.error("Erro ao adicionar meta:", err);
-    }
-  };
-
-  const updateMeta = async (id: string, updatedFields: Partial<MetaRepresentante>) => {
-    setMetas(prev => prev.map(m => m.id === id ? { ...m, ...updatedFields } : m));
-    try {
-      const { error } = await supabase.from('metas_representantes').update(updatedFields).eq('id', id);
-      if (error) throw error;
-    } catch (err) {
-      console.error("Erro ao atualizar meta:", err);
-    }
-  };
-
-  const deleteMeta = async (id: string) => {
-    setMetas(prev => prev.filter(m => m.id !== id));
-    try {
-      const { error } = await supabase.from('metas_representantes').delete().eq('id', id);
-      if (error) throw error;
-    } catch (err) {
-      console.error("Erro ao excluir meta:", err);
-    }
-  };
-
   const addCliente = async (c: Omit<Cliente, 'id'>) => {
     const newCliente = { ...c, id: generateId(), data_cadastro: new Date().toISOString().split('T')[0] };
     setClientes(prev => [...prev, newCliente]);
@@ -226,7 +186,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
         if (items && items.length > 0) {
           const dbItems = items.map(i => ({ ...i, pedido_id: newId }));
-          const { error: iError } = await supabase.from('itens_pedido').insert(dbItems);
+          const { error: iError } = await supabase.from('pedidos_itens').insert(dbItems);
           if (iError) throw iError;
         }
       } catch (err) {
@@ -280,9 +240,9 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
               if (pErr) throw pErr;
             }
             if (items) {
-               await supabase.from('itens_pedido').delete().eq('pedido_id', id);
+               await supabase.from('pedidos_itens').delete().eq('pedido_id', id);
                const dbItems = items.map(i => ({ ...i, pedido_id: id }));
-               const { error: iErr } = await supabase.from('itens_pedido').insert(dbItems);
+               const { error: iErr } = await supabase.from('pedidos_itens').insert(dbItems);
                if (iErr) throw iErr;
             }
           } catch (err) {
@@ -340,7 +300,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
         if (items && items.length > 0) {
           const dbItems = items.map(i => ({ ...i, orcamento_id: newId }));
-          const { error: iErr } = await supabase.from('itens_orcamento').insert(dbItems);
+          const { error: iErr } = await supabase.from('orcamentos_itens').insert(dbItems);
           if (iErr) throw iErr;
         }
       } catch (err) {
@@ -361,9 +321,9 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
                if (pErr) throw pErr;
             }
             if (items) {
-               await supabase.from('itens_orcamento').delete().eq('orcamento_id', id);
+               await supabase.from('orcamentos_itens').delete().eq('orcamento_id', id);
                const dbItems = items.map(i => ({ ...i, orcamento_id: id }));
-               const { error: iErr } = await supabase.from('itens_orcamento').insert(dbItems);
+               const { error: iErr } = await supabase.from('orcamentos_itens').insert(dbItems);
                if (iErr) throw iErr;
             }
           } catch (err) {
@@ -534,15 +494,15 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   return (
     <GlobalStateContext.Provider value={{ 
-      clientes, produtos, pedidos, orcamentos, despesas, comissoes, producao, usuarios, metas,
+      clientes, produtos, pedidos, orcamentos, despesas, comissoes, producao, usuarios,
       addUsuario, updateUsuario, deleteUsuario,
-      addMeta, updateMeta, deleteMeta,
       addCliente, updateCliente, deleteCliente,
       addPedido, updatePedido, deletePedido,
       addOrcamento, updateOrcamento, deleteOrcamento,
       addProducao, updateProducao, deleteProducao,
       addDespesa, updateDespesa, deleteDespesa,
-      updateProduto, addProduto, deleteProduto
+      updateProduto, addProduto, deleteProduto,
+      isLoading
     }}>
       {children}
     </GlobalStateContext.Provider>
