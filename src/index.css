@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #1b4332; /* Verde Escuro */
+  --color-secondary: #40916c; /* Verde Claro */
+  --color-accent: #d8f3dc; /* Verde Claríssimo/Bege */
+  --color-background: #f8f9fa; /* Branco Suave */
+  --color-earth: #6c584c; /* Marrom Suave */
+  --color-warning: #fb8500; /* Laranja alertas */
+  --color-danger: #ae2012; /* Vermelho bloqueios */
+  
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-earth antialiased;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary/20 rounded-full hover:bg-primary/40 transition-colors;
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-white/10;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  @apply bg-white/20;
+}
+
+/* Print Styles */
+@media print {
+  body {
+    background-color: white !important;
+  }
+  
+  .hide-on-print {
+    display: none !important;
+  }
+  
+  .sidebar, nav {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .dre-print-container {
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+
+  .print-ready {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Force background colors to print for the result box */
+  .result-card-print {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide main scrollbars on print */
+  ::-webkit-scrollbar {
+    display: none !important;
+  }
+}
