@@ -6,7 +6,7 @@ import { UserRole } from '../types';
 
 export default function Configuracoes() {
   const { user } = useAuth();
-  const { usuarios, addUsuario, deleteUsuario, metas, addMeta, deleteMeta } = useGlobalState();
+  const { usuarios, addUsuario, deleteUsuario } = useGlobalState();
   const isGerente = user?.perfil === 'gerente';
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -16,17 +16,6 @@ export default function Configuracoes() {
     senha: '',
     perfil: 'representante' as UserRole
   });
-
-  const [novaMeta, setNovaMeta] = useState({
-    representante_id: '',
-    ano: new Date().getFullYear(),
-    mes: new Date().getMonth() + 1,
-    valor: 0
-  });
-
-  const [activeMetaTab, setActiveMetaTab] = useState<'cadastro' | 'lancadas'>('lancadas');
-  const [filterMetaRepresentante, setFilterMetaRepresentante] = useState<string>('');
-  const [filterMetaAno, setFilterMetaAno] = useState<number>(new Date().getFullYear());
 
   const handleCreateUser = (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,25 +30,6 @@ export default function Configuracoes() {
     });
     setIsModalOpen(false);
     setNovoUsuario({ nome: '', login: '', senha: '', perfil: 'representante' });
-  };
-
-  const handleAddMeta = () => {
-    if (!novaMeta.representante_id || novaMeta.valor <= 0) return;
-    
-    // Check if goal already exists for this rep/year/month
-    const existingMeta = metas.find(m => m.representante_id === novaMeta.representante_id && m.ano === novaMeta.ano && m.mes === novaMeta.mes);
-    if (existingMeta) {
-       alert("Já existe uma meta para este representante neste mês/ano.");
-       return;
-    }
-
-    addMeta({
-      representante_id: novaMeta.representante_id,
-      ano: novaMeta.ano,
-      mes: novaMeta.mes,
-      valor: novaMeta.valor
-    });
-    setNovaMeta({ ...novaMeta, valor: 0 });
   };
 
   return (
@@ -108,7 +78,7 @@ export default function Configuracoes() {
                  <h3 className="font-bold text-gray-800 tracking-tight">Gestão de Equipe (Representantes)</h3>
               </div>
                <div className="p-8 space-y-4">
-                 {usuarios.filter(u => u.perfil === 'representante' || u.perfil === 'producao').map(u => (
+                 {(usuarios || []).filter(u => u.perfil === 'representante' || u.perfil === 'producao').map(u => (
                     <div key={u.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-2xl hover:bg-accent/10 transition-all group">
                        <div className="flex items-center gap-4">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${u.perfil === 'producao' ? 'bg-secondary/10 text-secondary' : 'bg-primary/5 text-primary'}`}>
@@ -142,160 +112,6 @@ export default function Configuracoes() {
                  </button>
               </div>
            </div>
-         )}
-
-         {/* Metas de Representantes Section */}
-         {isGerente && (
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden mt-6">
-               <div className="p-6 bg-gray-50/50 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                 <div className="flex items-center gap-2">
-                   <TrendingUp size={18} className="text-primary" />
-                   <h3 className="font-bold text-gray-800 tracking-tight">Metas de Vendas</h3>
-                 </div>
-                 <div className="flex bg-white rounded-lg p-1 shadow-sm border border-gray-100 self-start sm:self-auto">
-                    <button 
-                       onClick={() => setActiveMetaTab('lancadas')}
-                       className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeMetaTab === 'lancadas' ? 'bg-primary text-white shadow' : 'text-gray-500 hover:text-gray-800'}`}
-                    >
-                       Lançadas
-                    </button>
-                    <button 
-                       onClick={() => setActiveMetaTab('cadastro')}
-                       className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeMetaTab === 'cadastro' ? 'bg-primary text-white shadow' : 'text-gray-500 hover:text-gray-800'}`}
-                    >
-                       Cadastrar
-                    </button>
-                 </div>
-               </div>
-               <div className="p-8 space-y-4">
-                  {activeMetaTab === 'cadastro' && (
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                     <div className="md:col-span-1">
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Representante</label>
-                        <select 
-                           value={novaMeta.representante_id}
-                           onChange={e => setNovaMeta({...novaMeta, representante_id: e.target.value})}
-                           className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm font-bold text-gray-700 outline-none"
-                        >
-                           <option value="">Selecione...</option>
-                           {usuarios.filter(u => u.perfil === 'representante').map(u => (
-                              <option key={u.id} value={u.id}>{u.nome}</option>
-                           ))}
-                        </select>
-                     </div>
-                     <div className="md:col-span-1">
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Mês</label>
-                        <select 
-                           value={novaMeta.mes}
-                           onChange={e => setNovaMeta({...novaMeta, mes: Number(e.target.value)})}
-                           className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm font-bold text-gray-700 outline-none"
-                        >
-                           {Array.from({length: 12}, (_, i) => i + 1).map(m => (
-                              <option key={m} value={m}>{m.toString().padStart(2, '0')}</option>
-                           ))}
-                        </select>
-                     </div>
-                     <div className="md:col-span-1">
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Ano</label>
-                        <select 
-                           value={novaMeta.ano}
-                           onChange={e => setNovaMeta({...novaMeta, ano: Number(e.target.value)})}
-                           className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm font-bold text-gray-700 outline-none"
-                        >
-                           {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear()+1].map(y => (
-                              <option key={y} value={y}>{y}</option>
-                           ))}
-                        </select>
-                     </div>
-                     <div className="md:col-span-1">
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Valor da Meta</label>
-                        <input 
-                           type="number"
-                           step="0.01"
-                           placeholder="R$ 0,00"
-                           value={novaMeta.valor || ''}
-                           onChange={e => setNovaMeta({...novaMeta, valor: Number(e.target.value)})}
-                           className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm font-bold text-gray-700 outline-none"
-                        />
-                     </div>
-                     <div className="md:col-span-4 flex justify-end">
-                        <button 
-                           onClick={handleAddMeta}
-                           disabled={!novaMeta.representante_id || novaMeta.valor <= 0}
-                           className="px-6 py-3 bg-primary text-white rounded-xl text-sm font-bold shadow-lg hover:bg-primary/90 disabled:opacity-50 transition-all"
-                        >
-                           Salvar Meta
-                        </button>
-                     </div>
-                  </div>
-                  )}
-                  
-                  {activeMetaTab === 'lancadas' && (
-                  <div className="space-y-6">
-                     <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                        <div className="flex-1">
-                           <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Filtrar por Representante</label>
-                           <select 
-                              value={filterMetaRepresentante}
-                              onChange={e => setFilterMetaRepresentante(e.target.value)}
-                              className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm font-bold text-gray-700 outline-none"
-                           >
-                              <option value="">Todos os Representantes</option>
-                              {usuarios.filter(u => u.perfil === 'representante').map(u => (
-                                 <option key={u.id} value={u.id}>{u.nome}</option>
-                              ))}
-                           </select>
-                        </div>
-                        <div className="w-full sm:w-48">
-                           <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Ano</label>
-                           <select 
-                              value={filterMetaAno}
-                              onChange={e => setFilterMetaAno(Number(e.target.value))}
-                              className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm font-bold text-gray-700 outline-none"
-                           >
-                              {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear()+1].map(y => (
-                                 <option key={y} value={y}>{y}</option>
-                              ))}
-                           </select>
-                        </div>
-                     </div>
-                     <div className="space-y-3">
-                        {metas
-                           .filter(m => m.ano === filterMetaAno && (filterMetaRepresentante ? m.representante_id === filterMetaRepresentante : true))
-                           .sort((a, b) => b.mes - a.mes)
-                           .map(m => {
-                           const rep = usuarios.find(u => u.id === m.representante_id);
-                           return (
-                              <div key={m.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-colors">
-                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
-                                       {rep?.nome?.charAt(0) || '?'}
-                                    </div>
-                                    <div>
-                                       <p className="text-sm font-bold text-gray-800">{rep?.nome || 'Desconhecido'}</p>
-                                       <p className="text-[10px] font-bold text-gray-400 uppercase">Mês {m.mes.toString().padStart(2, '0')} / {m.ano}</p>
-                                    </div>
-                                 </div>
-                                 <div className="flex items-center gap-4">
-                                    <span className="text-lg font-black text-primary">R$ {m.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                    <button 
-                                      onClick={() => deleteMeta(m.id)}
-                                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg transition-all"
-                                    >
-                                       <Trash2 size={16} />
-                                    </button>
-                                 </div>
-                              </div>
-                           );
-                        })}
-                        {metas.filter(m => m.ano === filterMetaAno && (filterMetaRepresentante ? m.representante_id === filterMetaRepresentante : true)).length === 0 && (
-                           <p className="text-xs text-gray-400 text-center py-8 italic bg-gray-50 rounded-2xl">Nenhuma meta encontrada para os filtros selecionados.</p>
-                        )}
-                     </div>
-                  </div>
-                  )}
-               </div>
-            </div>
          )}
       </div>
 

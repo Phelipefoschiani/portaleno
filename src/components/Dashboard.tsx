@@ -39,7 +39,7 @@ const Card: React.FC<{ title: string; value: string; icon: any; color: string }>
 
 const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void }> = ({ setActiveTab }) => {
   const { user } = useAuth();
-  const { pedidos, clientes, orcamentos, despesas, produtos, comissoes, producao, addProducao, usuarios, metas } = useGlobalState();
+  const { pedidos, clientes, orcamentos, despesas, produtos, comissoes, producao, addProducao, usuarios } = useGlobalState();
   const isGerente = user?.perfil === 'gerente';
 
   const [selectedYears, setSelectedYears] = useState<number[]>([new Date().getFullYear()]);
@@ -48,7 +48,7 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void }> = ({ setActi
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [prodInput, setProdInput] = useState<Record<string, number>>({});
 
-  const availableYears = (Array.from(new Set(pedidos.map(p => new Date(p.data).getFullYear()))) as number[]).sort((a, b) => b - a);
+  const availableYears = (Array.from(new Set((pedidos || []).map(p => new Date(p.data).getFullYear()))) as number[]).sort((a, b) => b - a);
   if (availableYears.length === 0) availableYears.push(new Date().getFullYear());
 
   const availableMonths = [
@@ -193,9 +193,9 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void }> = ({ setActi
                      </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                     {usuarios.filter(u => u.perfil === 'representante').map((rep) => {
-                        const fatRep = filteredPedidos.filter(p => p.status === 'Faturado' && p.representante_id === rep.id).reduce((acc, p) => acc + p.valor_total, 0);
-                        const metaRep = metas.filter(m => m.representante_id === rep.id && (selectedYears.length === 0 || selectedYears.includes(m.ano)) && (selectedMonths.length === 0 || selectedMonths.includes(m.mes))).reduce((acc, m) => acc + m.valor, 0);
+                     {(usuarios || []).filter(u => u.perfil === 'representante').map((rep) => {
+                        const fatRep = (pedidos || []).filter(p => p.status === 'Faturado' && p.representante_id === rep.id).reduce((acc, p) => acc + p.valor_total, 0);
+                        const metaRep = 0; // Metas desabilitadas temporariamente
                         let percent = 0;
                         if (metaRep > 0) percent = Math.min(100, (fatRep / metaRep) * 100);
                         
@@ -429,8 +429,7 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void }> = ({ setActi
   // Representante View
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
-  const userMetaObj = metas.find(m => m.representante_id === user?.id && m.ano === currentYear && m.mes === currentMonth);
-  const userMetaValor = userMetaObj ? userMetaObj.valor : 0;
+  const userMetaValor = 0; // Metas desabilitadas temporariamente
   const percentAtingido = userMetaValor > 0 ? ((faturamentoTotal / userMetaValor) * 100).toFixed(1) : '0.0';
 
   return (

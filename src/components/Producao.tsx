@@ -39,7 +39,7 @@ export default function ProducaoTab() {
   const [previsaoEntrega, setPrevisaoEntrega] = useState('');
 
   // Pedidos que precisam ser produzidos
-  const pedidosParaProduzir = pedidos.filter(p => 
+  const pedidosParaProduzir = (pedidos || []).filter(p => 
     p.status === 'Aprovado' || p.status === 'Em produção'
   );
 
