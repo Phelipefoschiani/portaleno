@@ -1,9 +1,35 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Portal Grupo ENO</title>
+    <script>
+      // Fix for Google Translate crashing React (NotFoundError: Failed to execute 'removeChild' on 'Node')
+      if (typeof Node !== 'undefined' && Node.prototype) {
+        const originalRemoveChild = Node.prototype.removeChild;
+        Node.prototype.removeChild = function(child) {
+          if (child.parentNode !== this) {
+            if (console) {
+              console.warn('Prevented removeChild failure: child not found in parent.', child);
+            }
+            return child;
+          }
+          return originalRemoveChild.apply(this, arguments);
+        };
+
+        const originalInsertBefore = Node.prototype.insertBefore;
+        Node.prototype.insertBefore = function(newNode, referenceNode) {
+          if (referenceNode && referenceNode.parentNode !== this) {
+            if (console) {
+              console.warn('Prevented insertBefore failure: reference node not found in parent.', referenceNode);
+            }
+            return originalInsertBefore.apply(this, [newNode, null]);
+          }
+          return originalInsertBefore.apply(this, arguments);
+        };
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
