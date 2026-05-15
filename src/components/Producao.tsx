@@ -14,16 +14,21 @@ import {
   ClipboardList, 
   AlertCircle,
   ChevronRight,
-  Save
+  Save,
+  Trash2,
+  Edit2
 } from 'lucide-react';
 import { Producao, Pedido } from '../types';
 
 export default function ProducaoTab() {
   const { user } = useAuth();
-  const { producao, produtos, pedidos, addProducao, updateProducao, updatePedido } = useGlobalState();
+  const { producao, produtos, pedidos, addProducao, updateProducao, deleteProducao, updatePedido } = useGlobalState();
   const [showModal, setShowModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
+  const [selectedProducao, setSelectedProducao] = useState<Producao | null>(null);
   const [activeTab, setActiveTab] = useState<'operacional' | 'historico'>('operacional');
+  const isGerente = user?.perfil === 'gerente';
   
   const [formData, setFormData] = useState<Partial<Producao>>({
     produto_id: '',
@@ -32,10 +37,10 @@ export default function ProducaoTab() {
     lote: '',
     data_inicio: new Date().toISOString().split('T')[0],
     data_fim: '',
-    validade: '',
     status: 'Em andamento'
   });
 
+  const [editFormData, setEditFormData] = useState<Partial<Producao>>({});
   const [previsaoEntrega, setPrevisaoEntrega] = useState('');
 
   // Pedidos que precisam ser produzidos
@@ -43,10 +48,29 @@ export default function ProducaoTab() {
     p.status === 'Aprovado' || p.status === 'Em produção'
   );
 
+  const handleDeleteProducao = (id: string) => {
+    if (window.confirm("Tem certeza que deseja excluir este registro de produção? Isso removerá o histórico do portal.")) {
+      deleteProducao(id);
+    }
+  };
+
+  const handleOpenEditModal = (p: Producao) => {
+    setSelectedProducao(p);
+    setEditFormData({ ...p });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateProducao = () => {
+    if (!selectedProducao) return;
+    updateProducao(selectedProducao.id, editFormData);
+    setShowEditModal(false);
+    setSelectedProducao(null);
+    alert("Produção atualizada com sucesso!");
+  };
+
   const handleOpenProductionModal = (pedido: Pedido) => {
     setSelectedPedido(pedido);
     setPrevisaoEntrega(pedido.previsao_entrega || '');
-    // Pre-fill with first item of order for now, or we could handle multiple items
     if (pedido.items && pedido.items.length > 0) {
       const firstItem = pedido.items[0];
       setFormData({
@@ -63,27 +87,25 @@ export default function ProducaoTab() {
 
   const handleStartProducao = (pedidoId: string) => {
     updatePedido(pedidoId, { status: 'Em produção' });
-    alert("Produção iniciada! O gerente foi notificado no dashboard.");
+    alert("Produção iniciada!");
   };
 
   const handleSave = () => {
     if (!selectedPedido) return;
 
-    // Save Production Lote
     addProducao({
       ...formData,
       data: new Date().toISOString().split('T')[0],
       data_fim: new Date().toISOString().split('T')[0],
     } as Producao);
 
-    // Update Pedido with delivery forecast
     if (previsaoEntrega) {
       updatePedido(selectedPedido.id, { previsao_entrega: previsaoEntrega });
     }
 
     setShowModal(false);
     setSelectedPedido(null);
-    alert("Produção e Previsão registradas com sucesso!");
+    alert("Produção registrada com sucesso!");
   };
 
   const getProducaoStats = (p: Producao) => {
@@ -97,7 +119,6 @@ export default function ProducaoTab() {
 
   return (
     <div className="space-y-8 pb-12">
-      {/* Tabs */}
       <div className="flex gap-4 border-b border-gray-100 pb-px">
         <button 
           onClick={() => setActiveTab('operacional')}
@@ -127,14 +148,15 @@ export default function ProducaoTab() {
               <div key={pedido.id} className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden group hover:border-accent transition-all">
                 <div className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                   <div className="flex items-center gap-5">
-                    <div className={`p-4 rounded-2xl ${pedido.status === 'Em produção' ? 'bg-orange-50 text-orange-600 animate-pulse' : 'bg-gray-50 text-gray-400'}`}>
+                    <div className={`p-4 rounded-2xl ${pedido.status === 'Em produção' ? 'bg-orange-50 text-orange-600 animate-pulse' : 'bg-blue-50 text-blue-600'}`}>
                       <Factory size={28} />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
                          <h4 className="text-lg font-black text-gray-900 tracking-tight">PED-{pedido.id.substring(0, 8)}</h4>
-                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${pedido.status === 'Em produção' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>
-                           {pedido.status}
+                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase flex items-center gap-1 ${pedido.status === 'Em produção' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
+                           {pedido.status === 'Em produção' ? <Clock size={10} /> : <Play size={10} />}
+                           {pedido.status === 'Aprovado' ? 'Aguardando Início' : pedido.status}
                          </span>
                       </div>
                       <p className="text-xs font-bold text-gray-400 uppercase mt-1">Data: {new Date(pedido.data).toLocaleDateString('pt-BR')}</p>
@@ -204,6 +226,7 @@ export default function ProducaoTab() {
                    <th className="px-6 py-4 text-center">Duração</th>
                    <th className="px-6 py-4 text-center">Média/Dia</th>
                    <th className="px-6 py-4">Status</th>
+                   {isGerente && <th className="px-6 py-4 text-right">Ações</th>}
                  </tr>
                </thead>
                <tbody className="divide-y divide-gray-50">
@@ -228,13 +251,33 @@ export default function ProducaoTab() {
                        <td className="px-6 py-4 text-center">
                           <span className="font-bold text-secondary">{mediaPorDia.toFixed(1)} kg</span>
                        </td>
-                       <td className="px-6 py-4 text-right">
+                       <td className="px-6 py-4">
                           <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase ${
                             p.status === 'Finalizada' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
                           }`}>
                             {p.status}
                           </span>
                        </td>
+                       {isGerente && (
+                          <td className="px-6 py-4 text-right">
+                             <div className="flex justify-end gap-2">
+                               <button 
+                                 onClick={() => handleOpenEditModal(p)}
+                                 className="p-2 text-gray-400 hover:text-primary transition-colors"
+                                 title="Editar Lançamento"
+                               >
+                                  <Edit2 size={16} />
+                               </button>
+                               <button 
+                                 onClick={() => handleDeleteProducao(p.id)}
+                                 className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                 title="Excluir Lançamento"
+                               >
+                                  <Trash2 size={16} />
+                               </button>
+                             </div>
+                          </td>
+                        )}
                      </tr>
                    );
                  })}
@@ -322,6 +365,83 @@ export default function ProducaoTab() {
                   className="px-12 py-4 bg-primary text-white rounded-2xl font-black tracking-tight hover:bg-secondary shadow-xl shadow-primary/20 transition-all"
                  >
                    Registrar & Concluir
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Modal Editar Lançamento de Produção */}
+      {showEditModal && selectedProducao && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary/40 backdrop-blur-sm">
+           <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-xl overflow-hidden flex flex-col scale-in">
+              <div className="p-8 bg-gray-900 text-white flex justify-between items-center">
+                 <div>
+                    <h2 className="text-2xl font-black tracking-tight">Editar Lançamento</h2>
+                    <p className="text-[10px] font-bold text-white/60 uppercase tracking-widest mt-1">Lote: {selectedProducao.lote}</p>
+                 </div>
+                 <button onClick={() => setShowEditModal(false)} className="hover:rotate-90 transition-all"><X size={24} /></button>
+              </div>
+              <div className="p-10 space-y-6">
+                 <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Lote</label>
+                    <input 
+                      type="text"
+                      value={editFormData.lote}
+                      onChange={(e) => setEditFormData({...editFormData, lote: e.target.value})}
+                      className="w-full px-5 py-4 rounded-2xl border-2 border-gray-100 bg-gray-50/50 outline-none font-bold text-gray-700" 
+                    />
+                 </div>
+                 
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Quantidade Produzida (kg)</label>
+                      <input 
+                        type="number"
+                        value={editFormData.quantidade_produzida}
+                        onChange={(e) => setEditFormData({...editFormData, quantidade_produzida: Number(e.target.value)})}
+                        className="w-full px-5 py-4 rounded-2xl border-2 border-gray-100 bg-gray-50/50 outline-none font-black text-primary text-xl" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Quantidade Estimativa Original (kg)</label>
+                      <input 
+                        type="number"
+                        value={editFormData.quantidade_estimada}
+                        onChange={(e) => setEditFormData({...editFormData, quantidade_estimada: Number(e.target.value)})}
+                        className="w-full px-5 py-4 rounded-2xl border-2 border-gray-100 bg-gray-50/50 outline-none font-bold text-gray-400" 
+                      />
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Início</label>
+                      <input 
+                        type="date"
+                        value={editFormData.data_inicio}
+                        onChange={(e) => setEditFormData({...editFormData, data_inicio: e.target.value})}
+                        className="w-full px-5 py-4 rounded-2xl border-2 border-gray-100 bg-gray-50/50 outline-none font-bold text-gray-700" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Fim</label>
+                      <input 
+                        type="date"
+                        value={editFormData.data_fim || ''}
+                        onChange={(e) => setEditFormData({...editFormData, data_fim: e.target.value})}
+                        className="w-full px-5 py-4 rounded-2xl border-2 border-gray-100 bg-gray-50/50 outline-none font-bold text-gray-700" 
+                      />
+                    </div>
+                 </div>
+              </div>
+              <div className="p-8 bg-gray-50 flex justify-end gap-3 rounded-b-[40px]">
+                 <button onClick={() => setShowEditModal(false)} className="px-8 py-3 font-bold text-gray-400 hover:text-gray-600">Cancelar</button>
+                 <button 
+                  onClick={handleUpdateProducao}
+                  className="px-12 py-4 bg-gray-900 text-white rounded-2xl font-black tracking-tight hover:bg-black shadow-xl transition-all"
+                 >
+                   Salvar Alterações
                  </button>
               </div>
            </div>

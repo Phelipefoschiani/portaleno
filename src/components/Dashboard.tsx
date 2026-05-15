@@ -249,17 +249,17 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void }> = ({ setActi
                    </tr>
                  </thead>
                  <tbody className="divide-y divide-gray-50">
-                   {produtos.slice(0, 5).map(p => {
-                      // Active demand from orders that are not Faturado, Cancelado, or Entregue
+                   {produtos.map(p => {
+                      // Active demand from orders that are not Faturado or Cancelado
                       const pendentes = pedidos.filter(ped => 
-                        (ped.status === 'Em produção' || ped.status === 'Aprovado' || ped.status === 'Enviado' || ped.status === 'Em análise') &&
+                        (ped.status === 'Em produção' || ped.status === 'Aprovado') &&
                         ped.items?.some(i => i.produto_id === p.id)
                       ).reduce((acc, ped) => {
                         const item = ped.items?.find(i => i.produto_id === p.id);
                         return acc + (item?.quantidade || 0);
                       }, 0);
 
-                      const meta = Math.max(100, pendentes); 
+                      const meta = pendentes; 
                       
                       const produzidoHoje = producao
                          .filter(pr => pr.produto_id === p.id && new Date(pr.data).toDateString() === new Date().toDateString())
@@ -269,7 +269,7 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void }> = ({ setActi
                          .reduce((acc,pr)=>acc+pr.quantidade_produzida, 0);
                       
                       const faltam = Math.max(0, meta - produzidoTotal);
-                      const percent = Math.min(100, meta > 0 ? Math.floor((produzidoTotal / meta) * 100) : (produzidoTotal > 0 ? 100 : 0));
+                      const percent = meta > 0 ? Math.min(100, Math.floor((produzidoTotal / meta) * 100)) : (produzidoTotal > 0 ? 100 : 0);
 
                       if (meta === 0 && produzidoTotal === 0) return null;
 
