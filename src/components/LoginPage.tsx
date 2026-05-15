@@ -73,8 +73,7 @@ const LoginPage: React.FC = () => {
           <div className="inline-flex justify-center p-4 bg-primary/5 rounded-3xl text-primary mb-6 shadow-sm border border-primary/10">
             <Leaf size={40} />
           </div>
-          <h2 className="text-3xl font-black text-gray-900 mb-2 tracking-tight">Grupo ENO</h2>
-          <p className="text-gray-500 font-medium text-sm">Insira suas credenciais para acessar o portal.</p>
+          <h2 className="text-3xl font-black text-gray-900 tracking-tight">Grupo ENO</h2>
         </div>
 
         <form onSubmit={handleEntrar} className="space-y-6">
