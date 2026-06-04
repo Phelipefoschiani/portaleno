@@ -2,5 +2,7 @@
   "name": "Portal Grupo ENO",
   "description": "Portal corporativo completo para gestão de representantes, produção, estoque e financeiro do Grupo ENO.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

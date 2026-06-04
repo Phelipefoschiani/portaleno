@@ -9,11 +9,19 @@ export interface User {
   senha?: string;
   perfil: UserRole;
   ativo: boolean;
+  data_cadastro?: string;
 }
 
 export interface MetaRepresentante {
   id: string;
   representante_id: string;
+  ano: number;
+  mes: number;
+  valor: number;
+}
+
+export interface ObjetivoEmpresa {
+  id: string;
   ano: number;
   mes: number;
   valor: number;
@@ -29,12 +37,15 @@ export interface Cliente {
   telefone: string;
   whatsapp: string;
   email: string;
+  cep: string;
   endereco: string;
+  numero?: string;
   bairro: string;
   cidade: string;
   estado: string;
-  cep: string;
+  responsavel?: string;
   canal: 'Supermercado' | 'Food Service' | 'Distribuidor' | 'Atacado' | 'Varejo' | 'Outro';
+  categorias?: string[];
   status: 'Aguardando liberação' | 'Liberado' | 'Bloqueado' | 'Inativo';
   data_cadastro: string;
   observacoes?: string;
@@ -44,6 +55,18 @@ export interface ItemPedido {
   produto_id: string;
   quantidade: number;
   preco: number;
+  tipo?: 'venda' | 'bonificacao';
+  desconto?: number;
+  quantidade_produzida?: number;
+}
+
+export interface SolicitacaoInsumo {
+  id: string;
+  item: string;
+  quantidade: number;
+  unidade: string;
+  urgente: boolean;
+  status: 'Pendente' | 'Comprado' | 'Entregue';
 }
 
 export interface Orcamento {
@@ -53,7 +76,7 @@ export interface Orcamento {
   data: string;
   valor_total: number;
   items: ItemPedido[];
-  status: 'Rascunho' | 'Enviado' | 'Aprovado' | 'Reprovado' | 'Convertido em Pedido' | 'Cancelado';
+  status: 'Orçamento' | 'Rascunho' | 'Enviado' | 'Convertido em Pedido' | 'Cancelado';
   condicao_pagamento: string;
   prazo_entrega: string;
   observacoes?: string;
@@ -68,16 +91,30 @@ export interface Pedido {
   custo_total: number;
   margem: number;
   items: ItemPedido[];
-  status: 'Enviado' | 'Em análise' | 'Aprovado' | 'Em produção' | 'Faturado' | 'Entregue' | 'Cancelado';
+  status: 'Aguardando Produção' | 'Em produção' | 'Pronto' | 'Faturado' | 'Cancelado';
   nf_anexo?: string;
   nf_numero?: string;
   nf_serie?: string;
   nf_chave?: string;
   nf_data_emissao?: string;
+  nf_valor_total?: number;
   data_faturamento?: string;
   data_entrega?: string;
   previsao_entrega?: string;
   observacoes?: string;
+  solicitacoes_insumos?: SolicitacaoInsumo[];
+  data_fabricacao?: string;
+  data_vencimento?: string;
+  lote?: string;
+  forma_pagamento_nf?: string;
+  data_pagamento_nf?: string;
+  adiantado?: boolean;
+  data_adiantamento?: string;
+  valor_adiantado_recebido?: number;
+  juros_adiantamento?: number;
+  recebido?: boolean;
+  data_recebimento?: string;
+  juros_recebido?: number;
 }
 
 export interface CustoDiferenciado {
@@ -97,6 +134,7 @@ export interface Produto {
   nome: string;
   categoria: string;
   unidade: string;
+  quantidade_unidade?: number;
   preco_base: number;
   custo: number;
   custos_detalhados?: CustoDiferenciado[];
@@ -121,6 +159,11 @@ export interface Despesa {
   status: 'Paga' | 'Pago' | 'Em aberto' | 'Vencida' | 'Cancelada';
   descricao: string;
   comprovante?: string;
+  tipo_despesa?: 'fixa' | 'variavel';
+  compra_mandioca_id?: string;
+  data_pagamento?: string;
+  juros_pago?: number;
+  dias_atraso?: number;
 }
 
 export interface Comissao {
@@ -152,4 +195,40 @@ export interface Producao {
   rendimento: number;
   validade: string;
   custo_lote: number;
+}
+
+export interface Fornecedor {
+  id: string;
+  nome: string;
+  telefone: string;
+  rua_linha: string;
+  numero: string;
+  cidade: string;
+  estado: string;
+  ponto_referencia: string;
+  contato_secundario: string;
+}
+
+export interface CompraMandioca {
+  id: string;
+  fornecedor_id: string;
+  data: string;
+  tipo_pesagem: 'sacos' | 'total';
+  pesagens_sacos: number[];
+  quantidade_total: number;
+  status_pagamento: 'Pago' | 'Pendente';
+  casca_kg: number;
+  destopo_kg: number;
+  preco_quilo?: number;
+  valor_total?: number;
+}
+
+export interface AppEvent {
+  id: string;
+  data: string;
+  hora: string;
+  descricao: string;
+  usuario_id: string;
+  usuario_nome: string;
+  valor?: number;
 }

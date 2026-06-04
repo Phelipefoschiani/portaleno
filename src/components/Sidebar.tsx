@@ -1,119 +1,145 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../AuthContext';
+import { useGlobalState } from '../GlobalStateContext';
 import { 
   LayoutDashboard, 
-  Users, 
-  FileText, 
-  ShoppingCart, 
-  Receipt, 
-  History, 
-  Wallet, 
-  Percent, 
   LogOut,
+  Building2,
+  Users,
   Package,
-  Calculator,
-  Warehouse,
-  Factory,
-  BarChart3,
+  FileText,
+  Activity,
+  DollarSign,
+  Receipt,
+  Coins,
+  Target,
   TrendingUp,
-  Settings,
-  CreditCard
+  Settings
 } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  empresa: string;
+  setEmpresa: (emp: string) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
-  const { user, logout } = useAuth();
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, empresa, setEmpresa }) => {
+  const { logout, user } = useAuth();
+  const { usuarios, objetivosEmpresa, metasRepresentantes } = useGlobalState();
 
   const handleLogout = () => {
     logout();
     setActiveTab('dashboard');
   };
 
-  const getCategories = () => {
-    if (user?.perfil === 'gerente') {
-      return [
-        {
-          title: 'Principal',
-          items: [{ id: 'dashboard', label: 'Início', icon: LayoutDashboard }]
-        },
-        {
-          title: 'Vendas',
-          items: [
-            { id: 'clientes', label: 'Clientes', icon: Users },
-            { id: 'orcamentos', label: 'Orçamentos', icon: FileText },
-            { id: 'pedidos', label: 'Pedidos', icon: ShoppingCart },
-            { id: 'notas-fiscais', label: 'Notas Fiscais', icon: Receipt },
-          ]
-        },
-        {
-          title: 'Produção',
-          items: [
-            { id: 'produtos', label: 'Produtos', icon: Package },
-            { id: 'producao', label: 'Produção', icon: Factory },
-          ]
-        },
-        {
-          title: 'Financeiro',
-          items: [
-            { id: 'despesas', label: 'Despesas', icon: Wallet },
-            { id: 'comissoes', label: 'Comissões', icon: Percent },
-            { id: 'dre', label: 'DRE', icon: TrendingUp },
-            { id: 'relatorios', label: 'Relatórios', icon: BarChart3 },
-            { id: 'financeiro-pessoal', label: 'Meu Financeiro', icon: CreditCard },
-            { id: 'configuracoes', label: 'Ajustes', icon: Settings },
-          ]
-        }
-      ];
-    }
+  // Realignment checker function
+  const checkNeedRealignForMonth = (m: number, y: number) => {
+    const obj = objetivosEmpresa.find((o) => o.ano === y && o.mes === m);
+    const companyGoal = obj ? obj.valor : 0;
+    if (companyGoal === 0) return false;
 
-    if (user?.perfil === 'producao') {
-      return [
-        {
-          title: 'Operacional',
-          items: [
-            { id: 'producao', label: 'Centro de Produção', icon: Factory },
-            { id: 'despesas', label: 'Lançar Despesas', icon: Wallet },
-          ]
-        }
-      ];
-    }
+    // Active reps in that exact month/year
+    const activeReps = usuarios.filter((u) => {
+      if (u.perfil !== 'representante' || !u.ativo) return false;
+      if (!u.data_cadastro) return true;
+      const [regAno, regMes] = u.data_cadastro.split('-').map(Number);
+      if (y > regAno) return true;
+      if (y < regAno) return false;
+      return m >= regMes;
+    });
 
-    // Default: Representante
-    return [
-      {
-        title: 'Principal',
-        items: [{ id: 'dashboard', label: 'Meu Início', icon: LayoutDashboard }]
-      },
-      {
-        title: 'Vendas',
-        items: [
-          { id: 'clientes', label: 'Clientes', icon: Users },
-          { id: 'orcamentos', label: 'Orçamentos', icon: FileText },
-          { id: 'pedidos', label: 'Pedidos', icon: ShoppingCart },
-          { id: 'notas-fiscais', label: 'Notas', icon: Receipt },
-        ]
-      },
-      {
-        title: 'Financeiro',
-        items: [
-          { id: 'despesas', label: 'Despesas Pessoais', icon: Wallet },
-          { id: 'comissoes', label: 'Minhas Comissões', icon: Percent },
-        ]
+    if (activeReps.length === 0) return false;
+
+    let sumRepMetas = 0;
+    let hasRepWithZeroMeta = false;
+
+    for (const rep of activeReps) {
+      const rMetaObj = metasRepresentantes.find(
+        (met) => met.representante_id === rep.id && met.ano === y && met.mes === m
+      );
+      const val = rMetaObj ? rMetaObj.valor : 0;
+      sumRepMetas += val;
+      if (val === 0) {
+        hasRepWithZeroMeta = true;
       }
-    ];
+    }
+
+    return hasRepWithZeroMeta || Math.round(sumRepMetas) !== Math.round(companyGoal);
   };
 
-  const categories = getCategories();
+  // Check from May 2026 onwards for year 2026
+  let hasRealignForwardNeeded = false;
+  if (empresa === 'estancia') {
+    for (let m = 5; m <= 12; m++) {
+      if (checkNeedRealignForMonth(m, 2026)) {
+        hasRealignForwardNeeded = true;
+        break;
+      }
+    }
+  }
+
+  const categories = [
+    {
+      title: 'Principal',
+      items: [
+        ...(user?.perfil === 'producao' ? [
+          { id: 'producao', label: 'Produção / Início', icon: LayoutDashboard },
+          { id: 'despesas', label: 'Despesas', icon: DollarSign }
+        ] : [
+          { id: 'dashboard', label: 'Início', icon: LayoutDashboard },
+          ...(empresa === 'estancia' ? [
+            { id: 'clientes', label: 'Clientes', icon: Users },
+            { id: 'fornecedores', label: 'Fornecedores', icon: Users },
+            { id: 'produtos', label: 'Produtos', icon: Package },
+            { id: 'pedidos', label: 'Orçamentos / Pedidos', icon: FileText },
+            { id: 'producao', label: 'Fabricação / Produção', icon: Activity },
+            { id: 'despesas', label: 'Despesas', icon: DollarSign },
+            { id: 'controle-nf', label: 'Controle de NF', icon: Receipt },
+            { id: 'a-receber', label: 'A Receber', icon: Coins },
+            { id: 'objetivo', label: 'Objetivo do Mês', icon: Target },
+            { id: 'dre', label: 'DRE - Demonstração', icon: TrendingUp },
+            ...(user?.perfil === 'gerente' ? [
+              { id: 'configuracoes', label: 'Configurações', icon: Settings },
+              { id: 'eventos', label: 'Eventos do Sistema', icon: Activity } // Using same icon as Producao or maybe History/Clock if I had imported. Activity is fine. Wait, let me import Activity. It's already there. Is there a Shield/List/Activity? Activity is already in producao.
+            ] : [])
+          ] : [])
+        ])
+      ]
+    }
+  ];
 
   return (
     <div className="w-72 bg-primary text-white h-screen sticky top-0 flex flex-col shadow-2xl z-20 hide-on-print">
       <div className="p-8 border-b border-secondary/30">
-        <h2 className="text-2xl font-bold tracking-tighter">GRUPO</h2>
+        <h2 className="text-2xl font-bold tracking-tighter col-span-1">GRUPO</h2>
         <h3 className="text-lg font-light text-accent/80 tracking-widest -mt-1 uppercase text-xs opacity-70">ENO</h3>
+        
+        {user?.perfil === 'producao' ? (
+          <div className="mt-6 flex items-center gap-2 bg-white/5 p-2 px-3.5 rounded-xl border border-white/10 text-xs font-black uppercase tracking-wider text-accent/90">
+            <Building2 size={16} className="text-accent" />
+            <span>Estância Nova Olinda</span>
+          </div>
+        ) : (
+          <div className="mt-6 flex items-center gap-2 bg-white/5 p-2 rounded-xl border border-white/10">
+            <Building2 size={16} className="text-accent ml-2" />
+            <select 
+              value={empresa}
+              onChange={(e) => {
+                setEmpresa(e.target.value);
+                if (e.target.value !== 'estancia') {
+                  setActiveTab('dashboard');
+                }
+              }}
+              className="bg-transparent text-sm font-bold text-white outline-none w-full cursor-pointer appearance-none py-1"
+            >
+              <option value="estancia" className="text-gray-900">Estância Nova Olinda</option>
+              <option value="sitio" className="text-gray-900">Sítio</option>
+              <option value="empana" className="text-gray-900">Empana Fácil</option>
+              <option value="bigorna" className="text-gray-900">Bigorna</option>
+            </select>
+          </div>
+        )}
       </div>
       
       <nav className="flex-1 overflow-y-auto py-4 px-3 custom-scrollbar">
@@ -134,7 +160,10 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
                     }`}
                   >
                     <item.icon size={18} className={activeTab === item.id ? 'text-primary' : 'text-accent/40 group-hover:text-accent'} />
-                    <span className="text-sm">{item.label}</span>
+                    <span className="text-sm flex-1 text-left">{item.label}</span>
+                    {item.id === 'objetivo' && hasRealignForwardNeeded && (
+                      <span className="w-2 h-2 bg-red-500 rounded-full inline-block animate-pulse shrink-0" title="Alinhamento de metas necessário" />
+                    )}
                   </button>
                 </li>
               ))}

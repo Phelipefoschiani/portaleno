@@ -58,7 +58,7 @@ export const mockClientes: Cliente[] = [
 
 export const mockPedidos: Pedido[] = [
   { id: '1001', representante_id: '1', cliente_id: '1', data: '2024-05-01', items: [{ produto_id: '1', quantidade: 200, preco: 12.50 }], valor_total: 2500.50, custo_total: 1800.00, margem: 28.01, status: 'Faturado', data_faturamento: '2024-05-02', nf_anexo: 'NF1001.xml' },
-  { id: '1002', representante_id: '1', cliente_id: '1', data: '2024-05-05', items: [{ produto_id: '2', quantidade: 100, preco: 12.00 }], valor_total: 1200.00, custo_total: 850.00, margem: 29.17, status: 'Aprovado' },
+  { id: '1002', representante_id: '1', cliente_id: '1', data: '2024-05-05', items: [{ produto_id: '2', quantidade: 100, preco: 12.00 }], valor_total: 1200.00, custo_total: 850.00, margem: 29.17, status: 'Aguardando Produção' },
 ];
 
 export const mockOrcamentos: Orcamento[] = [
