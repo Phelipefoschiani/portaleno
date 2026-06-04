@@ -70,27 +70,34 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void, empresa?: stri
   const despesasTotal = despesasFixas + despesasVariaveis;
 
   const currentGoalObj = objetivosEmpresa?.find(o => o.ano === selectedYear && o.mes === selectedMonth);
-  const objetivoMes = currentGoalObj ? currentGoalObj.valor : 50000;
+  const objetivoMes = currentGoalObj ? currentGoalObj.valor : 0;
 
   // Chart Data
-  // Build daily data for the month with oscillating mock values for demonstration
   const diasNoMes = new Date(selectedYear, selectedMonth, 0).getDate();
   const chartData = [];
 
+  const faturadosNoMes = pedidosMes.filter(p => p.status === 'Faturado');
+  const custoFixoAoDia = despesasFixas / diasNoMes;
+
+  let fatAcumulado = 0;
+  let custoAcumulado = 0;
+
   for (let i = 1; i <= diasNoMes; i++) {
-    // Math.sin for smooth oscillation, Math.random for some noise
-    const osculation = Math.sin(i * 0.5) * 3000; 
-    const fatDiaMock = 4000 + osculation + Math.random() * 1000;
-    const despVarDiaMock = 2000 + (Math.random() * 1500) + (osculation * 0.3);
-    
-    const fatValid = Math.max(0, fatDiaMock);
-    const custoTotalDia = (despesasFixas / diasNoMes) + despVarDiaMock;
-    
+    const pedDia = faturadosNoMes.filter(p => new Date(p.data).getDate() === i);
+    const fatDia = pedDia.reduce((acc, p) => acc + (p.valor_total || 0), 0);
+    const custoProdDia = pedDia.reduce((acc, p) => acc + (p.custo_total || 0), 0);
+
+    const despVarDia = despesasMes.filter(d => new Date(d.vencimento).getDate() === i && d.categoria.toLowerCase().includes('vari'));
+    const totalDespVarDia = despVarDia.reduce((acc, d) => acc + d.valor, 0);
+
+    fatAcumulado += fatDia;
+    custoAcumulado += (custoFixoAoDia + custoProdDia + totalDespVarDia);
+
     chartData.push({
       dia: i,
-      Faturamento: Math.round(fatValid),
-      CustoTotal: Math.round(custoTotalDia),
-      LucroBruto: Math.round(fatValid - custoTotalDia)
+      Faturamento: Math.round(fatAcumulado),
+      CustoTotal: Math.round(custoAcumulado),
+      LucroBruto: Math.round(fatAcumulado - custoAcumulado)
     });
   }
 
@@ -188,7 +195,7 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void, empresa?: stri
              <div className="p-3 bg-primary/10 text-primary rounded-2xl"><TrendingUp size={24} /></div>
            </div>
            <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-             <div className="bg-primary h-full" style={{ width: `${Math.min(100, (faturamentoTotal / objetivoMes) * 100)}%` }} />
+             <div className="bg-primary h-full" style={{ width: `${Math.min(100, objetivoMes > 0 ? (faturamentoTotal / objetivoMes) * 100 : 0)}%` }} />
            </div>
         </div>
 

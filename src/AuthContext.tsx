@@ -1,61 +1,72 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, UserRole } from './types';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { User, UserRole } from "./types";
+import { supabase } from "./supabase";
 
 interface AuthContextType {
   user: User | null;
   login: (login: string, senha: string) => Promise<boolean>;
   logout: () => void;
-  updateSelf: (nome: string, loginStr: string, senhaStr: string) => void;
+  updateSelf: (
+    nome: string,
+    loginStr: string,
+    senhaStr: string,
+  ) => Promise<void>;
   isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('grupo_eno_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-    setIsLoading(false);
-  }, []);
+    const checkUser = async () => {
+      const savedUser = localStorage.getItem("grupo_eno_user");
+      if (savedUser) {
+        try {
+          const u = JSON.parse(savedUser);
+          const { data, error } = await supabase
+            .from("usuarios")
+            .select("*")
+            .eq("id", u.id)
+            .single();
 
-  const login = async (loginStr: string, senhaStr: string): Promise<boolean> => {
-    setIsLoading(true);
-    try {
-      // 1. Check for Gerente (Manager/Admin)
-      const cachedManagerPassword = localStorage.getItem('grupo_eno_manager_password') || 'admin';
-      const cachedManagerLogin = localStorage.getItem('grupo_eno_manager_login') || 'admin';
-      const cachedManagerNome = localStorage.getItem('grupo_eno_manager_nome') || 'Administrador';
-      
-      if (loginStr === cachedManagerLogin && senhaStr === cachedManagerPassword) {
-         const userObj: User = { 
-           id: '1', 
-           nome: cachedManagerNome, 
-           login: cachedManagerLogin, 
-           perfil: 'gerente', 
-           ativo: true 
-         };
-         setUser(userObj);
-         localStorage.setItem('grupo_eno_user', JSON.stringify(userObj));
-         return true;
-      }
-      
-      // 2. Check for other created users in localStorage
-      const usersRaw = localStorage.getItem('grupo_eno_usuarios_v2');
-      if (usersRaw) {
-        const usersList: User[] = JSON.parse(usersRaw);
-        const matched = usersList.find(u => u.login === loginStr && u.senha === senhaStr && u.ativo);
-        if (matched) {
-          setUser(matched);
-          localStorage.setItem('grupo_eno_user', JSON.stringify(matched));
-          return true;
+          if (data && data.ativo) {
+            setUser(data as User);
+          } else {
+            localStorage.removeItem("grupo_eno_user");
+          }
+        } catch (e) {
+          console.error(e);
         }
       }
-      
+      setIsLoading(false);
+    };
+    checkUser();
+  }, []);
+
+  const login = async (
+    loginStr: string,
+    senhaStr: string,
+  ): Promise<boolean> => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("usuarios")
+        .select("*")
+        .eq("login", loginStr)
+        .eq("senha", senhaStr)
+        .eq("ativo", true)
+        .single();
+
+      if (data) {
+        setUser(data as User);
+        localStorage.setItem("grupo_eno_user", JSON.stringify(data));
+        return true;
+      }
       return false;
     } catch (e) {
       console.error("Login erro:", e);
@@ -67,23 +78,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('grupo_eno_user');
+    localStorage.removeItem("grupo_eno_user");
   };
 
-  const updateSelf = (nomeStr: string, loginStr: string, senhaStr: string) => {
-    localStorage.setItem('grupo_eno_manager_nome', nomeStr);
-    localStorage.setItem('grupo_eno_manager_login', loginStr);
-    localStorage.setItem('grupo_eno_manager_password', senhaStr);
-    
-    if (user && user.perfil === 'gerente') {
-      const updatedUser = { ...user, nome: nomeStr, login: loginStr };
-      setUser(updatedUser);
-      localStorage.setItem('grupo_eno_user', JSON.stringify(updatedUser));
+  const updateSelf = async (
+    nomeStr: string,
+    loginStr: string,
+    senhaStr: string,
+  ) => {
+    if (user) {
+      const { data, error } = await supabase
+        .from("usuarios")
+        .update({ nome: nomeStr, login: loginStr, senha: senhaStr })
+        .eq("id", user.id)
+        .select()
+        .single();
+
+      if (data) {
+        setUser(data as User);
+        localStorage.setItem("grupo_eno_user", JSON.stringify(data));
+      }
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, updateSelf, isLoading }}>
+    <AuthContext.Provider
+      value={{ user, login, logout, updateSelf, isLoading }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -92,7 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };

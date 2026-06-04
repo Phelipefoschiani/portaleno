@@ -126,7 +126,7 @@ const Objetivo: React.FC<ObjetivoProps> = ({ empresa }) => {
     const companyDrafts: Record<number, number> = {};
     for (let m = 1; m <= 12; m++) {
       const obj = objetivosEmpresa.find(o => o.ano === year && o.mes === m);
-      companyDrafts[m] = obj ? obj.valor : 50000;
+      companyDrafts[m] = obj ? obj.valor : 0;
     }
     setDraftCompanyGoals(companyDrafts);
 
@@ -228,7 +228,7 @@ const Objetivo: React.FC<ObjetivoProps> = ({ empresa }) => {
 
   // Current selected month company goal
   const currentCompanyGoalObj = objetivosEmpresa.find(o => o.ano === selectedYear && o.mes === selectedMonth);
-  const currentCompanyGoal = currentCompanyGoalObj ? currentCompanyGoalObj.valor : 50000; // default standard
+  const currentCompanyGoal = currentCompanyGoalObj ? currentCompanyGoalObj.valor : 0; // default standard
 
   // Current selected month actual sales
   const currentOrders = getOrdersInMonthYear(selectedMonth, selectedYear);
