@@ -17,9 +17,9 @@ const LoginPage: React.FC = () => {
     
     // Simulate slight delay for better UX feel
     setTimeout(async () => {
-      const success = await login(loginStr, senhaStr);
-      if (!success) {
-        setError('Usuário ou senha incorretos. Tente novamente.');
+      const result = await login(loginStr, senhaStr);
+      if (!result.success) {
+        setError(result.error || 'Erro desconhecido ao realizar login.');
         setIsLoading(false);
       }
     }, 600);

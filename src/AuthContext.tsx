@@ -4,7 +4,7 @@ import { supabase } from "./supabase";
 
 interface AuthContextType {
   user: User | null;
-  login: (login: string, senha: string) => Promise<boolean>;
+  login: (login: string, senha: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   updateSelf: (
     nome: string,
@@ -51,8 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const login = async (
     loginStr: string,
     senhaStr: string,
-  ): Promise<boolean> => {
-    setIsLoading(true);
+  ): Promise<{ success: boolean; error?: string }> => {
     try {
       const { data, error } = await supabase
         .from("usuarios")
@@ -61,18 +60,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         .eq("senha", senhaStr)
         .eq("ativo", true)
         .single();
+        
+      if (error) {
+        if (error.code === 'PGRST116') { // PGRST116 means 0 rows returned
+          return { success: false, error: 'Usuário ou senha incorretos. Tente novamente.' };
+        }
+        console.error("Supabase login error:", error);
+        return { success: false, error: 'Erro de conexão com o banco de dados. Verifique a internet e tente novamente.' };
+      }
 
       if (data) {
         setUser(data as User);
         localStorage.setItem("grupo_eno_user", JSON.stringify(data));
-        return true;
+        return { success: true };
       }
-      return false;
-    } catch (e) {
-      console.error("Login erro:", e);
-      return false;
-    } finally {
-      setIsLoading(false);
+      return { success: false, error: 'Usuário não encontrado ou inativo.' };
+    } catch (e: any) {
+      console.error("Login exception:", e);
+      return { success: false, error: 'Falha na conexão com o sistema (Verifique as credenciais do Supabase/Internet).' };
     }
   };
 
