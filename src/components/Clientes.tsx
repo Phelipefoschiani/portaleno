@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useGlobalState } from '../GlobalStateContext';
+import { useAuth } from '../AuthContext';
 import { Cliente } from '../types';
 import { Search, Plus, Edit2, X, Building, Factory, Trash2, AlertTriangle } from 'lucide-react';
 
@@ -7,6 +8,7 @@ const DEFAULT_CATEGORIES = ['Farma', 'Atacado', 'Distribuidor', 'Mercado', 'Vare
 
 const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
   const { clientes, addCliente, updateCliente, deleteCliente, pedidos, orcamentos } = useGlobalState();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
@@ -153,8 +155,7 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
     } else {
       addCliente({
         ...formData,
-        id: formData.cnpj_cpf.replace(/\D/g, '') + Math.floor(Math.random()*1000).toString(), // mock id
-        representante_id: 'padrao',
+        representante_id: user?.id || '',
         data_cadastro: new Date().toISOString(),
         status: 'Liberado',
       } as Omit<Cliente, 'id'>);

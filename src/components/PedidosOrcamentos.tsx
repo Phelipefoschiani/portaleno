@@ -25,6 +25,24 @@ import {
 } from "lucide-react";
 import { useAuth } from "../AuthContext";
 
+const formatPrevisaoEntrega = (dateStr: string | null | undefined): string => {
+  if (!dateStr || dateStr === "Invalid Date") return "A Combinar";
+  if (!dateStr.includes("-")) {
+    return dateStr;
+  }
+  try {
+    const cleanStr = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
+    const date = new Date(cleanStr + "T00:00:00");
+    if (!isNaN(date.getTime())) {
+      const formatted = date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+      return formatted === "Invalid Date" ? "A Combinar" : formatted;
+    }
+  } catch (e) {
+    console.error("Error formatting date:", e);
+  }
+  return dateStr;
+};
+
 const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
   const {
     pedidos,
@@ -39,6 +57,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
     updateOrcamento,
     deleteOrcamento,
     addDespesa,
+    logEvent,
   } = useGlobalState();
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
@@ -205,30 +224,45 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
       pdf.text(`${cliente?.cnpj_cpf || "Não Informado"}`, 36, 81);
 
       pdf.setFont("helvetica", "bold");
+      pdf.text(`Insc. Estadual:`, 110, 81);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`${cliente?.inscricao_estadual || "Não Informado"}`, 135, 81);
+
+      pdf.setFont("helvetica", "bold");
       pdf.text(`Endereço:`, 16, 87);
       pdf.setFont("helvetica", "normal");
-      pdf.text(`${cliente?.endereco || ""} - ${cliente?.cidade || ""} / ${cliente?.estado || ""}`, 34, 87);
+      pdf.text(`${cliente?.endereco || "Não Informado"}${cliente?.numero ? ', ' + cliente.numero : ''}${cliente?.bairro ? ' - ' + cliente.bairro : ''}`, 36, 87);
+
+      pdf.setFont("helvetica", "bold");
+      pdf.text(`Cidade/UF:`, 16, 93);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`${cliente?.cidade || "Não Informado"} / ${cliente?.estado || "NI"}`, 37, 93);
 
       // Section 2: Logística e Pagamento
       pdf.setFillColor(245, 247, 246);
-      pdf.rect(14, 97, 182, 8, 'F');
+      pdf.rect(14, 101, 182, 8, 'F');
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(9);
       pdf.setTextColor(27, 67, 50);
-      pdf.text("LOGÍSTICA E PAGAMENTO", 16, 103);
+      pdf.text("LOGÍSTICA E PAGAMENTO", 16, 107);
 
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(30, 30, 30);
-      pdf.text(`Pagamento:`, 16, 112);
+      pdf.text(`Pagamento:`, 16, 116);
       pdf.setFont("helvetica", "normal");
-      pdf.text(`${selectedItem.condicao_pagamento || "A Combinar"}`, 39, 112);
+      pdf.text(`${selectedItem.condicao_pagamento || selectedItem.forma_pagamento_nf || "A Combinar"}`, 39, 116);
 
       pdf.setFont("helvetica", "bold");
-      pdf.text(`Prazo Entrega:`, 16, 118);
+      pdf.text(`Data Prevista:`, 16, 122);
       pdf.setFont("helvetica", "normal");
-      pdf.text(`${selectedItem.prazo_entrega || "A Combinar"}`, 43, 118);
+      
+      let deliveryText = selectedItem.previsao_entrega
+        ? formatPrevisaoEntrega(selectedItem.previsao_entrega)
+        : (selectedItem.prazo_entrega || "A Combinar");
+      
+      pdf.text(deliveryText, 45, 122);
 
-      let yPos = 130;
+      let yPos = 134;
 
       if (selectedItem.observacoes) {
         pdf.setFillColor(245, 247, 246);
@@ -310,7 +344,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
         pdf.text("Estância Nova Olinda", 155, sigY + 10, { align: "center" });
       }
 
+      const isOrcamentoPDF = (filenamePrefix === "Orcamento");
       pdf.save(`${filenamePrefix}_${selectedItem?.id.substring(0, 8) || 'export'}.pdf`);
+      logEvent(`Exportou PDF do ${isOrcamentoPDF ? 'Orçamento' : 'Pedido'}: ${clientes.find(c => c.id === selectedItem?.cliente_id)?.nome_fantasia || 'Desconhecido'}`);
     } catch (error) {
       console.error("Erro ao gerar PDF", error);
     } finally {
@@ -360,6 +396,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
     let imposto_total = 0;
     let comissao_total = 0;
     let frete_total = 0;
+    let peso_total = 0;
 
     formData.items.forEach((item) => {
       const prod = produtos.find((p) => p.id === item.produto_id);
@@ -369,9 +406,14 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
           item.tipo === "bonificacao" ? 0 : item.preco - (item.desconto || 0);
         let itemValorTotal = precoEfetivo * item.quantidade;
         let itemCustoTotal = (prod.custo || 0) * item.quantidade;
+        
+        let itemPesoTotal = (prod.unidade === 'g') 
+          ? (item.quantidade * (prod.quantidade_unidade || 1)) / 1000
+          : item.quantidade * (prod.quantidade_unidade || 1);
 
         valor_total += itemValorTotal;
         custo_total += itemCustoTotal;
+        peso_total += itemPesoTotal;
 
         if (prod.custos_detalhados) {
           prod.custos_detalhados.forEach((c) => {
@@ -397,15 +439,18 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
       comissao_total,
       frete_total,
       lucro_total,
+      peso_total,
     };
   }, [formData.items, produtos]);
 
   const [isConfirmOpen, setIsConfirmOpen] = useState<{
     isOpen: boolean;
     pedId?: string;
-    type?: "Faturar" | "Alert";
+    type?: "Faturar" | "Alert" | "DeletePedido" | "DeleteOrcamento";
     message?: string;
   }>({ isOpen: false });
+
+  const [isSaving, setIsSaving] = useState(false);
 
   // intermediate expense popup state
   const [faturamentoExpenseStep, setFaturamentoExpenseStep] = useState<{
@@ -597,43 +642,65 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
     setProduzirPedidoId(null);
   };
 
-  const handleGerarOrcamento = () => {
+  const handleGerarOrcamento = async () => {
+    if (isSaving) return;
     if (!formData.cliente_id || formData.items.length === 0)
       return setIsConfirmOpen({
         isOpen: true,
         type: "Alert",
         message: "Selecione cliente e adicione itens.",
       });
-    addOrcamento({
-      cliente_id: formData.cliente_id,
-      representante_id: formData.representante_id,
-      data: new Date().toISOString().split("T")[0],
-      items: formData.items,
-      valor_total: cartSummary.valor_total,
-      status: "Orçamento",
-      condicao_pagamento: formData.condicao_pagamento,
-      prazo_entrega: formData.prazo_entrega,
-      observacoes: formData.observacoes,
-    });
-    setIsModalOpen(false);
+    setIsSaving(true);
+    try {
+      const success = await addOrcamento({
+        cliente_id: formData.cliente_id,
+        representante_id: formData.representante_id,
+        data: new Date().toISOString().split("T")[0],
+        items: formData.items,
+        valor_total: cartSummary.valor_total,
+        status: "Orçamento",
+        condicao_pagamento: formData.condicao_pagamento,
+        prazo_entrega: formData.prazo_entrega,
+        observacoes: formData.observacoes,
+      });
+      if (success) {
+        setIsModalOpen(false);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleGerarPedido = (fromOrcamento?: Orcamento) => {
+  const handleGerarPedido = async (fromOrcamento?: Orcamento) => {
+    if (isSaving) return;
     if (fromOrcamento) {
-      addPedido({
-        cliente_id: fromOrcamento.cliente_id,
-        representante_id: fromOrcamento.representante_id,
-        data: new Date().toISOString().split("T")[0],
-        items: fromOrcamento.items,
-        valor_total: fromOrcamento.valor_total,
-        custo_total: fromOrcamento.valor_total * 0.4, // Estimate 40%
-        margem: fromOrcamento.valor_total * 0.6,
-        status: "Aguardando Produção",
-        observacoes: fromOrcamento.observacoes,
-        previsao_entrega: fromOrcamento.prazo_entrega
-      });
-      updateOrcamento(fromOrcamento.id, { status: "Convertido em Pedido" });
-      setIsModalOpen(false);
+      setIsSaving(true);
+      try {
+        const success = await addPedido({
+          cliente_id: fromOrcamento.cliente_id,
+          representante_id: fromOrcamento.representante_id,
+          data: new Date().toISOString().split("T")[0],
+          items: fromOrcamento.items,
+          valor_total: fromOrcamento.valor_total,
+          custo_total: fromOrcamento.valor_total * 0.4, // Estimate 40%
+          margem: 60.00, // Safe percentage margin (60.00% instead of absolute amount which overflows on values >= 1000)
+          status: "Aguardando Produção",
+          observacoes: fromOrcamento.observacoes,
+          previsao_entrega: fromOrcamento.prazo_entrega,
+          condicao_pagamento: fromOrcamento.condicao_pagamento,
+          prazo_entrega: fromOrcamento.prazo_entrega
+        });
+        if (success) {
+          await updateOrcamento(fromOrcamento.id, { status: "Convertido em Pedido" });
+          setIsModalOpen(false);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsSaving(false);
+      }
     } else {
       if (!formData.cliente_id || formData.items.length === 0)
         return setIsConfirmOpen({
@@ -641,19 +708,32 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
           type: "Alert",
           message: "Selecione cliente e adicione itens.",
         });
-      addPedido({
-        cliente_id: formData.cliente_id,
-        representante_id: formData.representante_id,
-        data: new Date().toISOString().split("T")[0],
-        items: formData.items,
-        valor_total: cartSummary.valor_total,
-        custo_total: cartSummary.custo_total,
-        margem: cartSummary.lucro_total,
-        status: "Aguardando Produção",
-        observacoes: formData.observacoes,
-        previsao_entrega: formData.previsao_entrega || formData.prazo_entrega
-      });
-      setIsModalOpen(false);
+      setIsSaving(true);
+      try {
+        const success = await addPedido({
+          cliente_id: formData.cliente_id,
+          representante_id: formData.representante_id,
+          data: new Date().toISOString().split("T")[0],
+          items: formData.items,
+          valor_total: cartSummary.valor_total,
+          custo_total: cartSummary.custo_total,
+          margem: cartSummary.valor_total > 0
+            ? Math.max(-999.99, Math.min(999.99, Number((((cartSummary.valor_total - cartSummary.custo_total) / cartSummary.valor_total) * 100).toFixed(2))))
+            : 0.00, // Safe percentage margin to completely avoid DB precision numeric(5,2) overflows
+          status: "Aguardando Produção",
+          observacoes: formData.observacoes,
+          previsao_entrega: formData.previsao_entrega || formData.prazo_entrega,
+          condicao_pagamento: formData.condicao_pagamento,
+          prazo_entrega: formData.prazo_entrega
+        });
+        if (success) {
+          setIsModalOpen(false);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -1046,7 +1126,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                     </td>
                     <td className="p-4">
                       <span className="text-sm font-bold text-gray-900">
-                        {cli?.nome_fantasia || "Desconhecido"}
+                        {cli?.nome_fantasia || cli?.razao_social || "Desconhecido"}
                       </span>
                     </td>
                     <td className="p-4">
@@ -1172,15 +1252,12 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                         {/* Administrative Cascade Deletion for BOTH orders and proposals */}
                         <button
                           onClick={() => {
-                            if (
-                              window.confirm(
-                                `Tem certeza de que realmente deseja deletar este ${item.type === "Pedido" ? "pedido" : "orçamento"}? Esta ação limpará de forma irreversível qualquer vínculo, comissão ou despesa associada.`,
-                              )
-                            ) {
-                              if (item.type === "Pedido")
-                                deletePedido(item.data.id);
-                              else deleteOrcamento(item.data.id);
-                            }
+                            setIsConfirmOpen({
+                              isOpen: true,
+                              pedId: item.data.id,
+                              type: item.type === "Pedido" ? "DeletePedido" : "DeleteOrcamento",
+                              message: `Tem certeza de que realmente deseja deletar este ${item.type === "Pedido" ? "pedido" : "orçamento"}? Esta ação limpará de forma irreversível qualquer vínculo, comissão ou despesa associada.`
+                            });
                           }}
                           className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                           title="Deletar Registro (Acesso Gerencial)"
@@ -1495,15 +1572,15 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                             </div>
 
                             {/* Applied values preview */}
-                            <div className="lg:col-span-4 pt-2 border-t border-dashed border-gray-200 mt-2 flex justify-between items-center text-[10px] font-bold">
-                              <div className="flex gap-4">
+                            <div className="lg:col-span-4 pt-2 border-t border-dashed border-gray-200 mt-2 flex flex-wrap justify-between items-center text-[10px] font-bold gap-2">
+                              <div className="flex gap-4 flex-wrap">
                                 <span className="text-gray-400">
                                   Preço Unit. Efetivo:{" "}
                                   <span className="text-gray-900">
                                     R${" "}
                                     {(newItem.tipo === "bonificacao"
                                       ? 0
-                                      : p.preco_base - newItem.desconto
+                                      : p.preco_base - (newItem.desconto || 0)
                                     ).toFixed(2)}
                                   </span>
                                 </span>
@@ -1514,9 +1591,18 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                                     {(
                                       (newItem.tipo === "bonificacao"
                                         ? 0
-                                        : p.preco_base - newItem.desconto) *
+                                        : p.preco_base - (newItem.desconto || 0)) *
                                       newItem.quantidade
                                     ).toFixed(2)}
+                                  </span>
+                                </span>
+                                <span className="text-gray-400">
+                                  Peso Total:{" "}
+                                  <span className="text-blue-700 font-extrabold">
+                                    {(p.unidade === 'g' 
+                                      ? (newItem.quantidade * (p.quantidade_unidade || 1)) / 1000
+                                      : newItem.quantidade * (p.quantidade_unidade || 1)
+                                    ).toFixed(2)} kg
                                   </span>
                                 </span>
                               </div>
@@ -1577,6 +1663,12 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                                   <div className="flex flex-col">
                                     <span className="font-black text-gray-900 text-xs">
                                       {p?.nome || "Produto Removido"}
+                                    </span>
+                                    <span className="text-gray-400 text-[10px] font-semibold">
+                                      Peso: {p ? (p.unidade === 'g' 
+                                        ? ((item.quantidade * (p.quantidade_unidade || 1)) / 1000).toFixed(2)
+                                        : (item.quantidade * (p.quantidade_unidade || 1)).toFixed(2)
+                                      ) : '0.00'} kg
                                     </span>
                                     <span
                                       className={`text-[9px] font-black uppercase tracking-tighter ${item.tipo === "venda" ? "text-emerald-600" : "text-blue-600"}`}
@@ -1652,6 +1744,10 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                             <span>Frete</span>
                             <span>R$ {cartSummary.frete_total.toFixed(2)}</span>
                           </div>
+                          <div className="border-t border-white/20 my-2 pt-2 flex justify-between font-bold text-accent">
+                            <span>Peso Total Estimado</span>
+                            <span>{cartSummary.peso_total.toFixed(2)} kg</span>
+                          </div>
                           <div className="border-t border-white/20 my-2 pt-2 flex justify-between font-bold text-green-400">
                             <span>Lucro Bruto Estimado</span>
                             <span>R$ {cartSummary.lucro_total.toFixed(2)}</span>
@@ -1663,15 +1759,17 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                     <div className="mt-8 flex flex-col gap-3">
                       <button
                         onClick={handleGerarOrcamento}
-                        className="w-full bg-white/20 hover:bg-white/30 text-white font-black text-sm uppercase tracking-widest py-4 rounded-xl transition-all shadow-sm"
+                        disabled={isSaving}
+                        className={`w-full text-white font-black text-sm uppercase tracking-widest py-4 rounded-xl transition-all shadow-sm ${isSaving ? "bg-white/10 text-white/50 cursor-not-allowed" : "bg-white/20 hover:bg-white/30"}`}
                       >
-                        Gerar Orçamento
+                        {isSaving ? "Processando..." : "Gerar Orçamento"}
                       </button>
                       <button
                         onClick={() => handleGerarPedido()}
-                        className="w-full bg-accent hover:bg-accent/90 text-primary font-black text-sm uppercase tracking-widest py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                        disabled={isSaving}
+                        className={`w-full text-primary font-black text-sm uppercase tracking-widest py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${isSaving ? "bg-accent/55 cursor-not-allowed text-primary/50" : "bg-accent hover:bg-accent/90"}`}
                       >
-                        <Package size={18} /> Gerar Pedido
+                        <Package size={18} /> {isSaving ? "Processando..." : "Gerar Pedido"}
                       </button>
                     </div>
                   </div>
@@ -1747,8 +1845,10 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                   </div>
                   <div className="md:border-l md:pl-6 border-gray-200">
                     <p className="text-sm font-bold text-gray-700">Condições Comerciais:</p>
-                    <p className="text-xs text-gray-600 mt-1"><strong>Pagamento:</strong> {selectedItem.condicao_pagamento || "A Combinar"}</p>
-                    <p className="text-xs text-gray-600 mt-1"><strong>Prazo de Entrega:</strong> {selectedItem.prazo_entrega || "15 dias"}</p>
+                    <p className="text-xs text-gray-600 mt-1"><strong>Pagamento:</strong> {selectedItem.condicao_pagamento || selectedItem.forma_pagamento_nf || "A Combinar"}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      <strong>Prazo/Previsão:</strong> {selectedItem.previsao_entrega ? formatPrevisaoEntrega(selectedItem.previsao_entrega) : (selectedItem.prazo_entrega || "A Combinar")}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1826,7 +1926,12 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
             <div className="p-6 bg-gray-50 border-t border-gray-200 hide-on-print flex gap-4 shrink-0">
               <button
                 onClick={() => {
-                  deleteOrcamento(selectedItem.id);
+                  setIsConfirmOpen({
+                    isOpen: true,
+                    pedId: selectedItem.id,
+                    type: "DeleteOrcamento",
+                    message: "Tem certeza de que realmente deseja deletar este orçamento? Esta ação limpará de forma irreversível qualquer vínculo ou despesa associada."
+                  });
                   setIsModalOpen(false);
                 }}
                 className="flex-1 px-6 py-4 bg-white border border-red-200 text-red-600 font-black text-sm uppercase tracking-widest rounded-xl hover:bg-red-50 transition-all"
@@ -1835,9 +1940,10 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
               </button>
               <button
                 onClick={() => handleGerarPedido(selectedItem as Orcamento)}
-                className="flex-[2] px-6 py-4 bg-primary text-white font-black text-sm uppercase tracking-widest rounded-xl hover:bg-primary/90 transition-all shadow-md"
+                disabled={isSaving}
+                className={`flex-[2] px-6 py-4 font-black text-sm uppercase tracking-widest rounded-xl shadow-md transition-all ${isSaving ? "bg-primary/50 text-white/50 cursor-not-allowed" : "bg-primary text-white hover:bg-primary/90"}`}
               >
-                Gerar Pedido a Partir do Orçamento
+                {isSaving ? "Processando..." : "Gerar Pedido a Partir do Orçamento"}
               </button>
             </div>
           </div>
@@ -1917,7 +2023,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                   </div>
                   <div className="md:border-l md:pl-6 border-gray-200">
                     <p className="text-sm font-bold text-gray-700">Previsão e Logística:</p>
-                    <p className="text-xs text-gray-600 mt-1"><strong>Data Prevista:</strong> {(selectedItem as Pedido).previsao_entrega ? new Date((selectedItem as Pedido).previsao_entrega!).toLocaleDateString("pt-BR", {timeZone: 'UTC'}) : "A definir"}</p>
+                    <p className="text-xs text-gray-600 mt-1"><strong>Data Prevista:</strong> {(selectedItem as Pedido).previsao_entrega ? formatPrevisaoEntrega((selectedItem as Pedido).previsao_entrega) : "A definir"}</p>
                     {selectedItem.status === 'Faturado' && (
                       <p className="text-xs text-gray-600 mt-1"><strong>Nº NF:</strong> {(selectedItem as Pedido).nf_numero || "N/A"}</p>
                     )}
@@ -2345,7 +2451,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                             <div className="border border-black p-2 text-left">
                               <p className="font-extrabold text-[7.5px] uppercase text-gray-500 tracking-wider font-sans">INFORMAÇÕES COMPLEMENTARES</p>
                               <p className="text-[7px] text-gray-650 font-sans">EMITIDA CONFORME SEFAZ DO ESTADO DO PARÁ - HOMOLOGADA VIA PROCESSO SELETIVO MANUAL E CONTINGÊNCIA FINANCEIRA.</p>
-                              <p className="text-[7px] text-gray-650 leading-tight font-sans">PREVISÃO DE TRANSPORTE E ENTREGA: {selectedNfPedido.previsao_entrega ? new Date(selectedNfPedido.previsao_entrega).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'EM DIAGNÓSTICO LOGÍSTICO'}.</p>
+                              <p className="text-[7px] text-gray-650 leading-tight font-sans">PREVISÃO DE TRANSPORTE E ENTREGA: {selectedNfPedido.previsao_entrega ? formatPrevisaoEntrega(selectedNfPedido.previsao_entrega) : 'EM DIAGNÓSTICO LOGÍSTICO'}.</p>
                             </div>
                           </div>
                         </div>
@@ -3079,8 +3185,12 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
           <div
             className={`bg-white rounded-[28px] shadow-2xl p-6 w-full ${isConfirmOpen.type === "Faturar" ? "max-w-2xl text-left" : "max-w-sm"} max-h-[90vh] overflow-y-auto scale-in`}
           >
-            <h3 className="text-lg font-black text-gray-900 mb-1">
-              Faturamento Comercial
+            <h3 className="text-lg font-black text-gray-905 mb-1">
+              {isConfirmOpen.type === "DeletePedido" || isConfirmOpen.type === "DeleteOrcamento"
+                ? "Confirmar Exclusão"
+                : isConfirmOpen.type === "Alert"
+                ? "Atenção"
+                : "Faturamento Comercial"}
             </h3>
             <p className="text-xs font-semibold text-gray-500 mb-4">
               {isConfirmOpen.message}
@@ -3430,6 +3540,28 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                   </div>
                 );
               })()
+            ) : isConfirmOpen.type === "DeletePedido" || isConfirmOpen.type === "DeleteOrcamento" ? (
+              <div className="flex flex-col gap-2 pt-2 text-center animate-fadeIn">
+                <button
+                  onClick={() => {
+                    if (isConfirmOpen.type === "DeletePedido" && isConfirmOpen.pedId) {
+                      deletePedido(isConfirmOpen.pedId);
+                    } else if (isConfirmOpen.type === "DeleteOrcamento" && isConfirmOpen.pedId) {
+                      deleteOrcamento(isConfirmOpen.pedId);
+                    }
+                    setIsConfirmOpen({ isOpen: false });
+                  }}
+                  className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-md shadow-red-200"
+                >
+                  Sim, Excluir Registro
+                </button>
+                <button
+                  onClick={() => setIsConfirmOpen({ isOpen: false })}
+                  className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold text-xs hover:bg-gray-200 transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
             ) : (
               <button
                 onClick={() => setIsConfirmOpen({ isOpen: false })}

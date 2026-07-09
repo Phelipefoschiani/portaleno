@@ -265,8 +265,8 @@ export const DRE: React.FC<DREProps> = ({ empresa }) => {
       comissoesBreakdown[com.representante_id] = (comissoesBreakdown[com.representante_id] || 0) + val;
     });
 
-    // CPV total: Industry Direct Cost + Mandioca root purchase
-    const custosProdutos = cpvIndustrial + totalMandioca;
+    // CPV total: Industry Direct Cost
+    const custosProdutos = cpvIndustrial;
     const lucroBruto = Math.max(0, receitaLiquida - custosProdutos);
 
     // FINANCIAL RESULTS (Receitas Financeiras)
@@ -296,18 +296,6 @@ export const DRE: React.FC<DREProps> = ({ empresa }) => {
           data: d.data_pagamento || d.data,
           desc: `Atraso/Juros: ${d.descricao}`,
           valor: d.juros_pago
-        });
-      }
-    });
-
-    // NF prepayment / antecipacao fees
-    periodPedidos.forEach(p => {
-      if (p.juros_adiantamento && p.juros_adiantamento > 0) {
-        despesasFinanceiras += p.juros_adiantamento;
-        jurosPagosDetalhes.push({
-          data: p.data_adiantamento || p.data,
-          desc: `Tarifa desconto Duplicata NF nº ${p.nf_numero || p.id}`,
-          valor: p.juros_adiantamento
         });
       }
     });
@@ -845,53 +833,6 @@ export const DRE: React.FC<DREProps> = ({ empresa }) => {
           {expanded.cpv && (
             <div className="bg-slate-50/60 border-t border-gray-100/80 divide-y divide-gray-100 animate-fadeIn">
               
-              {/* Custos com Matéria-Prima Mandioca */}
-              <div className="last:border-b-0">
-                <div className="grid grid-cols-12 py-2.5 px-4 lg:px-6 items-center hover:bg-slate-100/50 transition">
-                  <div className="col-span-6 md:col-span-8 pl-8 md:pl-12 flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
-                    <span className="font-bold text-gray-750 text-2xs md:text-xs"> Custos com Matéria-Prima Mandioca (Entradas de Raiz) </span>
-                  </div>
-                  <div className="col-span-4 md:col-span-2 text-right font-semibold text-xs font-mono text-gray-800">
-                    R$ {dreData.totalMandioca.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                  </div>
-                  <div className="col-span-1 text-right font-mono text-2xs font-semibold text-gray-500">
-                    {percentOfBruta(dreData.totalMandioca)}
-                  </div>
-                  <div className="col-span-1 text-right flex justify-end">
-                    <button
-                      onClick={() => toggleDescription('cpv-mandioca')}
-                      className="p-1 text-gray-400 hover:text-indigo-600 rounded hover:bg-slate-150/50 transition cursor-pointer"
-                    >
-                      {openDescriptions['cpv-mandioca'] ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                </div>
-                {openDescriptions['cpv-mandioca'] && (
-                  <div className="bg-indigo-50/25 border-t border-b border-indigo-100/30 py-3 px-12 md:px-20 text-[10px] text-gray-655 font-semibold font-medium leading-relaxed font-sans space-y-2 animate-fadeIn">
-                    <div className="font-bold text-gray-750 uppercase tracking-wider text-[9px]">Detalhamento das compras de mandioca no período:</div>
-                    {dreData.mandiocaBreakdown.length === 0 ? (
-                      <div className="text-gray-400 font-semibold italic">Nenhuma compra de mandioca raiz faturada no período.</div>
-                    ) : (
-                      <div className="max-h-48 overflow-y-auto space-y-1.5 border-t border-gray-100/60 pt-2">
-                        <div className="grid grid-cols-12 text-[8px] font-extrabold text-slate-400 uppercase tracking-widest pb-1">
-                          <div className="col-span-6">Fornecedor</div>
-                          <div className="col-span-3 text-center">Data</div>
-                          <div className="col-span-3 text-right">Valor Líquido</div>
-                        </div>
-                        {dreData.mandiocaBreakdown.map((man, mIdx) => (
-                          <div key={mIdx} className="grid grid-cols-12 font-semibold text-gray-600 hover:text-gray-950 font-mono text-2xs">
-                            <div className="col-span-6 truncate font-sans text-xs font-semibold">{man.fornecedor} {man.peso > 0 && `(${man.peso.toLocaleString('pt-BR')} kg)`}</div>
-                            <div className="col-span-3 text-center font-sans text-xs">{man.data.split('-').reverse().join('/')}</div>
-                            <div className="col-span-3 text-right">R$ {man.total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
               {/* Custos de Industrialização e Produção */}
               <div className="last:border-b-0">
                 <div className="grid grid-cols-12 py-2.5 px-4 lg:px-6 items-center hover:bg-slate-100/50 transition">

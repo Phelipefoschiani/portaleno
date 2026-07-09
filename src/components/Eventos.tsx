@@ -102,7 +102,7 @@ const Eventos: React.FC = () => {
                       </div>
                     </td>
                     <td className="p-5 text-right">
-                      {ev.valor !== undefined ? (
+                      {ev.valor != null ? (
                         <span className={`text-sm font-black tracking-tight ${ev.valor >= 0 ? 'text-primary' : 'text-red-500'}`}>
                           {ev.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </span>

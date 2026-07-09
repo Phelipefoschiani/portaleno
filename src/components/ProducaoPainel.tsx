@@ -137,17 +137,23 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
 
   // Helper to get either the draft quantity or actual saved quantity of an item
   const getDraftValue = (pedido: Pedido, itemIdx: number): number => {
+    const items = pedido.items || (pedido as any).itens_pedido || [];
     if (drafts[pedido.id] !== undefined) {
-      return drafts[pedido.id][itemIdx];
+      return drafts[pedido.id][itemIdx] || 0;
     }
-    return pedido.items[itemIdx].quantidade_produzida || 0;
+    if (items[itemIdx]) return items[itemIdx].quantidade_produzida || 0;
+    return 0;
   };
 
   // Helper to check if an order has pending unsaved changes
   const hasChanges = (pedido: Pedido): boolean => {
     const draft = drafts[pedido.id];
+    const items = pedido.items || (pedido as any).itens_pedido || [];
     if (!draft) return false;
-    return draft.some((val, idx) => val !== (pedido.items[idx].quantidade_produzida || 0));
+    return draft.some((val, idx) => {
+      const dbVal = items[idx]?.quantidade_produzida || 0;
+      return val !== dbVal;
+    });
   };
 
   // Calculate produced units vs expectation for a single order (accounting for operator edits)
@@ -207,11 +213,13 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
 
   // Set draft value for specific order item index
   const handleUpdateItemProductionDraft = (pedido: Pedido, itemIdx: number, stepVolume: number) => {
+    const items = pedido.items || (pedido as any).itens_pedido || [];
     const currentDraft = drafts[pedido.id] 
       ? [...drafts[pedido.id]] 
-      : pedido.items.map(it => it.quantidade_produzida || 0);
+      : items.map(it => it.quantidade_produzida || 0);
 
-    const targetItem = pedido.items[itemIdx];
+    const targetItem = items[itemIdx];
+    if (!targetItem) return;
     const currentVal = currentDraft[itemIdx];
     const newVal = Math.min(Math.max(0, currentVal + stepVolume), targetItem.quantidade);
 
@@ -223,19 +231,39 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
     }));
   };
 
-  // Reset order production draft locally
-  const handleResetOrderProductionDraft = (pedido: Pedido) => {
+  const handleSetItemProductionDraft = (pedido: Pedido, itemIdx: number, absoluteValue: number) => {
+    const items = pedido.items || (pedido as any).itens_pedido || [];
+    const currentDraft = drafts[pedido.id] 
+      ? [...drafts[pedido.id]] 
+      : items.map(it => it.quantidade_produzida || 0);
+
+    const targetItem = items[itemIdx];
+    if (!targetItem) return;
+    const newVal = Math.min(Math.max(0, absoluteValue), targetItem.quantidade);
+
+    currentDraft[itemIdx] = newVal;
+
     setDrafts(prev => ({
       ...prev,
-      [pedido.id]: pedido.items.map(() => 0)
+      [pedido.id]: currentDraft
+    }));
+  };
+
+  // Reset order production draft locally
+  const handleResetOrderProductionDraft = (pedido: Pedido) => {
+    const items = pedido.items || (pedido as any).itens_pedido || [];
+    setDrafts(prev => ({
+      ...prev,
+      [pedido.id]: items.map(() => 0)
     }));
   };
 
   // Complete order production draft locally
   const handleCompleteOrderProductionDraft = (pedido: Pedido) => {
+    const items = pedido.items || (pedido as any).itens_pedido || [];
     setDrafts(prev => ({
       ...prev,
-      [pedido.id]: pedido.items.map(it => it.quantidade)
+      [pedido.id]: items.map(it => it.quantidade)
     }));
   };
 
@@ -247,7 +275,8 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
     const draft = drafts[orderId];
     if (!draft) return; // No unsaved changes to commit
 
-    const updatedItems = targetOrder.items.map((item, idx) => ({
+    const items = targetOrder.items || (targetOrder as any).itens_pedido || [];
+    const updatedItems = items.map((item, idx) => ({
       ...item,
       quantidade_produzida: draft[idx]
     }));
@@ -701,38 +730,68 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
 
                       {/* Detailed product items inside the order */}
                       <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 space-y-3 mt-4">
-                        {pedido.items.map((item, idx) => {
-                          const prod = productMap.get(item.produto_id);
-                          const prodName = prod?.nome || 'Insumo Mandioca';
-                          const prodUn = prod?.unidade || 'Un';
-                          const produced = getDraftValue(pedido, idx);
-                          const expected = item.quantidade;
-                          const ratio = expected > 0 ? (produced / expected) * 100 : 0;
+                        {(() => {
+                          const itemsList = pedido.items || (pedido as any).itens_pedido || [];
+                          
+                          if (itemsList.length === 0) {
+                            return (
+                              <div className="text-center py-6 bg-white rounded-xl border border-dashed border-gray-200">
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                  Nenhum item encontrado para este pedido.
+                                </p>
+                              </div>
+                            );
+                          }
 
-                          return (
-                            <div key={idx} className="text-xs bg-white p-3 rounded-xl border border-gray-50 flex flex-col gap-2 shadow-sm">
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <h5 className="font-extrabold text-gray-900">{prodName}</h5>
-                                  <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">
-                                    Meta: <span className="text-gray-700 font-extrabold">{expected} {prodUn}</span>
-                                  </p>
+                          return itemsList.map((item: ItemPedido, idx: number) => {
+                            const prod = productMap.get(item.produto_id);
+                            const prodName = prod?.nome || 'Insumo Mandioca';
+                            const prodUn = prod?.unidade || 'Un';
+                            const prodQtdUn = prod?.quantidade_unidade || 1;
+                            const produced = getDraftValue(pedido, idx);
+                            const expected = item.quantidade;
+                            const ratio = expected > 0 ? (produced / expected) * 100 : 0;
+                            
+                            const producedKg = prodUn === 'g' || prodUn === 'grama' || prodUn === 'gramas' 
+                              ? (produced * prodQtdUn) / 1000 
+                              : (produced * prodQtdUn);
+                            const expectedKg = prodUn === 'g' || prodUn === 'grama' || prodUn === 'gramas'
+                              ? (expected * prodQtdUn) / 1000 
+                              : (expected * prodQtdUn);
+
+                            return (
+                              <div key={idx} className="text-xs bg-white p-3 rounded-xl border border-gray-50 flex flex-col gap-2 shadow-sm">
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <h5 className="font-extrabold text-gray-900">{prodName}</h5>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">
+                                      Meta: <span className="text-gray-700 font-extrabold">{expected} Cxs/Pacs</span>
+                                      {prodUn !== 'un' && prodUn !== 'Un' && (
+                                        <span className="text-emerald-600 font-extrabold ml-1">({expectedKg.toFixed(2)} kg)</span>
+                                      )}
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-col items-end">
+                                    <span className={`font-black tracking-tight ${ratio >= 100 ? 'text-emerald-600' : 'text-primary'}`}>
+                                      {produced} / {expected} Qt.
+                                    </span>
+                                    {prodUn !== 'un' && prodUn !== 'Un' && (
+                                      <span className="text-[9px] text-gray-400 font-bold mt-0.5">
+                                        {producedKg.toFixed(2)} / {expectedKg.toFixed(2)} kg
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                                <span className={`font-black tracking-tight ${ratio >= 100 ? 'text-emerald-600' : 'text-primary'}`}>
-                                  {produced} / {expected} {prodUn}
-                                </span>
-                              </div>
 
-                              {/* Item progress bar */}
-                              <div className="w-full bg-gray-50 h-1.5 rounded-full overflow-hidden">
-                                <div 
-                                  className={`h-full rounded-full transition-all duration-300 ${ratio >= 100 ? 'bg-emerald-500' : 'bg-primary/80'}`}
-                                  style={{ width: `${ratio}%` }}
-                                ></div>
-                              </div>
+                                {/* Item progress bar */}
+                                <div className="w-full bg-gray-50 h-1.5 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full transition-all duration-300 ${ratio >= 100 ? 'bg-emerald-500' : 'bg-primary/80'}`}
+                                    style={{ width: `${ratio}%` }}
+                                  ></div>
+                                </div>
 
-                              {/* OPERATOR/PRODUCTION REGISTER CONTROLS */}
-                              {roleMode === 'operador' && (
+                                {/* OPERATOR/PRODUCTION REGISTER CONTROLS */}
                                 <div className="flex items-center justify-between gap-2 mt-1.5 pt-1.5 border-t border-gray-100/60">
                                   {!pedido.lote ? (
                                     <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest bg-amber-50 px-2 py-1 rounded">
@@ -756,6 +815,18 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
                                         >
                                           -1
                                         </button>
+                                        
+                                        <input 
+                                          type="number" 
+                                          className="w-16 px-1 py-0.5 text-center text-xs font-black bg-white border-y border-x border-gray-200 focus:border-primary outline-none app-no-spinners"
+                                          value={produced}
+                                          onChange={(e) => {
+                                            let val = parseInt(e.target.value, 10);
+                                            if (isNaN(val)) val = 0;
+                                            handleSetItemProductionDraft(pedido, idx, val);
+                                          }}
+                                        />
+
                                         <button 
                                           onClick={() => handleUpdateItemProductionDraft(pedido, idx, 1)}
                                           disabled={produced >= expected}
@@ -783,16 +854,17 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
                                     </>
                                   )}
                                 </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                              </div>
+                            );
+                          });
+                        })()}
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  {/* BOTTOM ACTIONS BAR */}
-                  <div className="mt-6 pt-5 border-t border-gray-100 flex flex-wrap gap-2 justify-between items-center bg-white">
+                {/* BOTTOM ACTIONS BAR */}
+                <div className="mt-6 pt-5 border-t border-gray-100 flex flex-wrap gap-2 justify-between items-center bg-white">
                     {/* Visual indicators of extra requests */}
                     <button
                       onClick={() => setSelectedPedido(pedido)}
@@ -803,7 +875,6 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
                     </button>
 
                     {/* Operational draft control and Submit Button */}
-                    {roleMode === 'operador' && (
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {pedido.lote ? (
                           <>
@@ -841,10 +912,8 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
                           </span>
                         )}
                       </div>
-                    )}
                   </div>
                 </div>
-              </div>
             );
           })}
         </div>

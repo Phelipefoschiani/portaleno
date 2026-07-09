@@ -82,6 +82,7 @@ interface GlobalStateContextType {
     usuario_id?: string,
     usuario_nome?: string,
   ) => void;
+  resetDatabase: () => Promise<void>;
 }
 
 const GlobalStateContext = createContext<GlobalStateContextType | undefined>(
@@ -114,64 +115,78 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     const fetchData = async () => {
       setIsLoading(true);
 
-      const { data: qUsuarios } = await supabase.from("usuarios").select("*");
-      const { data: qClientes } = await supabase.from("clientes").select("*");
-      const { data: qProdutos } = await supabase
-        .from("produtos")
-        .select("*, custos_detalhados:custos_diferenciados(*)");
-      const { data: qFornecedores } = await supabase
-        .from("fornecedores")
-        .select("*");
-      const { data: qCompras } = await supabase
-        .from("compras_mandioca")
-        .select("*, pesagens_sacos:pesagens_mandioca(peso_kg)");
+      try {
+        const [
+          { data: qUsuarios, error: eUsuarios },
+          { data: qClientes, error: eClientes },
+          { data: qProdutos, error: eProdutos },
+          { data: qFornecedores, error: eFornecedores },
+          { data: qCompras, error: eCompras },
+          { data: qPedidos, error: ePedidos },
+          { data: qOrcamentos, error: eOrcamentos },
+          { data: qDespesas, error: eDespesas },
+          { data: qProducoes, error: eProducoes },
+          { data: qComissoes, error: eComissoes },
+          { data: qObjetivos, error: eObjetivos },
+          { data: qMetas, error: eMetas },
+          { data: qEventos, error: eEventos }
+        ] = await Promise.all([
+          supabase.from("usuarios").select("*").limit(10000),
+          supabase.from("clientes").select("*").limit(10000),
+          supabase.from("produtos").select("*, custos_detalhados:custos_diferenciados(*)").limit(10000),
+          supabase.from("fornecedores").select("*").limit(10000),
+          supabase.from("compras_mandioca").select("*, pesagens_sacos:pesagens_mandioca(peso_kg)").limit(10000),
+          supabase.from("pedidos").select("*, items:itens_pedido(*), solicitacoes_insumos:solicitacoes_insumo(*)").limit(10000),
+          supabase.from("orcamentos").select("*, items:itens_orcamento(*)").limit(10000),
+          supabase.from("despesas").select("*").limit(10000),
+          supabase.from("producoes").select("*").limit(10000),
+          supabase.from("comissoes").select("*").limit(10000),
+          supabase.from("objetivos_empresa").select("*").limit(10000),
+          supabase.from("metas_representante").select("*").limit(10000),
+          supabase.from("log_eventos").select("*").order("data", { ascending: false }).limit(200)
+        ]);
 
-      const { data: qPedidos } = await supabase
-        .from("pedidos")
-        .select("*, items:itens_pedido(*), solicitacoes_insumos(*)");
-      const { data: qOrcamentos } = await supabase
-        .from("orcamentos")
-        .select("*, items:itens_orcamento(*)");
+        if (eUsuarios) console.error("Erro usuarios:", eUsuarios);
+        if (eClientes) console.error("Erro clientes:", eClientes);
+        if (eProdutos) console.error("Erro produtos:", eProdutos);
+        if (eFornecedores) console.error("Erro fornecedores:", eFornecedores);
+        if (eCompras) console.error("Erro compras:", eCompras);
+        if (ePedidos) console.error("Erro pedidos:", ePedidos);
+        if (eOrcamentos) console.error("Erro orçamentos:", eOrcamentos);
+        if (eDespesas) console.error("Erro despesas:", eDespesas);
+        if (eProducoes) console.error("Erro producoes:", eProducoes);
+        if (eComissoes) console.error("Erro comissoes:", eComissoes);
+        if (eObjetivos) console.error("Erro objetivos:", eObjetivos);
+        if (eMetas) console.error("Erro metas:", eMetas);
+        if (eEventos) console.error("Erro eventos:", eEventos);
 
-      const { data: qDespesas } = await supabase.from("despesas").select("*");
-      const { data: qProducoes } = await supabase.from("producoes").select("*");
-      const { data: qComissoes } = await supabase.from("comissoes").select("*");
-      const { data: qObjetivos } = await supabase
-        .from("objetivos_empresa")
-        .select("*");
-      const { data: qMetas } = await supabase
-        .from("metas_representante")
-        .select("*");
-      const { data: qEventos } = await supabase
-        .from("log_eventos")
-        .select("*")
-        .order("data", { ascending: false })
-        .limit(200);
+        if (qUsuarios) setUsuarios(qUsuarios as User[]);
+        if (qClientes) setClientes(qClientes as Cliente[]);
+        if (qProdutos) setProdutos(qProdutos as Produto[]);
+        if (qFornecedores) setFornecedores(qFornecedores as Fornecedor[]);
+        if (qDespesas) setDespesas(qDespesas as Despesa[]);
+        if (qProducoes) setProducao(qProducoes as Producao[]);
+        if (qComissoes) setComissoes(qComissoes as Comissao[]);
+        if (qObjetivos) setObjetivosEmpresa(qObjetivos as ObjetivoEmpresa[]);
+        if (qMetas) setMetasRepresentantes(qMetas as MetaRepresentante[]);
+        if (qEventos) setEventos(qEventos as AppEvent[]);
 
-      if (qUsuarios) setUsuarios(qUsuarios as User[]);
-      if (qClientes) setClientes(qClientes as Cliente[]);
-      if (qProdutos) setProdutos(qProdutos as Produto[]);
-      if (qFornecedores) setFornecedores(qFornecedores as Fornecedor[]);
-      if (qDespesas) setDespesas(qDespesas as Despesa[]);
-      if (qProducoes) setProducao(qProducoes as Producao[]);
-      if (qComissoes) setComissoes(qComissoes as Comissao[]);
-      if (qObjetivos) setObjetivosEmpresa(qObjetivos as ObjetivoEmpresa[]);
-      if (qMetas) setMetasRepresentantes(qMetas as MetaRepresentante[]);
-      if (qEventos) setEventos(qEventos as AppEvent[]);
+        if (qCompras) {
+          setComprasMandioca(
+            qCompras.map((c) => ({
+              ...c,
+              pesagens_sacos: c.pesagens_sacos?.map((p: any) => p.peso_kg) || [],
+            })),
+          );
+        }
 
-      if (qCompras) {
-        setComprasMandioca(
-          qCompras.map((c) => ({
-            ...c,
-            pesagens_sacos: c.pesagens_sacos?.map((p: any) => p.peso_kg) || [],
-          })),
-        );
+        if (qPedidos) setPedidos(qPedidos as Pedido[]);
+        if (qOrcamentos) setOrcamentos(qOrcamentos as unknown as Orcamento[]);
+      } catch (err) {
+        console.error("Erro fatal no fetchData:", err);
+      } finally {
+        setIsLoading(false);
       }
-
-      if (qPedidos) setPedidos(qPedidos as Pedido[]);
-      if (qOrcamentos) setOrcamentos(qOrcamentos as unknown as Orcamento[]);
-
-      setIsLoading(false);
     };
     fetchData();
   }, []);
@@ -234,12 +249,16 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const addUsuario = async (u: Omit<User, "id">) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("usuarios")
       .insert([u])
       .select()
       .single();
-    if (data) setUsuarios((prev) => [...prev, data]);
+    if (error) {
+      console.error("Erro ao adicionar usuário:", error);
+      alert("Erro ao adicionar usuário: " + error.message);
+    }
+    if (data) { setUsuarios((prev) => [...prev, data]); logEvent(`Adicionou usuário: ${u.nome}`); }
   };
   const updateUsuario = async (id: string, updatedFields: Partial<User>) => {
     const { data } = await supabase
@@ -248,31 +267,49 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       .eq("id", id)
       .select()
       .single();
-    if (data) setUsuarios((prev) => prev.map((u) => (u.id === id ? data : u)));
+    if (data) { setUsuarios((prev) => prev.map((u) => (u.id === id ? data : u))); logEvent(`Atualizou usuário: ${updatedFields.nome || "Usuário"}`); }
   };
   const deleteUsuario = async (id: string) => {
+    const u = usuarios.find(x => x.id === id);
+    if(u) logEvent(`Excluiu usuário: ${u.nome}`);
     await supabase.from("usuarios").delete().eq("id", id);
     setUsuarios((prev) => prev.filter((u) => u.id !== id));
   };
 
   const addCliente = async (c: Omit<Cliente, "id">) => {
-    const { data } = await supabase
+    const payload = { ...c };
+    if ((payload as any).representante_id === "") (payload as any).representante_id = null;
+    
+    const { data, error } = await supabase
       .from("clientes")
-      .insert([c])
+      .insert([payload])
       .select()
       .single();
-    if (data) setClientes((prev) => [...prev, data]);
+      
+    if (error) {
+      console.error("Erro ao adicionar cliente:", error);
+      alert("Erro ao adicionar cliente: " + error.message);
+    }
+    if (data) { setClientes((prev) => [...prev, data]); logEvent(`Adicionou cliente: ${payload.nome_fantasia || payload.razao_social}`); }
   };
   const updateCliente = async (id: string, updatedFields: Partial<Cliente>) => {
+    const payload = { ...updatedFields };
+    if ((payload as any).representante_id === "") (payload as any).representante_id = null;
+
     const { data } = await supabase
       .from("clientes")
-      .update(updatedFields)
+      .update(payload)
       .eq("id", id)
       .select()
       .single();
-    if (data) setClientes((prev) => prev.map((c) => (c.id === id ? data : c)));
+    if (data) {
+      logEvent(`Atualizou configuração do cliente: ${(payload as any).razao_social || "Cliente"}`);
+      setClientes((prev) => prev.map((c) => (c.id === id ? data : c)));
+    }
   };
   const deleteCliente = async (id: string) => {
+    const c = clientes.find(x => x.id === id);
+    if(c) logEvent(`Excluiu cliente: ${c.nome_fantasia || c.razao_social}`);
     await supabase.from("clientes").delete().eq("id", id);
     setClientes((prev) => prev.filter((c) => c.id !== id));
     setPedidos((prev) => prev.filter((p) => p.cliente_id !== id));
@@ -281,38 +318,85 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const addPedido = async (p: Omit<Pedido, "id">) => {
     const { items, solicitacoes_insumos, ...rest } = p;
-    const { data } = await supabase
+    const payload = { ...rest };
+    
+    // Clean up empty strings
+    Object.keys(payload).forEach(key => {
+      if ((payload as any)[key] === "") {
+        (payload as any)[key] = null;
+      }
+    });
+
+    // Map `condicao_pagamento` & `prazo_entrega` which don't exist in `pedidos` table
+    if ((payload as any).condicao_pagamento) {
+      if (!(payload as any).forma_pagamento_nf) {
+        (payload as any).forma_pagamento_nf = (payload as any).condicao_pagamento;
+      }
+    }
+    
+    // Prevent sending invalid timestamp "15 dias"
+    if ((payload as any).previsao_entrega === "Atrasado" || (payload as any).previsao_entrega === "Hoje" || (payload as any).previsao_entrega?.includes("dias")) {
+      (payload as any).previsao_entrega = null;
+    }
+
+    // Append 'prazo_entrega' to observacoes if it is present since it doesn't exist natively
+    if ((payload as any).prazo_entrega) {
+      const obs = (payload as any).observacoes || '';
+      (payload as any).observacoes = `Prazo de Entrega: ${(payload as any).prazo_entrega}\n${obs}`;
+    }
+
+    delete (payload as any).condicao_pagamento;
+    delete (payload as any).prazo_entrega;
+
+    const { data, error } = await supabase
       .from("pedidos")
-      .insert([rest])
+      .insert([payload])
       .select()
       .single();
+    if (error) {
+      console.error("Erro ao adicionar pedido:", error);
+      alert("Erro ao adicionar pedido: " + error.message);
+      return false;
+    }
     if (data) {
       const insertedPedido = {
         ...data,
         items: [],
-        solicitacoes_insumos: [],
+        solicitacoes_insumos: [], // Ensure key matches join and interface
       } as any;
       if (items && items.length > 0) {
-        const mappedItems = items.map((it) => ({ ...it, pedido_id: data.id }));
-        const { data: itemData } = await supabase
+        // Remove temporary ID and map to table
+        const mappedItems = items.map(({ id, orcamento_id, ...it }: any) => ({ ...it, pedido_id: data.id }));
+        const { data: itemData, error: itemError } = await supabase
           .from("itens_pedido")
           .insert(mappedItems)
           .select();
+        
+        if (itemError) {
+          console.error("Erro ao inserir itens do pedido:", itemError);
+        }
         if (itemData) insertedPedido.items = itemData;
       }
       if (solicitacoes_insumos && solicitacoes_insumos.length > 0) {
-        const mapped = solicitacoes_insumos.map((s) => ({
+        const mapped = solicitacoes_insumos.map(({ id, ...s }: any) => ({
           ...s,
           pedido_id: data.id,
         }));
-        const { data: reqData } = await supabase
+        const { data: reqData, error: reqError } = await supabase
           .from("solicitacoes_insumo")
           .insert(mapped)
           .select();
+        
+        if (reqError) {
+          console.error("Erro ao inserir solicitações de insumo:", reqError);
+        }
         if (reqData) insertedPedido.solicitacoes_insumos = reqData;
       }
       setPedidos((prev) => [...prev, insertedPedido]);
+      logEvent(`Adicionou novo pedido.`, insertedPedido.valor_total);
+      return true;
     }
+    return false;
   };
 
   const updatePedido = async (id: string, updatedFields: Partial<Pedido>) => {
@@ -321,14 +405,36 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!oldPedido) return;
 
     if (Object.keys(rest).length > 0) {
-      await supabase.from("pedidos").update(rest).eq("id", id);
+      const payload = { ...rest };
+      
+      // Clean up empty strings
+      Object.keys(payload).forEach(key => {
+        if ((payload as any)[key] === "") {
+          (payload as any)[key] = null;
+        }
+      });
+
+      if ((payload as any).condicao_pagamento) {
+        if (!(payload as any).forma_pagamento_nf) {
+          (payload as any).forma_pagamento_nf = (payload as any).condicao_pagamento;
+        }
+      }
+
+      if ((payload as any).previsao_entrega === "Atrasado" || (payload as any).previsao_entrega === "Hoje" || (payload as any).previsao_entrega?.includes("dias")) {
+        (payload as any).previsao_entrega = null;
+      }
+
+      delete (payload as any).condicao_pagamento;
+      delete (payload as any).prazo_entrega;
+
+      await supabase.from("pedidos").update(payload).eq("id", id);
     }
 
     let updatedItems = oldPedido.items;
     if (items) {
       await supabase.from("itens_pedido").delete().eq("pedido_id", id);
       const mappedItems = items.map((it) => {
-        const { id: _, ...noIdIt } = it as any;
+        const { id: _, orcamento_id, ...noIdIt } = it as any;
         return { ...noIdIt, pedido_id: id };
       });
       const { data: newItems } = await supabase
@@ -338,6 +444,8 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       if (newItems) updatedItems = newItems;
     }
 
+    const pName = items ? "Itens do Pedido" : "Detalhes do Pedido";
+    logEvent(`Atualizou pedido.`, (rest as any).valor_total);
     setPedidos((prev) =>
       prev.map((p) =>
         p.id === id ? { ...p, ...rest, items: updatedItems } : p,
@@ -346,6 +454,8 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const deletePedido = async (id: string) => {
+    const ped = pedidos.find(p => p.id === id);
+    if(ped) logEvent(`Excluiu pedido.`, ped.valor_total);
     await supabase.from("pedidos").delete().eq("id", id);
     setPedidos((prev) => prev.filter((p) => p.id !== id));
     setComissoes((prev) => prev.filter((c) => c.pedido_id !== id));
@@ -353,26 +463,47 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const addOrcamento = async (o: Omit<Orcamento, "id">) => {
     const { items, ...rest } = o;
-    const { data } = await supabase
+    // Fix empty strings for UUID and timestamp fields
+    const payload = { ...rest };
+    Object.keys(payload).forEach(key => {
+      if ((payload as any)[key] === "") {
+        (payload as any)[key] = null;
+      }
+    });
+
+    const { data, error } = await supabase
       .from("orcamentos")
-      .insert([rest])
+      .insert([payload])
       .select()
       .single();
+    if (error) {
+      console.error("Erro ao adicionar orçamento:", error);
+      alert("Erro ao adicionar orçamento: " + error.message);
+      return false;
+    }
     if (data) {
       const inserted = { ...data, items: [] } as any;
       if (items && items.length > 0) {
-        const mappedItems = items.map((it) => ({
+        // Remove temporary ID and map to table
+        const mappedItems = items.map(({ id, pedido_id, ...it }: any) => ({
           ...it,
           orcamento_id: data.id,
         }));
-        const { data: itemData } = await supabase
+        const { data: itemData, error: itemError } = await supabase
           .from("itens_orcamento")
           .insert(mappedItems)
           .select();
+        
+        if (itemError) {
+          console.error("Erro ao inserir itens do orçamento:", itemError);
+        }
         if (itemData) inserted.items = itemData;
       }
-      setOrcamentos([...orcamentos, inserted]);
+      logEvent(`Adicionou novo orçamento.`, inserted.valor_total);
+      setOrcamentos((prev) => [...prev, inserted]);
+      return true;
     }
+    return false;
   };
 
   const updateOrcamento = async (
@@ -384,14 +515,20 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!oldOrcamento) return;
 
     if (Object.keys(rest).length > 0) {
-      await supabase.from("orcamentos").update(rest).eq("id", id);
+      const payload = { ...rest };
+      Object.keys(payload).forEach(key => {
+        if ((payload as any)[key] === "") {
+          (payload as any)[key] = null;
+        }
+      });
+      await supabase.from("orcamentos").update(payload).eq("id", id);
     }
 
     let updatedItems = oldOrcamento.items;
     if (items) {
       await supabase.from("itens_orcamento").delete().eq("orcamento_id", id);
       const mappedItems = items.map((it) => {
-        const { id: _, ...noIdIt } = it as any;
+        const { id: _, pedido_id, ...noIdIt } = it as any;
         return { ...noIdIt, orcamento_id: id };
       });
       const { data: newItems } = await supabase
@@ -401,25 +538,28 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       if (newItems) updatedItems = newItems as any;
     }
 
-    setOrcamentos((prev) =>
-      prev.map((o) =>
-        o.id === id ? { ...o, ...rest, items: updatedItems } : o,
-      ),
-    );
-  };
+    setOrcamentos((prev) => prev.map((o) => o.id === id ? { ...o, ...rest, items: updatedItems } : o)); logEvent(`Atualizou orçamento`, (rest as any).valor_total); };
 
   const deleteOrcamento = async (id: string) => {
+    const obj = orcamentos.find(o => o.id === id);
+    if(obj) logEvent(`Excluiu orçamento.`, obj.valor_total);
     await supabase.from("orcamentos").delete().eq("id", id);
-    setOrcamentos(orcamentos.filter((o) => o.id !== id));
+    setOrcamentos((prev) => prev.filter((o) => o.id !== id));
+    const orc = orcamentos.find(x => x.id === id);
+    logEvent(`Excluiu orçamento`, orc?.valor_total);
   };
 
   const addFornecedor = async (f: Omit<Fornecedor, "id">) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("fornecedores")
       .insert([f])
       .select()
       .single();
-    if (data) setFornecedores((prev) => [...prev, data]);
+    if (error) {
+      console.error("Erro ao adicionar fornecedor:", error);
+      alert("Erro ao adicionar fornecedor: " + error.message);
+    }
+    if (data) { setFornecedores((prev) => [...prev, data]); logEvent(`Adicionou fornecedor: ${data.nome || 'Fornecedor'}`); }
   };
   const updateFornecedor = async (
     id: string,
@@ -431,22 +571,29 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       .eq("id", id)
       .select()
       .single();
-    if (data)
+    if (data) {
       setFornecedores((prev) => prev.map((f) => (f.id === id ? data : f)));
+      logEvent(`Atualizou fornecedor: ${updatedFields.nome || 'Fornecedor'}`);
+    }
   };
   const deleteFornecedor = async (id: string) => {
-    await supabase.from("fornecedores").delete().eq("id", id);
-    setFornecedores((prev) => prev.filter((f) => f.id !== id));
+    const forn = fornecedores.find(x => x.id === id); if(forn) logEvent(`Excluiu fornecedor: ${forn.nome || 'Fornecedor'}`); await supabase.from("fornecedores").delete().eq("id", id); setFornecedores((prev) => prev.filter((f) => f.id !== id));
     setComprasMandioca((prev) => prev.filter((c) => c.fornecedor_id !== id));
   };
 
   const addCompraMandioca = async (c: Omit<CompraMandioca, "id">) => {
     const { pesagens_sacos, ...rest } = c;
-    const { data } = await supabase
+    if ((rest as any).fornecedor_id === "") (rest as any).fornecedor_id = null;
+    const { data, error } = await supabase
       .from("compras_mandioca")
       .insert([rest])
       .select()
       .single();
+
+    if (error) {
+      console.error("Erro ao adicionar compra:", error);
+      alert("Erro ao adicionar compra: " + error.message);
+    }
 
     if (data) {
       const compData = { ...data, pesagens_sacos: [] } as any;
@@ -462,6 +609,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         if (dp) compData.pesagens_sacos = dp.map((x: any) => x.peso_kg);
       }
       setComprasMandioca((prev) => [...prev, compData]);
+      logEvent(`Adicionou compra de mandioca`, c.valor_total);
 
       // Automatically create a "Materia Prima" expense as "Em aberto"
       const forn = fornecedores.find((f) => f.id === c.fornecedor_id);
@@ -469,8 +617,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       const valorCompra =
         c.valor_total || c.quantidade_total * (c.preco_quilo || 1.15);
 
+      const localUser = localStorage.getItem("grupo_eno_user");
+      let uId = null;
+      if (localUser) {
+        try { uId = JSON.parse(localUser).id; } catch (e) {}
+      }
+
       const novaDesp = {
-        usuario_id: "1", // Should ideally map to a real UUID if schema demands it, but for our setup UUID is default
+        usuario_id: uId,
         tipo: "Empresa",
         categoria: "Materia Prima",
         data: c.data,
@@ -545,9 +699,12 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         return c;
       }),
     );
+    logEvent(`Atualizou compra de mandioca`, rest.valor_total);
   };
 
   const deleteCompraMandioca = async (id: string) => {
+    const obj = comprasMandioca.find(c => c.id === id);
+    if(obj) logEvent(`Excluiu compra de mandioca`, obj.valor_total);
     await supabase.from("compras_mandioca").delete().eq("id", id);
     setComprasMandioca((prev) => prev.filter((c) => c.id !== id));
     setDespesas((prev) =>
@@ -558,12 +715,18 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const addProducao = async (p: Omit<Producao, "id">) => {
-    const { data } = await supabase
+    const payload = { ...p };
+    if ((payload as any).produto_id === "") (payload as any).produto_id = null;
+    const { data, error } = await supabase
       .from("producoes")
-      .insert([p])
+      .insert([payload])
       .select()
       .single();
-    if (data) setProducao((prev) => [...prev, data]);
+    if (error) {
+      console.error("Erro ao adicionar produção:", error);
+      alert("Erro ao adicionar produção: " + error.message);
+    }
+    if (data) { setProducao((prev) => [...prev, data]); logEvent(`Adicionou produção: ${data.lote}`); }
   };
   const updateProducao = async (
     id: string,
@@ -575,20 +738,29 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       .eq("id", id)
       .select()
       .single();
-    if (data) setProducao((prev) => prev.map((p) => (p.id === id ? data : p)));
+    if (data) { setProducao((prev) => prev.map((p) => (p.id === id ? data : p))); logEvent(`Atualizou produção: ${data.lote}`); }
   };
   const deleteProducao = async (id: string) => {
+    const obj = producao.find(p => p.id === id);
+    if(obj) logEvent(`Excluiu produção: ${obj.lote}`);
     await supabase.from("producoes").delete().eq("id", id);
     setProducao((prev) => prev.filter((p) => p.id !== id));
   };
 
   const addDespesa = async (d: Omit<Despesa, "id">) => {
-    const { data } = await supabase
+    const payload = { ...d };
+    if ((payload as any).usuario_id === "") (payload as any).usuario_id = null;
+
+    const { data, error } = await supabase
       .from("despesas")
-      .insert([d])
+      .insert([payload])
       .select()
       .single();
-    if (data) setDespesas((prev) => [...prev, data]);
+    if (error) {
+      console.error("Erro ao adicionar despesa:", error);
+      alert("Erro ao adicionar despesa: " + error.message);
+    }
+    if (data) { setDespesas((prev) => [...prev, data]); logEvent(`Adicionou despesa: ${data.descricao}`, data.valor); }
   };
 
   const updateDespesa = async (id: string, updatedFields: Partial<Despesa>) => {
@@ -646,21 +818,28 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         }
         return updatedList;
       });
+      logEvent(`Atualizou despesa.`, data.valor);
     }
   };
 
   const deleteDespesa = async (id: string) => {
+    const o = despesas.find(x => x.id === id);
+    if(o) logEvent(`Excluiu despesa.`, o.valor);
     await supabase.from("despesas").delete().eq("id", id);
     setDespesas((prev) => prev.filter((d) => d.id !== id));
   };
 
   const addProduto = async (p: Omit<Produto, "id">) => {
     const { custos_detalhados, ...rest } = p;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("produtos")
       .insert([rest])
       .select()
       .single();
+    if (error) {
+      console.error("Erro ao adicionar produto:", error);
+      alert("Erro ao adicionar produto: " + error.message);
+    }
     if (data) {
       const prod = { ...data, custos_detalhados: [] } as any;
       if (custos_detalhados && custos_detalhados.length > 0) {
@@ -700,9 +879,12 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         p.id === id ? { ...p, ...rest, custos_detalhados: newCustos } : p,
       ),
     );
+    logEvent(`Atualizou produto.`, (rest as any).preco_base);
   };
 
   const deleteProduto = async (id: string) => {
+    const prod = produtos.find(x => x.id === id);
+    if(prod) logEvent(`Excluiu produto: ${prod.nome}`, prod.preco_base);
     await supabase.from("produtos").delete().eq("id", id);
     setProdutos((prev) => prev.filter((p) => p.id !== id));
   };
@@ -713,13 +895,28 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     usuario_id?: string,
     usuario_nome?: string,
   ) => {
+    let finalUserId = usuario_id;
+    let finalUserName = usuario_nome;
+
+    if (!finalUserId) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session?.user) {
+        finalUserId = sessionData.session.user.id;
+      }
+    }
+    
+    if (finalUserId && !finalUserName) {
+       // Search in current users state. If not available yet, this will be skipped.
+       // However, the `usuarios` variable might be stale, so we do:
+    }
+
     const now = new Date();
     const ev = {
       data: now.toISOString().split("T")[0],
       hora: now.toTimeString().split(" ")[0],
       descricao,
-      usuario_id: usuario_id || null, // Cannot be 'sys' if UUID is strictly enforced and 'sys' is not a valid UUID
-      usuario_nome: usuario_nome || "Sistema",
+      usuario_id: finalUserId || null,
+      usuario_nome: finalUserName || "Sistema",
       valor,
     };
 
@@ -730,6 +927,47 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       .single();
     if (data) {
       setEventos((prev) => [data, ...prev]);
+    }
+  };
+
+
+  const resetDatabase = async () => {
+    setIsLoading(true);
+    try {
+      // Deletar os dados relacionados e principais
+      // Apaga dependencias primeiro
+      await supabase.from('log_eventos').delete().not('id', 'is', 'null');
+      await supabase.from('metas_representante').delete().not('id', 'is', 'null');
+      await supabase.from('objetivos_empresa').delete().not('ano', 'is', 'null');
+      
+      await supabase.from('pedidos').delete().not('id', 'is', 'null');
+      await supabase.from('orcamentos').delete().not('id', 'is', 'null');
+      await supabase.from('despesas').delete().not('id', 'is', 'null');
+      await supabase.from('comissoes').delete().not('id', 'is', 'null');
+      await supabase.from('compras_mandioca').delete().not('id', 'is', 'null');
+      await supabase.from('producoes').delete().not('id', 'is', 'null');
+
+      await supabase.from('fornecedores').delete().not('id', 'is', 'null');
+      await supabase.from('produtos').delete().not('id', 'is', 'null');
+      await supabase.from('clientes').delete().not('id', 'is', 'null');
+
+      setClientes([]);
+      setProdutos([]);
+      setPedidos([]);
+      setOrcamentos([]);
+      setDespesas([]);
+      setComissoes([]);
+      setProducao([]);
+      setFornecedores([]);
+      setComprasMandioca([]);
+      setEventos([]);
+      setObjetivosEmpresa([]);
+      setMetasRepresentantes([]);
+
+    } catch (e) {
+      console.error('Erro ao resetar: ', e);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -779,6 +1017,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         saveObjetivoEmpresa,
         saveMetaRepresentante,
         logEvent,
+        resetDatabase,
         isLoading,
       }}
     >

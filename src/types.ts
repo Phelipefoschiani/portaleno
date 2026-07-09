@@ -101,6 +101,8 @@ export interface Pedido {
   data_faturamento?: string;
   data_entrega?: string;
   previsao_entrega?: string;
+  condicao_pagamento?: string;
+  prazo_entrega?: string;
   observacoes?: string;
   solicitacoes_insumos?: SolicitacaoInsumo[];
   data_fabricacao?: string;

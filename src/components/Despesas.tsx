@@ -274,7 +274,7 @@ const Despesas: React.FC<DespesasProps> = ({ empresa }) => {
         : newExpForm.descricao.trim();
 
       addDespesa({
-        usuario_id: '1',
+        usuario_id: user?.id || '',
         tipo: 'Empresa',
         categoria: newExpForm.categoria,
         data: entryHeuristicFilter(entryDate),

@@ -175,8 +175,22 @@ const ControleNFs: React.FC<ControleNFsProps> = ({ empresa }) => {
   };
 
   const handleDownloadDANFE = (ped: Pedido) => {
-    if (ped.nf_anexo) {
-      const filename = `DANFE_NF_${ped.nf_numero || "Faturado_SemNumero"}_Pedido_${ped.id.substring(0,6)}.pdf`;
+    if (ped.nf_anexo && ped.nf_anexo !== "simulated_danfe") {
+      let extension = "pdf"; // Default
+      
+      // Determine extension from base64 mime type if possible
+      if (ped.nf_anexo.startsWith("data:")) {
+        const mimeType = ped.nf_anexo.split(";")[0].replace("data:", "");
+        if (mimeType.includes("xml")) {
+          extension = "xml";
+        } else if (mimeType.includes("png")) {
+          extension = "png";
+        } else if (mimeType.includes("jpeg") || mimeType.includes("jpg")) {
+          extension = "jpg";
+        }
+      }
+
+      const filename = `NotaFiscal_${ped.nf_numero || "S_Numero"}_Pedido_${ped.id.substring(0,6)}.${extension}`;
       const link = document.createElement("a");
       link.href = ped.nf_anexo;
       link.download = filename;
@@ -184,7 +198,7 @@ const ControleNFs: React.FC<ControleNFsProps> = ({ empresa }) => {
       link.click();
       document.body.removeChild(link);
     } else {
-      alert("Comprovante/DANFE simulado. Imprima a Nota Fiscal diretamente pelo painel de impressão.");
+      alert("Comprovante/DANFE simulado ou sem anexo. Imprima a Nota Fiscal diretamente pelo painel de impressão.");
     }
   };
 
@@ -746,12 +760,12 @@ const ControleNFs: React.FC<ControleNFsProps> = ({ empresa }) => {
                 </div>
 
                 <div className="space-y-2 pt-4">
-                  {selectedPedidoNf.nf_anexo && (
+                  {selectedPedidoNf.nf_anexo && selectedPedidoNf.nf_anexo !== "simulated_danfe" && (
                     <button
                       onClick={() => handleDownloadDANFE(selectedPedidoNf)}
                       className="w-full bg-emerald-650 hover:bg-emerald-750 text-white py-2.5 rounded-xl font-bold uppercase tracking-wider text-[10px] flex items-center justify-center gap-1 shadow-sm transition-all"
                     >
-                      <Download size={12} /> Download PDF Original
+                      <Download size={12} /> Exportar Arquivo Original
                     </button>
                   )}
                   <button

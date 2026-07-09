@@ -25,7 +25,7 @@ interface ConfiguracoesProps {
 
 export default function Configuracoes({ empresa }: ConfiguracoesProps) {
   const { user, updateSelf } = useAuth();
-  const { usuarios, addUsuario, updateUsuario, deleteUsuario } = useGlobalState();
+  const { usuarios, addUsuario, updateUsuario, deleteUsuario, resetDatabase } = useGlobalState();
 
   // Own profile form state
   const [ownNome, setOwnNome] = useState(user?.nome || '');
@@ -35,6 +35,11 @@ export default function Configuracoes({ empresa }: ConfiguracoesProps) {
   });
   const [showOwnPassword, setShowOwnPassword] = useState(false);
   const [ownSuccessMsg, setOwnSuccessMsg] = useState('');
+
+  // Reset database state
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [resetError, setResetError] = useState('');
 
   // Users management state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -350,7 +355,94 @@ export default function Configuracoes({ empresa }: ConfiguracoesProps) {
           </div>
         </div>
 
+        {/* Danger Zone */}
+        <div className="xl:col-span-3 bg-red-50 border border-red-100 p-6 rounded-3xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <h3 className="font-extrabold text-red-900 text-base mb-1">Zona de Perigo (Apenas para Testes)</h3>
+            <p className="text-xs font-semibold text-red-700/80">
+              Esta ação apagará <strong>todos os dados do sistema</strong> (pedidos, clientes, produtos, orçamentos, etc.), exceto os usuários cadastrados. Esta ação é irreversível.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setResetError('');
+              setResetConfirmPassword('');
+              setIsResetModalOpen(true);
+            }}
+            className="px-6 py-3 bg-red-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red-700 transition-all shadow-md shadow-red-600/20 shrink-0 cursor-pointer flex items-center gap-2"
+          >
+            <AlertCircle size={16} /> Deletar Banco de Dados
+          </button>
+        </div>
+
       </div>
+
+      {/* Reset Database Confirmation Modal */}
+      {isResetModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-sm overflow-hidden scale-in">
+            <div className="px-6 py-5 border-b border-red-50 flex justify-between items-center bg-red-50/50">
+              <div className="flex items-center gap-2.5 text-red-600">
+                <ShieldAlert size={20} />
+                <h3 className="font-extrabold text-red-900 text-lg">Confirmação de Segurança</h3>
+              </div>
+              <button 
+                onClick={() => setIsResetModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white hover:bg-red-50 flex items-center justify-center text-red-400 hover:text-red-600 border border-red-100 transition-all"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <p className="text-sm font-semibold text-gray-700 mb-4 text-center">
+                Para confirmar a exclusão de <strong className="text-red-600">todos os dados</strong> do banco, digite sua senha de acesso abaixo:
+              </p>
+
+              <div className="mb-4">
+                <input
+                  type="password"
+                  placeholder="Sua senha atual"
+                  value={resetConfirmPassword}
+                  onChange={e => setResetConfirmPassword(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 focus:border-red-500 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-700 outline-none transition-all text-center"
+                />
+              </div>
+
+              {resetError && (
+                <div className="mb-4 bg-red-50 text-red-700 p-3 rounded-xl text-xs font-bold text-center border border-red-100">
+                  {resetError}
+                </div>
+              )}
+
+              <div className="flex gap-3 mt-2">
+                <button
+                  onClick={() => setIsResetModalOpen(false)}
+                  className="flex-1 py-3 bg-gray-100 text-gray-600 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-gray-200 transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={async () => {
+                    const currentPass = localStorage.getItem('grupo_eno_manager_password') || 'admin';
+                    if (resetConfirmPassword !== currentPass) {
+                      setResetError('Senha incorreta.');
+                      return;
+                    }
+                    setIsResetModalOpen(false);
+                    await resetDatabase();
+                    alert("Banco de dados limpo com sucesso!");
+                  }}
+                  disabled={!resetConfirmPassword}
+                  className="flex-1 py-3 bg-red-600 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red-700 transition-all shadow-md shadow-red-600/10 cursor-pointer"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Account Creation / Edition Modal */}
       {isModalOpen && (
