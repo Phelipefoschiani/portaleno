@@ -1,7 +1,8 @@
+import { formatCurrency } from "../types";
 import React, { useState, useMemo } from 'react';
-import { useGlobalState } from '../GlobalStateContext';
-import { Produto, CustoDiferenciado } from '../types';
-import { Search, Plus, Edit2, X, Package, Trash2, PieChart, DollarSign, Calculator, ChevronDown, FileText, BarChart2 } from 'lucide-react';
+import {  useGlobalState } from '../GlobalStateContext';
+import {  Produto, CustoDiferenciado } from '../types';
+import {  Search, Plus, Edit2, X, Package, Trash2, PieChart, DollarSign, Calculator, ChevronDown, FileText, BarChart2 } from 'lucide-react';
 
 const DEFAULT_CUSTO_GRUPOS = ['Matéria Prima', 'Insumos', 'Impostos', 'Comissão', 'Frete', 'Embalagem', 'Outros'];
 
@@ -491,8 +492,8 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                     <td className="px-6 py-4 text-center">
                       <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-md text-[10px] font-bold uppercase">{p.quantidade_unidade} {p.unidade}</span>
                     </td>
-                    <td className="px-6 py-4 text-right font-black text-gray-900">R$ {p.preco_base.toFixed(2)}</td>
-                    <td className="px-6 py-4 text-right font-black text-red-500">R$ {p.custo.toFixed(2)}</td>
+                    <td className="px-6 py-4 text-right font-black text-gray-900">R$ {formatCurrency(p.preco_base)}</td>
+                    <td className="px-6 py-4 text-right font-black text-red-500">R$ {formatCurrency(p.custo)}</td>
                     <td className="px-6 py-4 text-right font-black text-primary">{mrg.toFixed(1)}%</td>
                     <td className="px-6 py-4 text-right">
                       <button 
@@ -691,7 +692,7 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                           <div className="w-full flex justify-between items-end mt-2 pt-4 border-t border-gray-200">
                              <div>
                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Prévia do Custo</p>
-                               <p className="text-xl font-black text-red-500">R$ {previewCusto.valor.toFixed(2)}</p>
+                               <p className="text-xl font-black text-red-500">R$ {formatCurrency(previewCusto.valor)}</p>
                              </div>
                              <button type="button" onClick={handleAddCusto} className="h-10 px-6 bg-orange-500 text-white font-black text-sm uppercase tracking-widest rounded-lg hover:bg-orange-600 transition-all flex items-center gap-2">
                                 <Plus size={18} /> Adicionar
@@ -713,12 +714,12 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                        </div>
                        <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex justify-between items-center">
                          <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">Custo Total</span>
-                         <span className="text-xl font-black text-red-600">R$ {custoTotal.toFixed(2)}</span>
+                         <span className="text-xl font-black text-red-600">R$ {formatCurrency(custoTotal)}</span>
                        </div>
                        <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 flex justify-between items-center">
                          <div>
                             <span className="text-[10px] font-black text-primary/70 uppercase tracking-widest block mb-1">Lucro Bruto</span>
-                            <span className="text-2xl font-black text-primary block">R$ {valorBruto.toFixed(2)}</span>
+                            <span className="text-2xl font-black text-primary block">R$ {formatCurrency(valorBruto)}</span>
                          </div>
                          <div className="text-right">
                             <span className="text-[10px] font-black text-primary/70 uppercase tracking-widest block mb-1">Margem</span>
@@ -749,7 +750,7 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                                     </div>
                                   </div>
                                   <div className="text-right">
-                                     <div className="font-black text-red-500 text-sm">R$ {computedVal.toFixed(2)}</div>
+                                     <div className="font-black text-red-500 text-sm">R$ {formatCurrency(computedVal)}</div>
                                      <div className="text-[10px] text-gray-400 font-bold">{percentOfCost.toFixed(1)}%</div>
                                   </div>
                                   <button onClick={() => handleRemoveCusto(c.id)} type="button" className="absolute top-1/2 -translate-y-1/2 -right-3 w-8 h-8 bg-white border border-gray-200 text-red-400 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 group-hover:-right-4 transition-all shadow-sm hover:text-red-600 hover:border-red-200">
@@ -905,7 +906,7 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                              <tr key={i} className="hover:bg-gray-50">
                                <td className="p-4 font-bold text-gray-900">{p.nome}</td>
                                <td className="p-4 font-medium text-gray-600 text-right">{p.kgVendidos.toFixed(2)}</td>
-                               <td className="p-4 font-black text-green-600 text-right">R$ {p.faturado.toFixed(2)}</td>
+                               <td className="p-4 font-black text-green-600 text-right">R$ {formatCurrency(p.faturado)}</td>
                                <td className="p-4 font-black text-primary text-right">{p.margemBruta.toFixed(1)}%</td>
                              </tr>
                            ))}

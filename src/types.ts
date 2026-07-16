@@ -79,6 +79,7 @@ export interface Orcamento {
   status: 'Orçamento' | 'Rascunho' | 'Enviado' | 'Convertido em Pedido' | 'Cancelado';
   condicao_pagamento: string;
   prazo_entrega: string;
+  previsao_entrega?: string;
   observacoes?: string;
 }
 
@@ -218,11 +219,12 @@ export interface CompraMandioca {
   tipo_pesagem: 'sacos' | 'total';
   pesagens_sacos: number[];
   quantidade_total: number;
-  status_pagamento: 'Pago' | 'Pendente';
+  status_pagamento: 'Pago' | 'Pendente' | 'Ordem de Compra' | 'Ordem Cumprida';
   casca_kg: number;
   destopo_kg: number;
   preco_quilo?: number;
   valor_total?: number;
+  ordem_compra_id?: string;
 }
 
 export interface AppEvent {
@@ -233,4 +235,9 @@ export interface AppEvent {
   usuario_id: string;
   usuario_nome: string;
   valor?: number;
+}
+
+export function formatCurrency(value: number): string {
+  if (isNaN(value) || value === null || value === undefined) return "0,00";
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }

@@ -1,7 +1,8 @@
+import { formatCurrency } from "../types";
 import React, { useState } from "react";
-import { useGlobalState } from "../GlobalStateContext";
-import { useAuth } from "../AuthContext";
-import {
+import {  useGlobalState } from "../GlobalStateContext";
+import {  useAuth } from "../AuthContext";
+import { 
   Search,
   FileText,
   Calendar,
@@ -21,7 +22,7 @@ import {
   Coins,
   ArrowUpRight
 } from "lucide-react";
-import { Pedido } from "../types";
+import {  Pedido } from "../types";
 
 interface ControleNFsProps {
   empresa: string;
@@ -518,11 +519,11 @@ const ControleNFs: React.FC<ControleNFsProps> = ({ empresa }) => {
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-left font-bold">
                         <div>
                           <span className="text-[8px] text-gray-400 uppercase tracking-widest block">BASE DE CÁLCULO</span>
-                          <span className="text-gray-900 text-xs font-mono">R$ {(totalVal * 0.18).toFixed(2)}</span>
+                          <span className="text-gray-900 text-xs font-mono">R$ {formatCurrency((totalVal * 0.18))}</span>
                         </div>
                         <div>
                           <span className="text-[8px] text-gray-400 uppercase tracking-widest block">VALOR ICMS</span>
-                          <span className="text-gray-900 text-xs font-mono">R$ {(totalVal * 0.05).toFixed(2)}</span>
+                          <span className="text-gray-900 text-xs font-mono">R$ {formatCurrency((totalVal * 0.05))}</span>
                         </div>
                         <div>
                           <span className="text-[8px] text-gray-400 uppercase tracking-widest block">BASE ICMS SUBST.</span>
@@ -559,8 +560,8 @@ const ControleNFs: React.FC<ControleNFsProps> = ({ empresa }) => {
                             <td className="p-2 font-black text-gray-900">{prod?.nome || "Mandioca de Mesa"}</td>
                             <td className="p-2 text-center uppercase">{prod?.unidade || "Kg"}</td>
                             <td className="p-2 text-center">{it.quantidade}</td>
-                            <td className="p-2 text-right font-mono">R$ {it.preco.toFixed(2)}</td>
-                            <td className="p-2 text-right font-mono font-black text-gray-900">R$ {(it.quantidade * it.preco).toFixed(2)}</td>
+                            <td className="p-2 text-right font-mono">R$ {formatCurrency(it.preco)}</td>
+                            <td className="p-2 text-right font-mono font-black text-gray-900">R$ {formatCurrency((it.quantidade * it.preco))}</td>
                           </tr>
                         );
                       })}

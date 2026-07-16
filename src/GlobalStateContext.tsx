@@ -173,10 +173,21 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
         if (qCompras) {
           setComprasMandioca(
-            qCompras.map((c) => ({
-              ...c,
-              pesagens_sacos: c.pesagens_sacos?.map((p: any) => p.peso_kg) || [],
-            })),
+            qCompras.map((c) => {
+              let realStatus = c.status_pagamento || 'Pendente';
+              let linkedOrdemId = undefined;
+              if (realStatus.includes('_vinc_')) {
+                const parts = realStatus.split('_vinc_');
+                realStatus = parts[0];
+                linkedOrdemId = parts[1];
+              }
+              return {
+                ...c,
+                status_pagamento: realStatus,
+                ordem_compra_id: linkedOrdemId,
+                pesagens_sacos: c.pesagens_sacos?.map((p: any) => p.peso_kg) || [],
+              };
+            }),
           );
         }
 
@@ -584,6 +595,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
   const addCompraMandioca = async (c: Omit<CompraMandioca, "id">) => {
     const { pesagens_sacos, ...rest } = c;
     if ((rest as any).fornecedor_id === "") (rest as any).fornecedor_id = null;
+    
+    // Serialize ordem_compra_id into status_pagamento to avoid DB errors due to missing columns
+    if ((rest as any).ordem_compra_id) {
+      (rest as any).status_pagamento = `${rest.status_pagamento}_vinc_${(rest as any).ordem_compra_id}`;
+    }
+    delete (rest as any).ordem_compra_id;
+
     const { data, error } = await supabase
       .from("compras_mandioca")
       .insert([rest])
@@ -596,7 +614,19 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     if (data) {
-      const compData = { ...data, pesagens_sacos: [] } as any;
+      let realStatus = data.status_pagamento || 'Pendente';
+      let linkedOrdemId = undefined;
+      if (realStatus.includes('_vinc_')) {
+        const parts = realStatus.split('_vinc_');
+        realStatus = parts[0];
+        linkedOrdemId = parts[1];
+      }
+      const compData = { 
+        ...data, 
+        status_pagamento: realStatus,
+        ordem_compra_id: linkedOrdemId,
+        pesagens_sacos: [] 
+      } as any;
       if (pesagens_sacos && pesagens_sacos.length > 0) {
         const peds = pesagens_sacos.map((p) => ({
           compra_id: data.id,
@@ -612,45 +642,56 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       logEvent(`Adicionou compra de mandioca`, c.valor_total);
 
       // Automatically create a "Materia Prima" expense as "Em aberto"
-      const forn = fornecedores.find((f) => f.id === c.fornecedor_id);
-      const fornName = forn ? forn.nome : "Fornecedor";
-      const valorCompra =
-        c.valor_total || c.quantidade_total * (c.preco_quilo || 1.15);
+      if (c.status_pagamento !== "Ordem de Compra" && c.status_pagamento !== "Ordem Cumprida") {
+        const forn = fornecedores.find((f) => f.id === c.fornecedor_id);
+        const fornName = forn ? forn.nome : "Fornecedor";
+        const valorCompra =
+          c.valor_total || c.quantidade_total * (c.preco_quilo || 1.15);
 
-      const localUser = localStorage.getItem("grupo_eno_user");
-      let uId = null;
-      if (localUser) {
-        try { uId = JSON.parse(localUser).id; } catch (e) {}
-      }
+        const localUser = localStorage.getItem("grupo_eno_user");
+        let uId = null;
+        if (localUser) {
+          try { uId = JSON.parse(localUser).id; } catch (e) {}
+        }
+        const isPaidInit = c.status_pagamento === "Pago";
+        const novaDesp = {
+          usuario_id: uId,
+          tipo: "Empresa",
+          categoria: "Materia Prima",
+          data: c.data,
+          vencimento: c.data,
+          valor: valorCompra,
+          forma_pagamento: "Pix",
+          recorrente: false,
+          parcelas: 1,
+          parcela_atual: 1,
+          status: isPaidInit ? "Pago" : "Em aberto",
+          data_pagamento: isPaidInit ? c.data : null,
+          descricao: `Compra de Mandioca - Lote ${c.quantidade_total}kg (${fornName})`,
+          tipo_despesa: "variavel",
+          compra_mandioca_id: data.id,
+        };
 
-      const novaDesp = {
-        usuario_id: uId,
-        tipo: "Empresa",
-        categoria: "Materia Prima",
-        data: c.data,
-        vencimento: c.data,
-        valor: valorCompra,
-        forma_pagamento: "Pix",
-        recorrente: false,
-        parcelas: 1,
-        parcela_atual: 1,
-        status: "Em aberto",
-        descricao: `Compra de Mandioca - Lote ${c.quantidade_total}kg (${fornName})`,
-        tipo_despesa: "variavel",
-        compra_mandioca_id: data.id,
-      };
+        const admin = usuarios.find((u) => u.login === "admin");
+        const finalUsuarioId = admin?.id || uId || null;
+        if (finalUsuarioId) {
+          novaDesp.usuario_id = finalUsuarioId;
+        } else {
+          delete (novaDesp as any).usuario_id;
+        }
 
-      // For reference integrity, we must be careful with usuario_id if it's strongly enforced,
-      // Assuming '1' might fail UUID. Let's omit and let user logic handle, or use admin user id.
-      const admin = usuarios.find((u) => u.login === "admin");
-      if (admin) {
-        novaDesp.usuario_id = admin.id;
-        const { data: newDesp } = await supabase
+        const { data: newDesp, error: errD } = await supabase
           .from("despesas")
           .insert([novaDesp])
           .select()
           .single();
-        if (newDesp) setDespesas((prev) => [...prev, newDesp]);
+
+        if (errD) {
+          console.error("Erro ao inserir despesa automática:", errD);
+        }
+        if (newDesp) {
+          setDespesas((prev) => [...prev, newDesp]);
+        }
       }
     }
   };
@@ -660,6 +701,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     updatedFields: Partial<CompraMandioca>,
   ) => {
     const { pesagens_sacos, ...rest } = updatedFields;
+
+    const existing = comprasMandioca.find(c => c.id === id);
+    const linkedOrdemId = (updatedFields as any).ordem_compra_id || existing?.ordem_compra_id;
+
+    if (rest.status_pagamento && linkedOrdemId) {
+      (rest as any).status_pagamento = `${rest.status_pagamento}_vinc_${linkedOrdemId}`;
+    }
+    delete (rest as any).ordem_compra_id;
 
     if (Object.keys(rest).length > 0) {
       await supabase.from("compras_mandioca").update(rest).eq("id", id);
@@ -680,7 +729,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     setComprasMandioca((prev) =>
       prev.map((c) => {
         if (c.id === id) {
-          const updated = { ...c, ...rest, pesagens_sacos: newPesagens };
+          const updated = { 
+            ...c, 
+            ...rest, 
+            pesagens_sacos: newPesagens, 
+            status_pagamento: updatedFields.status_pagamento || c.status_pagamento, 
+            ordem_compra_id: linkedOrdemId 
+          };
           if (updatedFields.status_pagamento === "Pago") {
             // Sync state instantly, but technically should update DB as well
             const relatedExp = despesas.find(
@@ -780,6 +835,23 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
           updatedFields.status === "Pago" &&
           oldDesp.status !== "Pago"
         ) {
+          if (oldDesp.compra_mandioca_id) {
+            supabase
+              .from("compras_mandioca")
+              .update({ status_pagamento: "Pago" })
+              .eq("id", oldDesp.compra_mandioca_id)
+              .then(({ error: errC }) => {
+                if (errC) console.error("Erro ao quitar compra de mandioca relacionada:", errC);
+              });
+            setComprasMandioca((currC) =>
+              currC.map((c) =>
+                c.id === oldDesp.compra_mandioca_id
+                  ? { ...c, status_pagamento: "Pago" }
+                  : c
+              )
+            );
+          }
+
           const jurosPago = updatedFields.juros_pago || 0;
           if (jurosPago > 0) {
             const dataPagamento =

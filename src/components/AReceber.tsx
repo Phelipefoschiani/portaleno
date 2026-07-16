@@ -1,7 +1,8 @@
+import { formatCurrency } from "../types";
 import React, { useState } from "react";
-import { useGlobalState } from "../GlobalStateContext";
-import { useAuth } from "../AuthContext";
-import {
+import {  useGlobalState } from "../GlobalStateContext";
+import {  useAuth } from "../AuthContext";
+import { 
   Search,
   FileText,
   Calendar,
@@ -17,7 +18,7 @@ import {
   CreditCard,
   Landmark
 } from "lucide-react";
-import { Pedido } from "../types";
+import {  Pedido } from "../types";
 
 interface AReceberProps {
   empresa: string;
@@ -343,7 +344,7 @@ const AReceber: React.FC<AReceberProps> = ({ empresa }) => {
                               <span>Rec. em {item.data_recebimento ? new Date(item.data_recebimento + "T12:00:00").toLocaleDateString("pt-BR") : "---"}</span>
                               {item.juros_recebido ? (
                                 <span className="block text-[9px] text-[#ef4444] font-black">
-                                  (+ R$ {item.juros_recebido.toFixed(2)} juros cobrados)
+                                  (+ R$ {formatCurrency(item.juros_recebido)} juros cobrados)
                                 </span>
                               ) : null}
                             </div>

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useGlobalState } from "../GlobalStateContext";
-import { Pedido, Orcamento, ItemPedido } from "../types";
+import { Pedido, Orcamento, ItemPedido, formatCurrency } from "../types";
 import {
   FileText,
   Plus,
@@ -66,12 +66,26 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
   >("Todos");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalType, setModalType] = useState<"Novo" | "Visualizar Orcamento" | "Visualizar Pedido">(
+  const [modalType, setModalType] = useState<"Novo" | "Visualizar Orcamento" | "Visualizar Pedido" | "Editar Orcamento">(
     "Novo",
   );
   const [selectedItem, setSelectedItem] = useState<Orcamento | Pedido | null>(
     null,
   );
+
+  const [exportOptionsModal, setExportOptionsModal] = useState<{
+    isOpen: boolean;
+    includeCondicao: boolean;
+    includePrazo: boolean;
+    nomeDocumento: "Orçamento" | "Pedido Sugestivo";
+    selectedItem: Orcamento | null;
+  }>({
+    isOpen: false,
+    includeCondicao: true,
+    includePrazo: true,
+    nomeDocumento: "Orçamento",
+    selectedItem: null,
+  });
 
   // NF Visualizer Modal State
   const [isNfModalOpen, setIsNfModalOpen] = useState(false);
@@ -163,9 +177,66 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
     setIsModalOpen(true);
   };
 
+  const handleOpenEditarOrcamento = (o: Orcamento) => {
+    setSelectedItem(o);
+    setFormData({
+      cliente_id: o.cliente_id || "",
+      representante_id: o.representante_id || "",
+      items: [...(o.items || [])],
+      prazo_entrega: o.prazo_entrega || "15 dias",
+      previsao_entrega: o.previsao_entrega || "",
+      observacoes: o.observacoes || "",
+      condicao_pagamento: o.condicao_pagamento || "A Combinar",
+    });
+    setNewItem({
+      produto_id: "",
+      quantidade: 1,
+      preco: 0,
+      tipo: "venda",
+      desconto: 0,
+    });
+    setModalType("Editar Orcamento");
+    setIsModalOpen(true);
+  };
+
+  const handleSalvarEditarOrcamento = async () => {
+    if (isSaving || !selectedItem) return;
+    if (!formData.cliente_id || formData.items.length === 0) {
+      return setIsConfirmOpen({
+        isOpen: true,
+        type: "Alert",
+        message: "Selecione cliente e adicione itens.",
+      });
+    }
+    setIsSaving(true);
+    try {
+      await updateOrcamento(selectedItem.id, {
+        cliente_id: formData.cliente_id,
+        representante_id: formData.representante_id,
+        items: formData.items,
+        valor_total: cartSummary.valor_total,
+        condicao_pagamento: formData.condicao_pagamento,
+        prazo_entrega: formData.prazo_entrega,
+        observacoes: formData.observacoes,
+      });
+      setIsModalOpen(false);
+      setSelectedItem(null);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
-  const handleDownloadPDF = async (mode: string, filenamePrefix: string) => {
+  const handleDownloadPDF = async (
+    mode: string,
+    filenamePrefix: string,
+    includeCondicao: boolean = true,
+    includePrazo: boolean = true,
+    documentTitle: string = ""
+  ) => {
     if (!selectedItem) return;
 
     setIsGeneratingPDF(true);
@@ -193,7 +264,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(10);
       pdf.setTextColor(200, 220, 210);
-      const subtitle = filenamePrefix === "Orcamento" ? "ORÇAMENTO DE VENDA" : "CONFIRMAÇÃO DE PEDIDO DE VENDA";
+      const subtitle = documentTitle || (filenamePrefix === "Orcamento" ? "ORÇAMENTO DE VENDA" : "CONFIRMAÇÃO DE PEDIDO DE VENDA");
       pdf.text(subtitle, 105, 26, { align: "center" });
 
       // Info Summary
@@ -239,30 +310,45 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
       pdf.text(`${cliente?.cidade || "Não Informado"} / ${cliente?.estado || "NI"}`, 37, 93);
 
       // Section 2: Logística e Pagamento
-      pdf.setFillColor(245, 247, 246);
-      pdf.rect(14, 101, 182, 8, 'F');
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(9);
-      pdf.setTextColor(27, 67, 50);
-      pdf.text("LOGÍSTICA E PAGAMENTO", 16, 107);
+      let yPos = 101;
+      const showPagamento = filenamePrefix !== "Orcamento" || includeCondicao;
+      const showPrazo = filenamePrefix !== "Orcamento" || includePrazo;
 
-      pdf.setFont("helvetica", "bold");
-      pdf.setTextColor(30, 30, 30);
-      pdf.text(`Pagamento:`, 16, 116);
-      pdf.setFont("helvetica", "normal");
-      pdf.text(`${selectedItem.condicao_pagamento || selectedItem.forma_pagamento_nf || "A Combinar"}`, 39, 116);
+      if (showPagamento || showPrazo) {
+        pdf.setFillColor(245, 247, 246);
+        pdf.rect(14, 101, 182, 8, 'F');
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(9);
+        pdf.setTextColor(27, 67, 50);
+        pdf.text("LOGÍSTICA E PAGAMENTO", 16, 107);
 
-      pdf.setFont("helvetica", "bold");
-      pdf.text(`Data Prevista:`, 16, 122);
-      pdf.setFont("helvetica", "normal");
-      
-      let deliveryText = selectedItem.previsao_entrega
-        ? formatPrevisaoEntrega(selectedItem.previsao_entrega)
-        : (selectedItem.prazo_entrega || "A Combinar");
-      
-      pdf.text(deliveryText, 45, 122);
+        pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(30, 30, 30);
 
-      let yPos = 134;
+        let currentY = 116;
+
+        if (showPagamento) {
+          pdf.setFont("helvetica", "bold");
+          pdf.text(`Pagamento:`, 16, currentY);
+          pdf.setFont("helvetica", "normal");
+          const condTxt = selectedItem.condicao_pagamento || selectedItem.forma_pagamento_nf || "A Combinar";
+          pdf.text(condTxt, 39, currentY);
+          currentY += 6;
+        }
+
+        if (showPrazo) {
+          pdf.setFont("helvetica", "bold");
+          pdf.text(`Data Prevista:`, 16, currentY);
+          pdf.setFont("helvetica", "normal");
+          const deliveryText = selectedItem.previsao_entrega
+            ? formatPrevisaoEntrega(selectedItem.previsao_entrega)
+            : (selectedItem.prazo_entrega || "A Combinar");
+          pdf.text(deliveryText, 45, currentY);
+          currentY += 6;
+        }
+
+        yPos = currentY + 6;
+      }
 
       if (selectedItem.observacoes) {
         pdf.setFillColor(245, 247, 246);
@@ -288,8 +374,8 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
         return [
           (p?.nome || "Produto Desconhecido") + tipoLabel,
           it.quantidade.toString(),
-          `R$ ${precoEf.toFixed(2)}`,
-          `R$ ${(it.quantidade * precoEf).toFixed(2)}`
+          `R$ ${formatCurrency(precoEf)}`,
+          `R$ ${formatCurrency((it.quantidade * precoEf))}`
         ];
       });
 
@@ -1027,7 +1113,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                         Total:
                       </span>
                       <span className="text-base font-black text-emerald-600">
-                        R$ {p.valor_total.toFixed(2)}
+                        R$ {formatCurrency(p.valor_total)}
                       </span>
                     </div>
                   </div>
@@ -1131,7 +1217,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                     </td>
                     <td className="p-4">
                       <span className="text-sm font-black text-green-600">
-                        R$ {(item.data.valor_total || 0).toFixed(2)}
+                        R$ {formatCurrency((item.data.valor_total || 0))}
                       </span>
                     </td>
                     <td className="p-4">
@@ -1201,6 +1287,13 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                               title="Ver Orçamento"
                             >
                               <FileText size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleOpenEditarOrcamento(item.data)}
+                              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors tooltip-trigger"
+                              title="Editar Orçamento"
+                            >
+                              <Edit size={16} />
                             </button>
                             <button
                               onClick={() => handleGerarPedido(item.data)}
@@ -1275,13 +1368,13 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
       </div>
 
       {/* Creation Modal */}
-      {isModalOpen && modalType === "Novo" && (
+      {isModalOpen && (modalType === "Novo" || modalType === "Editar Orcamento") && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 bg-primary/40 backdrop-blur-sm">
           <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-6xl h-[90vh] overflow-hidden flex flex-col scale-in">
             <div className="p-6 bg-white border-b border-gray-100 flex justify-between items-center shrink-0">
               <div>
                 <h2 className="text-2xl font-black tracking-tight text-gray-900">
-                  Novo Pedido/Orçamento
+                  {modalType === "Editar Orcamento" ? `Editar Orçamento #${selectedItem?.id.split("_")[1] || ""}` : "Novo Pedido/Orçamento"}
                 </h2>
               </div>
               <button
@@ -1505,7 +1598,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                                   Preço de Venda
                                 </span>
                                 <span className="text-sm font-black text-emerald-700 block">
-                                  R$ {p.preco_base.toFixed(2)}
+                                  R$ {formatCurrency(p.preco_base)}
                                 </span>
                               </div>
                             </div>
@@ -1678,18 +1771,29 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                                   </div>
                                 </td>
                                 <td className="py-4 font-black text-gray-900 text-xs text-center bg-gray-50/50">
-                                  {item.quantidade}
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={item.quantidade}
+                                    onChange={(e) => {
+                                      const novaQuantidade = parseInt(e.target.value) || 1;
+                                      const newItems = [...formData.items];
+                                      newItems[idx].quantidade = novaQuantidade;
+                                      setFormData({ ...formData, items: newItems });
+                                    }}
+                                    className="w-16 mx-auto text-center font-bold text-gray-900 text-xs border border-gray-200 rounded-md bg-white p-1"
+                                  />
                                 </td>
                                 <td className="py-4 font-bold text-gray-500 text-[10px] text-right uppercase">
-                                  R$ {item.preco.toFixed(2)}
+                                  R$ {formatCurrency(item.preco)}
                                 </td>
                                 <td className="py-4 font-black text-red-600 text-xs text-right px-2">
                                   {item.desconto && item.desconto > 0
-                                    ? `- R$ ${item.desconto.toFixed(2)}`
+                                    ? `- R$ ${formatCurrency(item.desconto)}`
                                     : "—"}
                                 </td>
                                 <td className="py-4 font-black text-gray-950 text-sm text-right">
-                                  R$ {(precoEfetivo * item.quantidade).toFixed(2)}
+                                  R$ {formatCurrency((precoEfetivo * item.quantidade))}
                                 </td>
                                 <td className="py-4 text-right">
                                   <button
@@ -1719,30 +1823,30 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                             Total do Pedido
                           </span>
                           <span className="text-lg font-black shrink-0 ml-4">
-                            R$ {cartSummary.valor_total.toFixed(2)}
+                            R$ {formatCurrency(cartSummary.valor_total)}
                           </span>
                         </div>
 
                         <div className="space-y-2 mt-4 bg-white/5 p-4 rounded-xl border border-white/10 text-sm">
                           <div className="flex justify-between text-white/80">
                             <span>Custo Produtivo</span>
-                            <span>R$ {cartSummary.custo_total.toFixed(2)}</span>
+                            <span>R$ {formatCurrency(cartSummary.custo_total)}</span>
                           </div>
                           <div className="flex justify-between text-white/80">
                             <span>Impostos</span>
                             <span>
-                              R$ {cartSummary.imposto_total.toFixed(2)}
+                              R$ {formatCurrency(cartSummary.imposto_total)}
                             </span>
                           </div>
                           <div className="flex justify-between text-white/80">
                             <span>Comissão</span>
                             <span>
-                              R$ {cartSummary.comissao_total.toFixed(2)}
+                              R$ {formatCurrency(cartSummary.comissao_total)}
                             </span>
                           </div>
                           <div className="flex justify-between text-white/80">
                             <span>Frete</span>
-                            <span>R$ {cartSummary.frete_total.toFixed(2)}</span>
+                            <span>R$ {formatCurrency(cartSummary.frete_total)}</span>
                           </div>
                           <div className="border-t border-white/20 my-2 pt-2 flex justify-between font-bold text-accent">
                             <span>Peso Total Estimado</span>
@@ -1750,27 +1854,39 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                           </div>
                           <div className="border-t border-white/20 my-2 pt-2 flex justify-between font-bold text-green-400">
                             <span>Lucro Bruto Estimado</span>
-                            <span>R$ {cartSummary.lucro_total.toFixed(2)}</span>
+                            <span>R$ {formatCurrency(cartSummary.lucro_total)}</span>
                           </div>
                         </div>
                       </div>
                     </div>
 
                     <div className="mt-8 flex flex-col gap-3">
-                      <button
-                        onClick={handleGerarOrcamento}
-                        disabled={isSaving}
-                        className={`w-full text-white font-black text-sm uppercase tracking-widest py-4 rounded-xl transition-all shadow-sm ${isSaving ? "bg-white/10 text-white/50 cursor-not-allowed" : "bg-white/20 hover:bg-white/30"}`}
-                      >
-                        {isSaving ? "Processando..." : "Gerar Orçamento"}
-                      </button>
-                      <button
-                        onClick={() => handleGerarPedido()}
-                        disabled={isSaving}
-                        className={`w-full text-primary font-black text-sm uppercase tracking-widest py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${isSaving ? "bg-accent/55 cursor-not-allowed text-primary/50" : "bg-accent hover:bg-accent/90"}`}
-                      >
-                        <Package size={18} /> {isSaving ? "Processando..." : "Gerar Pedido"}
-                      </button>
+                      {modalType === "Editar Orcamento" ? (
+                        <button
+                          onClick={handleSalvarEditarOrcamento}
+                          disabled={isSaving}
+                          className={`w-full text-primary font-black text-sm uppercase tracking-widest py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${isSaving ? "bg-accent/55 cursor-not-allowed text-primary/50" : "bg-accent hover:bg-accent/90"}`}
+                        >
+                          {isSaving ? "Processando..." : "Salvar Alterações"}
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={handleGerarOrcamento}
+                            disabled={isSaving}
+                            className={`w-full text-white font-black text-sm uppercase tracking-widest py-4 rounded-xl transition-all shadow-sm ${isSaving ? "bg-white/10 text-white/50 cursor-not-allowed" : "bg-white/20 hover:bg-white/30"}`}
+                          >
+                            {isSaving ? "Processando..." : "Gerar Orçamento"}
+                          </button>
+                          <button
+                            onClick={() => handleGerarPedido()}
+                            disabled={isSaving}
+                            className={`w-full text-primary font-black text-sm uppercase tracking-widest py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${isSaving ? "bg-accent/55 cursor-not-allowed text-primary/50" : "bg-accent hover:bg-accent/90"}`}
+                          >
+                            <Package size={18} /> {isSaving ? "Processando..." : "Gerar Pedido"}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1799,7 +1915,14 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => handleDownloadPDF("Orcamento", "Orcamento")}
+                  onClick={() => {
+                    setExportOptionsModal({
+                      isOpen: true,
+                      includeCondicao: true,
+                      includePrazo: true,
+                      selectedItem: selectedItem as Orcamento,
+                    });
+                  }}
                   disabled={isGeneratingPDF}
                   className={`w-10 h-10 border rounded-full flex items-center justify-center transition-all shadow-sm tooltip-trigger ${
                     isGeneratingPDF ? "bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
@@ -1897,10 +2020,10 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                             {it.quantidade}
                           </td>
                           <td className="py-4 font-medium text-gray-600 text-right">
-                            R$ {it.preco.toFixed(2)}
+                            R$ {formatCurrency(it.preco)}
                           </td>
                           <td className="py-4 font-black text-gray-900 text-right">
-                            R$ {(it.quantidade * it.preco).toFixed(2)}
+                            R$ {formatCurrency((it.quantidade * it.preco))}
                           </td>
                         </tr>
                       );
@@ -1915,7 +2038,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                         Total do Orçamento
                       </td>
                       <td className="py-6 font-black text-2xl text-right text-gray-900">
-                        R$ {selectedItem.valor_total.toFixed(2)}
+                        R$ {formatCurrency(selectedItem.valor_total)}
                       </td>
                     </tr>
                   </tfoot>
@@ -1923,7 +2046,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
               </div>
             </div>
 
-            <div className="p-6 bg-gray-50 border-t border-gray-200 hide-on-print flex gap-4 shrink-0">
+            <div className="p-6 bg-gray-50 border-t border-gray-200 hide-on-print flex flex-col sm:flex-row gap-4 shrink-0">
               <button
                 onClick={() => {
                   setIsConfirmOpen({
@@ -1934,14 +2057,22 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                   });
                   setIsModalOpen(false);
                 }}
-                className="flex-1 px-6 py-4 bg-white border border-red-200 text-red-600 font-black text-sm uppercase tracking-widest rounded-xl hover:bg-red-50 transition-all"
+                className="flex-1 px-4 py-4 bg-white border border-red-200 text-red-600 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red-50 transition-all text-center"
               >
                 Deletar Orçamento
               </button>
               <button
+                onClick={() => {
+                  handleOpenEditarOrcamento(selectedItem as Orcamento);
+                }}
+                className="flex-1 px-4 py-4 bg-white border border-blue-200 text-blue-600 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-blue-50 transition-all text-center"
+              >
+                Editar Orçamento
+              </button>
+              <button
                 onClick={() => handleGerarPedido(selectedItem as Orcamento)}
                 disabled={isSaving}
-                className={`flex-[2] px-6 py-4 font-black text-sm uppercase tracking-widest rounded-xl shadow-md transition-all ${isSaving ? "bg-primary/50 text-white/50 cursor-not-allowed" : "bg-primary text-white hover:bg-primary/90"}`}
+                className={`flex-[2] px-4 py-4 font-black text-xs uppercase tracking-widest rounded-xl shadow-md transition-all text-center ${isSaving ? "bg-primary/50 text-white/50 cursor-not-allowed" : "bg-primary text-white hover:bg-primary/90"}`}
               >
                 {isSaving ? "Processando..." : "Gerar Pedido a Partir do Orçamento"}
               </button>
@@ -2078,10 +2209,10 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                             {it.quantidade}
                           </td>
                           <td className="py-4 font-medium text-gray-600 text-right">
-                            R$ {precoEf.toFixed(2)}
+                            R$ {formatCurrency(precoEf)}
                           </td>
                           <td className="py-4 font-black text-gray-950 text-right font-mono">
-                            R$ {(it.quantidade * precoEf).toFixed(2)}
+                            R$ {formatCurrency((it.quantidade * precoEf))}
                           </td>
                         </tr>
                       );
@@ -3232,7 +3363,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                             Valor no Sistema
                           </span>
                           <span className="text-xs font-black text-blue-700 block">
-                            R$ {pedidoVal.toFixed(2)}
+                            R$ {formatCurrency(pedidoVal)}
                           </span>
                         </div>
                       </div>
@@ -3335,7 +3466,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                               Valor do Pedido (Sistema)
                             </span>
                             <span className="block text-gray-950 font-black text-xs">
-                              R$ {pedidoVal.toFixed(2)}
+                              R$ {formatCurrency(pedidoVal)}
                             </span>
                           </div>
                           <div className="text-left">
@@ -3345,7 +3476,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                             <span className="block text-emerald-800 font-black text-xs">
                               R${" "}
                               {inputValorTotal !== null
-                                ? inputValorTotal.toFixed(2)
+                                ? formatCurrency(inputValorTotal)
                                 : "---"}
                             </span>
                           </div>
@@ -3374,10 +3505,10 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                               </span>
                               <span className="font-semibold text-gray-650 text-[9px] leading-tight block mt-0.5 text-left">
                                 O valor da Nota Fiscal comercial difere em R${" "}
-                                {Math.abs(
+                                {formatCurrency(Math.abs(
                                   pedidoVal - (inputValorTotal || 0),
-                                ).toFixed(2)}{" "}
-                                do pedido do sistema. Certique-se de que os
+                                ))}{" "}
+                                do pedido do sistema. Certifique-se de que os
                                 dados estão corretos antes de avançar.
                               </span>
                             </div>
@@ -3596,19 +3727,19 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                   {costs.imposto_total > 0 && (
                     <div className="flex justify-between font-bold text-gray-700">
                       <span>Imposto (Variável)</span>
-                      <span className="text-rose-700 font-mono font-bold">R$ {costs.imposto_total.toFixed(2)}</span>
+                      <span className="text-rose-700 font-mono font-bold">R$ {formatCurrency(costs.imposto_total)}</span>
                     </div>
                   )}
                   {costs.frete_total > 0 && (
                     <div className="flex justify-between font-bold text-gray-700">
                       <span>Frete (Variável)</span>
-                      <span className="text-rose-700 font-mono font-bold">R$ {costs.frete_total.toFixed(2)}</span>
+                      <span className="text-rose-700 font-mono font-bold">R$ {formatCurrency(costs.frete_total)}</span>
                     </div>
                   )}
                   {costs.comissao_total > 0 && (
                     <div className="flex justify-between font-bold text-gray-700">
                       <span>Comissão do Representante</span>
-                      <span className="text-rose-700 font-mono font-bold">R$ {costs.comissao_total.toFixed(2)}</span>
+                      <span className="text-rose-700 font-mono font-bold">R$ {formatCurrency(costs.comissao_total)}</span>
                     </div>
                   )}
                 </div>
@@ -3659,6 +3790,131 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                 className="w-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-400 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all text-center"
               >
                 Cancelar Faturamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Options Modal */}
+      {exportOptionsModal.isOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-primary/40 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-[32px] shadow-2xl p-8 w-full max-w-md scale-in border border-gray-100">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-gray-900 tracking-tight">
+                Opções de Exportação
+              </h3>
+              <button
+                onClick={() => setExportOptionsModal({ ...exportOptionsModal, isOpen: false })}
+                className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full flex items-center justify-center transition-all"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs font-semibold text-gray-500 mb-6 leading-relaxed text-left">
+              Escolha quais informações adicionais deseja incluir no documento em formato PDF do orçamento:
+            </p>
+
+            <div className="space-y-4 mb-8">
+              <div className="flex flex-col gap-2 p-4 bg-gray-50 border border-gray-200/80 rounded-2xl">
+                <span className="text-xs font-bold text-gray-800 text-left">Título do Documento</span>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="nomeDocumento"
+                      value="Orçamento"
+                      checked={exportOptionsModal.nomeDocumento === "Orçamento"}
+                      onChange={(e) => setExportOptionsModal({ ...exportOptionsModal, nomeDocumento: "Orçamento" })}
+                      className="accent-emerald-700"
+                    />
+                    <span className="text-sm text-gray-700">Orçamento</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="nomeDocumento"
+                      value="Pedido Sugestivo"
+                      checked={exportOptionsModal.nomeDocumento === "Pedido Sugestivo"}
+                      onChange={(e) => setExportOptionsModal({ ...exportOptionsModal, nomeDocumento: "Pedido Sugestivo" })}
+                      className="accent-emerald-700"
+                    />
+                    <span className="text-sm text-gray-700">Pedido Sugestivo</span>
+                  </label>
+                </div>
+              </div>
+
+              <label className="flex items-center gap-3 p-4 bg-gray-50 hover:bg-gray-100/70 border border-gray-200/80 rounded-2xl cursor-pointer transition-all">
+                <input
+                  type="checkbox"
+                  checked={exportOptionsModal.includeCondicao}
+                  onChange={(e) =>
+                    setExportOptionsModal({
+                      ...exportOptionsModal,
+                      includeCondicao: e.target.checked,
+                    })
+                  }
+                  className="w-5 h-5 accent-emerald-700 rounded border-gray-300"
+                />
+                <div className="flex flex-col text-left">
+                  <span className="text-xs font-bold text-gray-800">
+                    Condição de Pagamento
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-semibold text-left">
+                    {exportOptionsModal.selectedItem?.condicao_pagamento || "A Combinar"}
+                  </span>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-4 bg-gray-50 hover:bg-gray-100/70 border border-gray-200/80 rounded-2xl cursor-pointer transition-all">
+                <input
+                  type="checkbox"
+                  checked={exportOptionsModal.includePrazo}
+                  onChange={(e) =>
+                    setExportOptionsModal({
+                      ...exportOptionsModal,
+                      includePrazo: e.target.checked,
+                    })
+                  }
+                  className="w-5 h-5 accent-emerald-700 rounded border-gray-300"
+                />
+                <div className="flex flex-col text-left">
+                  <span className="text-xs font-bold text-gray-800">
+                    Prazo / Previsão de Entrega
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-semibold text-left">
+                    {exportOptionsModal.selectedItem?.previsao_entrega
+                      ? formatPrevisaoEntrega(exportOptionsModal.selectedItem.previsao_entrega)
+                      : (exportOptionsModal.selectedItem?.prazo_entrega || "A Combinar")}
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setExportOptionsModal({ ...exportOptionsModal, isOpen: false })}
+                className="flex-1 py-3 border border-gray-200 text-gray-700 font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-gray-50 transition-all text-center"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setExportOptionsModal({ ...exportOptionsModal, isOpen: false });
+                  await handleDownloadPDF(
+                    "Orcamento",
+                    "Orcamento",
+                    exportOptionsModal.includeCondicao,
+                    exportOptionsModal.includePrazo,
+                    exportOptionsModal.nomeDocumento === "Pedido Sugestivo" ? "PEDIDO SUGESTIVO" : "ORÇAMENTO DE VENDA"
+                  );
+                }}
+                className="flex-1 py-3 bg-emerald-800 hover:bg-emerald-900 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-1 text-center"
+              >
+                <Download size={14} /> Exportar PDF
               </button>
             </div>
           </div>

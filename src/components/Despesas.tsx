@@ -104,6 +104,25 @@ const P_METHODS = [
   'Cartão Débito'
 ];
 
+const formatDateSafe = (dateStr: string) => {
+  if (!dateStr) return '---';
+  try {
+    const cleanStr = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
+    if (cleanStr.includes("-")) {
+      const parts = cleanStr.split("-");
+      if (parts.length === 3 && parts[0].length === 4) {
+        // YYYY-MM-DD
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    }
+    const parsed = new Date(cleanStr + "T12:00:00");
+    if (isNaN(parsed.getTime())) return '---';
+    return parsed.toLocaleDateString('pt-BR');
+  } catch (e) {
+    return '---';
+  }
+};
+
 interface DespesasProps {
   empresa?: string;
 }
@@ -623,7 +642,8 @@ const Despesas: React.FC<DespesasProps> = ({ empresa }) => {
                 {filteredDespesas.map((d) => {
                   const IconComp = CATEGORIA_ICONS[d.categoria] || HelpCircle;
                   const isPaid = d.status === 'Pago' || d.status === 'Paga';
-                  const isOverdue = !isPaid && new Date(d.vencimento + "T12:00:00") < new Date();
+                  const cleanVencStr = d.vencimento ? (d.vencimento.includes("T") ? d.vencimento.split("T")[0] : d.vencimento) : '';
+                  const isOverdue = !isPaid && cleanVencStr && new Date(cleanVencStr + "T12:00:00") < new Date();
 
                   return (
                     <tr key={d.id} className="hover:bg-gray-50/35 transition-colors group">
@@ -675,13 +695,13 @@ const Despesas: React.FC<DespesasProps> = ({ empresa }) => {
                       {/* COMPETENCE / OVERDUE DATES */}
                       <td className="py-4.5 px-6 leading-relaxed">
                         <div className="flex flex-col gap-0.5 text-gray-500 font-bold">
-                          <span>Fecha: <strong className="text-gray-800">{new Date(d.data + "T12:00:00").toLocaleDateString('pt-BR')}</strong></span>
+                          <span>Comp.: <strong className="text-gray-800">{formatDateSafe(d.data)}</strong></span>
                           <span>Venc.: <strong className={isOverdue ? "text-red-600 animate-pulse" : "text-gray-800"}>
-                            {new Date(d.vencimento + "T12:00:00").toLocaleDateString('pt-BR')}
+                            {formatDateSafe(d.vencimento)}
                           </strong></span>
                           {isPaid && d.data_pagamento && (
                             <span className="text-[9px] text-emerald-600 block mt-0.5">
-                              Pago em: {new Date(d.data_pagamento + "T12:00:00").toLocaleDateString('pt-BR')}
+                              Pago em: {formatDateSafe(d.data_pagamento)}
                             </span>
                           )}
                         </div>
@@ -1027,7 +1047,7 @@ const Despesas: React.FC<DespesasProps> = ({ empresa }) => {
               <p>Nome: <span className="font-extrabold text-gray-950">{selectedPayExpense.descricao}</span></p>
               <p>Categoria: <span className="font-extrabold text-gray-900">{selectedPayExpense.categoria}</span></p>
               <p>Valor Líquido: <span className="font-mono font-black text-gray-950 text-sm">R$ {selectedPayExpense.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span></p>
-              <p>Vencimento Original: <span className="font-extrabold text-gray-900">{new Date(selectedPayExpense.vencimento + "T12:00:00").toLocaleDateString('pt-BR')}</span></p>
+              <p>Vencimento Original: <span className="font-extrabold text-gray-900">{formatDateSafe(selectedPayExpense.vencimento)}</span></p>
             </div>
 
             <form onSubmit={handleConfirmPay} className="space-y-4">
@@ -1455,14 +1475,14 @@ const Despesas: React.FC<DespesasProps> = ({ empresa }) => {
                     <div>
                       <span className="text-[9px] font-black text-gray-400 uppercase block tracking-widest">Data Competência</span>
                       <span className="text-gray-900 font-extrabold block mt-0.5">
-                        {new Date(selectedDetailExpense.data + "T12:00:00").toLocaleDateString('pt-BR')}
+                        {formatDateSafe(selectedDetailExpense.data)}
                       </span>
                     </div>
 
                     <div>
                       <span className="text-[9px] font-black text-gray-400 uppercase block tracking-widest">Vencimento</span>
                       <span className="text-gray-955 font-black block mt-0.5">
-                        {new Date(selectedDetailExpense.vencimento + "T12:00:00").toLocaleDateString('pt-BR')}
+                        {formatDateSafe(selectedDetailExpense.vencimento)}
                       </span>
                     </div>
 
@@ -1544,7 +1564,7 @@ const Despesas: React.FC<DespesasProps> = ({ empresa }) => {
                       <div>
                         <span className="text-[#059669] text-[8px] uppercase block tracking-wider">Pago em...</span>
                         <span className="text-gray-905 block mt-0.5">
-                          {selectedDetailExpense.data_pagamento ? new Date(selectedDetailExpense.data_pagamento + "T12:00:00").toLocaleDateString('pt-BR') : "---"}
+                          {selectedDetailExpense.data_pagamento ? formatDateSafe(selectedDetailExpense.data_pagamento) : "---"}
                         </span>
                       </div>
                       <div>

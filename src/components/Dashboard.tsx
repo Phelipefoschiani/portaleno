@@ -49,8 +49,57 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void, empresa?: stri
 
   // Filter data by selected month and year
   const filterByDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear;
+    if (!dateStr) return false;
+    try {
+      const cleanStr = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
+      if (cleanStr.includes("-")) {
+        const parts = cleanStr.split("-");
+        if (parts.length === 3 && parts[0].length === 4) {
+          const yr = parseInt(parts[0], 10);
+          const mo = parseInt(parts[1], 10);
+          return mo === selectedMonth && yr === selectedYear;
+        }
+      }
+      const d = new Date(cleanStr + "T12:00:00");
+      if (isNaN(d.getTime())) return false;
+      return d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const getExpenseDay = (dateStr: string) => {
+    if (!dateStr) return 0;
+    try {
+      const cleanStr = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
+      if (cleanStr.includes("-")) {
+        const parts = cleanStr.split("-");
+        if (parts.length === 3 && parts[0].length === 4) {
+          return parseInt(parts[2], 10);
+        }
+      }
+      const d = new Date(cleanStr + "T12:00:00");
+      return d.getDate();
+    } catch (e) {
+      return 0;
+    }
+  };
+
+  const getPedidoDay = (dateStr: string) => {
+    if (!dateStr) return 0;
+    try {
+      const cleanStr = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
+      if (cleanStr.includes("-")) {
+        const parts = cleanStr.split("-");
+        if (parts.length === 3 && parts[0].length === 4) {
+          return parseInt(parts[2], 10);
+        }
+      }
+      const d = new Date(cleanStr + "T12:00:00");
+      return d.getDate();
+    } catch (e) {
+      return 0;
+    }
   };
 
   const pedidosMes = pedidos.filter(p => filterByDate(p.data));
@@ -65,8 +114,11 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void, empresa?: stri
     .filter(p => p.status === 'Faturado' && !p.recebido && !p.adiantado)
     .reduce((acc, p) => acc + (p.nf_valor_total || p.valor_total || 0), 0);
 
-  const despesasFixas = despesasMes.filter(d => d.categoria.toLowerCase().includes('fix')).reduce((acc, d) => acc + d.valor, 0);
-  const despesasVariaveis = despesasMes.filter(d => d.categoria.toLowerCase().includes('vari')).reduce((acc, d) => acc + d.valor, 0);
+  const isExpenseFixed = (d: any) => d.tipo_despesa === 'fixa' || d.categoria?.toLowerCase().includes('fix');
+  const isExpenseVariable = (d: any) => d.tipo_despesa === 'variavel' || d.categoria?.toLowerCase().includes('vari') || (!d.categoria?.toLowerCase().includes('fix') && d.tipo_despesa !== 'fixa');
+
+  const despesasFixas = despesasMes.filter(isExpenseFixed).reduce((acc, d) => acc + d.valor, 0);
+  const despesasVariaveis = despesasMes.filter(isExpenseVariable).reduce((acc, d) => acc + d.valor, 0);
   const despesasTotal = despesasFixas + despesasVariaveis;
 
   const currentGoalObj = objetivosEmpresa?.find(o => o.ano === selectedYear && o.mes === selectedMonth);
@@ -83,11 +135,11 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void, empresa?: stri
   let custoAcumulado = 0;
 
   for (let i = 1; i <= diasNoMes; i++) {
-    const pedDia = faturadosNoMes.filter(p => new Date(p.data).getDate() === i);
+    const pedDia = faturadosNoMes.filter(p => getPedidoDay(p.data) === i);
     const fatDia = pedDia.reduce((acc, p) => acc + (p.valor_total || 0), 0);
     const custoProdDia = pedDia.reduce((acc, p) => acc + (p.custo_total || 0), 0);
 
-    const despVarDia = despesasMes.filter(d => new Date(d.vencimento).getDate() === i && d.categoria.toLowerCase().includes('vari'));
+    const despVarDia = despesasMes.filter(d => getExpenseDay(d.vencimento) === i && isExpenseVariable(d));
     const totalDespVarDia = despVarDia.reduce((acc, d) => acc + d.valor, 0);
 
     fatAcumulado += fatDia;
