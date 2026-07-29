@@ -17,7 +17,8 @@ import {
   ChevronRight,
   AlertTriangle,
   Edit,
-  Plus
+  Plus,
+  Trash2
 } from 'lucide-react';
 
 interface ProducaoPainelProps {
@@ -29,7 +30,8 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
     pedidos, 
     produtos, 
     clientes, 
-    updatePedido 
+    updatePedido,
+    deletePedido 
   } = useGlobalState();
 
   const { user } = useAuth();
@@ -61,6 +63,12 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
   const [opDataFabricacao, setOpDataFabricacao] = useState("");
   const [opDataVencimento, setOpDataVencimento] = useState("");
   const [opLoteCodigo, setOpLoteCodigo] = useState("");
+
+  // Delete Confirmation Modal State
+  const [deleteConfirmState, setDeleteConfirmState] = useState<{
+    isOpen: boolean;
+    pedidoId: string | null;
+  }>({ isOpen: false, pedidoId: null });
 
   const handleOpenDefinirLoteModal = (pedido: Pedido) => {
     const today = new Date().toISOString().split("T")[0];
@@ -650,6 +658,14 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
                         }`}>
                           {pedido.status}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirmState({ isOpen: true, pedidoId: pedido.id })}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Apagar Pedido de Produção"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </div>
 
@@ -1170,6 +1186,41 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
                 className="flex-1 px-4 py-2.5 bg-primary hover:bg-primary-hover disabled:bg-gray-200 disabled:text-gray-400 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm"
               >
                 Salvar Configurações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmState.isOpen && deleteConfirmState.pedidoId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary/40 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-[28px] shadow-2xl p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto scale-in text-center">
+            <h3 className="text-base font-black text-gray-900 mb-3">
+              Confirmar Exclusão
+            </h3>
+            <p className="text-xs text-gray-500 font-bold leading-relaxed mb-6">
+              Deseja realmente deletar este pedido de produção? Esta ação não poderá ser desfeita.
+            </p>
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (deleteConfirmState.pedidoId) {
+                    await deletePedido(deleteConfirmState.pedidoId);
+                  }
+                  setDeleteConfirmState({ isOpen: false, pedidoId: null });
+                }}
+                className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-md shadow-red-200"
+              >
+                Sim, Excluir Pedido
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmState({ isOpen: false, pedidoId: null })}
+                className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold text-xs hover:bg-gray-200 transition-all"
+              >
+                Cancelar
               </button>
             </div>
           </div>

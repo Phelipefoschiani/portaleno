@@ -43,7 +43,7 @@ const formatPrevisaoEntrega = (dateStr: string | null | undefined): string => {
   return dateStr;
 };
 
-const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
+const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: string) => void }> = ({ empresa, setActiveTab }) => {
   const {
     pedidos,
     orcamentos,
@@ -77,7 +77,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
     isOpen: boolean;
     includeCondicao: boolean;
     includePrazo: boolean;
-    nomeDocumento: "Orçamento" | "Pedido Sugestivo";
+    nomeDocumento: "Orçamento" | "Pedido Sugestivo" | "Pedido";
     selectedItem: Orcamento | null;
   }>({
     isOpen: false,
@@ -431,7 +431,23 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
       }
 
       const isOrcamentoPDF = (filenamePrefix === "Orcamento");
-      pdf.save(`${filenamePrefix}_${selectedItem?.id.substring(0, 8) || 'export'}.pdf`);
+      const clientName = cliente?.razao_social || cliente?.nome_fantasia || "Cliente";
+      let docType = "Documento";
+      if (documentTitle) {
+        if (documentTitle.toUpperCase() === "ORÇAMENTO DE VENDA" || documentTitle.toUpperCase() === "ORÇAMENTO") {
+          docType = "Orçamento";
+        } else if (documentTitle.toUpperCase() === "PEDIDO SUGESTIVO") {
+          docType = "Pedido Sugestivo";
+        } else if (documentTitle.toUpperCase() === "PEDIDO") {
+          docType = "Pedido";
+        } else {
+          docType = documentTitle.charAt(0).toUpperCase() + documentTitle.slice(1).toLowerCase();
+        }
+      } else {
+        docType = filenamePrefix === "Orcamento" ? "Orçamento" : "Pedido";
+      }
+
+      pdf.save(`${docType} - ${clientName}.pdf`);
       logEvent(`Exportou PDF do ${isOrcamentoPDF ? 'Orçamento' : 'Pedido'}: ${clientes.find(c => c.id === selectedItem?.cliente_id)?.nome_fantasia || 'Desconhecido'}`);
     } catch (error) {
       console.error("Erro ao gerar PDF", error);
@@ -532,8 +548,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
   const [isConfirmOpen, setIsConfirmOpen] = useState<{
     isOpen: boolean;
     pedId?: string;
-    type?: "Faturar" | "Alert" | "DeletePedido" | "DeleteOrcamento";
+    type?: "Faturar" | "Alert" | "DeletePedido" | "DeleteOrcamento" | "GerarPedido";
     message?: string;
+    fromOrcamento?: Orcamento;
   }>({ isOpen: false });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -759,8 +776,31 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
     }
   };
 
-  const handleGerarPedido = async (fromOrcamento?: Orcamento) => {
+  const handleGerarPedido = async (fromOrcamento?: Orcamento, bypassConfirm = false) => {
     if (isSaving) return;
+
+    if (!fromOrcamento) {
+      if (!formData.cliente_id || formData.items.length === 0) {
+        return setIsConfirmOpen({
+          isOpen: true,
+          type: "Alert",
+          message: "Selecione cliente e adicione itens.",
+        });
+      }
+    }
+
+    if (!bypassConfirm) {
+      setIsConfirmOpen({
+        isOpen: true,
+        type: "GerarPedido",
+        message: fromOrcamento
+          ? "Deseja realmente gerar o pedido a partir deste orçamento?"
+          : "Deseja realmente gerar este pedido?",
+        fromOrcamento: fromOrcamento,
+      });
+      return;
+    }
+
     if (fromOrcamento) {
       setIsSaving(true);
       try {
@@ -773,7 +813,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
           custo_total: fromOrcamento.valor_total * 0.4, // Estimate 40%
           margem: 60.00, // Safe percentage margin (60.00% instead of absolute amount which overflows on values >= 1000)
           status: "Aguardando Produção",
-          observacoes: fromOrcamento.observacoes,
+          observacoes: `[OrcamentoID:${fromOrcamento.id}] ${fromOrcamento.observacoes || ""}`,
           previsao_entrega: fromOrcamento.prazo_entrega,
           condicao_pagamento: fromOrcamento.condicao_pagamento,
           prazo_entrega: fromOrcamento.prazo_entrega
@@ -781,6 +821,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
         if (success) {
           await updateOrcamento(fromOrcamento.id, { status: "Convertido em Pedido" });
           setIsModalOpen(false);
+          if (setActiveTab) {
+            setActiveTab("producao");
+          }
         }
       } catch (e) {
         console.error(e);
@@ -788,12 +831,6 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
         setIsSaving(false);
       }
     } else {
-      if (!formData.cliente_id || formData.items.length === 0)
-        return setIsConfirmOpen({
-          isOpen: true,
-          type: "Alert",
-          message: "Selecione cliente e adicione itens.",
-        });
       setIsSaving(true);
       try {
         const success = await addPedido({
@@ -814,6 +851,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
         });
         if (success) {
           setIsModalOpen(false);
+          if (setActiveTab) {
+            setActiveTab("producao");
+          }
         }
       } catch (e) {
         console.error(e);
@@ -1920,6 +1960,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                       isOpen: true,
                       includeCondicao: true,
                       includePrazo: true,
+                      nomeDocumento: "Orçamento",
                       selectedItem: selectedItem as Orcamento,
                     });
                   }}
@@ -3693,6 +3734,24 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                   Cancelar
                 </button>
               </div>
+            ) : isConfirmOpen.type === "GerarPedido" ? (
+              <div className="flex flex-col gap-2 pt-2 text-center animate-fadeIn">
+                <button
+                  onClick={() => {
+                    handleGerarPedido(isConfirmOpen.fromOrcamento, true);
+                    setIsConfirmOpen({ isOpen: false });
+                  }}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-md shadow-green-200"
+                >
+                  Sim, Gerar Pedido
+                </button>
+                <button
+                  onClick={() => setIsConfirmOpen({ isOpen: false })}
+                  className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold text-xs hover:bg-gray-200 transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
             ) : (
               <button
                 onClick={() => setIsConfirmOpen({ isOpen: false })}
@@ -3842,6 +3901,17 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                     />
                     <span className="text-sm text-gray-700">Pedido Sugestivo</span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="nomeDocumento"
+                      value="Pedido"
+                      checked={exportOptionsModal.nomeDocumento === "Pedido"}
+                      onChange={(e) => setExportOptionsModal({ ...exportOptionsModal, nomeDocumento: "Pedido" })}
+                      className="accent-emerald-700"
+                    />
+                    <span className="text-sm text-gray-700">Pedido</span>
+                  </label>
                 </div>
               </div>
 
@@ -3909,7 +3979,11 @@ const PedidosOrcamentos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                     "Orcamento",
                     exportOptionsModal.includeCondicao,
                     exportOptionsModal.includePrazo,
-                    exportOptionsModal.nomeDocumento === "Pedido Sugestivo" ? "PEDIDO SUGESTIVO" : "ORÇAMENTO DE VENDA"
+                    exportOptionsModal.nomeDocumento === "Pedido Sugestivo"
+                      ? "PEDIDO SUGESTIVO"
+                      : exportOptionsModal.nomeDocumento === "Pedido"
+                      ? "PEDIDO"
+                      : "ORÇAMENTO DE VENDA"
                   );
                 }}
                 className="flex-1 py-3 bg-emerald-800 hover:bg-emerald-900 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-1 text-center"

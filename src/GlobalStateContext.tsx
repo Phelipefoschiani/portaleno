@@ -56,13 +56,13 @@ interface GlobalStateContextType {
   updateCompraMandioca: (id: string, c: Partial<CompraMandioca>) => void;
   deleteCompraMandioca: (id: string) => void;
 
-  addPedido: (p: Omit<Pedido, "id">) => void;
-  updatePedido: (id: string, p: Partial<Pedido>) => void;
-  deletePedido: (id: string) => void;
+  addPedido: (p: Omit<Pedido, "id">) => Promise<boolean>;
+  updatePedido: (id: string, p: Partial<Pedido>) => Promise<boolean>;
+  deletePedido: (id: string) => Promise<boolean>;
 
-  addOrcamento: (o: Omit<Orcamento, "id">) => void;
-  updateOrcamento: (id: string, o: Partial<Orcamento>) => void;
-  deleteOrcamento: (id: string) => void;
+  addOrcamento: (o: Omit<Orcamento, "id">) => Promise<boolean>;
+  updateOrcamento: (id: string, o: Partial<Orcamento>) => Promise<boolean>;
+  deleteOrcamento: (id: string) => Promise<boolean>;
 
   addProducao: (p: Omit<Producao, "id">) => void;
   updateProducao: (id: string, p: Partial<Producao>) => void;
@@ -345,9 +345,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
     
-    // Prevent sending invalid timestamp "15 dias"
-    if ((payload as any).previsao_entrega === "Atrasado" || (payload as any).previsao_entrega === "Hoje" || (payload as any).previsao_entrega?.includes("dias")) {
-      (payload as any).previsao_entrega = null;
+    // Prevent sending invalid timestamp
+    const prevDateVal = (payload as any).previsao_entrega;
+    if (prevDateVal) {
+      const parsed = Date.parse(prevDateVal);
+      if (isNaN(parsed) || !/^\d{4}-\d{2}-\d{2}/.test(prevDateVal)) {
+        (payload as any).previsao_entrega = null;
+      }
     }
 
     // Append 'prazo_entrega' to observacoes if it is present since it doesn't exist natively
@@ -431,8 +435,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       }
 
-      if ((payload as any).previsao_entrega === "Atrasado" || (payload as any).previsao_entrega === "Hoje" || (payload as any).previsao_entrega?.includes("dias")) {
-        (payload as any).previsao_entrega = null;
+      // Prevent sending invalid timestamp
+      const prevDateVal = (payload as any).previsao_entrega;
+      if (prevDateVal) {
+        const parsed = Date.parse(prevDateVal);
+        if (isNaN(parsed) || !/^\d{4}-\d{2}-\d{2}/.test(prevDateVal)) {
+          (payload as any).previsao_entrega = null;
+        }
       }
 
       delete (payload as any).condicao_pagamento;
@@ -466,7 +475,38 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const deletePedido = async (id: string) => {
     const ped = pedidos.find(p => p.id === id);
-    if(ped) logEvent(`Excluiu pedido.`, ped.valor_total);
+    if(ped) {
+      logEvent(`Excluiu pedido.`, ped.valor_total);
+      
+      let orcamentoIdToRevert = null;
+      if (ped.observacoes) {
+        const match = ped.observacoes.match(/\[OrcamentoID:([a-fA-F0-9-]{36})\]/);
+        if (match && match[1]) {
+          orcamentoIdToRevert = match[1];
+        }
+      }
+
+      if (!orcamentoIdToRevert) {
+        // Fallback: find any Orçamento with status "Convertido em Pedido" matching client and valor_total
+        const matchingOrcamento = orcamentos.find(o => 
+          o.status === "Convertido em Pedido" && 
+          o.cliente_id === ped.cliente_id && 
+          Math.abs(Number(o.valor_total) - Number(ped.valor_total)) < 0.01
+        );
+        if (matchingOrcamento) {
+          orcamentoIdToRevert = matchingOrcamento.id;
+        }
+      }
+
+      if (orcamentoIdToRevert) {
+        await supabase.from("orcamentos").update({ status: "Orçamento" }).eq("id", orcamentoIdToRevert);
+        setOrcamentos((prev) =>
+          prev.map((o) =>
+            o.id === orcamentoIdToRevert ? { ...o, status: "Orçamento" } : o
+          )
+        );
+      }
+    }
     await supabase.from("pedidos").delete().eq("id", id);
     setPedidos((prev) => prev.filter((p) => p.id !== id));
     setComissoes((prev) => prev.filter((c) => c.pedido_id !== id));

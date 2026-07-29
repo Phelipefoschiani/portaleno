@@ -16,6 +16,7 @@ import Objetivo from './components/Objetivo';
 import { DRE } from './components/DRE';
 import Configuracoes from './components/Configuracoes';
 import Eventos from './components/Eventos';
+import GrupoEnoLanding from './components/GrupoEnoLanding';
 import { GlobalStateProvider } from './GlobalStateContext';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -51,6 +52,7 @@ const getCompanyTheme = (empresa: string) => {
 
 function AppContent() {
   const { user, isLoading } = useAuth();
+  const [showPortal, setShowPortal] = useState(false);
   const [activeTab, setActiveTab ] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [empresa, setEmpresa] = useState('estancia');
@@ -61,6 +63,12 @@ function AppContent() {
     }
   }, [user, activeTab]);
 
+  React.useEffect(() => {
+    if (!user) {
+      setShowPortal(false);
+    }
+  }, [user]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-primary">
@@ -69,8 +77,12 @@ function AppContent() {
     );
   }
 
+  if (!showPortal && !user) {
+    return <GrupoEnoLanding onEnterPortal={() => setShowPortal(true)} isLoggedIn={false} />;
+  }
+
   if (!user) {
-    return <LoginPage />;
+    return <LoginPage onBackToSite={() => setShowPortal(false)} />;
   }
 
   const theme = getCompanyTheme(empresa);
@@ -86,7 +98,7 @@ function AppContent() {
       case 'produtos':
         return <Produtos empresa={empresa} />;
       case 'pedidos':
-        return <PedidosOrcamentos empresa={empresa} />;
+        return <PedidosOrcamentos empresa={empresa} setActiveTab={setActiveTab} />;
       case 'producao':
         return <ProducaoPainel empresa={empresa} />;
       case 'despesas':

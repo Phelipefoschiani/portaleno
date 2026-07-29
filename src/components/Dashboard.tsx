@@ -103,7 +103,7 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void, empresa?: stri
   };
 
   const pedidosMes = pedidos.filter(p => filterByDate(p.data));
-  const despesasMes = despesas.filter(d => filterByDate(d.vencimento));
+  const despesasMes = despesas.filter(d => filterByDate(d.data || d.vencimento) && d.status !== 'Cancelada');
 
   // KPIs
   const faturamentoTotal = pedidosMes

@@ -3,7 +3,11 @@ import { useAuth } from '../AuthContext';
 import { LogIn, Leaf, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'motion/react';
 
-const LoginPage: React.FC = () => {
+interface LoginPageProps {
+  onBackToSite?: () => void;
+}
+
+const LoginPage: React.FC<LoginPageProps> = ({ onBackToSite }) => {
   const [loginStr, setLoginStr] = useState('');
   const [senhaStr, setSenhaStr] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -139,6 +143,15 @@ const LoginPage: React.FC = () => {
             )}
           </button>
         </form>
+
+        {onBackToSite && (
+          <button
+            onClick={onBackToSite}
+            className="w-full mt-4 bg-gray-50 hover:bg-gray-100 text-gray-500 font-bold py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 border border-gray-200 text-xs uppercase tracking-widest cursor-pointer"
+          >
+            Voltar para o site institucional
+          </button>
+        )}
 
         <p className="mt-8 text-center text-xs font-bold text-gray-400 uppercase tracking-widest">
           Grupo ENO © {new Date().getFullYear()}
