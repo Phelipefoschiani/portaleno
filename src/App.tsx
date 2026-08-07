@@ -4,6 +4,8 @@ import LoginPage from './components/LoginPage';
 import Sidebar from './components/Sidebar';
 import { Menu } from 'lucide-react';
 import Dashboard from './components/Dashboard';
+import DashboardEmpana from './components/DashboardEmpana';
+import ConfiguracoesEmpana from './components/ConfiguracoesEmpana';
 import Clientes from './components/Clientes';
 import Fornecedores from './components/Fornecedores';
 import Produtos from './components/Produtos';
@@ -36,7 +38,7 @@ const getCompanyTheme = (empresa: string) => {
       };
     case 'empana':
       return {
-        primary: '#c2410c', // Orange 700
+        primary: '#ea580c', // Orange 600
         secondary: '#f97316', // Orange 500
         accent: '#ffedd5', // Orange 100
       };
@@ -57,9 +59,29 @@ function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [empresa, setEmpresa] = useState('estancia');
 
+  const theme = getCompanyTheme(empresa);
+
   React.useEffect(() => {
-    if (user && user.perfil === 'producao' && activeTab === 'dashboard') {
-      setActiveTab('producao');
+    // Se não houver usuário, garantir que o tema seja o padrão (estancia/verde)
+    if (!user && empresa !== 'estancia') {
+      setEmpresa('estancia');
+    }
+  }, [user, empresa]);
+
+  React.useEffect(() => {
+    document.documentElement.style.setProperty('--primary', theme.primary);
+    document.documentElement.style.setProperty('--secondary', theme.secondary);
+    document.documentElement.style.setProperty('--accent', theme.accent);
+  }, [theme]);
+
+  React.useEffect(() => {
+    if (user) {
+      if (user.perfil === 'producao') {
+        if (activeTab === 'dashboard') setActiveTab('producao');
+      } else if (user.perfil === 'empana') {
+        setEmpresa('empana');
+        // Mantém dashboard se estiver nele
+      }
     }
   }, [user, activeTab]);
 
@@ -85,12 +107,13 @@ function AppContent() {
     return <LoginPage onBackToSite={() => setShowPortal(false)} />;
   }
 
-  const theme = getCompanyTheme(empresa);
-
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': 
+        if (empresa === 'empana') return <DashboardEmpana />;
         return <Dashboard setActiveTab={setActiveTab} empresa={empresa} />;
+      case 'configuracoes-empana':
+        return <ConfiguracoesEmpana />;
       case 'clientes':
         return <Clientes empresa={empresa} />;
       case 'fornecedores':
@@ -122,11 +145,6 @@ function AppContent() {
   return (
     <div 
       className="flex min-h-screen bg-background relative transition-colors duration-300"
-      style={{
-        '--primary': theme.primary,
-        '--secondary': theme.secondary,
-        '--accent': theme.accent,
-      } as React.CSSProperties}
     >
       <div className={`fixed inset-0 bg-primary/40 backdrop-blur-sm z-30 lg:hidden transition-opacity duration-300 ${sidebarOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`} onClick={() => setSidebarOpen(false)} />
       

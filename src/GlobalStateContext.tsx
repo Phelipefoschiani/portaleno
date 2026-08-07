@@ -18,6 +18,7 @@ import { supabase } from "./supabase";
 
 interface GlobalStateContextType {
   clientes: Cliente[];
+  clientesEmpana: Cliente[];
   produtos: Produto[];
   pedidos: Pedido[];
   orcamentos: Orcamento[];
@@ -47,6 +48,10 @@ interface GlobalStateContextType {
   addCliente: (c: Omit<Cliente, "id">) => void;
   updateCliente: (id: string, c: Partial<Cliente>) => void;
   deleteCliente: (id: string) => void;
+
+  addClienteEmpana: (c: Omit<Cliente, "id">) => void;
+  updateClienteEmpana: (id: string, c: Partial<Cliente>) => void;
+  deleteClienteEmpana: (id: string) => void;
 
   addFornecedor: (f: Omit<Fornecedor, "id">) => void;
   updateFornecedor: (id: string, f: Partial<Fornecedor>) => void;
@@ -93,6 +98,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [clientesEmpana, setClientesEmpana] = useState<Cliente[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
@@ -129,7 +135,8 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
           { data: qComissoes, error: eComissoes },
           { data: qObjetivos, error: eObjetivos },
           { data: qMetas, error: eMetas },
-          { data: qEventos, error: eEventos }
+          { data: qEventos, error: eEventos },
+          { data: qClientesEmpana, error: eClientesEmpana }
         ] = await Promise.all([
           supabase.from("usuarios").select("*").limit(10000),
           supabase.from("clientes").select("*").limit(10000),
@@ -143,11 +150,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
           supabase.from("comissoes").select("*").limit(10000),
           supabase.from("objetivos_empresa").select("*").limit(10000),
           supabase.from("metas_representante").select("*").limit(10000),
-          supabase.from("log_eventos").select("*").order("data", { ascending: false }).limit(200)
+          supabase.from("log_eventos").select("*").order("data", { ascending: false }).limit(200),
+          supabase.from("clientes_empana").select("*").limit(10000)
         ]);
 
         if (eUsuarios) console.error("Erro usuarios:", eUsuarios);
         if (eClientes) console.error("Erro clientes:", eClientes);
+        if (eClientesEmpana) console.error("Erro clientes empana:", eClientesEmpana);
         if (eProdutos) console.error("Erro produtos:", eProdutos);
         if (eFornecedores) console.error("Erro fornecedores:", eFornecedores);
         if (eCompras) console.error("Erro compras:", eCompras);
@@ -162,6 +171,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
         if (qUsuarios) setUsuarios(qUsuarios as User[]);
         if (qClientes) setClientes(qClientes as Cliente[]);
+        if (qClientesEmpana) setClientesEmpana(qClientesEmpana as Cliente[]);
         if (qProdutos) setProdutos(qProdutos as Produto[]);
         if (qFornecedores) setFornecedores(qFornecedores as Fornecedor[]);
         if (qDespesas) setDespesas(qDespesas as Despesa[]);
@@ -327,6 +337,37 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     setOrcamentos((prev) => prev.filter((o) => o.cliente_id !== id));
   };
 
+  const addClienteEmpana = async (c: Omit<Cliente, "id">) => {
+    const payload = { ...c };
+    if ((payload as any).representante_id === "") (payload as any).representante_id = null;
+    const { data, error } = await supabase.from("clientes_empana").insert([payload]).select().single();
+    if (error) {
+      console.error("Erro ao adicionar cliente empana:", error);
+      alert("Erro ao adicionar cliente empana: " + error.message);
+    }
+    if (data) { setClientesEmpana((prev) => [...prev, data]); logEvent(`Adicionou cliente Empana: ${payload.nome_fantasia || payload.razao_social}`); }
+  };
+
+  const updateClienteEmpana = async (id: string, updatedFields: Partial<Cliente>) => {
+    const payload = { ...updatedFields };
+    if ((payload as any).representante_id === "") (payload as any).representante_id = null;
+    const { data, error } = await supabase.from("clientes_empana").update(payload).eq("id", id).select().single();
+    if (error) {
+      console.error("Erro ao atualizar cliente empana:", error);
+    }
+    if (data) {
+      logEvent(`Atualizou cliente Empana: ${(payload as any).razao_social || "Cliente"}`);
+      setClientesEmpana((prev) => prev.map((c) => (c.id === id ? data : c)));
+    }
+  };
+
+  const deleteClienteEmpana = async (id: string) => {
+    const c = clientesEmpana.find(x => x.id === id);
+    if(c) logEvent(`Excluiu cliente Empana: ${c.nome_fantasia || c.razao_social}`);
+    await supabase.from("clientes_empana").delete().eq("id", id);
+    setClientesEmpana((prev) => prev.filter((c) => c.id !== id));
+  };
+
   const addPedido = async (p: Omit<Pedido, "id">) => {
     const { items, solicitacoes_insumos, ...rest } = p;
     const payload = { ...rest };
@@ -345,6 +386,20 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
     
+    // Handle data_vencimento and prazo_entrega which don't exist natively
+    const extraObs: string[] = [];
+    if ((payload as any).data_vencimento) {
+      extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR')}`);
+    }
+    if ((payload as any).prazo_entrega) {
+      extraObs.push(`Prazo de Entrega: ${(payload as any).prazo_entrega}`);
+    }
+
+    if (extraObs.length > 0) {
+      const obs = (payload as any).observacoes || '';
+      (payload as any).observacoes = `${extraObs.join(' | ')}\n${obs}`;
+    }
+
     // Prevent sending invalid timestamp
     const prevDateVal = (payload as any).previsao_entrega;
     if (prevDateVal) {
@@ -354,14 +409,9 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
 
-    // Append 'prazo_entrega' to observacoes if it is present since it doesn't exist natively
-    if ((payload as any).prazo_entrega) {
-      const obs = (payload as any).observacoes || '';
-      (payload as any).observacoes = `Prazo de Entrega: ${(payload as any).prazo_entrega}\n${obs}`;
-    }
-
     delete (payload as any).condicao_pagamento;
     delete (payload as any).prazo_entrega;
+    delete (payload as any).data_vencimento;
 
     const { data, error } = await supabase
       .from("pedidos")
@@ -435,6 +485,20 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       }
 
+      // Handle data_vencimento and prazo_entrega which don't exist natively
+      const extraObs: string[] = [];
+      if ((payload as any).data_vencimento) {
+        extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR')}`);
+      }
+      if ((payload as any).prazo_entrega) {
+        extraObs.push(`Prazo de Entrega: ${(payload as any).prazo_entrega}`);
+      }
+
+      if (extraObs.length > 0) {
+        const obs = (payload as any).observacoes || '';
+        (payload as any).observacoes = `${extraObs.join(' | ')}\n${obs}`;
+      }
+
       // Prevent sending invalid timestamp
       const prevDateVal = (payload as any).previsao_entrega;
       if (prevDateVal) {
@@ -446,6 +510,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
       delete (payload as any).condicao_pagamento;
       delete (payload as any).prazo_entrega;
+      delete (payload as any).data_vencimento;
 
       await supabase.from("pedidos").update(payload).eq("id", id);
     }
@@ -522,6 +587,23 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     });
 
+    // Handle data_vencimento and prazo_entrega which don't exist natively
+    const extraObs: string[] = [];
+    if ((payload as any).data_vencimento) {
+      extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR')}`);
+    }
+    if ((payload as any).prazo_entrega) {
+      extraObs.push(`Prazo de Entrega: ${(payload as any).prazo_entrega}`);
+    }
+
+    if (extraObs.length > 0) {
+      const obs = (payload as any).observacoes || '';
+      (payload as any).observacoes = `${extraObs.join(' | ')}\n${obs}`;
+    }
+
+    delete (payload as any).prazo_entrega;
+    delete (payload as any).data_vencimento;
+
     const { data, error } = await supabase
       .from("orcamentos")
       .insert([payload])
@@ -572,6 +654,24 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
           (payload as any)[key] = null;
         }
       });
+
+      // Handle fields that don't exist in the DB table
+      const extraObs: string[] = [];
+      if ((payload as any).data_vencimento) {
+        extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR')}`);
+      }
+      if ((payload as any).prazo_entrega) {
+        extraObs.push(`Prazo de Entrega: ${(payload as any).prazo_entrega}`);
+      }
+
+      if (extraObs.length > 0) {
+        const obs = (payload as any).observacoes || '';
+        (payload as any).observacoes = `${extraObs.join(' | ')}\n${obs}`;
+      }
+
+      delete (payload as any).prazo_entrega;
+      delete (payload as any).data_vencimento;
+
       await supabase.from("orcamentos").update(payload).eq("id", id);
     }
 
@@ -1087,6 +1187,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     <GlobalStateContext.Provider
       value={{
         clientes,
+        clientesEmpana,
         produtos,
         pedidos,
         orcamentos,
@@ -1103,6 +1204,9 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         addCliente,
         updateCliente,
         deleteCliente,
+        addClienteEmpana,
+        updateClienteEmpana,
+        deleteClienteEmpana,
         addFornecedor,
         updateFornecedor,
         deleteFornecedor,

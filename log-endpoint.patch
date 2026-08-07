@@ -1,0 +1,13 @@
+--- server.ts
++++ server.ts
+@@ -107,6 +107,11 @@
+     }
+   });
+ 
++  app.post("/api/log", (req, res) => {
++    console.log("FRONTEND ERROR:", req.body);
++    res.json({ ok: true });
++  });
++
+   // Serve static dist in Production or Vite in Dev
+   if (process.env.NODE_ENV !== "production") {

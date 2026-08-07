@@ -86,10 +86,10 @@ async function startServer() {
         }
       }
 
-      console.log(`Enviando para processamento do Gemini a Nota Fiscal: ${filename} (${finalMimeType})`);
+      console.log(`Iniciando análise da Nota Fiscal: ${filename} com o Gemini...`);
 
       const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-3.6-flash",
         contents: [
           {
             inlineData: {
@@ -130,6 +130,8 @@ async function startServer() {
         }
       });
 
+      console.log(`Análise concluída para: ${filename}`);
+
       const textResponse = response.text || "{}";
       const parsedData = JSON.parse(textResponse.trim());
 
@@ -143,6 +145,12 @@ async function startServer() {
       console.error("Erro no processamento da Nota Fiscal pelo Gemini:", error);
       return res.status(500).json({ error: "Erro interno ao processar a nota fiscal.", details: error.message });
     }
+  });
+
+  app.post("/api/log", (req, res) => {
+    require('fs').appendFileSync('frontend-error.log', JSON.stringify(req.body) + '\n');
+    console.log("FRONTEND ERROR:", req.body);
+    res.json({ ok: true });
   });
 
   // Serve static dist in Production or Vite in Dev

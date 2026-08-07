@@ -64,6 +64,8 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
   const [viewFilter, setViewFilter] = useState<
     "Todos" | "Orcamentos" | "Pedidos" | "Prontos"
   >("Todos");
+  const [filterMonth, setFilterMonth] = useState<string>("Todos");
+  const [filterYear, setFilterYear] = useState<string>("Todos");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<"Novo" | "Visualizar Orcamento" | "Visualizar Pedido" | "Editar Orcamento">(
@@ -96,8 +98,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
     cliente_id: "",
     representante_id: "",
     items: [] as ItemPedido[],
-    prazo_entrega: "15 dias",
+    prazo_entrega: "15",
     previsao_entrega: "",
+    data_vencimento: "",
     observacoes: "",
     condicao_pagamento: "A Combinar",
   });
@@ -144,8 +147,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       cliente_id: "", 
       representante_id: "", 
       items: [],
-      prazo_entrega: "15 dias",
+      prazo_entrega: "15",
       previsao_entrega: "",
+      data_vencimento: "",
       observacoes: "",
       condicao_pagamento: "A Combinar"
     });
@@ -183,8 +187,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       cliente_id: o.cliente_id || "",
       representante_id: o.representante_id || "",
       items: [...(o.items || [])],
-      prazo_entrega: o.prazo_entrega || "15 dias",
+      prazo_entrega: (o.prazo_entrega || "15").replace(/[^0-9]/g, ''),
       previsao_entrega: o.previsao_entrega || "",
+      data_vencimento: (o as any).data_vencimento || "",
       observacoes: o.observacoes || "",
       condicao_pagamento: o.condicao_pagamento || "A Combinar",
     });
@@ -216,7 +221,8 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         items: formData.items,
         valor_total: cartSummary.valor_total,
         condicao_pagamento: formData.condicao_pagamento,
-        prazo_entrega: formData.prazo_entrega,
+        prazo_entrega: `${formData.prazo_entrega} dias`,
+        data_vencimento: formData.data_vencimento,
         observacoes: formData.observacoes,
       });
       setIsModalOpen(false);
@@ -331,25 +337,46 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
           pdf.setFont("helvetica", "bold");
           pdf.text(`Pagamento:`, 16, currentY);
           pdf.setFont("helvetica", "normal");
-          const condTxt = selectedItem.condicao_pagamento || selectedItem.forma_pagamento_nf || "A Combinar";
+          let condTxt = selectedItem.condicao_pagamento || selectedItem.forma_pagamento_nf || "A Combinar";
+          
+          // Tentar pegar vencimento se não estiver no objeto mas estiver nas observações
+          let vencimento = (selectedItem as any).data_vencimento;
+          if (!vencimento && selectedItem.observacoes?.includes("Vencimento:")) {
+             const match = selectedItem.observacoes.match(/Vencimento: (\d{2}\/\d{2}\/\d{4})/);
+             if (match) vencimento = match[1];
+          }
+
+          if (vencimento) {
+            const vencTxt = vencimento.includes('-') 
+              ? new Date(vencimento).toLocaleDateString("pt-BR", { timeZone: 'UTC' })
+              : vencimento;
+            condTxt += ` | Vencimento: ${vencTxt}`;
+          }
+          
           pdf.text(condTxt, 39, currentY);
           currentY += 6;
         }
 
         if (showPrazo) {
           pdf.setFont("helvetica", "bold");
-          pdf.text(`Data Prevista:`, 16, currentY);
+          pdf.text(`Prazo de Entrega:`, 16, currentY);
           pdf.setFont("helvetica", "normal");
-          const deliveryText = selectedItem.previsao_entrega
-            ? formatPrevisaoEntrega(selectedItem.previsao_entrega)
-            : (selectedItem.prazo_entrega || "A Combinar");
-          pdf.text(deliveryText, 45, currentY);
+          
+          let deliveryText = selectedItem.prazo_entrega || "A Combinar";
+          if ((!selectedItem.prazo_entrega || deliveryText === "A Combinar") && selectedItem.observacoes?.includes("Prazo de Entrega:")) {
+             const match = selectedItem.observacoes.match(/Prazo de Entrega: ([^|\n]+)/);
+             if (match) deliveryText = match[1].trim();
+          }
+
+          pdf.text(deliveryText, 47, currentY);
           currentY += 6;
         }
 
         yPos = currentY + 6;
       }
 
+      // Section 3: Removida conforme solicitação do usuário (redundante com Logística e Pagamento)
+      /*
       if (selectedItem.observacoes) {
         pdf.setFillColor(245, 247, 246);
         pdf.rect(14, yPos, 182, 8, 'F');
@@ -365,6 +392,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         pdf.text(splitText, 16, yPos + 15);
         yPos += 18 + (splitText.length * 4);
       }
+      */
 
       // Preparar Itens da Tabela
       const tableData = selectedItem.items.map((it: any) => {
@@ -379,21 +407,30 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         ];
       });
 
-      // Simple Table
       autoTable(pdf, {
         startY: yPos,
-        head: [['Produto', 'Quantidade', 'Preço Unitário', 'Subtotal']],
+        head: [['Produto', 'Qtd.', 'Preço Unitário', 'Subtotal']],
         body: tableData,
         theme: 'striped',
-        headStyles: { fillColor: [27, 67, 50], textColor: [255, 255, 255], fontStyle: 'bold' },
-        styles: { fontSize: 9, cellPadding: 4, textColor: [60,60,60] },
+        styles: { fontSize: 9, cellPadding: 3, textColor: [60,60,60] },
         alternateRowStyles: { fillColor: [245, 247, 246] },
         columnStyles: {
-          0: { cellWidth: 'auto' },
-          1: { cellWidth: 25, halign: 'center' },
-          2: { cellWidth: 35, halign: 'right' },
-          3: { cellWidth: 35, halign: 'right' }
+          0: { halign: 'left' },
+          1: { halign: 'center' },
+          2: { halign: 'center' },
+          3: { halign: 'center' }
         },
+        headStyles: { 
+          fillColor: [27, 67, 50], 
+          textColor: [255, 255, 255], 
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        didParseCell: (data) => {
+          if (data.section === 'head' && data.column.index === 0) {
+            data.cell.styles.halign = 'left';
+          }
+        }
       });
 
       // @ts-ignore
@@ -755,17 +792,18 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       });
     setIsSaving(true);
     try {
-      const success = await addOrcamento({
-        cliente_id: formData.cliente_id,
-        representante_id: formData.representante_id,
-        data: new Date().toISOString().split("T")[0],
-        items: formData.items,
-        valor_total: cartSummary.valor_total,
-        status: "Orçamento",
-        condicao_pagamento: formData.condicao_pagamento,
-        prazo_entrega: formData.prazo_entrega,
-        observacoes: formData.observacoes,
-      });
+        const success = await addOrcamento({
+          cliente_id: formData.cliente_id,
+          representante_id: formData.representante_id,
+          data: new Date().toISOString().split("T")[0],
+          items: formData.items,
+          valor_total: cartSummary.valor_total,
+          status: "Orçamento",
+          condicao_pagamento: formData.condicao_pagamento,
+          prazo_entrega: `${formData.prazo_entrega} dias`,
+          data_vencimento: formData.data_vencimento,
+          observacoes: formData.observacoes,
+        });
       if (success) {
         setIsModalOpen(false);
       }
@@ -814,9 +852,10 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
           margem: 60.00, // Safe percentage margin (60.00% instead of absolute amount which overflows on values >= 1000)
           status: "Aguardando Produção",
           observacoes: `[OrcamentoID:${fromOrcamento.id}] ${fromOrcamento.observacoes || ""}`,
-          previsao_entrega: fromOrcamento.prazo_entrega,
+          previsao_entrega: "",
           condicao_pagamento: fromOrcamento.condicao_pagamento,
-          prazo_entrega: fromOrcamento.prazo_entrega
+          prazo_entrega: fromOrcamento.prazo_entrega,
+          data_vencimento: (fromOrcamento as any).data_vencimento
         });
         if (success) {
           await updateOrcamento(fromOrcamento.id, { status: "Convertido em Pedido" });
@@ -845,9 +884,10 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
             : 0.00, // Safe percentage margin to completely avoid DB precision numeric(5,2) overflows
           status: "Aguardando Produção",
           observacoes: formData.observacoes,
-          previsao_entrega: formData.previsao_entrega || formData.prazo_entrega,
+          previsao_entrega: "",
           condicao_pagamento: formData.condicao_pagamento,
-          prazo_entrega: formData.prazo_entrega
+          prazo_entrega: `${formData.prazo_entrega} dias`,
+          data_vencimento: formData.data_vencimento
         });
         if (success) {
           setIsModalOpen(false);
@@ -943,10 +983,14 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       reader.onload = async () => {
         const base64 = reader.result as string;
         setUploadedNfBase64(base64);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes timeout for large files/AI analysis
+
         try {
           const res = await fetch("/api/faturamento/upload-nf", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
             body: JSON.stringify({
               fileBase64: base64,
               filename: file.name,
@@ -954,9 +998,12 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
             }),
           });
 
+          clearTimeout(timeoutId);
+
           if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
             throw new Error(
-              "Não foi possível se conectar com o módulo de extração inteligente do servidor.",
+              errorData.error || "Não foi possível se conectar com o módulo de extração inteligente do servidor.",
             );
           }
 
@@ -985,10 +1032,14 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
             );
           }
         } catch (err: any) {
-          setNfAnalysisError(
-            err.message ||
-              "Falha de processamento na leitura inteligente do arquivo.",
-          );
+          if (err.name === 'AbortError') {
+            setNfAnalysisError("A análise está demorando mais que o esperado. Por favor, tente novamente ou preencha manualmente.");
+          } else {
+            setNfAnalysisError(
+              err.message ||
+                "Falha de processamento na leitura inteligente do arquivo.",
+            );
+          }
         } finally {
           setIsAnalyzingNf(false);
         }
@@ -1041,6 +1092,40 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         (i) => i.type === "Pedido" && i.data.status === "Pronto",
       );
 
+    if (filterMonth !== "Todos") {
+      list = list.filter((i) => {
+        if (!i.date) return false;
+        const dStr = i.date.toString();
+        let m = "";
+        if (dStr.includes("-")) {
+          const parts = dStr.split("-");
+          // ISO YYYY-MM-DD ou DD-MM-YYYY
+          m = parts[0].length === 4 ? parts[1] : parts[1];
+        } else if (dStr.includes("/")) {
+          const parts = dStr.split("/");
+          // DD/MM/YYYY
+          m = parts[1];
+        }
+        return m && parseInt(m, 10).toString() === filterMonth;
+      });
+    }
+
+    if (filterYear !== "Todos") {
+      list = list.filter((i) => {
+        if (!i.date) return false;
+        const dStr = i.date.toString();
+        let y = "";
+        if (dStr.includes("-")) {
+          const parts = dStr.split("-");
+          y = parts[0].length === 4 ? parts[0] : parts[2];
+        } else if (dStr.includes("/")) {
+          const parts = dStr.split("/");
+          y = parts[2];
+        }
+        return y && y.toString() === filterYear;
+      });
+    }
+
     if (searchTerm) {
       list = list.filter((i) => {
         const cli = clientes.find((c) => c.id === i.data.cliente_id);
@@ -1060,7 +1145,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
     return list.sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
-  }, [pedidos, orcamentos, viewFilter, searchTerm, clientes]);
+  }, [pedidos, orcamentos, viewFilter, searchTerm, clientes, filterMonth, filterYear]);
 
   const pedidosProntosParaFaturar = useMemo(() => {
     return pedidos.filter((p) => p.status === "Pronto");
@@ -1171,21 +1256,58 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-2 p-1 bg-white border border-gray-200 rounded-xl w-fit">
-        {["Todos", "Orcamentos", "Pedidos", "Prontos"].map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setViewFilter(tab as any)}
-            className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${
-              viewFilter === tab
-                ? "bg-primary/10 text-primary"
-                : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-            }`}
+      {/* Tabs and Filters */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex gap-2 p-1 bg-white border border-gray-200 rounded-xl w-fit">
+          {["Todos", "Orcamentos", "Pedidos", "Prontos"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setViewFilter(tab as any)}
+              className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${
+                viewFilter === tab
+                  ? "bg-primary/10 text-primary"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+              }`}
+            >
+              {tab === "Orcamentos" ? "Orçamentos" : tab}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <select
+            value={filterMonth}
+            onChange={(e) => setFilterMonth(e.target.value)}
+            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-600 outline-none focus:ring-2 focus:ring-primary shadow-sm"
           >
-            {tab}
-          </button>
-        ))}
+            <option value="Todos">Mês: Todos</option>
+            <option value="1">Janeiro</option>
+            <option value="2">Fevereiro</option>
+            <option value="3">Março</option>
+            <option value="4">Abril</option>
+            <option value="5">Maio</option>
+            <option value="6">Junho</option>
+            <option value="7">Julho</option>
+            <option value="8">Agosto</option>
+            <option value="9">Setembro</option>
+            <option value="10">Outubro</option>
+            <option value="11">Novembro</option>
+            <option value="12">Dezembro</option>
+          </select>
+
+          <select
+            value={filterYear}
+            onChange={(e) => setFilterYear(e.target.value)}
+            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-600 outline-none focus:ring-2 focus:ring-primary shadow-sm"
+          >
+            <option value="Todos">Ano: Todos</option>
+            {[2024, 2025, 2026, 2027].map((y) => (
+              <option key={y} value={y.toString()}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Main Table List */}
@@ -1473,7 +1595,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                   <div>
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
                       Condição de Pagamento
@@ -1494,38 +1616,25 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
-                      Prazo de Entrega
+                      Data de Vencimento
                     </label>
                     <input
-                      type="text"
-                      value={formData.prazo_entrega}
-                      readOnly
-                      placeholder="Calculado auto."
-                      className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-500 outline-none cursor-not-allowed"
+                      type="date"
+                      value={formData.data_vencimento}
+                      onChange={(e) => setFormData({ ...formData, data_vencimento: e.target.value })}
+                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold focus:border-primary outline-none"
                     />
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
-                      Data Prevista de Entrega
+                      Prazo de Entrega (Dias)
                     </label>
                     <input
-                      type="date"
-                      value={formData.previsao_entrega}
-                      onChange={(e) => {
-                        const dateStr = e.target.value;
-                        let prazo = "A definir";
-                        if (dateStr) {
-                          const dateObj = new Date(dateStr);
-                          const today = new Date();
-                          const diffTime = dateObj.getTime() - today.getTime();
-                          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                          if (diffDays === 0) prazo = "Hoje";
-                          else if (diffDays === 1) prazo = "1 dia";
-                          else if (diffDays > 1) prazo = `${diffDays} dias`;
-                          else prazo = "Atrasado";
-                        }
-                        setFormData({ ...formData, previsao_entrega: dateStr, prazo_entrega: prazo })
-                      }}
+                      type="number"
+                      min="0"
+                      value={formData.prazo_entrega}
+                      onChange={(e) => setFormData({ ...formData, prazo_entrega: e.target.value })}
+                      placeholder="Ex: 15"
                       className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold focus:border-primary outline-none"
                     />
                   </div>
@@ -2010,13 +2119,17 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   <div className="md:border-l md:pl-6 border-gray-200">
                     <p className="text-sm font-bold text-gray-700">Condições Comerciais:</p>
                     <p className="text-xs text-gray-600 mt-1"><strong>Pagamento:</strong> {selectedItem.condicao_pagamento || selectedItem.forma_pagamento_nf || "A Combinar"}</p>
+                    {(selectedItem as any).data_vencimento && (
+                      <p className="text-xs text-gray-600 mt-1"><strong>Vencimento:</strong> {new Date((selectedItem as any).data_vencimento).toLocaleDateString("pt-BR", { timeZone: 'UTC' })}</p>
+                    )}
                     <p className="text-xs text-gray-600 mt-1">
-                      <strong>Prazo/Previsão:</strong> {selectedItem.previsao_entrega ? formatPrevisaoEntrega(selectedItem.previsao_entrega) : (selectedItem.prazo_entrega || "A Combinar")}
+                      <strong>Prazo de Entrega:</strong> {selectedItem.prazo_entrega || "A Combinar"}
                     </p>
                   </div>
                 </div>
               </div>
 
+              {/* Section 3: Removida conforme solicitação do usuário
               {selectedItem.observacoes && (
                 <div className="mb-10 font-sans">
                   <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
@@ -2027,6 +2140,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   </div>
                 </div>
               )}
+              */}
 
               <div className="font-sans">
                 <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
@@ -2195,7 +2309,10 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   </div>
                   <div className="md:border-l md:pl-6 border-gray-200">
                     <p className="text-sm font-bold text-gray-700">Previsão e Logística:</p>
-                    <p className="text-xs text-gray-600 mt-1"><strong>Data Prevista:</strong> {(selectedItem as Pedido).previsao_entrega ? formatPrevisaoEntrega((selectedItem as Pedido).previsao_entrega) : "A definir"}</p>
+                    <p className="text-xs text-gray-600 mt-1"><strong>Prazo de Entrega:</strong> {selectedItem.prazo_entrega || "A definir"}</p>
+                    {(selectedItem as any).data_vencimento && (
+                      <p className="text-xs text-gray-600 mt-1"><strong>Data de Vencimento:</strong> {new Date((selectedItem as any).data_vencimento).toLocaleDateString("pt-BR", { timeZone: 'UTC' })}</p>
+                    )}
                     {selectedItem.status === 'Faturado' && (
                       <p className="text-xs text-gray-600 mt-1"><strong>Nº NF:</strong> {(selectedItem as Pedido).nf_numero || "N/A"}</p>
                     )}
@@ -2204,6 +2321,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                 </div>
               </div>
 
+              {/* Section 3: Removida conforme solicitação do usuário
               {selectedItem.observacoes && (
                 <div className="mb-10 font-sans">
                   <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
@@ -2214,6 +2332,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   </div>
                 </div>
               )}
+              */}
 
               <div className="font-sans">
                 <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
@@ -2623,7 +2742,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                             <div className="border border-black p-2 text-left">
                               <p className="font-extrabold text-[7.5px] uppercase text-gray-500 tracking-wider font-sans">INFORMAÇÕES COMPLEMENTARES</p>
                               <p className="text-[7px] text-gray-650 font-sans">EMITIDA CONFORME SEFAZ DO ESTADO DO PARÁ - HOMOLOGADA VIA PROCESSO SELETIVO MANUAL E CONTINGÊNCIA FINANCEIRA.</p>
-                              <p className="text-[7px] text-gray-650 leading-tight font-sans">PREVISÃO DE TRANSPORTE E ENTREGA: {selectedNfPedido.previsao_entrega ? formatPrevisaoEntrega(selectedNfPedido.previsao_entrega) : 'EM DIAGNÓSTICO LOGÍSTICO'}.</p>
+                              <p className="text-[7px] text-gray-650 leading-tight font-sans">PRAZO DE ENTREGA: {selectedNfPedido.prazo_entrega || 'A COMBINAR'}.</p>
                             </div>
                           </div>
                         </div>
@@ -3017,12 +3136,8 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                           FINANCEIRA.
                         </p>
                         <p className="text-[7px] text-gray-650 leading-tight">
-                          PREVISÃO DE TRANSPORTE E ENTREGA:{" "}
-                          {selectedNfPedido.previsao_entrega
-                            ? new Date(
-                                selectedNfPedido.previsao_entrega,
-                              ).toLocaleDateString("pt-BR", { timeZone: "UTC" })
-                            : "EM DIAGNÓSTICO LOGÍSTICO"}
+                          PRAZO DE ENTREGA:{" "}
+                          {selectedNfPedido.prazo_entrega || "A COMBINAR"}
                           .
                         </p>
                       </div>
@@ -3933,6 +4048,8 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   </span>
                   <span className="text-[10px] text-gray-400 font-semibold text-left">
                     {exportOptionsModal.selectedItem?.condicao_pagamento || "A Combinar"}
+                    {(exportOptionsModal.selectedItem as any)?.data_vencimento && 
+                      ` | Vencimento: ${new Date((exportOptionsModal.selectedItem as any).data_vencimento).toLocaleDateString("pt-BR", { timeZone: 'UTC' })}`}
                   </span>
                 </div>
               </label>
@@ -3951,12 +4068,10 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                 />
                 <div className="flex flex-col text-left">
                   <span className="text-xs font-bold text-gray-800">
-                    Prazo / Previsão de Entrega
+                    Prazo de Entrega
                   </span>
                   <span className="text-[10px] text-gray-400 font-semibold text-left">
-                    {exportOptionsModal.selectedItem?.previsao_entrega
-                      ? formatPrevisaoEntrega(exportOptionsModal.selectedItem.previsao_entrega)
-                      : (exportOptionsModal.selectedItem?.prazo_entrega || "A Combinar")}
+                    {exportOptionsModal.selectedItem?.prazo_entrega || "A Combinar"}
                   </span>
                 </div>
               </label>

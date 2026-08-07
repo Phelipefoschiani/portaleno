@@ -7,9 +7,19 @@ import { Search, Plus, Edit2, X, Building, Factory, Trash2, AlertTriangle } from
 const DEFAULT_CATEGORIES = ['Farma', 'Atacado', 'Distribuidor', 'Mercado', 'Varejo', 'Food Service'];
 
 const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
-  const { clientes, addCliente, updateCliente, deleteCliente, pedidos, orcamentos } = useGlobalState();
+  const globalState = useGlobalState();
   const { user } = useAuth();
+
+  const isEmpana = empresa === 'empana';
+  const clientes = isEmpana ? globalState.clientesEmpana : globalState.clientes;
+  const addCliente = isEmpana ? globalState.addClienteEmpana : globalState.addCliente;
+  const updateCliente = isEmpana ? globalState.updateClienteEmpana : globalState.updateCliente;
+  const deleteCliente = isEmpana ? globalState.deleteClienteEmpana : globalState.deleteCliente;
+  const pedidos = globalState.pedidos;
+  const orcamentos = globalState.orcamentos;
+
   const [searchTerm, setSearchTerm] = useState('');
+  const [userFilter, setUserFilter] = useState('Todos');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
   const [deleteStep, setDeleteStep] = useState<'none' | 'first' | 'second'>('none');
@@ -34,10 +44,11 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
     cidade: '',
     estado: '',
     responsavel: '',
+    canal: 'Outro',
     categorias: [],
   });
 
-  if (empresa !== 'estancia') {
+  if (empresa !== 'estancia' && empresa !== 'empana') {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] bg-white rounded-3xl border border-gray-100 shadow-sm p-8 text-center">
         <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6">
@@ -64,16 +75,29 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
     return Array.from(cats);
   }, [clientes, formData.categorias]);
 
+  const empanaUsers = useMemo(() => {
+    return globalState.usuarios.filter(u => u.perfil === 'empana');
+  }, [globalState.usuarios]);
+
   const filteredClientes = useMemo(() => {
-    if (!searchTerm) return clientes;
+    let list = clientes;
+    
+    // Isolamento de dados para usuários empana
+    if (isEmpana && user?.perfil === 'empana') {
+      list = list.filter(c => c.representante_id === user.id);
+    } else if (isEmpana && user?.perfil === 'gerente' && userFilter !== 'Todos') {
+      list = list.filter(c => c.representante_id === userFilter);
+    }
+
+    if (!searchTerm) return list;
     const lowerSearch = searchTerm.toLowerCase();
-    return clientes.filter(c => 
+    return list.filter(c => 
       c.razao_social?.toLowerCase().includes(lowerSearch) ||
       c.nome_fantasia?.toLowerCase().includes(lowerSearch) ||
       c.cnpj_cpf?.toLowerCase().includes(lowerSearch) ||
       c.email?.toLowerCase().includes(lowerSearch)
     );
-  }, [clientes, searchTerm]);
+  }, [clientes, searchTerm, isEmpana, user, userFilter]);
 
   const handleOpenModal = (cliente?: Cliente) => {
     if (cliente) {
@@ -96,6 +120,7 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
         cidade: '',
         estado: '',
         responsavel: '',
+        canal: 'Outro',
         categorias: [],
       });
     }
@@ -169,7 +194,7 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
         <div>
           <h2 className="text-2xl font-black text-gray-900 tracking-tight">Clientes</h2>
-          <p className="text-sm font-medium text-gray-500">Gerencie a base de clientes da Estância Nova Olinda</p>
+          <p className="text-sm font-medium text-gray-500">Gerencie a base de clientes {empresa === 'empana' ? 'da Empana Fácil' : 'da Estância Nova Olinda'}</p>
         </div>
         <div className="flex items-center gap-4 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
@@ -182,6 +207,20 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
               className="w-full pl-12 pr-4 py-3 bg-gray-50 border-2 border-transparent focus:border-primary rounded-xl outline-none font-medium text-sm transition-all"
             />
           </div>
+
+          {isEmpana && user?.perfil === 'gerente' && (
+            <select
+              value={userFilter}
+              onChange={(e) => setUserFilter(e.target.value)}
+              className="px-4 py-3 bg-gray-50 border-2 border-transparent focus:border-primary rounded-xl outline-none font-black text-xs uppercase tracking-wider transition-all cursor-pointer"
+            >
+              <option value="Todos">Todos Usuários</option>
+              {empanaUsers.map(u => (
+                <option key={u.id} value={u.id}>{u.nome}</option>
+              ))}
+            </select>
+          )}
+
           <button 
             onClick={() => handleOpenModal()}
             className="flex items-center justify-center gap-2 px-6 py-3 bg-primary text-white font-black text-sm uppercase tracking-widest rounded-xl hover:bg-primary/90 transition-all shadow-lg flex-shrink-0"
@@ -203,6 +242,7 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
               <tr className="bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                 <th className="px-6 py-4">Cliente</th>
                 <th className="px-6 py-4">CPF / CNPJ</th>
+                {isEmpana && <th className="px-6 py-4">Vendedor</th>}
                 <th className="px-6 py-4">Categorias</th>
                 <th className="px-6 py-4">Contato</th>
                 <th className="px-6 py-4 text-right">Ações</th>
@@ -211,7 +251,7 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
             <tbody className="divide-y divide-gray-50">
               {filteredClientes.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-400 font-medium">Nenhum cliente encontrado.</td>
+                  <td colSpan={isEmpana ? 6 : 5} className="px-6 py-12 text-center text-gray-400 font-medium">Nenhum cliente encontrado.</td>
                 </tr>
               ) : (
                 filteredClientes.map(cliente => (
@@ -221,6 +261,13 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
                       <p className="text-xs text-gray-500">{cliente.nome_fantasia}</p>
                     </td>
                     <td className="px-6 py-4 font-mono text-gray-600">{cliente.cnpj_cpf}</td>
+                    {isEmpana && (
+                      <td className="px-6 py-4">
+                        <p className="text-xs font-black text-primary uppercase tracking-tight">
+                          {globalState.usuarios.find(u => u.id === cliente.representante_id)?.nome || 'Sistema'}
+                        </p>
+                      </td>
+                    )}
                     <td className="px-6 py-4 border-l border-r border-transparent">
                       <div className="flex flex-wrap gap-1 w-48">
                         {cliente.categorias && cliente.categorias.length > 0 ? (
@@ -309,6 +356,23 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
                         className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none hover:border-gray-300 focus:border-primary transition-all"
                         placeholder="000.000.000-00 ou 00.000.000/0001-00"
                       />
+                    </div>
+
+                    <div className="col-span-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Canal / Segmento <span className="text-red-500">*</span></label>
+                      <select 
+                        required
+                        value={formData.canal || 'Outro'}
+                        onChange={(e) => setFormData({...formData, canal: e.target.value as any})}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none hover:border-gray-300 focus:border-primary transition-all"
+                      >
+                        <option value="Supermercado">Supermercado</option>
+                        <option value="Food Service">Food Service</option>
+                        <option value="Distribuidor">Distribuidor</option>
+                        <option value="Atacado">Atacado</option>
+                        <option value="Varejo">Varejo</option>
+                        <option value="Outro">Outro</option>
+                      </select>
                     </div>
 
                     <div className="col-span-1 md:col-span-2">

@@ -83,27 +83,36 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, empresa, set
     {
       title: 'Principal',
       items: [
-        ...(user?.perfil === 'producao' ? [
-          { id: 'producao', label: 'Produção / Início', icon: LayoutDashboard },
-          { id: 'despesas', label: 'Despesas', icon: DollarSign }
+        { id: 'dashboard', label: 'Início', icon: LayoutDashboard },
+        ...(user?.perfil === 'empana' ? [
+          { id: 'clientes', label: 'Clientes', icon: Users }
         ] : [
-          { id: 'dashboard', label: 'Início', icon: LayoutDashboard },
-          ...(empresa === 'estancia' ? [
-            { id: 'clientes', label: 'Clientes', icon: Users },
-            { id: 'fornecedores', label: 'Fornecedores', icon: Users },
-            { id: 'produtos', label: 'Produtos', icon: Package },
-            { id: 'pedidos', label: 'Orçamentos / Pedidos', icon: FileText },
-            { id: 'producao', label: 'Fabricação / Produção', icon: Activity },
-            { id: 'despesas', label: 'Despesas', icon: DollarSign },
-            { id: 'controle-nf', label: 'Controle de NF', icon: Receipt },
-            { id: 'a-receber', label: 'A Receber', icon: Coins },
-            { id: 'objetivo', label: 'Objetivo do Mês', icon: Target },
-            { id: 'dre', label: 'DRE - Demonstração', icon: TrendingUp },
-            ...(user?.perfil === 'gerente' ? [
-              { id: 'configuracoes', label: 'Configurações', icon: Settings },
-              { id: 'eventos', label: 'Eventos do Sistema', icon: Activity } // Using same icon as Producao or maybe History/Clock if I had imported. Activity is fine. Wait, let me import Activity. It's already there. Is there a Shield/List/Activity? Activity is already in producao.
+          ...(user?.perfil === 'producao' ? [
+            { id: 'producao', label: 'Produção / Início', icon: LayoutDashboard },
+            { id: 'despesas', label: 'Despesas', icon: DollarSign }
+          ] : [
+            ...(empresa === 'estancia' ? [
+              { id: 'clientes', label: 'Clientes', icon: Users },
+              { id: 'fornecedores', label: 'Fornecedores', icon: Users },
+              { id: 'produtos', label: 'Produtos', icon: Package },
+              { id: 'pedidos', label: 'Orçamentos / Pedidos', icon: FileText },
+              { id: 'producao', label: 'Fabricação / Produção', icon: Activity },
+              { id: 'despesas', label: 'Despesas', icon: DollarSign },
+              { id: 'controle-nf', label: 'Controle de NF', icon: Receipt },
+              { id: 'a-receber', label: 'A Receber', icon: Coins },
+              { id: 'objetivo', label: 'Objetivo do Mês', icon: Target },
+              { id: 'dre', label: 'DRE - Demonstração', icon: TrendingUp },
+              ...(user?.perfil === 'gerente' ? [
+                { id: 'configuracoes', label: 'Configurações', icon: Settings },
+                { id: 'eventos', label: 'Eventos do Sistema', icon: Activity } 
+              ] : [])
+            ] : empresa === 'empana' ? [
+              { id: 'clientes', label: 'Clientes', icon: Users },
+              ...(user?.perfil === 'gerente' ? [
+                { id: 'configuracoes-empana', label: 'Configurações', icon: Settings }
+              ] : [])
             ] : [])
-          ] : [])
+          ])
         ])
       ]
     }
@@ -119,6 +128,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, empresa, set
           <div className="mt-6 flex items-center gap-2 bg-white/5 p-2 px-3.5 rounded-xl border border-white/10 text-xs font-black uppercase tracking-wider text-accent/90">
             <Building2 size={16} className="text-accent" />
             <span>Estância Nova Olinda</span>
+          </div>
+        ) : user?.perfil === 'empana' ? (
+          <div className="mt-6 flex items-center gap-2 bg-white/5 p-2 px-3.5 rounded-xl border border-white/10 text-xs font-black uppercase tracking-wider text-accent/90">
+            <Building2 size={16} className="text-accent" />
+            <span>Empana Fácil</span>
           </div>
         ) : (
           <div className="mt-6 flex items-center gap-2 bg-white/5 p-2 rounded-xl border border-white/10">

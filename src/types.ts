@@ -1,6 +1,6 @@
 import { LucideIcon } from 'lucide-react';
 
-export type UserRole = 'representante' | 'gerente' | 'producao';
+export type UserRole = 'representante' | 'gerente' | 'producao' | 'empana';
 
 export interface User {
   id: string;
@@ -79,6 +79,7 @@ export interface Orcamento {
   status: 'Orçamento' | 'Rascunho' | 'Enviado' | 'Convertido em Pedido' | 'Cancelado';
   condicao_pagamento: string;
   prazo_entrega: string;
+  data_vencimento?: string;
   previsao_entrega?: string;
   observacoes?: string;
 }

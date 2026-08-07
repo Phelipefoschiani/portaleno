@@ -1,9 +1,15 @@
 @import "tailwindcss";
 
+:root {
+  --primary: #1b4332;
+  --secondary: #40916c;
+  --accent: #d8f3dc;
+}
+
 @theme {
-  --color-primary: var(--primary, #1b4332); /* Verde Escuro / Var overrides */
-  --color-secondary: var(--secondary, #40916c); /* Verde Claro / Var overrides */
-  --color-accent: var(--accent, #d8f3dc); /* Verde Claríssimo/Bege / Var overrides */
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
   --color-background: #f8f9fa; /* Branco Suave */
   --color-earth: #6c584c; /* Marrom Suave */
   --color-warning: #fb8500; /* Laranja alertas */
