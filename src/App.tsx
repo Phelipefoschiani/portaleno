@@ -18,6 +18,9 @@ import Objetivo from './components/Objetivo';
 import { DRE } from './components/DRE';
 import Configuracoes from './components/Configuracoes';
 import Eventos from './components/Eventos';
+import SuportePortal from './components/SuportePortal';
+import { SupportFAB } from './components/SupportFAB';
+import { NewTicketModal } from './components/NewTicketModal';
 import GrupoEnoLanding from './components/GrupoEnoLanding';
 import { GlobalStateProvider } from './GlobalStateContext';
 import { AnimatePresence, motion } from 'motion/react';
@@ -58,6 +61,8 @@ function AppContent() {
   const [activeTab, setActiveTab ] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [empresa, setEmpresa] = useState('estancia');
+  const [supportAutoOpen, setSupportAutoOpen] = useState(false);
+  const [isGlobalTicketModalOpen, setIsGlobalTicketModalOpen] = useState(false);
 
   const theme = getCompanyTheme(empresa);
 
@@ -78,6 +83,8 @@ function AppContent() {
     if (user) {
       if (user.perfil === 'producao') {
         if (activeTab === 'dashboard') setActiveTab('producao');
+      } else if (user.perfil === 'suporte') {
+        if (activeTab === 'dashboard') setActiveTab('suporte');
       } else if (user.perfil === 'empana') {
         setEmpresa('empana');
         // Mantém dashboard se estiver nele
@@ -138,6 +145,10 @@ function AppContent() {
         return <Configuracoes empresa={empresa} />;
       case 'eventos':
         return <Eventos />;
+      case 'chamados':
+        return <SuportePortal autoOpen={supportAutoOpen} />;
+      case 'suporte':
+        return user?.perfil === 'suporte' ? <SuportePortal /> : <Dashboard setActiveTab={setActiveTab} empresa={empresa} />;
       default: return <Dashboard setActiveTab={setActiveTab} empresa={empresa} />;
     }
   };
@@ -153,24 +164,32 @@ function AppContent() {
       </div>
 
       <main className="flex-1 overflow-auto bg-gray-50">
-        <header className="bg-white border-b border-gray-200 px-4 lg:px-8 py-4 flex justify-between items-center sticky top-0 z-10 shadow-sm">
+        <header className={`border-b px-4 lg:px-8 py-4 flex justify-between items-center sticky top-0 z-10 shadow-sm ${
+          user?.perfil === 'suporte' ? 'bg-black border-gray-800' : 'bg-white border-gray-200'
+        }`}>
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setSidebarOpen(true)}
-              className="p-2 lg:hidden text-primary hover:bg-gray-100 rounded-lg transition-colors"
+              className={`p-2 lg:hidden rounded-lg transition-colors ${
+                user?.perfil === 'suporte' ? 'text-white hover:bg-white/10' : 'text-primary hover:bg-gray-100'
+              }`}
             >
               <Menu size={24} />
             </button>
-            <h1 className="text-lg lg:text-xl font-semibold text-primary capitalize">
+            <h1 className={`text-lg lg:text-xl font-semibold capitalize ${
+              user?.perfil === 'suporte' ? 'text-white' : 'text-primary'
+            }`}>
               {activeTab.replace('-', ' ')}
             </h1>
           </div>
           <div className="flex items-center gap-3 lg:gap-4">
             <div className="hidden sm:block text-right">
-              <p className="text-sm font-medium text-gray-900">{user.nome}</p>
-              <p className="text-xs text-gray-500 uppercase tracking-wider">{user.perfil}</p>
+              <p className={`text-sm font-medium ${user?.perfil === 'suporte' ? 'text-white' : 'text-gray-900'}`}>{user.nome}</p>
+              <p className={`text-xs uppercase tracking-wider ${user?.perfil === 'suporte' ? 'text-gray-400' : 'text-gray-500'}`}>{user.perfil}</p>
             </div>
-            <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-accent flex items-center justify-center text-primary font-bold">
+            <div className={`w-8 h-8 lg:w-10 lg:h-10 rounded-full flex items-center justify-center font-bold ${
+              user?.perfil === 'suporte' ? 'bg-white/10 text-white' : 'bg-accent text-primary'
+            }`}>
               {user.nome.charAt(0)}
             </div>
           </div>
@@ -189,6 +208,16 @@ function AppContent() {
           </AnimatePresence>
         </div>
       </main>
+
+      <SupportFAB 
+        isVisible={user?.perfil !== 'suporte'} 
+        onClick={() => setIsGlobalTicketModalOpen(true)} 
+      />
+
+      <NewTicketModal 
+        isOpen={isGlobalTicketModalOpen} 
+        onClose={() => setIsGlobalTicketModalOpen(false)} 
+      />
     </div>
   );
 }

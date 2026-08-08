@@ -1,6 +1,6 @@
 import { LucideIcon } from 'lucide-react';
 
-export type UserRole = 'representante' | 'gerente' | 'producao' | 'empana';
+export type UserRole = 'representante' | 'gerente' | 'producao' | 'empana' | 'suporte';
 
 export interface User {
   id: string;
