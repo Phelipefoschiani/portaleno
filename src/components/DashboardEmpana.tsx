@@ -31,7 +31,7 @@ const COLORS = [
 const DashboardEmpana: React.FC = () => {
   const { user } = useAuth();
   const { clientesEmpana, usuarios, loading } = useGlobalState();
-  const [cityFilter, setCityFilter] = useState<string>('Todos');
+  const [categoriaFilter, setCategoriaFilter] = useState<string>('Todos');
   const [userFilter, setUserFilter] = useState<string>('Todos');
 
   const empanaUsers = useMemo(() => {
@@ -55,17 +55,22 @@ const DashboardEmpana: React.FC = () => {
   const canalData = useMemo(() => {
     const counts: Record<string, number> = {};
     isolatedClientes.forEach(c => {
-      const canal = c.canal || 'Outro';
-      counts[canal] = (counts[canal] || 0) + 1;
+      if (c.categorias && c.categorias.length > 0) {
+        c.categorias.forEach(cat => {
+          counts[cat] = (counts[cat] || 0) + 1;
+        });
+      } else {
+        counts['Sem Categoria'] = (counts['Sem Categoria'] || 0) + 1;
+      }
     });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
   }, [isolatedClientes]);
 
   // Data for Cities Chart with Filter
   const filteredCitiesData = useMemo(() => {
     const counts: Record<string, number> = {};
     isolatedClientes.forEach(c => {
-      if (cityFilter === 'Todos' || c.canal === cityFilter) {
+      if (categoriaFilter === 'Todos' || (c.categorias && c.categorias.includes(categoriaFilter))) {
         const cidade = c.cidade || 'Não Informada';
         counts[cidade] = (counts[cidade] || 0) + 1;
       }
@@ -74,7 +79,7 @@ const DashboardEmpana: React.FC = () => {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10); // Top 10 cities
-  }, [isolatedClientes, cityFilter]);
+  }, [isolatedClientes, categoriaFilter]);
 
   const generateReport = () => {
     const doc = new jsPDF('l', 'mm', 'a4');
@@ -82,8 +87,8 @@ const DashboardEmpana: React.FC = () => {
 
     // Header
     doc.setFontSize(20);
-    doc.setTextColor(27, 67, 50); // Verde Escuro (Primary)
-    doc.text('Relatório Geral de Clientes - Empana Fácil', 14, 20);
+    doc.setTextColor(3, 105, 161); // Azul Comercial (Primary - Sky 700)
+    doc.text('Relatório Geral de Clientes - RCA', 14, 20);
     
     doc.setFontSize(10);
     doc.setTextColor(100);
@@ -99,7 +104,7 @@ const DashboardEmpana: React.FC = () => {
         c.responsavel || '-',
         c.whatsapp || c.telefone || '-',
         c.email || '-',
-        c.canal || 'Outro'
+        c.categorias && c.categorias.length > 0 ? c.categorias.join(', ') : 'Sem Categoria'
       ];
       
       if (user?.perfil === 'gerente') {
@@ -110,7 +115,7 @@ const DashboardEmpana: React.FC = () => {
       return row;
     });
 
-    const headers = ['Razão Social', 'CNPJ/CPF', 'UF', 'Cidade', 'Responsável', 'Contato', 'E-mail', 'Canal'];
+    const headers = ['Razão Social', 'CNPJ/CPF', 'UF', 'Cidade', 'Responsável', 'Contato', 'E-mail', 'Categorias'];
     if (user?.perfil === 'gerente') {
       headers.unshift('Vendedor');
     }
@@ -120,12 +125,12 @@ const DashboardEmpana: React.FC = () => {
       head: [headers],
       body: tableData,
       theme: 'striped',
-      headStyles: { fillColor: [27, 67, 50], textColor: [255, 255, 255], fontStyle: 'bold' },
+      headStyles: { fillColor: [3, 105, 161], textColor: [255, 255, 255], fontStyle: 'bold' },
       styles: { fontSize: 8 },
       margin: { left: 14, right: 14 }
     });
 
-    doc.save(`Relatorio_Clientes_Empana_${now.replace(/\//g, '-')}.pdf`);
+    doc.save(`Relatorio_Clientes_RCA_${now.replace(/\//g, '-')}.pdf`);
   };
 
   if (loading) {
@@ -141,7 +146,7 @@ const DashboardEmpana: React.FC = () => {
       {/* Header & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Dashboard Empana Fácil</h1>
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Dashboard RCA</h1>
           <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Visão Geral e Indicadores</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -194,7 +199,7 @@ const DashboardEmpana: React.FC = () => {
             <div className="w-10 h-10 bg-secondary/10 rounded-xl flex items-center justify-center text-secondary">
               <BarChart3 size={20} />
             </div>
-            <h3 className="font-black text-gray-900 tracking-tight uppercase text-xs tracking-widest">Clientes por Canal / Segmento</h3>
+            <h3 className="font-black text-gray-900 tracking-tight uppercase text-xs tracking-widest">Clientes por Categoria</h3>
           </div>
           
           <div className="h-[300px] w-full">
@@ -247,17 +252,14 @@ const DashboardEmpana: React.FC = () => {
             <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-xl border border-gray-100">
               <Filter size={14} className="text-gray-400 ml-2" />
               <select 
-                value={cityFilter}
-                onChange={(e) => setCityFilter(e.target.value)}
+                value={categoriaFilter}
+                onChange={(e) => setCategoriaFilter(e.target.value)}
                 className="bg-transparent text-[11px] font-black text-gray-600 uppercase tracking-wider outline-none pr-2 cursor-pointer"
               >
-                <option value="Todos">Todos Canais</option>
-                <option value="Supermercado">Supermercado</option>
-                <option value="Food Service">Food Service</option>
-                <option value="Distribuidor">Distribuidor</option>
-                <option value="Atacado">Atacado</option>
-                <option value="Varejo">Varejo</option>
-                <option value="Outro">Outro</option>
+                <option value="Todos">Todas Categorias</option>
+                {canalData.map(c => (
+                  <option key={c.name} value={c.name}>{c.name}</option>
+                ))}
               </select>
             </div>
           </div>

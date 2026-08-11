@@ -345,7 +345,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       console.error("Erro ao adicionar cliente empana:", error);
       alert("Erro ao adicionar cliente empana: " + error.message);
     }
-    if (data) { setClientesEmpana((prev) => [...prev, data]); logEvent(`Adicionou cliente Empana: ${payload.nome_fantasia || payload.razao_social}`); }
+    if (data) { setClientesEmpana((prev) => [...prev, data]); logEvent(`Adicionou cliente RCA: ${payload.nome_fantasia || payload.razao_social}`); }
   };
 
   const updateClienteEmpana = async (id: string, updatedFields: Partial<Cliente>) => {
@@ -356,14 +356,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       console.error("Erro ao atualizar cliente empana:", error);
     }
     if (data) {
-      logEvent(`Atualizou cliente Empana: ${(payload as any).razao_social || "Cliente"}`);
+      logEvent(`Atualizou cliente RCA: ${(payload as any).razao_social || "Cliente"}`);
       setClientesEmpana((prev) => prev.map((c) => (c.id === id ? data : c)));
     }
   };
 
   const deleteClienteEmpana = async (id: string) => {
     const c = clientesEmpana.find(x => x.id === id);
-    if(c) logEvent(`Excluiu cliente Empana: ${c.nome_fantasia || c.razao_social}`);
+    if(c) logEvent(`Excluiu cliente RCA: ${c.nome_fantasia || c.razao_social}`);
     await supabase.from("clientes_empana").delete().eq("id", id);
     setClientesEmpana((prev) => prev.filter((c) => c.id !== id));
   };
@@ -388,7 +388,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     
     // Handle data_vencimento and prazo_entrega which don't exist natively
     const extraObs: string[] = [];
-    if ((payload as any).data_vencimento) {
+    if ((payload as any).prazo_pagamento_dias !== undefined) { extraObs.push(`Prazo Pag. Faturamento: ${(payload as any).prazo_pagamento_dias} dias`); } if ((payload as any).data_vencimento) {
       extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR')}`);
     }
     if ((payload as any).prazo_entrega) {
@@ -412,6 +412,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     delete (payload as any).condicao_pagamento;
     delete (payload as any).prazo_entrega;
     delete (payload as any).data_vencimento;
+    delete (payload as any).prazo_pagamento_dias;
 
     const { data, error } = await supabase
       .from("pedidos")
@@ -485,8 +486,11 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       }
 
-      // Handle data_vencimento and prazo_entrega which don't exist natively
+      // Handle prazo_pagamento_dias, data_vencimento and prazo_entrega which don't exist natively
       const extraObs: string[] = [];
+      if ((payload as any).prazo_pagamento_dias !== undefined) {
+        extraObs.push(`Prazo Pag. Faturamento: ${(payload as any).prazo_pagamento_dias} dias`);
+      }
       if ((payload as any).data_vencimento) {
         extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR')}`);
       }
@@ -589,7 +593,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
     // Handle data_vencimento and prazo_entrega which don't exist natively
     const extraObs: string[] = [];
-    if ((payload as any).data_vencimento) {
+    if ((payload as any).prazo_pagamento_dias !== undefined) { extraObs.push(`Prazo Pag. Faturamento: ${(payload as any).prazo_pagamento_dias} dias`); } if ((payload as any).data_vencimento) {
       extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR')}`);
     }
     if ((payload as any).prazo_entrega) {
@@ -657,7 +661,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
       // Handle fields that don't exist in the DB table
       const extraObs: string[] = [];
-      if ((payload as any).data_vencimento) {
+      if ((payload as any).prazo_pagamento_dias !== undefined) { extraObs.push(`Prazo Pag. Faturamento: ${(payload as any).prazo_pagamento_dias} dias`); } if ((payload as any).data_vencimento) {
         extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR')}`);
       }
       if ((payload as any).prazo_entrega) {

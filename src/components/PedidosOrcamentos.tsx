@@ -66,6 +66,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
   >("Todos");
   const [filterMonth, setFilterMonth] = useState<string>("Todos");
   const [filterYear, setFilterYear] = useState<string>("Todos");
+  const [filterStatus, setFilterStatus] = useState<string>("Todos");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<"Novo" | "Visualizar Orcamento" | "Visualizar Pedido" | "Editar Orcamento">(
@@ -101,6 +102,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
     prazo_entrega: "15",
     previsao_entrega: "",
     data_vencimento: "",
+    prazo_pagamento_dias: "",
     observacoes: "",
     condicao_pagamento: "A Combinar",
   });
@@ -150,6 +152,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       prazo_entrega: "15",
       previsao_entrega: "",
       data_vencimento: "",
+      prazo_pagamento_dias: "",
       observacoes: "",
       condicao_pagamento: "A Combinar"
     });
@@ -190,6 +193,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       prazo_entrega: (o.prazo_entrega || "15").replace(/[^0-9]/g, ''),
       previsao_entrega: o.previsao_entrega || "",
       data_vencimento: (o as any).data_vencimento || "",
+      prazo_pagamento_dias: (o as any).prazo_pagamento_dias?.toString() || "",
       observacoes: o.observacoes || "",
       condicao_pagamento: o.condicao_pagamento || "A Combinar",
     });
@@ -801,7 +805,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
           status: "Orçamento",
           condicao_pagamento: formData.condicao_pagamento,
           prazo_entrega: `${formData.prazo_entrega} dias`,
-          data_vencimento: formData.data_vencimento,
+          prazo_pagamento_dias: formData.prazo_pagamento_dias ? Number(formData.prazo_pagamento_dias) : undefined,
           observacoes: formData.observacoes,
         });
       if (success) {
@@ -855,7 +859,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
           previsao_entrega: "",
           condicao_pagamento: fromOrcamento.condicao_pagamento,
           prazo_entrega: fromOrcamento.prazo_entrega,
-          data_vencimento: (fromOrcamento as any).data_vencimento
+          prazo_pagamento_dias: (fromOrcamento as any).prazo_pagamento_dias
         });
         if (success) {
           await updateOrcamento(fromOrcamento.id, { status: "Convertido em Pedido" });
@@ -887,7 +891,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
           previsao_entrega: "",
           condicao_pagamento: formData.condicao_pagamento,
           prazo_entrega: `${formData.prazo_entrega} dias`,
-          data_vencimento: formData.data_vencimento
+          prazo_pagamento_dias: formData.prazo_pagamento_dias ? Number(formData.prazo_pagamento_dias) : undefined
         });
         if (success) {
           setIsModalOpen(false);
@@ -1070,14 +1074,12 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
     let list: Array<{ type: "Orcamento" | "Pedido"; data: any; date: string }> =
       [];
     orcamentos.forEach((o) => {
-      if (o.status !== "Cancelado" && o.status !== "Convertido em Pedido") {
-        list.push({ type: "Orcamento", data: o, date: o.data });
-      }
+      if (filterStatus === "Todos" && (o.status === "Cancelado" || o.status === "Convertido em Pedido")) return;
+      list.push({ type: "Orcamento", data: o, date: o.data });
     });
     pedidos.forEach((p) => {
-      if (p.status !== "Cancelado") {
-        list.push({ type: "Pedido", data: p, date: p.data });
-      }
+      if (filterStatus === "Todos" && p.status === "Cancelado") return;
+      list.push({ type: "Pedido", data: p, date: p.data });
     });
 
     // Filters
@@ -1142,10 +1144,14 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       });
     }
 
+    if (filterStatus !== "Todos") {
+      list = list.filter((i) => i.data.status === filterStatus);
+    }
+
     return list.sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
-  }, [pedidos, orcamentos, viewFilter, searchTerm, clientes, filterMonth, filterYear]);
+  }, [pedidos, orcamentos, viewFilter, searchTerm, clientes, filterMonth, filterYear, filterStatus]);
 
   const pedidosProntosParaFaturar = useMemo(() => {
     return pedidos.filter((p) => p.status === "Pronto");
@@ -1306,6 +1312,23 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                 {y}
               </option>
             ))}
+          </select>
+
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-600 outline-none focus:ring-2 focus:ring-primary shadow-sm"
+          >
+            <option value="Todos">Status: Todos</option>
+            <option value="Aguardando Produção">Aguardando Produção</option>
+            <option value="Em produção">Em produção</option>
+            <option value="Pronto">Pronto</option>
+            <option value="Faturado">Faturado</option>
+            <option value="Cancelado">Cancelado</option>
+            <option value="Orçamento">Orçamento</option>
+            <option value="Rascunho">Rascunho</option>
+            <option value="Enviado">Enviado</option>
+            <option value="Convertido em Pedido">Convertido em Pedido</option>
           </select>
         </div>
       </div>
@@ -1616,12 +1639,14 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
-                      Data de Vencimento
+                      Prazo Pag. Faturamento (Dias)
                     </label>
                     <input
-                      type="date"
-                      value={formData.data_vencimento}
-                      onChange={(e) => setFormData({ ...formData, data_vencimento: e.target.value })}
+                      type="number"
+                      min="0"
+                      placeholder="Ex: 30"
+                      value={formData.prazo_pagamento_dias}
+                      onChange={(e) => setFormData({ ...formData, prazo_pagamento_dias: e.target.value })}
                       className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold focus:border-primary outline-none"
                     />
                   </div>
@@ -2119,6 +2144,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   <div className="md:border-l md:pl-6 border-gray-200">
                     <p className="text-sm font-bold text-gray-700">Condições Comerciais:</p>
                     <p className="text-xs text-gray-600 mt-1"><strong>Pagamento:</strong> {selectedItem.condicao_pagamento || selectedItem.forma_pagamento_nf || "A Combinar"}</p>
+                    {(selectedItem as any).prazo_pagamento_dias !== undefined && (
+                      <p className="text-xs text-gray-600 mt-1"><strong>Prazo Pag. Faturamento:</strong> {(selectedItem as any).prazo_pagamento_dias} dias</p>
+                    )}
                     {(selectedItem as any).data_vencimento && (
                       <p className="text-xs text-gray-600 mt-1"><strong>Vencimento:</strong> {new Date((selectedItem as any).data_vencimento).toLocaleDateString("pt-BR", { timeZone: 'UTC' })}</p>
                     )}
@@ -2310,6 +2338,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   <div className="md:border-l md:pl-6 border-gray-200">
                     <p className="text-sm font-bold text-gray-700">Previsão e Logística:</p>
                     <p className="text-xs text-gray-600 mt-1"><strong>Prazo de Entrega:</strong> {selectedItem.prazo_entrega || "A definir"}</p>
+                    {(selectedItem as any).prazo_pagamento_dias !== undefined && (
+                      <p className="text-xs text-gray-600 mt-1"><strong>Prazo Pag. Faturamento:</strong> {(selectedItem as any).prazo_pagamento_dias} dias</p>
+                    )}
                     {(selectedItem as any).data_vencimento && (
                       <p className="text-xs text-gray-600 mt-1"><strong>Data de Vencimento:</strong> {new Date((selectedItem as any).data_vencimento).toLocaleDateString("pt-BR", { timeZone: 'UTC' })}</p>
                     )}

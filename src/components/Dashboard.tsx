@@ -160,7 +160,7 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void, empresa?: stri
 
   // Painel de Produção x Gerente
   const pedidosEmProducao = pedidos.filter(p => p.status === 'Em produção' || p.status === 'Aguardando Produção');
-  const pedidosConcluidos = pedidos.filter(p => p.status === 'Faturado');
+  const pedidosConcluidos = pedidos.filter(p => p.status === 'Faturado' && filterByDate(p.data_faturamento || p.data));
 
   const handleFaturar = (pedidoId: string) => {
     updatePedido(pedidoId, { status: 'Faturado', data_faturamento: new Date().toISOString() });
@@ -277,6 +277,71 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void, empresa?: stri
              </div>
              <div className="p-3 bg-red-50 text-red-500 rounded-2xl"><Wallet size={24} /></div>
            </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Break-Even Chart */}
+        <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+          <div className="p-6 border-b border-gray-100 bg-gray-50/50">
+            <h3 className="font-bold text-primary uppercase text-xs tracking-widest">Ponto de Equilíbrio & Resultado</h3>
+          </div>
+          <div className="p-6 flex-1 min-h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <XAxis 
+                  dataKey="dia" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: 600 }}
+                  dy={10}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false}
+                  tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: 600 }}
+                  tickFormatter={(val) => `R$${val/1000}k`}
+                />
+                <RechartsTooltip 
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
+                />
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 'bold' }} />
+                <Line type="monotone" name="Custo Total (Fixo+Var)" dataKey="CustoTotal" stroke="#ef4444" strokeWidth={3} dot={false} />
+                <Line type="monotone" name="Faturamento Bruto" dataKey="Faturamento" stroke="#3b82f6" strokeWidth={3} dot={false} />
+                <Line type="monotone" name="Lucro Bruto" dataKey="LucroBruto" stroke="#10b981" strokeWidth={3} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Comissões Representantes */}
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+          <div className="p-6 border-b border-gray-100 bg-gray-50/50">
+            <h3 className="font-bold text-primary uppercase text-xs tracking-widest">Comissões do Mês</h3>
+            <p className="text-[10px] text-gray-400 mt-1">Serão lançadas como Despesa Variável no último dia.</p>
+          </div>
+          <div className="p-6 flex-1 overflow-y-auto">
+             <div className="space-y-4">
+               {comissoesMes.length === 0 ? (
+                 <p className="text-sm text-gray-500 font-medium">Nenhuma comissão prevista para este mês.</p>
+               ) : (
+                 comissoesMes.map(com => (
+                   <div key={com.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl">
+                     <div>
+                       <p className="font-bold text-gray-900 tracking-tight">{getUserName(com.representante_id)}</p>
+                       <p className="text-[10px] font-black text-gray-400 uppercase">PED: {com.pedido_id}</p>
+                     </div>
+                     <div className="text-right">
+                       <p className="font-black text-secondary">R$ {com.valor_comissao.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                       <p className="text-[10px] font-bold text-gray-400">{com.percentual}% de R${com.valor_base}</p>
+                     </div>
+                   </div>
+                 ))
+               )}
+             </div>
+          </div>
         </div>
       </div>
 
@@ -403,71 +468,6 @@ const Dashboard: React.FC<{ setActiveTab?: (tab: string) => void, empresa?: stri
             })}
           </div>
         )}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Break-Even Chart */}
-        <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
-          <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-            <h3 className="font-bold text-primary uppercase text-xs tracking-widest">Ponto de Equilíbrio & Resultado</h3>
-          </div>
-          <div className="p-6 flex-1 min-h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                <XAxis 
-                  dataKey="dia" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: 600 }}
-                  dy={10}
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false}
-                  tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: 600 }}
-                  tickFormatter={(val) => `R$${val/1000}k`}
-                />
-                <RechartsTooltip 
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
-                />
-                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 'bold' }} />
-                <Line type="monotone" name="Custo Total (Fixo+Var)" dataKey="CustoTotal" stroke="#ef4444" strokeWidth={3} dot={false} />
-                <Line type="monotone" name="Faturamento Bruto" dataKey="Faturamento" stroke="#3b82f6" strokeWidth={3} dot={false} />
-                <Line type="monotone" name="Lucro Bruto" dataKey="LucroBruto" stroke="#10b981" strokeWidth={3} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Comissões Representantes */}
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
-          <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-            <h3 className="font-bold text-primary uppercase text-xs tracking-widest">Comissões do Mês</h3>
-            <p className="text-[10px] text-gray-400 mt-1">Serão lançadas como Despesa Variável no último dia.</p>
-          </div>
-          <div className="p-6 flex-1 overflow-y-auto">
-             <div className="space-y-4">
-               {comissoesMes.length === 0 ? (
-                 <p className="text-sm text-gray-500 font-medium">Nenhuma comissão prevista para este mês.</p>
-               ) : (
-                 comissoesMes.map(com => (
-                   <div key={com.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl">
-                     <div>
-                       <p className="font-bold text-gray-900 tracking-tight">{getUserName(com.representante_id)}</p>
-                       <p className="text-[10px] font-black text-gray-400 uppercase">PED: {com.pedido_id}</p>
-                     </div>
-                     <div className="text-right">
-                       <p className="font-black text-secondary">R$ {com.valor_comissao.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-                       <p className="text-[10px] font-bold text-gray-400">{com.percentual}% de R${com.valor_base}</p>
-                     </div>
-                   </div>
-                 ))
-               )}
-             </div>
-          </div>
-        </div>
       </div>
 
       {/* Modal Detalhes do Pedido */}

@@ -62,7 +62,7 @@ const ConfiguracoesEmpana: React.FC = () => {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-black text-gray-900 tracking-tight">Configurações Empana Fácil</h1>
+        <h1 className="text-2xl font-black text-gray-900 tracking-tight">Configurações RCA</h1>
         <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Gerenciamento de Acessos</p>
       </div>
 
@@ -84,7 +84,7 @@ const ConfiguracoesEmpana: React.FC = () => {
             className="flex items-center justify-center gap-2 px-6 py-3 bg-primary text-white rounded-2xl font-black text-sm tracking-tight hover:bg-secondary transition-all shadow-lg shadow-primary/20"
           >
             <UserPlus size={18} />
-            NOVO USUÁRIO EMPANA
+            NOVO USUÁRIO RCA
           </button>
         </div>
 
@@ -133,7 +133,7 @@ const ConfiguracoesEmpana: React.FC = () => {
               {filteredUsers.length === 0 && (
                 <tr>
                   <td colSpan={3} className="px-6 py-12 text-center text-gray-400 font-medium">
-                    Nenhum usuário empana encontrado.
+                    Nenhum usuário RCA encontrado.
                   </td>
                 </tr>
               )}
@@ -147,8 +147,8 @@ const ConfiguracoesEmpana: React.FC = () => {
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
           <div className="bg-white rounded-[40px] w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-8 bg-primary text-white">
-              <h2 className="text-2xl font-black tracking-tight mb-2">Novo Usuário Empana</h2>
-              <p className="text-white/60 text-sm font-medium">Cadastre um novo acesso para o painel Empana Fácil.</p>
+              <h2 className="text-2xl font-black tracking-tight mb-2">Novo Usuário RCA</h2>
+              <p className="text-white/60 text-sm font-medium">Cadastre um novo acesso para o painel RCA.</p>
             </div>
             
             <form onSubmit={handleSubmit} className="p-8 space-y-6">
@@ -194,7 +194,7 @@ const ConfiguracoesEmpana: React.FC = () => {
               <div className="bg-amber-50 p-4 rounded-2xl flex items-start gap-3 border border-amber-100">
                 <AlertCircle className="text-amber-500 shrink-0 mt-0.5" size={18} />
                 <p className="text-[11px] font-bold text-amber-700 leading-relaxed">
-                  Este usuário terá acesso restrito apenas aos seus próprios clientes cadastrados no portal Empana Fácil.
+                  Este usuário terá acesso restrito apenas aos seus próprios clientes cadastrados no portal RCA.
                 </p>
               </div>
 

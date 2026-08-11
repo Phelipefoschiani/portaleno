@@ -41,9 +41,9 @@ const getCompanyTheme = (empresa: string) => {
       };
     case 'empana':
       return {
-        primary: '#ea580c', // Orange 600
-        secondary: '#f97316', // Orange 500
-        accent: '#ffedd5', // Orange 100
+        primary: '#0369a1', // Sky 700
+        secondary: '#0284c7', // Sky 600
+        accent: '#e0f2fe', // Sky 100
       };
     case 'estancia':
     default:
@@ -210,7 +210,7 @@ function AppContent() {
       </main>
 
       <SupportFAB 
-        isVisible={user?.perfil !== 'suporte'} 
+        isVisible={user?.perfil === 'gerente'} 
         onClick={() => setIsGlobalTicketModalOpen(true)} 
       />
 

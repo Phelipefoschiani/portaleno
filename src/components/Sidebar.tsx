@@ -144,7 +144,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, empresa, set
             ) : user?.perfil === 'empana' ? (
               <div className="mt-6 flex items-center gap-2 bg-white/5 p-2 px-3.5 rounded-xl border border-white/10 text-xs font-black uppercase tracking-wider text-accent/90">
                 <Building2 size={16} className="text-accent" />
-                <span>Empana Fácil</span>
+                <span>RCA</span>
               </div>
             ) : (
               <div className="mt-6 flex items-center gap-2 bg-white/5 p-2 rounded-xl border border-white/10">
@@ -161,7 +161,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, empresa, set
                 >
                   <option value="estancia" className="text-gray-900">Estância Nova Olinda</option>
                   <option value="sitio" className="text-gray-900">Sítio</option>
-                  <option value="empana" className="text-gray-900">Empana Fácil</option>
+                  <option value="empana" className="text-gray-900">RCA</option>
                   <option value="bigorna" className="text-gray-900">Bigorna</option>
                 </select>
               </div>

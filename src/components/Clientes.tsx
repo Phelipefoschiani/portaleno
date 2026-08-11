@@ -4,7 +4,8 @@ import { useAuth } from '../AuthContext';
 import { Cliente } from '../types';
 import { Search, Plus, Edit2, X, Building, Factory, Trash2, AlertTriangle } from 'lucide-react';
 
-const DEFAULT_CATEGORIES = ['Farma', 'Atacado', 'Distribuidor', 'Mercado', 'Varejo', 'Food Service'];
+
+const DEFAULT_CATEGORIES = ['Distribuidor', 'Grande Varejo', 'Pequeno Varejo', 'Food Service', 'Atacado', 'Outros'];
 
 const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
   const globalState = useGlobalState();
@@ -44,7 +45,6 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
     cidade: '',
     estado: '',
     responsavel: '',
-    canal: 'Outro',
     categorias: [],
   });
 
@@ -120,7 +120,6 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
         cidade: '',
         estado: '',
         responsavel: '',
-        canal: 'Outro',
         categorias: [],
       });
     }
@@ -194,7 +193,7 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
         <div>
           <h2 className="text-2xl font-black text-gray-900 tracking-tight">Clientes</h2>
-          <p className="text-sm font-medium text-gray-500">Gerencie a base de clientes {empresa === 'empana' ? 'da Empana Fácil' : 'da Estância Nova Olinda'}</p>
+          <p className="text-sm font-medium text-gray-500">Gerencie a base de clientes {empresa === 'empana' ? 'da RCA' : 'da Estância Nova Olinda'}</p>
         </div>
         <div className="flex items-center gap-4 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
@@ -358,24 +357,7 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
                       />
                     </div>
 
-                    <div className="col-span-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Canal / Segmento <span className="text-red-500">*</span></label>
-                      <select 
-                        required
-                        value={formData.canal || 'Outro'}
-                        onChange={(e) => setFormData({...formData, canal: e.target.value as any})}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none hover:border-gray-300 focus:border-primary transition-all"
-                      >
-                        <option value="Supermercado">Supermercado</option>
-                        <option value="Food Service">Food Service</option>
-                        <option value="Distribuidor">Distribuidor</option>
-                        <option value="Atacado">Atacado</option>
-                        <option value="Varejo">Varejo</option>
-                        <option value="Outro">Outro</option>
-                      </select>
-                    </div>
-
-                    <div className="col-span-1 md:col-span-2">
+                    <div className="col-span-1 md:col-span-3">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Inscrição Estadual</label>
                       <input 
                         type="text" 

@@ -174,8 +174,13 @@ export const DRE: React.FC<DREProps> = ({ empresa }) => {
 
       // Map client channel
       const clientObj = clientes.find(c => c.id === p.cliente_id);
-      const canal = clientObj?.canal || 'Outro';
-      channelRevenueMap[canal] = (channelRevenueMap[canal] || 0) + orderVal;
+      if (clientObj?.categorias && clientObj.categorias.length > 0) {
+        clientObj.categorias.forEach(cat => {
+          channelRevenueMap[cat] = (channelRevenueMap[cat] || 0) + orderVal;
+        });
+      } else {
+        channelRevenueMap['Sem Categoria'] = (channelRevenueMap['Sem Categoria'] || 0) + orderVal;
+      }
     });
 
     // DEDUÇÕES DA RECEITA
@@ -645,7 +650,10 @@ export const DRE: React.FC<DREProps> = ({ empresa }) => {
                       </div>
                       {openDescriptions[pId] && (
                         <div className="bg-indigo-50/25 border-t border-b border-indigo-100/30 py-2.5 px-12 md:px-20 text-[10px] text-gray-650 font-medium leading-relaxed font-sans space-y-1 animate-fadeIn">
-                          <div><strong>Canal de Venda:</strong> {clientes.find(c => c.id === p.cliente_id)?.canal || 'Outro'}</div>
+                          <div><strong>Categoria(s):</strong> {(() => {
+                            const cats = clientes.find(c => c.id === p.cliente_id)?.categorias;
+                            return cats && cats.length > 0 ? cats.join(', ') : 'Sem Categoria';
+                          })()}</div>
                           <div><strong>Representante:</strong> {repName}</div>
                           <div><strong>Itens do Pedido:</strong> {itemsStr}</div>
                           {p.observacao && <div><strong>Observações:</strong> {p.observacao}</div>}

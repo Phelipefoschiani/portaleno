@@ -44,7 +44,7 @@ export interface Cliente {
   cidade: string;
   estado: string;
   responsavel?: string;
-  canal: 'Supermercado' | 'Food Service' | 'Distribuidor' | 'Atacado' | 'Varejo' | 'Outro';
+  canal?: string;
   categorias?: string[];
   status: 'Aguardando liberação' | 'Liberado' | 'Bloqueado' | 'Inativo';
   data_cadastro: string;
@@ -80,6 +80,7 @@ export interface Orcamento {
   condicao_pagamento: string;
   prazo_entrega: string;
   data_vencimento?: string;
+  prazo_pagamento_dias?: number;
   previsao_entrega?: string;
   observacoes?: string;
 }
@@ -105,6 +106,7 @@ export interface Pedido {
   previsao_entrega?: string;
   condicao_pagamento?: string;
   prazo_entrega?: string;
+  prazo_pagamento_dias?: number;
   observacoes?: string;
   solicitacoes_insumos?: SolicitacaoInsumo[];
   data_fabricacao?: string;
