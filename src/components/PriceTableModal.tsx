@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Download, FileText, Check } from 'lucide-react';
+import { X, Download, FileText, Check, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Produto } from '../types';
 import jsPDF from 'jspdf';
@@ -42,6 +42,7 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
   const [observacao, setObservacao] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [logoSrc, setLogoSrc] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const getMultiplier = (name: string): number => {
     const match = name.match(/\((\d+)x(\d+)\)/);
@@ -49,6 +50,44 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
       return parseInt(match[2], 10);
     }
     return 1;
+  };
+
+  const getDisplayUnit = (p: Produto, viewMode: 'unidade' | 'fardo', multiplier: number, hasPack: boolean) => {
+    const name = p.nome.toLowerCase();
+    const unit = (p.unidade || '').toLowerCase();
+
+    const isGram = unit === 'g' || name.includes('g') || name.includes('grama') || name.includes('gr');
+    const isKg = unit === 'kg' || name.includes('kg') || name.includes('kilo');
+
+    if (!hasPack) {
+      const pesoUnitario = p.quantidade_unidade || 0;
+      if (isGram && !isKg) {
+        const grams = pesoUnitario < 10 ? Math.round(pesoUnitario * 1000) : pesoUnitario;
+        return `${grams} g`;
+      } else if (isKg || (!isGram && pesoUnitario >= 1)) {
+        return `${pesoUnitario % 1 === 0 ? pesoUnitario : pesoUnitario.toFixed(2)} kg`;
+      } else if (pesoUnitario < 1 && pesoUnitario > 0) {
+        return `${Math.round(pesoUnitario * 1000)} g`;
+      } else {
+        return `${pesoUnitario} ${unit || 'un'}`;
+      }
+    } else {
+      if (viewMode === 'unidade') {
+        const pesoUnitario = (p.quantidade_unidade || 0) / multiplier;
+        if (isGram && !isKg) {
+          const grams = pesoUnitario < 10 ? Math.round(pesoUnitario * 1000) : pesoUnitario;
+          return `${grams} g`;
+        } else if (isKg || (!isGram && pesoUnitario >= 1)) {
+          return `${pesoUnitario % 1 === 0 ? pesoUnitario : pesoUnitario.toFixed(2)} kg`;
+        } else if (pesoUnitario < 1 && pesoUnitario > 0) {
+          return `${Math.round(pesoUnitario * 1000)} g`;
+        } else {
+          return `${pesoUnitario % 1 === 0 ? pesoUnitario : pesoUnitario.toFixed(2)} ${unit || 'un'}`;
+        }
+      } else {
+        return `${multiplier} un`;
+      }
+    }
   };
 
   useEffect(() => {
@@ -100,6 +139,7 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
       
       const tableData = selectedProds.map(p => {
         const multiplier = getMultiplier(p.nome);
+        const hasPack = multiplier > 1 || p.unidade === 'cx' || p.unidade === 'fd';
         const parts = p.nome.split(' - ');
         let legacyBarcode = '-';
         let nomeProduto = p.nome;
@@ -112,29 +152,18 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
         const barcodeFardo = p.codigo_barras || "";
         const barcodeUnit = p.codigo_barras_unitario || legacyBarcode;
 
-        let barcodeExibicao = viewMode === 'fardo' ? barcodeFardo : barcodeUnit;
+        let barcodeExibicao = viewMode === 'fardo' ? (barcodeFardo || barcodeUnit) : barcodeUnit;
         let nomeExibicao = nomeProduto;
         
-        if (viewMode === 'fardo' && barcodeUnit && barcodeUnit !== '-') {
+        if (viewMode === 'fardo' && hasPack && barcodeUnit && barcodeUnit !== '-') {
           nomeExibicao = `${nomeProduto}\n${barcodeUnit}`;
         }
 
         let precoExibicao = p.preco_base;
-        let unidadeExibicao = "";
-
-        if (viewMode === 'unidade') {
+        if (hasPack && viewMode === 'unidade') {
           precoExibicao = p.preco_base / multiplier;
-          const pesoUnitario = p.quantidade_unidade / multiplier;
-          
-          if ((p.unidade === 'kg' || p.unidade === 'fd' || p.unidade === 'cx') && pesoUnitario < 1) {
-            unidadeExibicao = `${Math.round(pesoUnitario * 1000)} g`;
-          } else {
-            const unitLabel = (p.unidade === 'fd' || p.unidade === 'cx') ? 'kg' : p.unidade;
-            unidadeExibicao = `${pesoUnitario % 1 === 0 ? pesoUnitario : pesoUnitario.toFixed(2)} ${unitLabel}`;
-          }
-        } else {
-          unidadeExibicao = multiplier > 1 ? `${multiplier} un` : `1 ${p.unidade}`;
         }
+        const unidadeExibicao = getDisplayUnit(p, viewMode, multiplier, hasPack);
         
         return [
           p.codigo || '-',
@@ -196,10 +225,10 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
             initial={{ opacity: 0, scale: 0.95, y: 20 }} 
             animate={{ opacity: 1, scale: 1, y: 0 }} 
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-6xl h-[85vh] rounded-[2rem] shadow-2xl overflow-hidden bg-white border border-gray-100 flex flex-col lg:flex-row"
+            className="relative w-full max-w-[1350px] h-[88vh] rounded-[2rem] shadow-2xl overflow-hidden bg-white border border-gray-100 flex flex-col lg:flex-row"
           >
             {/* Left Panel: Controls */}
-            <div className="w-full lg:w-[400px] bg-gray-50 flex flex-col border-r border-gray-200">
+            <div className="w-full lg:w-[520px] bg-gray-50 flex flex-col border-r border-gray-200">
               <div className="p-6 border-b border-gray-200 bg-white flex justify-between items-center shrink-0">
                 <div>
                   <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
@@ -295,8 +324,25 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
                       {selectedProductIds.length === produtos.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
                     </button>
                   </div>
-                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                    {produtos.map(p => (
+                  <div className="relative mb-3">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input 
+                      type="text"
+                      placeholder="Pesquisar por código ou nome..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary transition-colors"
+                    />
+                  </div>
+                  <div className="space-y-2 max-h-[260px] overflow-y-auto pr-2 custom-scrollbar">
+                    {produtos
+                      .filter(p => {
+                        const q = searchQuery.toLowerCase();
+                        const codigo = (p.codigo || '').toLowerCase();
+                        const nome = (p.nome || '').toLowerCase();
+                        return codigo.includes(q) || nome.includes(q);
+                      })
+                      .map(p => (
                       <div 
                         key={p.id} 
                         onClick={() => toggleProduct(p.id)}
@@ -306,8 +352,13 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
                           {selectedProductIds.includes(p.id) && <Check size={14} strokeWidth={3} />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-gray-900 truncate">{p.nome}</p>
-                          <p className="text-xs text-gray-500 font-medium truncate">{p.quantidade_unidade} {p.unidade} • R$ {formatCurrency(p.preco_base)}</p>
+                          <p className="text-sm font-bold text-gray-900 leading-tight">
+                            {p.codigo ? <span className="text-primary font-black mr-2 bg-primary/10 px-1.5 py-0.5 rounded text-xs">{p.codigo}</span> : null}
+                            {p.nome}
+                          </p>
+                          <p className="text-xs text-gray-500 font-medium mt-1">
+                            {getDisplayUnit(p, viewMode, getMultiplier(p.nome), getMultiplier(p.nome) > 1 || p.unidade === 'cx' || p.unidade === 'fd')} • R$ {formatCurrency(viewMode === 'unidade' && (getMultiplier(p.nome) > 1 || p.unidade === 'cx' || p.unidade === 'fd') ? p.preco_base / getMultiplier(p.nome) : p.preco_base)}
+                          </p>
                         </div>
                       </div>
                     ))}
@@ -370,6 +421,7 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
                   <tbody>
                     {selectedProds.map((p, idx) => {
                       const multiplier = getMultiplier(p.nome);
+                      const hasPack = multiplier > 1 || p.unidade === 'cx' || p.unidade === 'fd';
                       const parts = p.nome.split(' - ');
                       let legacyBarcode = '-';
                       let nomeProduto = p.nome;
@@ -381,38 +433,29 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
 
                       const barcodeFardo = p.codigo_barras || "";
                       const barcodeUnit = p.codigo_barras_unitario || legacyBarcode;
-                      const barcodeExibicao = viewMode === 'fardo' ? barcodeFardo : barcodeUnit;
+                      const barcodeExibicao = viewMode === 'fardo' ? (barcodeFardo || barcodeUnit) : barcodeUnit;
+
+                      let precoExibicao = p.preco_base;
+                      if (hasPack && viewMode === 'unidade') {
+                        precoExibicao = p.preco_base / multiplier;
+                      }
+                      const unidadeExibicao = getDisplayUnit(p, viewMode, multiplier, hasPack);
 
                       return (
                         <tr key={p.id} className={idx % 2 === 1 ? 'bg-gray-50' : 'bg-white'}>
                           <td className="p-2 text-gray-600 font-medium">{p.codigo || '-'}</td>
                           <td className="p-2 font-medium text-[11px]">
                             <div>{nomeProduto}</div>
-                            {viewMode === 'fardo' && barcodeUnit && barcodeUnit !== '-' && (
+                            {viewMode === 'fardo' && hasPack && barcodeUnit && barcodeUnit !== '-' && (
                               <div className="text-[9px] text-gray-400 font-normal">{barcodeUnit}</div>
                             )}
                           </td>
                           <td className="p-2 text-gray-600 font-medium text-[11px] break-all">{barcodeExibicao}</td>
                           <td className="p-2 text-center text-gray-600 font-medium">
-                            {(() => {
-                                const multiplier = getMultiplier(p.nome);
-                                if (viewMode === 'unidade') {
-                                  const pesoUnitario = p.quantidade_unidade / multiplier;
-                                  if ((p.unidade === 'kg' || p.unidade === 'fd' || p.unidade === 'cx') && pesoUnitario < 1) {
-                                    return `${Math.round(pesoUnitario * 1000)} g`;
-                                  }
-                                  const unitLabel = (p.unidade === 'fd' || p.unidade === 'cx') ? 'kg' : p.unidade;
-                                  return `${pesoUnitario % 1 === 0 ? pesoUnitario : pesoUnitario.toFixed(2)} ${unitLabel}`;
-                                }
-                                return multiplier > 1 ? `${multiplier} un` : `1 ${p.unidade}`;
-                            })()}
+                            {unidadeExibicao}
                           </td>
                           <td className="p-2 text-right font-medium">
-                            R$ {formatCurrency(
-                              viewMode === 'unidade' 
-                                ? p.preco_base / multiplier
-                                : p.preco_base
-                            )}
+                            R$ {formatCurrency(precoExibicao)}
                           </td>
                         </tr>
                       );

@@ -80,17 +80,19 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
   });
 
   // Packaging Calculator Helpers
+  const [temEmbalagem, setTemEmbalagem] = useState<boolean>(false);
   const [baseUnit, setBaseUnit] = useState<'kg' | 'g' | 'un'>('kg');
   const [calcUnitWeight, setCalcUnitWeight] = useState<number>(0);
   const [calcUnitPrice, setCalcUnitPrice] = useState<number>(0);
   const [calcQty, setCalcQty] = useState<number>(1);
 
-  const updateCalculatedValues = (weight: number, price: number, qty: number, unit: 'kg' | 'g' | 'un' = baseUnit) => {
+  const updateCalculatedValues = (weight: number, price: number, qty: number, unit: 'kg' | 'g' | 'un' = baseUnit, hasPack: boolean = temEmbalagem) => {
     const weightInKg = unit === 'g' ? weight / 1000 : weight;
+    const finalQty = hasPack ? qty : 1;
     setFormData(prev => ({
       ...prev,
-      quantidade_unidade: Number((weightInKg * qty).toFixed(3)),
-      preco_base: Number((price * qty).toFixed(2))
+      quantidade_unidade: Number((weightInKg * finalQty).toFixed(3)),
+      preco_base: Number((price * finalQty).toFixed(2))
     }));
   };
 
@@ -328,18 +330,26 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
       setFormData(p);
       setCustos(p.custos_detalhados || []);
       
+      const qtyMatch = p.nome.match(/\((\d+)x(\d+)\)/);
+      const isPack = !!qtyMatch || p.unidade === 'cx' || p.unidade === 'fd';
+      setTemEmbalagem(isPack);
+
       // Initialize calculator if possible
-      const qty = p.nome.match(/(\d+)x/)?.[1] || "1";
-      const nQty = parseInt(qty);
+      const qty = qtyMatch ? qtyMatch[2] : "1";
+      const nQty = parseInt(qty, 10);
       setCalcQty(nQty);
       
+      const unitWeight = qtyMatch ? parseInt(qtyMatch[1], 10) : 0;
+      const totalWeight = p.quantidade_unidade || 0;
+      const singleUnitWeight = nQty > 0 ? totalWeight / nQty : totalWeight;
+      
       // Determine base unit based on weight
-      if (p.quantidade_unidade && p.quantidade_unidade < 1 && p.quantidade_unidade > 0) {
+      if (singleUnitWeight > 0 && singleUnitWeight < 1) {
         setBaseUnit('g');
-        setCalcUnitWeight(Number(((p.quantidade_unidade * 1000) / nQty).toFixed(0)));
+        setCalcUnitWeight(unitWeight || Number((singleUnitWeight * 1000).toFixed(0)));
       } else {
         setBaseUnit('kg');
-        setCalcUnitWeight(Number(((p.quantidade_unidade || 0) / nQty).toFixed(3)));
+        setCalcUnitWeight(unitWeight || Number(singleUnitWeight.toFixed(3)));
       }
       
       setCalcUnitPrice(Number(((p.preco_base || 0) / nQty).toFixed(2)));
@@ -348,7 +358,7 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
       setFormData({
         codigo: '', 
         nome: '', 
-        unidade: 'cx', 
+        unidade: 'un', 
         quantidade_unidade: 1, 
         preco_base: 0, 
         categoria: 'Geral', 
@@ -357,6 +367,7 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
         codigo_barras_unitario: ''
       });
       setCustos([]);
+      setTemEmbalagem(false);
       setBaseUnit('kg');
       setCalcUnitWeight(0);
       setCalcUnitPrice(0);
@@ -450,8 +461,21 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
     e.preventDefault();
     if (!formData.nome) return;
 
+    // Remove any existing suffix (Peso x Qtd) from the name
+    const cleanName = formData.nome.replace(/\s*\(\d+x\d+\)\s*$/, '').trim();
+    
+    // If has package, append the correct suffix
+    const finalName = temEmbalagem 
+      ? `${cleanName} (${calcUnitWeight}x${calcQty})`
+      : cleanName;
+
+    // Determine final selling unit
+    const finalUnidade = temEmbalagem ? (formData.unidade || 'cx') : baseUnit;
+
     const saveObj = {
       ...formData,
+      nome: finalName,
+      unidade: finalUnidade,
       preco_base: Number(formData.preco_base),
       quantidade_unidade: Number(formData.quantidade_unidade),
       custo: custoTotal,
@@ -459,6 +483,11 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
       margem_pretendida: margemBruta,
       ativo: true
     } as Produto;
+
+    if (!temEmbalagem) {
+      // Clear pack barcode if it doesn't have package
+      saveObj.codigo_barras = '';
+    }
 
     if (editingProduto) {
       updateProduto(editingProduto.id, saveObj);
@@ -537,16 +566,21 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
               ) : (
                 filteredProdutos.map(p => {
                   const qtyMatch = p.nome.match(/\((\d+)x(\d+)\)/);
-                  const qtdFardo = qtyMatch ? parseInt(qtyMatch[2]) : 1;
-                  const precoUnit = qtdFardo > 0 ? p.preco_base / qtdFardo : p.preco_base;
+                  const hasPack = !!qtyMatch || p.unidade === 'cx' || p.unidade === 'fd';
+                  const qtdFardo = hasPack && qtyMatch ? parseInt(qtyMatch[2]) : 1;
+                  const precoUnit = (hasPack && qtdFardo > 0) ? p.preco_base / qtdFardo : p.preco_base;
 
                   return (
                   <tr key={p.id} className="hover:bg-gray-50/50 transition-colors text-sm font-medium text-gray-800">
                     <td className="px-6 py-4 font-bold text-gray-500">{p.codigo || '-'}</td>
                     <td className="px-6 py-4 font-bold text-gray-900">{p.nome}</td>
                     <td className="px-6 py-4 text-right font-black text-gray-900">R$ {formatCurrency(precoUnit)}</td>
-                    <td className="px-6 py-4 text-center font-black text-blue-600">{qtdFardo} un</td>
-                    <td className="px-6 py-4 text-right font-black text-primary">R$ {formatCurrency(p.preco_base)}</td>
+                    <td className="px-6 py-4 text-center font-black text-blue-600">
+                      {hasPack ? `${qtdFardo} un` : '-'}
+                    </td>
+                    <td className="px-6 py-4 text-right font-black text-primary">
+                      {hasPack ? `R$ ${formatCurrency(p.preco_base)}` : '-'}
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <button 
                         onClick={() => handleOpenForm(p)}
@@ -668,77 +702,118 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
                         </div>
                       </div>
 
-                      {/* SEÇÃO 2: CONFIGURAÇÃO DE VENDA (FARDO/CAIXA) */}
-                      <div className="space-y-4 p-5 bg-primary/5 rounded-2xl border border-primary/10">
-                        <div className="flex items-center gap-2 pb-2 border-b border-primary/10">
-                          <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
-                            <Calculator size={16} />
+                      {/* ATIVAR/DESATIVAR CONFIGURAÇÃO DE EMBALAGEM */}
+                      <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl flex items-center justify-between gap-4 transition-all hover:border-primary/20">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center shrink-0">
+                            <Package size={20} />
                           </div>
-                          <h3 className="text-sm font-black text-primary uppercase tracking-tight">2. Configuração de Venda (Fardo/Caixa)</h3>
+                          <div>
+                            <h4 className="text-sm font-black text-gray-950 uppercase tracking-tight">Vender também por Fardo / Caixa?</h4>
+                            <p className="text-xs text-gray-400 font-semibold">Ative se este produto for vendido em fardos ou caixas fechadas.</p>
+                          </div>
                         </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                           <div className="col-span-1">
-                             <label className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1 block">Tipo Embalagem</label>
-                             <select value={formData.unidade} onChange={e => setFormData({...formData, unidade: e.target.value})} className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-primary outline-none focus:border-primary">
-                               <option value="cx">Caixa (cx)</option>
-                               <option value="fd">Fardo (fd)</option>
-                               <option value="un">Unidade (un)</option>
-                             </select>
-                           </div>
-
-                           <div className="col-span-1">
-                             <label className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1 block">Qtd na Emb.</label>
-                             <input 
-                               type="number" 
-                               value={calcQty} 
-                               onChange={e => {
-                                 const val = Number(e.target.value);
-                                 setCalcQty(val);
-                                 updateCalculatedValues(calcUnitWeight, calcUnitPrice, val);
-                               }} 
-                               className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-primary outline-none focus:border-primary" 
-                             />
-                           </div>
-
-                           <div className="col-span-2">
-                             <label className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1 block">Cód. Barras Embalagem</label>
-                             <input 
-                               type="text" 
-                               value={formData.codigo_barras || ''} 
-                               onChange={e => setFormData({...formData, codigo_barras: e.target.value})} 
-                               className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-primary outline-none focus:border-primary transition-all" 
-                             />
-                           </div>
-
-                           <div className="col-span-2">
-                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Peso Total (kg)</label>
-                              <div className="relative">
-                                <input 
-                                  readOnly
-                                  type="number" 
-                                  step="any" 
-                                  value={formData.quantidade_unidade} 
-                                  className="w-full bg-gray-100 border border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-500 outline-none" 
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">kg</span>
-                              </div>
-                           </div>
-
-                           <div className="col-span-2">
-                              <label className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-1 block">Valor Total da Emb. (R$)</label>
-                              <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-primary/40">R$</span>
-                                <input 
-                                  readOnly
-                                  type="text" 
-                                  value={formatCurrency(formData.preco_base)} 
-                                  className="w-full bg-primary/5 border border-primary/20 rounded-lg pl-8 pr-3 py-2 text-lg font-black text-primary outline-none" 
-                                />
-                              </div>
-                           </div>
-                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer select-none">
+                          <input 
+                            type="checkbox" 
+                            checked={temEmbalagem} 
+                            onChange={e => {
+                              const checked = e.target.checked;
+                              setTemEmbalagem(checked);
+                              if (!checked) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  unidade: 'un',
+                                  preco_base: calcUnitPrice || prev.preco_base,
+                                  quantidade_unidade: calcUnitWeight || prev.quantidade_unidade
+                                }));
+                              } else {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  unidade: 'cx'
+                                }));
+                                updateCalculatedValues(calcUnitWeight, calcUnitPrice, calcQty, baseUnit, true);
+                              }
+                            }} 
+                            className="sr-only peer" 
+                          />
+                          <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                        </label>
                       </div>
+
+                      {/* SEÇÃO 2: CONFIGURAÇÃO DE VENDA (FARDO/CAIXA) */}
+                      {temEmbalagem && (
+                        <div className="space-y-4 p-5 bg-primary/5 rounded-2xl border border-primary/10 transition-all duration-300">
+                          <div className="flex items-center gap-2 pb-2 border-b border-primary/10">
+                            <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
+                              <Calculator size={16} />
+                            </div>
+                            <h3 className="text-sm font-black text-primary uppercase tracking-tight">2. Configuração de Venda (Fardo/Caixa)</h3>
+                          </div>
+
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                             <div className="col-span-1">
+                               <label className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1 block">Tipo Embalagem</label>
+                               <select value={formData.unidade} onChange={e => setFormData({...formData, unidade: e.target.value})} className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-primary outline-none focus:border-primary">
+                                 <option value="cx">Caixa (cx)</option>
+                                 <option value="fd">Fardo (fd)</option>
+                                 <option value="un">Unidade (un)</option>
+                               </select>
+                             </div>
+
+                             <div className="col-span-1">
+                               <label className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1 block">Qtd na Emb.</label>
+                               <input 
+                                 type="number" 
+                                 value={calcQty} 
+                                 onChange={e => {
+                                   const val = Number(e.target.value);
+                                   setCalcQty(val);
+                                   updateCalculatedValues(calcUnitWeight, calcUnitPrice, val);
+                                 }} 
+                                 className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-primary outline-none focus:border-primary" 
+                               />
+                             </div>
+
+                             <div className="col-span-2">
+                               <label className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1 block">Cód. Barras Embalagem</label>
+                               <input 
+                                 type="text" 
+                                 value={formData.codigo_barras || ''} 
+                                 onChange={e => setFormData({...formData, codigo_barras: e.target.value})} 
+                                 className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-primary outline-none focus:border-primary transition-all" 
+                               />
+                             </div>
+
+                             <div className="col-span-2">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Peso Total (kg)</label>
+                                <div className="relative">
+                                  <input 
+                                    readOnly
+                                    type="number" 
+                                    step="any" 
+                                    value={formData.quantidade_unidade} 
+                                    className="w-full bg-gray-100 border border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-500 outline-none" 
+                                  />
+                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">kg</span>
+                                </div>
+                             </div>
+
+                             <div className="col-span-2">
+                                <label className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-1 block">Valor Total da Emb. (R$)</label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-primary/40">R$</span>
+                                  <input 
+                                    readOnly
+                                    type="text" 
+                                    value={formatCurrency(formData.preco_base)} 
+                                    className="w-full bg-primary/5 border border-primary/20 rounded-lg pl-8 pr-3 py-2 text-lg font-black text-primary outline-none" 
+                                  />
+                                </div>
+                             </div>
+                          </div>
+                        </div>
+                      )}
                     </form>
 
                  </div>
