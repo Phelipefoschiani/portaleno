@@ -1,0 +1,182 @@
+  2141	      {isModalOpen && modalType === "Visualizar Orcamento" && selectedItem && (
+  2142	        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 bg-primary/40 backdrop-blur-sm">
+  2143	          <div
+  2144	            className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col scale-in relative"
+  2145	            id="print-area"
+  2146	          >
+  2147	            <div className="p-8 bg-gray-50 border-b border-gray-100 flex justify-between items-start hide-on-print shrink-0">
+  2148	              <div>
+  2149	                <h2 className="text-2xl font-black tracking-tight text-gray-900">
+  2150	                  Orçamento #{selectedItem.id.split("_")[1]}
+  2151	                </h2>
+  2152	                <p className="text-sm font-medium text-gray-500 mt-1">
+  2153	                  Data:{" "}
+  2154	                  {new Date(selectedItem.data).toLocaleDateString("pt-BR")}
+  2155	                </p>
+  2156	              </div>
+  2157	              <div className="flex gap-2">
+  2158	                <button
+  2159	                  onClick={() => {
+  2160	                    handleDownloadPDF(
+  2161	                      "Orcamento",
+  2162	                      "Orcamento",
+  2163	                      true,
+  2164	                      true,
+  2165	                      "ORÇAMENTO DE VENDA",
+  2166	                      true // previewOnly
+  2167	                    );
+  2168	                  }}
+  2169	                  disabled={isGeneratingPDF}
+  2170	                  className={`w-10 h-10 border rounded-full flex items-center justify-center transition-all shadow-sm tooltip-trigger ${
+  2171	                    isGeneratingPDF ? "bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+  2172	                  }`}
+  2173	                  title="Visualizar PDF"
+  2174	                >
+  2175	                  <Eye size={18} />
+  2176	                </button>
+  2177	                <button
+  2178	                  onClick={() => {
+  2179	                    setExportOptionsModal({
+  2180	                      isOpen: true,
+  2181	                      includeCondicao: true,
+  2182	                      includePrazo: true,
+  2183	                      nomeDocumento: "Orçamento",
+  2184	                      selectedItem: selectedItem as Orcamento,
+  2185	                    });
+  2186	                  }}
+  2187	                  disabled={isGeneratingPDF}
+  2188	                  className={`w-10 h-10 border rounded-full flex items-center justify-center transition-all shadow-sm tooltip-trigger ${
+  2189	                    isGeneratingPDF ? "bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+  2190	                  }`}
+  2191	                  title="Exportar Orçamento"
+  2192	                >
+  2193	                  <Printer size={18} />
+  2194	                </button>
+  2195	                <button
+  2196	                  onClick={() => setIsModalOpen(false)}
+  2197	                  className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-all"
+  2198	                >
+  2199	                  <X size={20} />
+  2200	                </button>
+  2201	              </div>
+  2202	            </div>
+  2203	
+  2204	            <div className="p-12 overflow-y-auto print-content bg-white flex-1 animate-fadeIn">
+  2205	              <div className="hidden print-header mb-8 text-center pb-8 border-b-2 border-gray-200 font-sans">
+  2206	                <h1 className="text-3xl font-black uppercase tracking-tighter text-gray-900">
+  2207	                  GRUPO ENO
+  2208	                </h1>
+  2209	                <p className="text-sm text-gray-500 tracking-widest uppercase font-bold mt-1">
+  2210	                  Orçamento Comercial
+  2211	                </p>
+  2212	              </div>
+  2213	
+  2214	              <div className="mb-10 font-sans">
+  2215	                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
+  2216	                  Dados do Cliente
+  2217	                </h3>
+  2218	                <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+  2219	                  <div>
+  2220	                    <p className="font-black text-gray-900 text-lg mb-1">
+  2221	                      {clientes.find((c) => c.id === selectedItem.cliente_id)?.razao_social}
+  2222	                    </p>
+  2223	                    <p className="text-sm text-gray-600 font-medium">
+  2224	                      CNPJ: {clientes.find((c) => c.id === selectedItem.cliente_id)?.cnpj_cpf}
+  2225	                    </p>
+  2226	                    <p className="text-sm text-gray-600 font-medium capitalize">
+  2227	                      Cidade: {clientes.find((c) => c.id === selectedItem.cliente_id)?.cidade} - {clientes.find((c) => c.id === selectedItem.cliente_id)?.estado}
+  2228	                    </p>
+  2229	                  </div>
+  2230	                  <div className="md:border-l md:pl-6 border-gray-200">
+  2231	                    <p className="text-sm font-bold text-gray-700">Condições Comerciais:</p>
+  2232	                    <p className="text-xs text-gray-600 mt-1"><strong>Pagamento:</strong> {selectedItem.condicao_pagamento || selectedItem.forma_pagamento_nf || "A Combinar"}</p>
+  2233	                    {(selectedItem as any).data_vencimento && (
+  2234	                      <p className="text-xs text-gray-600 mt-1"><strong>Vencimento:</strong> {new Date((selectedItem as any).data_vencimento).toLocaleDateString("pt-BR", { timeZone: 'UTC' })}</p>
+  2235	                    )}
+  2236	                    <p className="text-xs text-gray-600 mt-1">
+  2237	                      <strong>Prazo de Entrega:</strong> {selectedItem.prazo_entrega ? (/^\d{4}-\d{2}-\d{2}/.test(selectedItem.prazo_entrega) ? new Date(selectedItem.prazo_entrega).toLocaleDateString("pt-BR", { timeZone: 'UTC' }) : selectedItem.prazo_entrega) : "A Combinar"}
+  2238	                    </p>
+  2239	                  </div>
+  2240	                </div>
+  2241	              </div>
+  2242	
+  2243	              {/* Section 3: Removida conforme solicitação do usuário
+  2244	              {selectedItem.observacoes && (
+  2245	                <div className="mb-10 font-sans">
+  2246	                  <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
+  2247	                    Observações
+  2248	                  </h3>
+  2249	                  <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-100">
+  2250	                    <p className="text-sm text-gray-700 italic">{selectedItem.observacoes}</p>
+  2251	                  </div>
+  2252	                </div>
+  2253	              )}
+  2254	              */}
+  2255	
+  2256	              <div className="font-sans">
+  2257	                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
+  2258	                  Itens
+  2259	                </h3>
+  2260	                <table className="w-full text-left border-collapse">
+  2261	                  <thead>
+  2262	                    <tr className="border-b-2 border-gray-900">
+  2263	                      <th className="py-4 text-xs font-black text-gray-900 uppercase tracking-widest">
+  2264	                        Produto
+  2265	                      </th>
+  2266	                      <th className="py-4 text-xs font-black text-gray-900 uppercase tracking-widest text-center">
+  2267	                        Qtd
+  2268	                      </th>
+  2269	                      <th className="py-4 text-xs font-black text-gray-900 uppercase tracking-widest text-right">
+  2270	                        Preço Unitário
+  2271	                      </th>
+  2272	                      <th className="py-4 text-xs font-black text-gray-900 uppercase tracking-widest text-right">
+  2273	                        Subtotal
+  2274	                      </th>
+  2275	                    </tr>
+  2276	                  </thead>
+  2277	                  <tbody className="divide-y divide-gray-100">
+  2278	                    {selectedItem.items.map((it: any, i: number) => {
+  2279	                      const p = produtos.find((x) => x.id === it.produto_id);
+  2280	                      return (
+  2281	                        <tr key={i}>
+  2282	                          <td className="py-4 font-bold text-gray-800">
+  2283	                            {p?.nome}
+  2284	                            <span className="block text-[10px] text-gray-400 font-medium mt-0.5">
+  2285	                              Peso: {p ? (p.unidade === 'g' ? ((it.quantidade * (p.quantidade_unidade || 1)) / 1000).toFixed(2) : (it.quantidade * (p.quantidade_unidade || 1)).toFixed(2)) : '0.00'} kg
+  2286	                            </span>
+  2287	                          </td>
+  2288	                          <td className="py-4 font-medium text-gray-600 text-center">
+  2289	                            {it.quantidade}
+  2290	                          </td>
+  2291	                          <td className="py-4 font-medium text-gray-600 text-right whitespace-nowrap">
+  2292	                            R$ {formatCurrency(it.preco)}
+  2293	                          </td>
+  2294	                          <td className="py-4 font-black text-gray-900 text-right whitespace-nowrap">
+  2295	                            R$ {formatCurrency((it.quantidade * it.preco))}
+  2296	                          </td>
+  2297	                        </tr>
+  2298	                      );
+  2299	                    })}
+  2300	                  </tbody>
+  2301	                  <tfoot>
+  2302	                    <tr className="border-t-2 border-gray-900">
+  2303	                      <td
+  2304	                        colSpan={3}
+  2305	                        className="py-6 font-black text-right tracking-widest uppercase text-gray-400 text-sm"
+  2306	                      >
+  2307	                        Total do Orçamento
+  2308	                      </td>
+  2309	                      <td className="py-6 font-black text-2xl text-right text-gray-900 whitespace-nowrap">
+  2310	                        R$ {formatCurrency(selectedItem.valor_total)}
+  2311	                      </td>
+  2312	                    </tr>
+  2313	                  </tfoot>
+  2314	                </table>
+  2315	              </div>
+  2316	            </div>
+  2317	
+  2318	            <div className="p-6 bg-gray-50 border-t border-gray-200 hide-on-print flex flex-col sm:flex-row gap-4 shrink-0">
+  2319	              <button
+  2320	                onClick={() => {
+  2321	                  setIsConfirmOpen({
+  2322	                    isOpen: true,

@@ -614,127 +614,79 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
           <p className="text-gray-500 text-sm max-w-md">Não foram localizados pedidos nos filtros selecionados.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start animate-fade-in">
+        <div className="flex flex-col gap-6 items-stretch animate-fade-in">
           {filteredOrders.map((pedido) => {
             const progressInfo = getOrderProgress(pedido);
             const clientName = clientMap.get(pedido.cliente_id) || 'Cliente Desconhecido';
             const orderDraftChanges = hasChanges(pedido);
+            const itemsList = pedido.items || (pedido as any).itens_pedido || [];
 
             return (
               <div 
                 key={pedido.id} 
-                className={`bg-white rounded-[32px] shadow-sm border overflow-hidden flex flex-col group hover:shadow-md transition-all duration-300 ${
+                className={`bg-white rounded-[32px] shadow-sm border overflow-hidden flex flex-col lg:flex-row items-stretch group hover:shadow-md transition-all duration-300 ${
                   orderDraftChanges ? 'border-amber-400' : 'border-gray-100'
                 }`}
               >
-                {/* Visual Accent header depending on status */}
-                <div className={`h-1.5 w-full ${
+                {/* Visual Accent Side Bar */}
+                <div className={`w-1.5 lg:w-2 shrink-0 ${
                   pedido.status === 'Pronto' ? 'bg-emerald-500' :
                   pedido.status === 'Em produção' ? 'bg-blue-500' : 'bg-amber-400'
                 }`} />
 
-                <div className="p-6 lg:p-8 flex-1 flex flex-col justify-between">
-                  <div>
-                    {/* Header line */}
-                    <div className="flex justify-between items-start gap-2">
-                      <div>
-                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Pedido</span>
-                        <h4 className="text-base font-black text-gray-950">{pedido.id.toUpperCase().substring(0, 11)}</h4>
+                <div className="flex-1 p-6 lg:p-8 flex flex-col gap-6">
+                  {/* MAIN INFO ROW */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    {/* 1. ID & Client */}
+                    <div className="flex items-center gap-4 min-w-[240px]">
+                      <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-400 shrink-0">
+                        <Package size={24} />
                       </div>
-                      
-                      {/* Status indicator pills */}
-                      <div className="flex items-center gap-1.5">
-                        {orderDraftChanges && (
-                          <span className="px-2 py-0.5 bg-amber-500 text-white rounded-full text-[9px] font-black uppercase tracking-widest animate-pulse">
-                            Alterado
-                          </span>
-                        )}
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                          pedido.status === 'Pronto' 
-                            ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' 
-                            : pedido.status === 'Em produção'
-                              ? 'bg-blue-500/10 text-blue-700 border border-blue-500/20'
-                              : 'bg-amber-500/10 text-amber-700 border border-amber-500/20'
-                        }`}>
-                          {pedido.status}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirmState({ isOpen: true, pedidoId: pedido.id })}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Apagar Pedido de Produção"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                      <div className="flex flex-col overflow-hidden">
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Pedido</span>
+                        <h4 className="text-base font-black text-gray-950 truncate">{pedido.id.toUpperCase().substring(0, 11)}</h4>
+                        <span className="text-xs font-bold text-gray-500 truncate">{clientName}</span>
                       </div>
                     </div>
 
-                    {/* Client & Date */}
-                    <div className="mt-4 pb-4 border-b border-gray-50">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Cliente</p>
-                          <h4 className="text-sm font-extrabold text-gray-900 truncate mt-0.5 max-w-[180px]">{clientName}</h4>
-                        </div>
-                        <p className="text-[10px] text-gray-400 flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100">
-                          <Calendar size={12} />
-                          <span className="font-bold">{new Date(pedido.data).toLocaleDateString('pt-BR')}</span>
-                        </p>
-                      </div>
-
+                    {/* 2. Lote Info */}
+                    <div className="flex-1 max-w-sm">
                       {pedido.lote ? (
-                        <div className="mt-3 bg-indigo-50/40 border border-indigo-100/50 p-3 rounded-2xl relative">
+                        <div className="bg-indigo-50/50 p-3 rounded-2xl border border-indigo-100/30 flex items-center gap-4">
+                          <div className="flex flex-col">
+                            <span className="text-[8px] font-black text-indigo-400 block uppercase tracking-wider">Lote</span>
+                            <span className="font-extrabold text-[10px] text-indigo-900 font-mono">{pedido.lote}</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[8px] font-black text-indigo-400 block uppercase tracking-wider">Datas</span>
+                            <span className="font-bold text-[10px] text-indigo-900 whitespace-nowrap">
+                              {pedido.data_fabricacao ? new Date(pedido.data_fabricacao + "T12:00:00").toLocaleDateString('pt-BR').substring(0,5) : '-'} | {pedido.data_vencimento ? new Date(pedido.data_vencimento + "T12:00:00").toLocaleDateString('pt-BR').substring(0,5) : '-'}
+                            </span>
+                          </div>
                           <button
                             onClick={() => handleOpenDefinirLoteModal(pedido)}
-                            className="absolute right-2.5 top-2.5 p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-all"
+                            className="ml-auto p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-all"
                             title="Editar Dados do Lote"
                           >
-                            <Edit size={12} />
+                            <Edit size={14} />
                           </button>
-                          
-                          <div className="grid grid-cols-3 gap-2 text-left">
-                            <div>
-                              <span className="text-[8px] font-black text-indigo-400 block uppercase tracking-wider">Lote</span>
-                              <span className="font-extrabold text-[10px] text-indigo-900 font-mono tracking-tight">{pedido.lote}</span>
-                            </div>
-                            <div>
-                              <span className="text-[8px] font-black text-indigo-400 block uppercase tracking-wider">Fabricação</span>
-                              <span className="font-bold text-[10px] text-indigo-900">
-                                {pedido.data_fabricacao ? new Date(pedido.data_fabricacao + "T12:00:00").toLocaleDateString('pt-BR') : '-'}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-[8px] font-black text-indigo-400 block uppercase tracking-wider">Vencimento</span>
-                              <span className="font-bold text-[10px] text-indigo-900">
-                                {pedido.data_vencimento ? new Date(pedido.data_vencimento + "T12:00:00").toLocaleDateString('pt-BR') : '-'}
-                              </span>
-                            </div>
-                          </div>
                         </div>
                       ) : (
-                        <div className="mt-3 bg-amber-50/70 border border-amber-200/50 p-3 rounded-2xl flex flex-col gap-2">
-                          <div className="flex items-start gap-1.5 text-amber-800 text-[10px] font-bold leading-normal">
-                            <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
-                            <span>Lote e datas de fabricação/vencimento não configurados.</span>
-                          </div>
-                          <button
-                            onClick={() => handleOpenDefinirLoteModal(pedido)}
-                            className="w-full bg-amber-600 hover:bg-amber-700 text-white font-black text-[10px] uppercase tracking-wider py-1.5 px-3 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1"
-                          >
-                            <Plus size={12} /> Configurar Lote / Datas
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => handleOpenDefinirLoteModal(pedido)}
+                          className="w-full bg-amber-50 hover:bg-amber-100 border border-amber-200 border-dashed p-3 rounded-2xl text-amber-700 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all"
+                        >
+                          <AlertTriangle size={14} /> Configurar Lote
+                        </button>
                       )}
                     </div>
 
-                    {/* ITEM PROGRESS SEGMENT */}
-                    <div className="mt-5 space-y-4">
-                      <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-gray-400">
-                        <span>Produtos Fabricados</span>
-                        <span className="text-gray-900 font-extrabold">{progressInfo.percentage}%</span>
+                    {/* 3. Progress */}
+                    <div className="w-full md:w-48">
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Progresso Geral</span>
+                        <span className="text-xs font-black text-gray-950">{progressInfo.percentage}%</span>
                       </div>
-
-                      {/* Global Progress bar */}
                       <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
                         <div 
                           className={`h-full rounded-full transition-all duration-300 ${
@@ -743,193 +695,138 @@ const ProducaoPainel: React.FC<ProducaoPainelProps> = ({ empresa }) => {
                           style={{ width: `${progressInfo.percentage}%` }}
                         ></div>
                       </div>
+                    </div>
 
-                      {/* Detailed product items inside the order */}
-                      <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 space-y-3 mt-4">
-                        {(() => {
-                          const itemsList = pedido.items || (pedido as any).itens_pedido || [];
-                          
-                          if (itemsList.length === 0) {
-                            return (
-                              <div className="text-center py-6 bg-white rounded-xl border border-dashed border-gray-200">
-                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                  Nenhum item encontrado para este pedido.
-                                </p>
+                    {/* 4. Status & Actions */}
+                    <div className="flex items-center gap-3">
+                      <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider ${
+                        pedido.status === 'Pronto' 
+                          ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' 
+                          : pedido.status === 'Em produção'
+                            ? 'bg-blue-500/10 text-blue-700 border border-blue-500/20'
+                            : 'bg-amber-500/10 text-amber-700 border border-amber-500/20'
+                      }`}>
+                        {pedido.status}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmState({ isOpen: true, pedidoId: pedido.id })}
+                        className="p-2 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ITEMS AREA - ORGANIZED IN ROWS/GRID */}
+                  <div className="bg-gray-50/50 p-4 lg:p-6 rounded-[28px] border border-gray-100 space-y-3">
+                    {itemsList.length === 0 ? (
+                      <p className="text-center py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Nenhum item encontrado.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {itemsList.map((item: ItemPedido, idx: number) => {
+                          const prod = productMap.get(item.produto_id);
+                          const prodName = prod?.nome || 'Insumo Mandioca';
+                          const produced = getDraftValue(pedido, idx);
+                          const expected = item.quantidade;
+                          const ratio = expected > 0 ? (produced / expected) * 100 : 0;
+
+                          return (
+                            <div key={idx} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col gap-3 group/item hover:border-primary/30 transition-all">
+                              <div className="flex justify-between items-start gap-2">
+                                <h5 className="font-extrabold text-gray-900 text-xs truncate flex-1">{prodName}</h5>
+                                <span className={`text-[11px] font-black px-2 py-0.5 rounded-lg ${ratio >= 100 ? 'bg-emerald-50 text-emerald-600' : 'bg-primary/5 text-primary'}`}>
+                                  {produced} / {expected}
+                                </span>
                               </div>
-                            );
-                          }
 
-                          return itemsList.map((item: ItemPedido, idx: number) => {
-                            const prod = productMap.get(item.produto_id);
-                            const prodName = prod?.nome || 'Insumo Mandioca';
-                            const prodUn = prod?.unidade || 'Un';
-                            const prodQtdUn = prod?.quantidade_unidade || 1;
-                            const produced = getDraftValue(pedido, idx);
-                            const expected = item.quantidade;
-                            const ratio = expected > 0 ? (produced / expected) * 100 : 0;
-                            
-                            const producedKg = prodUn === 'g' || prodUn === 'grama' || prodUn === 'gramas' 
-                              ? (produced * prodQtdUn) / 1000 
-                              : (produced * prodQtdUn);
-                            const expectedKg = prodUn === 'g' || prodUn === 'grama' || prodUn === 'gramas'
-                              ? (expected * prodQtdUn) / 1000 
-                              : (expected * prodQtdUn);
-
-                            return (
-                              <div key={idx} className="text-xs bg-white p-3 rounded-xl border border-gray-50 flex flex-col gap-2 shadow-sm">
-                                <div className="flex justify-between items-start">
-                                  <div>
-                                    <h5 className="font-extrabold text-gray-900">{prodName}</h5>
-                                    <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">
-                                      Meta: <span className="text-gray-700 font-extrabold">{expected} Cxs/Pacs</span>
-                                      {prodUn !== 'un' && prodUn !== 'Un' && (
-                                        <span className="text-emerald-600 font-extrabold ml-1">({expectedKg.toFixed(2)} kg)</span>
-                                      )}
-                                    </p>
-                                  </div>
-                                  <div className="flex flex-col items-end">
-                                    <span className={`font-black tracking-tight ${ratio >= 100 ? 'text-emerald-600' : 'text-primary'}`}>
-                                      {produced} / {expected} Qt.
-                                    </span>
-                                    {prodUn !== 'un' && prodUn !== 'Un' && (
-                                      <span className="text-[9px] text-gray-400 font-bold mt-0.5">
-                                        {producedKg.toFixed(2)} / {expectedKg.toFixed(2)} kg
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Item progress bar */}
-                                <div className="w-full bg-gray-50 h-1.5 rounded-full overflow-hidden">
-                                  <div 
-                                    className={`h-full rounded-full transition-all duration-300 ${ratio >= 100 ? 'bg-emerald-500' : 'bg-primary/80'}`}
-                                    style={{ width: `${ratio}%` }}
-                                  ></div>
-                                </div>
-
-                                {/* OPERATOR/PRODUCTION REGISTER CONTROLS */}
-                                <div className="flex items-center justify-between gap-2 mt-1.5 pt-1.5 border-t border-gray-100/60">
-                                  {!pedido.lote ? (
-                                    <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest bg-amber-50 px-2 py-1 rounded">
-                                      Defina o lote acima para apontar dados
-                                    </span>
-                                  ) : (
-                                    <>
-                                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Ajustar Qtd:</span>
-                                      <div className="flex items-center gap-1 bg-gray-50 p-0.5 rounded-lg border border-gray-100 scale-95 origin-right">
-                                        <button 
-                                          onClick={() => handleUpdateItemProductionDraft(pedido, idx, -10)}
-                                          disabled={produced === 0}
-                                          className="px-2 py-0.5 bg-white border border-gray-200 hover:bg-gray-100 rounded text-[10px] font-black text-gray-700 disabled:opacity-40 transition-all font-mono"
-                                        >
-                                          -10
-                                        </button>
-                                        <button 
-                                          onClick={() => handleUpdateItemProductionDraft(pedido, idx, -1)}
-                                          disabled={produced === 0}
-                                          className="px-2 py-0.5 bg-white border border-gray-200 hover:bg-gray-100 rounded text-[10px] font-black text-gray-700 disabled:opacity-40 transition-all font-mono"
-                                        >
-                                          -1
-                                        </button>
-                                        
-                                        <input 
-                                          type="number" 
-                                          className="w-16 px-1 py-0.5 text-center text-xs font-black bg-white border-y border-x border-gray-200 focus:border-primary outline-none app-no-spinners"
-                                          value={produced}
-                                          onChange={(e) => {
-                                            let val = parseInt(e.target.value, 10);
-                                            if (isNaN(val)) val = 0;
-                                            handleSetItemProductionDraft(pedido, idx, val);
-                                          }}
-                                        />
-
-                                        <button 
-                                          onClick={() => handleUpdateItemProductionDraft(pedido, idx, 1)}
-                                          disabled={produced >= expected}
-                                          className="px-2 py-0.5 bg-accent hover:bg-accent/80 text-primary font-bold rounded text-[10px] disabled:opacity-40 transition-all font-mono"
-                                        >
-                                          +1
-                                        </button>
-                                        <button 
-                                          onClick={() => handleUpdateItemProductionDraft(pedido, idx, 10)}
-                                          disabled={produced >= expected}
-                                          className="px-2 py-0.5 bg-accent hover:bg-accent/80 text-primary font-bold rounded text-[10px] disabled:opacity-40 transition-all font-mono"
-                                          title="Lançar lote de 10"
-                                        >
-                                          +10
-                                        </button>
-                                        <button 
-                                          onClick={() => handleUpdateItemProductionDraft(pedido, idx, expected - produced)}
-                                          disabled={produced >= expected}
-                                          className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] uppercase tracking-wider disabled:opacity-40 transition-all"
-                                          title="Confirmar Conclusão Total"
-                                        >
-                                          Meta
-                                        </button>
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
+                              <div className="w-full bg-gray-50 h-1 rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full transition-all duration-300 ${ratio >= 100 ? 'bg-emerald-500' : 'bg-primary'}`}
+                                  style={{ width: `${ratio}%` }}
+                                ></div>
                               </div>
-                            );
-                          });
-                        })()}
+
+                              <div className="flex items-center justify-between gap-2 mt-1">
+                                {pedido.lote ? (
+                                  <div className="flex items-center gap-1 bg-gray-50 p-0.5 rounded-xl border border-gray-100 w-full justify-between">
+                                    <div className="flex items-center gap-0.5">
+                                      <button 
+                                        onClick={() => handleUpdateItemProductionDraft(pedido, idx, -1)}
+                                        disabled={produced === 0}
+                                        className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 hover:bg-gray-100 rounded-lg text-xs font-black disabled:opacity-40 transition-all"
+                                      >
+                                        -
+                                      </button>
+                                      <input 
+                                        type="number" 
+                                        className="w-10 px-1 py-1 text-center text-xs font-black bg-transparent border-none outline-none app-no-spinners"
+                                        value={produced}
+                                        onChange={(e) => handleSetItemProductionDraft(pedido, idx, parseInt(e.target.value) || 0)}
+                                      />
+                                      <button 
+                                        onClick={() => handleUpdateItemProductionDraft(pedido, idx, 1)}
+                                        disabled={produced >= expected}
+                                        className="w-8 h-8 flex items-center justify-center bg-accent hover:bg-accent/80 text-primary font-black rounded-lg text-xs disabled:opacity-40 transition-all"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                    <button 
+                                      onClick={() => handleUpdateItemProductionDraft(pedido, idx, expected - produced)}
+                                      disabled={produced >= expected}
+                                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9px] uppercase tracking-wider rounded-lg disabled:opacity-40 transition-all"
+                                    >
+                                      Meta
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-[9px] font-bold text-gray-400 uppercase italic">Configure o lote para apontar</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
+                    )}
+                  </div>
+
+                  {/* BOTTOM ACTIONS BAR */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+                    <button
+                      onClick={() => setSelectedPedido(pedido)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all border border-gray-100"
+                    >
+                      <Package size={14} /> Demanda de Insumos
+                    </button>
+
+                    <div className="flex items-center gap-3">
+                      {orderDraftChanges && (
+                        <>
+                          <button
+                            onClick={() => handleResetOrderProductionDraft(pedido)}
+                            className="text-[10px] font-black text-gray-400 hover:text-red-500 uppercase tracking-widest transition-all"
+                          >
+                            Descartar
+                          </button>
+                          <button
+                            onClick={() => handleCompleteOrderProductionDraft(pedido)}
+                            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all"
+                          >
+                            Completar Lote
+                          </button>
+                          <button
+                            onClick={() => handleSendProductionUpdate(pedido.id)}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-200 transition-all active:scale-95 flex items-center gap-2"
+                          >
+                            <Save size={14} /> Salvar Fabricação
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
-
-                {/* BOTTOM ACTIONS BAR */}
-                <div className="mt-6 pt-5 border-t border-gray-100 flex flex-wrap gap-2 justify-between items-center bg-white">
-                    {/* Visual indicators of extra requests */}
-                    <button
-                      onClick={() => setSelectedPedido(pedido)}
-                      className="flex items-center gap-2 px-3.5 py-2 text-xs font-black uppercase tracking-wider bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-100 rounded-xl transition-all"
-                    >
-                      <Package size={14} />
-                      Insumos / Demanda
-                    </button>
-
-                    {/* Operational draft control and Submit Button */}
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {pedido.lote ? (
-                          <>
-                            <button
-                              onClick={() => handleResetOrderProductionDraft(pedido)}
-                              className="px-3 py-2 text-[10px] font-black text-gray-400 hover:text-red-500 uppercase tracking-widest transition-all rounded-lg"
-                              title="Reiniciar rascunho de progresso do lote"
-                            >
-                              Zerar
-                            </button>
-                            
-                            <button
-                              onClick={() => handleCompleteOrderProductionDraft(pedido)}
-                              className="px-3 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-100 text-gray-600 font-extrabold text-[10px] uppercase tracking-widest rounded-xl transition-all"
-                            >
-                              Fazer Tudo
-                            </button>
-
-                            <button
-                              onClick={() => handleSendProductionUpdate(pedido.id)}
-                              disabled={!orderDraftChanges}
-                              className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-sm flex items-center gap-1.5 ${
-                                orderDraftChanges
-                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white animate-pulse'
-                                  : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
-                              }`}
-                            >
-                              <Save size={14} />
-                              Enviar Apontamento
-                            </button>
-                          </>
-                        ) : (
-                          <span className="text-[10px] font-black text-amber-700 uppercase tracking-wider bg-amber-50 px-3 py-2 rounded-xl border border-amber-100/50">
-                            Aguardando Lote
-                          </span>
-                        )}
-                      </div>
-                  </div>
-                </div>
+              </div>
             );
           })}
         </div>

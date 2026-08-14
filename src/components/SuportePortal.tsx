@@ -45,6 +45,8 @@ const SuportePortal: React.FC<SuportePortalProps> = ({ autoOpen = false }) => {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isNewTicketOpen, setIsNewTicketOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [newTicket, setNewTicket] = useState({ titulo: '', descricao: '' });
+  const [ticketImages, setTicketImages] = useState<string[]>([]);
 
   const isSupport = user?.perfil === 'suporte';
 
@@ -106,7 +108,7 @@ const SuportePortal: React.FC<SuportePortalProps> = ({ autoOpen = false }) => {
         return new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
+          reader.readAsDataURL(file as Blob);
         });
       });
 
@@ -160,7 +162,7 @@ const SuportePortal: React.FC<SuportePortalProps> = ({ autoOpen = false }) => {
       } else {
         setChamados([{ ...novoChamado, id: Date.now().toString() } as Chamado, ...chamados]);
       }
-      setIsModalOpen(false);
+      setIsNewTicketOpen(false);
       setNewTicket({ titulo: '', descricao: '' });
       setTicketImages([]);
     } catch (err) {

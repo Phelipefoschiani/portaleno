@@ -208,8 +208,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, empresa, set
       <div className={`p-4 border-t bg-primary/50 ${isSupport ? 'border-gray-800 bg-black/50' : 'border-secondary/30 bg-primary/50'}`}>
         <button
           onClick={handleLogout}
-          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-semibold ${
-            isSupport ? 'text-red-400 hover:bg-red-500/10' : 'text-red-300 hover:bg-red-500/20 hover:text-red-200'
+          className={`w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl transition-all font-bold shadow-md ${
+            isSupport ? 'bg-red-900/60 text-red-300 hover:bg-red-800 hover:text-white' : 'bg-red-600 text-white hover:bg-red-500 hover:shadow-red-600/30'
           }`}
         >
           <LogOut size={18} />

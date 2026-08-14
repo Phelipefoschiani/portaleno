@@ -327,11 +327,19 @@ const AReceber: React.FC<AReceberProps> = ({ empresa }) => {
                         <div className="flex items-center gap-1.5 text-gray-900">
                           <Calendar size={13} className="text-gray-450" />
                           <span>
-                            {item.data_pagamento_nf
-                              ? new Date(item.data_pagamento_nf + "T12:00:00").toLocaleDateString("pt-BR")
-                              : item.data_vencimento
-                              ? new Date(item.data_vencimento + "T12:00:00").toLocaleDateString("pt-BR")
-                              : "À Vista"}
+                            {(() => {
+                              try {
+                                const dt = item.data_pagamento_nf || item.data_vencimento;
+                                const forma = item.forma_pagamento_nf;
+                                if (!dt || !dt.trim()) return "À Vista";
+                                const dateObj = new Date(dt + "T12:00:00");
+                                if (isNaN(dateObj.getTime())) return "À Vista";
+                                const dateStr = dateObj.toLocaleDateString("pt-BR");
+                                return forma ? `${forma} | ${dateStr}` : dateStr;
+                              } catch (e) {
+                                return "À Vista";
+                              }
+                            })()}
                           </span>
                         </div>
                       </td>

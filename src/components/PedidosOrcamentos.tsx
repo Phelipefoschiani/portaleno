@@ -10,6 +10,7 @@ import {
   Edit,
   Trash2,
   CheckCircle,
+  PlusCircle,
   Package,
   FileInput,
   User as UserIcon,
@@ -21,7 +22,7 @@ import {
   Eye,
   Play,
   AlertTriangle,
-  Download,
+  Download, Upload,
 } from "lucide-react";
 import { useAuth } from "../AuthContext";
 
@@ -69,7 +70,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
   const [filterStatus, setFilterStatus] = useState<string>("Todos");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalType, setModalType] = useState<"Novo" | "Visualizar Orcamento" | "Visualizar Pedido" | "Editar Orcamento">(
+  const [modalType, setModalType] = useState<"Novo" | "Visualizar Orcamento" | "Visualizar Pedido" | "Editar Orcamento" | "Editar Pedido">(
     "Novo",
   );
   const [selectedItem, setSelectedItem] = useState<Orcamento | Pedido | null>(
@@ -99,10 +100,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
     cliente_id: "",
     representante_id: "",
     items: [] as ItemPedido[],
-    prazo_entrega: "15",
+    prazo_entrega: "",
     previsao_entrega: "",
     data_vencimento: "",
-    prazo_pagamento_dias: "",
     observacoes: "",
     condicao_pagamento: "A Combinar",
   });
@@ -113,6 +113,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
     preco: 0,
     tipo: "venda" as "venda" | "bonificacao",
     desconto: 0,
+    unidade_venda: "fardo" as "fardo" | "unidade",
   });
 
   // Custom NF number state for confirmation dialog
@@ -149,10 +150,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       cliente_id: "", 
       representante_id: "", 
       items: [],
-      prazo_entrega: "15",
+      prazo_entrega: "",
       previsao_entrega: "",
       data_vencimento: "",
-      prazo_pagamento_dias: "",
       observacoes: "",
       condicao_pagamento: "A Combinar"
     });
@@ -175,12 +175,14 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
   const handleOpenVisualizarOrcamento = (o: Orcamento) => {
     setSelectedItem(o);
     setModalType("Visualizar Orcamento");
+    setExportOptionsModal(prev => ({ ...prev, nomeDocumento: "Orçamento" }));
     setIsModalOpen(true);
   };
 
   const handleOpenVisualizarPedido = (p: Pedido) => {
     setSelectedItem(p);
     setModalType("Visualizar Pedido");
+    setExportOptionsModal(prev => ({ ...prev, nomeDocumento: "Pedido" }));
     setIsModalOpen(true);
   };
 
@@ -190,10 +192,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       cliente_id: o.cliente_id || "",
       representante_id: o.representante_id || "",
       items: [...(o.items || [])],
-      prazo_entrega: (o.prazo_entrega || "15").replace(/[^0-9]/g, ''),
+      prazo_entrega: o.prazo_entrega || "",
       previsao_entrega: o.previsao_entrega || "",
       data_vencimento: (o as any).data_vencimento || "",
-      prazo_pagamento_dias: (o as any).prazo_pagamento_dias?.toString() || "",
       observacoes: o.observacoes || "",
       condicao_pagamento: o.condicao_pagamento || "A Combinar",
     });
@@ -205,6 +206,29 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       desconto: 0,
     });
     setModalType("Editar Orcamento");
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditarPedido = (p: Pedido) => {
+    setSelectedItem(p);
+    setFormData({
+      cliente_id: p.cliente_id || "",
+      representante_id: p.representante_id || "",
+      items: [...(p.items || [])],
+      prazo_entrega: p.prazo_entrega || "",
+      previsao_entrega: p.previsao_entrega || "",
+      data_vencimento: p.data_vencimento || "",
+      observacoes: p.observacoes || "",
+      condicao_pagamento: p.condicao_pagamento || "A Combinar",
+    });
+    setNewItem({
+      produto_id: "",
+      quantidade: 1,
+      preco: 0,
+      tipo: "venda",
+      desconto: 0,
+    });
+    setModalType("Editar Pedido");
     setIsModalOpen(true);
   };
 
@@ -225,7 +249,39 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         items: formData.items,
         valor_total: cartSummary.valor_total,
         condicao_pagamento: formData.condicao_pagamento,
-        prazo_entrega: `${formData.prazo_entrega} dias`,
+        prazo_entrega: formData.prazo_entrega,
+        data_vencimento: formData.data_vencimento,
+        observacoes: formData.observacoes,
+      });
+      setIsModalOpen(false);
+      setSelectedItem(null);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSalvarEditarPedido = async () => {
+    if (isSaving || !selectedItem) return;
+    if (!formData.cliente_id || formData.items.length === 0) {
+      return setIsConfirmOpen({
+        isOpen: true,
+        type: "Alert",
+        message: "Selecione cliente e adicione itens.",
+      });
+    }
+    setIsSaving(true);
+    try {
+      await updatePedido(selectedItem.id, {
+        cliente_id: formData.cliente_id,
+        representante_id: formData.representante_id,
+        items: formData.items,
+        valor_total: cartSummary.valor_total,
+        custo_total: cartSummary.custo_total,
+        margem: cartSummary.margem,
+        condicao_pagamento: formData.condicao_pagamento,
+        prazo_entrega: formData.prazo_entrega,
         data_vencimento: formData.data_vencimento,
         observacoes: formData.observacoes,
       });
@@ -239,13 +295,16 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
   };
 
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [logoSrc, setLogoSrc] = useState<string | null>(localStorage.getItem('savedLogo') || null);
+  
 
   const handleDownloadPDF = async (
     mode: string,
     filenamePrefix: string,
     includeCondicao: boolean = true,
     includePrazo: boolean = true,
-    documentTitle: string = ""
+    documentTitle: string = "",
+    previewOnly: boolean = false
   ) => {
     if (!selectedItem) return;
 
@@ -266,6 +325,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
 
       const isPedido = mode === "Pedido" || mode === "NFe";
 
+      if (logoSrc) {
+        pdf.addImage(logoSrc, 'PNG', 14, 5, 25, 25);
+      }
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(22);
       pdf.setTextColor(255, 255, 255);
@@ -403,8 +465,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         const p = produtos.find((x) => x.id === it.produto_id);
         const precoEf = it.tipo === 'bonificacao' ? 0 : it.preco - (it.desconto || 0);
         const tipoLabel = it.tipo === 'bonificacao' ? " (Bonificação)" : "";
+        const peso = p ? (p.unidade === 'g' ? ((it.quantidade * (p.quantidade_unidade || 1)) / 1000).toFixed(2) : (it.quantidade * (p.quantidade_unidade || 1)).toFixed(2)) : '0.00';
         return [
-          (p?.nome || "Produto Desconhecido") + tipoLabel,
+          (p?.nome || "Produto Desconhecido") + tipoLabel + "\nPeso: " + peso + " kg",
           it.quantidade.toString(),
           `R$ ${formatCurrency(precoEf)}`,
           `R$ ${formatCurrency((it.quantidade * precoEf))}`
@@ -488,8 +551,14 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         docType = filenamePrefix === "Orcamento" ? "Orçamento" : "Pedido";
       }
 
-      pdf.save(`${docType} - ${clientName}.pdf`);
-      logEvent(`Exportou PDF do ${isOrcamentoPDF ? 'Orçamento' : 'Pedido'}: ${clientes.find(c => c.id === selectedItem?.cliente_id)?.nome_fantasia || 'Desconhecido'}`);
+      if (previewOnly) {
+        const blob = pdf.output("blob");
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+      } else {
+        pdf.save(`${docType} - ${clientName}.pdf`);
+        logEvent(`Exportou PDF do ${isOrcamentoPDF ? 'Orçamento' : 'Pedido'}: ${clientes.find(c => c.id === selectedItem?.cliente_id)?.nome_fantasia || 'Desconhecido'}`);
+      }
     } catch (error) {
       console.error("Erro ao gerar PDF", error);
     } finally {
@@ -506,15 +575,28 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         preco: prod.preco_base || 0,
         desconto: 0,
         tipo: "venda",
+        unidade_venda: "fardo",
       }));
     }
   };
 
   const handleAddItem = () => {
     if (!newItem.produto_id || newItem.quantidade <= 0) return;
+    
+    const prod = produtos.find(p => p.id === newItem.produto_id);
+    if (!prod) return;
+
+    // Se for unidade, ajusta o preço base
+    let finalPreco = prod.preco_base || 0;
+    if (newItem.unidade_venda === 'unidade') {
+      const qtyMatch = prod.nome.match(/\((\d+)x(\d+)\)/);
+      const qtdFardo = qtyMatch ? parseInt(qtyMatch[2]) : 1;
+      finalPreco = qtdFardo > 0 ? (prod.preco_base || 0) / qtdFardo : (prod.preco_base || 0);
+    }
+
     setFormData((prev) => ({
       ...prev,
-      items: [...prev.items, { ...newItem }],
+      items: [...prev.items, { ...newItem, preco: finalPreco }],
     }));
     setNewItem({
       produto_id: "",
@@ -522,6 +604,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       preco: 0,
       tipo: "venda",
       desconto: 0,
+      unidade_venda: "fardo",
     });
   };
 
@@ -550,9 +633,13 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         let itemValorTotal = precoEfetivo * item.quantidade;
         let itemCustoTotal = (prod.custo || 0) * item.quantidade;
         
+        let qtyMatch = prod.nome.match(/\((\d+)x(\d+)\)/);
+        let qtdFardo = qtyMatch ? parseInt(qtyMatch[2]) : 1;
+        let pesoUnitario = (prod.quantidade_unidade || 1) / qtdFardo;
+
         let itemPesoTotal = (prod.unidade === 'g') 
-          ? (item.quantidade * (prod.quantidade_unidade || 1)) / 1000
-          : item.quantidade * (prod.quantidade_unidade || 1);
+          ? (item.quantidade * (item.unidade_venda === 'unidade' ? pesoUnitario : (prod.quantidade_unidade || 1))) / 1000
+          : item.quantidade * (item.unidade_venda === 'unidade' ? pesoUnitario : (prod.quantidade_unidade || 1));
 
         valor_total += itemValorTotal;
         custo_total += itemCustoTotal;
@@ -804,8 +891,8 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
           valor_total: cartSummary.valor_total,
           status: "Orçamento",
           condicao_pagamento: formData.condicao_pagamento,
-          prazo_entrega: `${formData.prazo_entrega} dias`,
-          prazo_pagamento_dias: formData.prazo_pagamento_dias ? Number(formData.prazo_pagamento_dias) : undefined,
+          prazo_entrega: formData.prazo_entrega,
+          data_vencimento: formData.data_vencimento,
           observacoes: formData.observacoes,
         });
       if (success) {
@@ -855,11 +942,11 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
           custo_total: fromOrcamento.valor_total * 0.4, // Estimate 40%
           margem: 60.00, // Safe percentage margin (60.00% instead of absolute amount which overflows on values >= 1000)
           status: "Aguardando Produção",
-          observacoes: `[OrcamentoID:${fromOrcamento.id}] ${fromOrcamento.observacoes || ""}`,
+          observacoes: fromOrcamento.observacoes || "",
           previsao_entrega: "",
           condicao_pagamento: fromOrcamento.condicao_pagamento,
           prazo_entrega: fromOrcamento.prazo_entrega,
-          prazo_pagamento_dias: (fromOrcamento as any).prazo_pagamento_dias
+          data_vencimento: (fromOrcamento as any).data_vencimento
         });
         if (success) {
           await updateOrcamento(fromOrcamento.id, { status: "Convertido em Pedido" });
@@ -890,8 +977,8 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
           observacoes: formData.observacoes,
           previsao_entrega: "",
           condicao_pagamento: formData.condicao_pagamento,
-          prazo_entrega: `${formData.prazo_entrega} dias`,
-          prazo_pagamento_dias: formData.prazo_pagamento_dias ? Number(formData.prazo_pagamento_dias) : undefined
+          prazo_entrega: formData.prazo_entrega,
+          data_vencimento: formData.data_vencimento
         });
         if (success) {
           setIsModalOpen(false);
@@ -1451,15 +1538,24 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                           )}
 
                         {item.type === "Pedido" && (
-                          <button
-                            onClick={() =>
-                              handleOpenVisualizarPedido(item.data as Pedido)
-                            }
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors tooltip-trigger"
-                            title="Ver Pedido"
-                          >
-                            <Eye size={16} />
-                          </button>
+                          <>
+                            <button
+                              onClick={() =>
+                                handleOpenVisualizarPedido(item.data as Pedido)
+                              }
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors tooltip-trigger"
+                              title="Ver Pedido"
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleOpenEditarPedido(item.data as Pedido)}
+                              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors tooltip-trigger"
+                              title="Editar Pedido"
+                            >
+                              <Edit size={16} />
+                            </button>
+                          </>
                         )}
 
                         {item.type === "Orcamento" && (
@@ -1553,13 +1649,13 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       </div>
 
       {/* Creation Modal */}
-      {isModalOpen && (modalType === "Novo" || modalType === "Editar Orcamento") && (
+      {isModalOpen && (modalType === "Novo" || modalType === "Editar Orcamento" || modalType === "Editar Pedido") && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 bg-primary/40 backdrop-blur-sm">
           <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-6xl h-[90vh] overflow-hidden flex flex-col scale-in">
             <div className="p-6 bg-white border-b border-gray-100 flex justify-between items-center shrink-0">
               <div>
                 <h2 className="text-2xl font-black tracking-tight text-gray-900">
-                  {modalType === "Editar Orcamento" ? `Editar Orçamento #${selectedItem?.id.split("_")[1] || ""}` : "Novo Pedido/Orçamento"}
+                  {modalType === "Editar Orcamento" ? `Editar Orçamento #${selectedItem?.id.split("_")[1] || ""}` : modalType === "Editar Pedido" ? `Editar Pedido #${selectedItem?.id.split("_")[1] || ""}` : "Novo Pedido/Orçamento"}
                 </h2>
               </div>
               <button
@@ -1574,7 +1670,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
               <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                   <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
+                    <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-3 block">
                       Cliente
                     </label>
                     <select
@@ -1582,7 +1678,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                       onChange={(e) =>
                         setFormData({ ...formData, cliente_id: e.target.value })
                       }
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold opacity-90 focus:border-primary outline-none"
+                      className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-base font-bold text-gray-900 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
                     >
                       <option value="">Selecione o Cliente</option>
                       {clientes.map((c) => (
@@ -1593,7 +1689,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
+                    <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-3 block">
                       Representante (Opcional)
                     </label>
                     <select
@@ -1604,7 +1700,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                           representante_id: e.target.value,
                         })
                       }
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold opacity-90 focus:border-primary outline-none"
+                      className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-base font-bold text-gray-900 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
                     >
                       <option value="">Sem Representante / Gerente</option>
                       {usuarios
@@ -1618,9 +1714,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                   <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
+                    <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-3 block">
                       Condição de Pagamento
                     </label>
                     <select
@@ -1628,7 +1724,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                       onChange={(e) =>
                         setFormData({ ...formData, condicao_pagamento: e.target.value })
                       }
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold focus:border-primary outline-none"
+                      className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-base font-bold text-gray-900 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
                     >
                       <option value="A Combinar">A Combinar</option>
                       <option value="Boleto">Boleto</option>
@@ -1638,29 +1734,25 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
-                      Prazo Pag. Faturamento (Dias)
+                    <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-3 block">
+                      Data de Vencimento
                     </label>
                     <input
-                      type="number"
-                      min="0"
-                      placeholder="Ex: 30"
-                      value={formData.prazo_pagamento_dias}
-                      onChange={(e) => setFormData({ ...formData, prazo_pagamento_dias: e.target.value })}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold focus:border-primary outline-none"
+                      type="date"
+                      value={formData.data_vencimento}
+                      onChange={(e) => setFormData({ ...formData, data_vencimento: e.target.value })}
+                      className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-base font-bold text-gray-900 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
-                      Prazo de Entrega (Dias)
+                    <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-3 block">
+                      Data de Entrega
                     </label>
                     <input
-                      type="number"
-                      min="0"
+                      type="date"
                       value={formData.prazo_entrega}
                       onChange={(e) => setFormData({ ...formData, prazo_entrega: e.target.value })}
-                      placeholder="Ex: 15"
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold focus:border-primary outline-none"
+                      className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-base font-bold text-gray-900 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
                     />
                   </div>
                 </div>
@@ -1680,16 +1772,18 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   />
                 </div>
 
-                <div className="mt-8 border-t border-gray-100 pt-6">
-                  <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">
-                    Adicionar Produto
-                  </h3>
+                <div className="mt-8 border-t border-gray-100 pt-8">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                      <PlusCircle className="text-emerald-600" size={18} /> Adicionar Produto ao Carrinho
+                    </h3>
+                  </div>
 
-                  <div className="space-y-4">
+                  <div className="bg-gray-50/50 p-8 rounded-[32px] border border-gray-100 space-y-8">
                     {/* Step 1: Selection by Name */}
-                    <div className="flex flex-col sm:flex-row gap-3 items-end">
-                      <div className="flex-1">
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 shadow-xs block">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="md:col-span-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
                           Selecione o Produto
                         </label>
                         <select
@@ -1697,46 +1791,49 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                           onChange={(e) =>
                             handleSelectItemProduto(e.target.value)
                           }
-                          className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2 text-sm font-bold opacity-90 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none transition-all"
+                          className="w-full bg-white border border-gray-200 rounded-2xl px-5 py-3.5 text-base font-bold text-gray-900 shadow-sm focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all"
                         >
                           <option value="">Selecione o Produto</option>
                           {produtos.map((p) => (
                             <option key={p.id} value={p.id}>
-                              {p.nome} (
-                              {p.codigo || p.id.substring(0, 6).toUpperCase()})
+                              {p.nome} ({p.codigo || p.id.substring(0, 6).toUpperCase()})
                             </option>
                           ))}
                         </select>
                       </div>
 
-                      {/* Venda / Bonificação Toggle */}
-                      <div className="flex bg-gray-100 p-1 rounded-xl gap-1">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setNewItem({ ...newItem, tipo: "venda" })
-                          }
-                          className={`px-4 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${
-                            newItem.tipo === "venda"
-                              ? "bg-white text-emerald-800 shadow-sm"
-                              : "text-gray-400 hover:text-gray-600"
-                          }`}
-                        >
-                          Venda
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setNewItem({ ...newItem, tipo: "bonificacao" })
-                          }
-                          className={`px-4 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${
-                            newItem.tipo === "bonificacao"
-                              ? "bg-white text-blue-800 shadow-sm"
-                              : "text-gray-400 hover:text-gray-600"
-                          }`}
-                        >
-                          Bonificação
-                        </button>
+                      <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
+                          Tipo de Operação
+                        </label>
+                        <div className="flex bg-white border border-gray-200 p-1.5 rounded-2xl gap-1 shadow-sm">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setNewItem({ ...newItem, tipo: "venda" })
+                            }
+                            className={`flex-1 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all ${
+                              newItem.tipo === "venda"
+                                ? "bg-emerald-600 text-white shadow-md"
+                                : "text-gray-400 hover:bg-gray-50"
+                            }`}
+                          >
+                            Venda
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setNewItem({ ...newItem, tipo: "bonificacao" })
+                            }
+                            className={`flex-1 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all ${
+                              newItem.tipo === "bonificacao"
+                                ? "bg-blue-600 text-white shadow-md"
+                                : "text-gray-400 hover:bg-gray-50"
+                            }`}
+                          >
+                            Bonificação
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -1747,137 +1844,157 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                           (x) => x.id === newItem.produto_id,
                         );
                         if (!p) return null;
+
+                        const qtyMatch = p.nome.match(/\((\d+)x(\d+)\)/);
+                        const qtdFardo = qtyMatch ? parseInt(qtyMatch[2]) : 1;
+                        const precoFardo = p.preco_base || 0;
+                        const precoUnitario = qtdFardo > 0 ? precoFardo / qtdFardo : precoFardo;
+                        const pesoFardo = p.quantidade_unidade || 0;
+                        const pesoUnitario = qtdFardo > 0 ? pesoFardo / qtdFardo : pesoFardo;
+
+                        const precoAtual = newItem.unidade_venda === 'unidade' ? precoUnitario : precoFardo;
+                        const pesoAtual = newItem.unidade_venda === 'unidade' ? pesoUnitario : pesoFardo;
+
                         return (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-fadeIn">
-                            {/* Panel Information (Read-only attributes) */}
-                            <div className="lg:col-span-4 grid grid-cols-2 lg:grid-cols-3 gap-3 bg-gray-50 border border-gray-200 p-4 rounded-2xl">
-                              <div>
-                                <span className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">
-                                  Nome
-                                </span>
-                                <span className="text-sm font-black text-gray-800 block truncate">
-                                  {p.nome}
-                                </span>
+                          <div className="space-y-8 animate-fadeIn">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                              {/* Left side: Product Info Card */}
+                              <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm flex flex-col justify-center">
+                                <div className="flex items-center gap-4 mb-4">
+                                  <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600">
+                                    <Package size={24} />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-lg font-black text-gray-900 leading-tight">
+                                      {p.nome}
+                                    </h4>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                      Código: {p.codigo || p.id.substring(0, 6)}
+                                    </p>
+                                  </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-4 mt-2">
+                                  <div className="bg-gray-50 p-3 rounded-xl">
+                                    <span className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                                      {newItem.unidade_venda === 'unidade' ? 'Peso por Unidade' : 'Peso do Fardo/Cx'}
+                                    </span>
+                                    <span className="text-sm font-black text-gray-700">
+                                      {pesoAtual.toFixed(2)} kg
+                                    </span>
+                                  </div>
+                                  <div className="bg-gray-50 p-3 rounded-xl">
+                                    <span className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                                      {newItem.unidade_venda === 'unidade' ? 'Preço da Unidade' : 'Preço do Fardo/Cx'}
+                                    </span>
+                                    <span className="text-sm font-black text-emerald-700">R$ {formatCurrency(precoAtual)}</span>
+                                  </div>
+                                </div>
                               </div>
-                              <div>
-                                <span className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">
-                                  Unidade / Peso
-                                </span>
-                                <span className="text-xs font-bold text-gray-600 block">
-                                  {p.unidade} - {p.quantidade_unidade || 1}
-                                </span>
-                              </div>
-                              <div>
-                                <span className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">
-                                  Preço de Venda
-                                </span>
-                                <span className="text-sm font-black text-emerald-700 block">
-                                  R$ {formatCurrency(p.preco_base)}
-                                </span>
+
+                              {/* Right side: Selection Details */}
+                              <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm space-y-6">
+                                <div>
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 block text-center">
+                                    Vender como:
+                                  </label>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                      type="button"
+                                      onClick={() => setNewItem({...newItem, unidade_venda: 'unidade'})}
+                                      className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 ${
+                                        newItem.unidade_venda === 'unidade'
+                                          ? "border-emerald-600 bg-emerald-50"
+                                          : "border-gray-100 hover:border-gray-200"
+                                      }`}
+                                    >
+                                      <span className={`text-xs font-black ${newItem.unidade_venda === 'unidade' ? "text-emerald-700" : "text-gray-500"}`}>UNIDADE</span>
+                                      <span className="text-[10px] font-bold text-gray-400">R$ {formatCurrency(precoUnitario)}</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setNewItem({...newItem, unidade_venda: 'fardo'})}
+                                      className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 ${
+                                        newItem.unidade_venda === 'fardo'
+                                          ? "border-emerald-600 bg-emerald-50"
+                                          : "border-gray-100 hover:border-gray-200"
+                                      }`}
+                                    >
+                                      <span className={`text-xs font-black ${newItem.unidade_venda === 'fardo' ? "text-emerald-700" : "text-gray-500"}`}>FARDO / CX</span>
+                                      <span className="text-[10px] font-bold text-gray-400">R$ {formatCurrency(precoFardo)}</span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Qtd. Pedida</label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={newItem.quantidade}
+                                      onChange={(e) => setNewItem({...newItem, quantidade: Number(e.target.value)})}
+                                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-lg font-black text-gray-900 focus:bg-white focus:border-emerald-600 outline-none transition-all"
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Desconto (Unit.)</label>
+                                    <div className="relative">
+                                      <input
+                                        type="text"
+                                        disabled={newItem.tipo === "bonificacao"}
+                                        value={newItem.desconto === 0 ? "" : newItem.desconto}
+                                        onChange={(e) => {
+                                          const val = e.target.value.replace(",", ".");
+                                          if (val === "") {
+                                            setNewItem({ ...newItem, desconto: 0 });
+                                          } else if (!isNaN(Number(val))) {
+                                            setNewItem({ ...newItem, desconto: Number(val) });
+                                          }
+                                        }}
+                                        className={`w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-lg font-black text-red-600 focus:bg-white focus:border-red-500 outline-none transition-all ${newItem.tipo === "bonificacao" ? "opacity-50 cursor-not-allowed" : ""}`}
+                                        placeholder="0.00"
+                                      />
+                                      <DollarSign size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             </div>
 
-                            {/* Inputs for adding to cart */}
-                            <div className="flex flex-col gap-1.5">
-                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block px-1">
-                                Qtd. Pedida
-                              </label>
-                              <div className="relative">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={newItem.quantidade}
-                                  onChange={(e) =>
-                                    setNewItem({
-                                      ...newItem,
-                                      quantidade: Number(e.target.value),
-                                    })
-                                  }
-                                  className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm font-black text-gray-900 focus:border-emerald-600 outline-none"
-                                />
+                            {/* Applied values preview Banner */}
+                            <div className="bg-white border-2 border-dashed border-gray-200 rounded-[32px] p-6 flex flex-col md:flex-row justify-between items-center gap-6">
+                              <div className="grid grid-cols-3 gap-8 flex-1 w-full md:w-auto">
+                                <div>
+                                  <span className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Preço Efetivo</span>
+                                  <span className="text-xl font-black text-gray-900">
+                                    R$ {(newItem.tipo === "bonificacao" ? 0 : precoAtual - (newItem.desconto || 0)).toFixed(2)}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Subtotal Item</span>
+                                  <span className="text-xl font-black text-emerald-700">
+                                    R$ {((newItem.tipo === "bonificacao" ? 0 : precoAtual - (newItem.desconto || 0)) * newItem.quantidade).toFixed(2)}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Peso Total</span>
+                                  <span className="text-xl font-black text-blue-700">
+                                    {(newItem.quantidade * pesoAtual).toFixed(2)} kg
+                                  </span>
+                                </div>
                               </div>
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block px-1">
-                                Área de Desconto (Unitário)
-                              </label>
-                              <div className="relative">
-                                <input
-                                  type="text"
-                                  disabled={newItem.tipo === "bonificacao"}
-                                  value={newItem.desconto === 0 ? "" : newItem.desconto}
-                                  onChange={(e) => {
-                                    const val = e.target.value.replace(",", ".");
-                                    if (val === "") {
-                                      setNewItem({ ...newItem, desconto: 0 });
-                                    } else if (!isNaN(Number(val))) {
-                                      setNewItem({ ...newItem, desconto: Number(val) });
-                                    }
-                                  }}
-                                  className={`w-full bg-white border border-gray-300 rounded-xl px-9 py-2.5 text-sm font-black text-red-600 focus:border-red-500 outline-none ${newItem.tipo === "bonificacao" ? "bg-gray-100 opacity-50 cursor-not-allowed" : ""}`}
-                                  placeholder="0.00"
-                                />
-                                <DollarSign
-                                  size={14}
-                                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="md:col-span-2 flex items-end">
+                              
                               <button
                                 onClick={handleAddItem}
-                                className={`w-full h-[46px] rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-md ${
+                                className={`w-full md:w-auto px-10 h-16 rounded-[20px] font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-xl hover:scale-[1.02] active:scale-95 ${
                                   newItem.tipo === "venda"
-                                    ? "bg-emerald-800 hover:bg-emerald-900 text-white"
-                                    : "bg-blue-800 hover:bg-blue-900 text-white"
+                                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    : "bg-blue-600 hover:bg-blue-700 text-white"
                                 }`}
                               >
-                                <Plus size={16} /> Adicionar ao Pedido
+                                <Plus size={24} /> Adicionar ao Pedido
                               </button>
-                            </div>
-
-                            {/* Applied values preview */}
-                            <div className="lg:col-span-4 pt-2 border-t border-dashed border-gray-200 mt-2 flex flex-wrap justify-between items-center text-[10px] font-bold gap-2">
-                              <div className="flex gap-4 flex-wrap">
-                                <span className="text-gray-400">
-                                  Preço Unit. Efetivo:{" "}
-                                  <span className="text-gray-900">
-                                    R${" "}
-                                    {(newItem.tipo === "bonificacao"
-                                      ? 0
-                                      : p.preco_base - (newItem.desconto || 0)
-                                    ).toFixed(2)}
-                                  </span>
-                                </span>
-                                <span className="text-gray-400">
-                                  Total do Item:{" "}
-                                  <span className="text-emerald-700 font-extrabold">
-                                    R${" "}
-                                    {(
-                                      (newItem.tipo === "bonificacao"
-                                        ? 0
-                                        : p.preco_base - (newItem.desconto || 0)) *
-                                      newItem.quantidade
-                                    ).toFixed(2)}
-                                  </span>
-                                </span>
-                                <span className="text-gray-400">
-                                  Peso Total:{" "}
-                                  <span className="text-blue-700 font-extrabold">
-                                    {(p.unidade === 'g' 
-                                      ? (newItem.quantidade * (p.quantidade_unidade || 1)) / 1000
-                                      : newItem.quantidade * (p.quantidade_unidade || 1)
-                                    ).toFixed(2)} kg
-                                  </span>
-                                </span>
-                              </div>
-                              <span
-                                className={`px-2 py-0.5 rounded text-[8px] uppercase tracking-tighter ${newItem.tipo === "venda" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}
-                              >
-                                Operação: {newItem.tipo}
-                              </span>
                             </div>
                           </div>
                         );
@@ -1932,16 +2049,30 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                                       {p?.nome || "Produto Removido"}
                                     </span>
                                     <span className="text-gray-400 text-[10px] font-semibold">
-                                      Peso: {p ? (p.unidade === 'g' 
-                                        ? ((item.quantidade * (p.quantidade_unidade || 1)) / 1000).toFixed(2)
-                                        : (item.quantidade * (p.quantidade_unidade || 1)).toFixed(2)
-                                      ) : '0.00'} kg
+                                      {(() => {
+                                        if (!p) return "0.00 kg";
+                                        const qtyMatch = p.nome.match(/\((\d+)x(\d+)\)/);
+                                        const qtdFardo = qtyMatch ? parseInt(qtyMatch[2]) : 1;
+                                        const pesoUnitario = (p.quantidade_unidade || 1) / qtdFardo;
+                                        const pesoBase = item.unidade_venda === 'unidade' ? pesoUnitario : (p.quantidade_unidade || 1);
+                                        
+                                        const pesoTotal = (p.unidade === 'g') 
+                                          ? (item.quantidade * pesoBase) / 1000
+                                          : item.quantidade * pesoBase;
+                                        
+                                        return `Peso: ${pesoTotal.toFixed(2)} kg`;
+                                      })()}
                                     </span>
-                                    <span
-                                      className={`text-[9px] font-black uppercase tracking-tighter ${item.tipo === "venda" ? "text-emerald-600" : "text-blue-600"}`}
-                                    >
-                                      {item.tipo || "venda"}
-                                    </span>
+                                    <div className="flex gap-1 mt-0.5">
+                                      <span
+                                        className={`text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded ${item.tipo === "venda" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}
+                                      >
+                                        {item.tipo || "venda"}
+                                      </span>
+                                      <span className="text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                        {item.unidade_venda === 'unidade' ? 'unidade' : 'fardo'}
+                                      </span>
+                                    </div>
                                   </div>
                                 </td>
                                 <td className="py-4 font-black text-gray-900 text-xs text-center bg-gray-50/50">
@@ -2035,9 +2166,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                     </div>
 
                     <div className="mt-8 flex flex-col gap-3">
-                      {modalType === "Editar Orcamento" ? (
+                      {(modalType === "Editar Orcamento" || modalType === "Editar Pedido") ? (
                         <button
-                          onClick={handleSalvarEditarOrcamento}
+                          onClick={modalType === "Editar Pedido" ? handleSalvarEditarPedido : handleSalvarEditarOrcamento}
                           disabled={isSaving}
                           className={`w-full text-primary font-black text-sm uppercase tracking-widest py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${isSaving ? "bg-accent/55 cursor-not-allowed text-primary/50" : "bg-accent hover:bg-accent/90"}`}
                         >
@@ -2070,396 +2201,304 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         </div>
       )}
 
-      {/* Proposal Visualizer */}
-      {isModalOpen && modalType === "Visualizar Orcamento" && selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 bg-primary/40 backdrop-blur-sm">
-          <div
-            className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col scale-in relative"
-            id="print-area"
-          >
-            <div className="p-8 bg-gray-50 border-b border-gray-100 flex justify-between items-start hide-on-print shrink-0">
-              <div>
-                <h2 className="text-2xl font-black tracking-tight text-gray-900">
-                  Orçamento #{selectedItem.id.split("_")[1]}
-                </h2>
-                <p className="text-sm font-medium text-gray-500 mt-1">
-                  Data:{" "}
-                  {new Date(selectedItem.data).toLocaleDateString("pt-BR")}
-                </p>
-              </div>
-              <div className="flex gap-2">
+      {/* Universal Document Visualizer (Orcamento & Pedido) */}
+      {isModalOpen && (modalType === "Visualizar Orcamento" || modalType === "Visualizar Pedido") && selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-6xl h-[90vh] overflow-hidden flex flex-col lg:flex-row scale-in relative" id="print-area">
+            
+            {/* Left Panel: Options & Actions */}
+            <div className="w-full lg:w-[400px] border-r border-gray-200 bg-gray-50 flex flex-col shrink-0">
+              <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-white">
+                <div>
+                  <h3 className="text-xl font-black text-gray-900 tracking-tight">Opções de Exportação</h3>
+                  <p className="text-xs text-gray-500 font-medium mt-1">Configurações do PDF</p>
+                </div>
                 <button
-                  onClick={() => {
-                    setExportOptionsModal({
-                      isOpen: true,
-                      includeCondicao: true,
-                      includePrazo: true,
-                      nomeDocumento: "Orçamento",
-                      selectedItem: selectedItem as Orcamento,
-                    });
+                  onClick={() => setIsModalOpen(false)}
+                  className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto flex-1 space-y-6">
+                <div className="flex flex-col gap-2 p-4 bg-white border border-gray-200/80 rounded-2xl shadow-sm">
+                  <span className="text-xs font-bold text-gray-800 text-left">Título do Documento</span>
+                  <div className="flex flex-col gap-3 mt-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="nomeDocumento"
+                        value="Orçamento"
+                        checked={exportOptionsModal.nomeDocumento === "Orçamento"}
+                        onChange={(e) => setExportOptionsModal({ ...exportOptionsModal, nomeDocumento: "Orçamento" })}
+                        className="accent-emerald-700"
+                      />
+                      <span className="text-sm text-gray-700 font-medium">Orçamento</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="nomeDocumento"
+                        value="Pedido Sugestivo"
+                        checked={exportOptionsModal.nomeDocumento === "Pedido Sugestivo"}
+                        onChange={(e) => setExportOptionsModal({ ...exportOptionsModal, nomeDocumento: "Pedido Sugestivo" })}
+                        className="accent-emerald-700"
+                      />
+                      <span className="text-sm text-gray-700 font-medium">Pedido Sugestivo</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="nomeDocumento"
+                        value="Pedido"
+                        checked={exportOptionsModal.nomeDocumento === "Pedido"}
+                        onChange={(e) => setExportOptionsModal({ ...exportOptionsModal, nomeDocumento: "Pedido" })}
+                        className="accent-emerald-700"
+                      />
+                      <span className="text-sm text-gray-700 font-medium">Pedido</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 p-4 bg-white border border-gray-200/80 rounded-2xl shadow-sm">
+                  <label className="text-xs font-bold text-gray-800 text-left block mb-2">
+                    Logomarca do PDF
+                  </label>
+                  <label className="flex items-center gap-3 p-3 bg-white border border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-emerald-700/50 transition-colors">
+                    {logoSrc ? (
+                      <div className="w-8 h-8 rounded overflow-hidden flex items-center justify-center bg-gray-50 border shrink-0">
+                        <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
+                      </div>
+                    ) : (
+                      <div className="w-8 h-8 rounded bg-gray-50 border flex items-center justify-center text-gray-400 shrink-0">
+                        <Upload size={14} />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="text-sm font-bold text-gray-900">{logoSrc ? 'Logo carregada' : 'Adicionar Logo'}</p>
+                      <p className="text-[10px] text-gray-500 font-medium">Clique para {logoSrc ? 'alterar' : 'enviar'} imagem</p>
+                    </div>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            const result = reader.result as string;
+                            setLogoSrc(result);
+                            localStorage.setItem('savedLogo', result);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }} 
+                    />
+                  </label>
+                  {logoSrc && (
+                     <button onClick={() => { setLogoSrc(null); localStorage.removeItem('savedLogo'); }} className="text-[10px] text-red-500 font-bold mt-2 hover:underline text-left">Remover logomarca</button>
+                  )}
+                </div>
+
+                <label className="flex items-center gap-3 p-4 bg-white hover:bg-gray-50 border border-gray-200/80 rounded-2xl cursor-pointer transition-all shadow-sm">
+                  <input
+                    type="checkbox"
+                    checked={exportOptionsModal.includeCondicao}
+                    onChange={(e) => setExportOptionsModal({ ...exportOptionsModal, includeCondicao: e.target.checked })}
+                    className="w-5 h-5 accent-emerald-700 rounded border-gray-300"
+                  />
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs font-bold text-gray-800">Condição de Pagamento</span>
+                    <span className="text-[10px] text-gray-400 font-semibold text-left">
+                      {selectedItem.condicao_pagamento || "A Combinar"}
+                    </span>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 p-4 bg-white hover:bg-gray-50 border border-gray-200/80 rounded-2xl cursor-pointer transition-all shadow-sm">
+                  <input
+                    type="checkbox"
+                    checked={exportOptionsModal.includePrazo}
+                    onChange={(e) => setExportOptionsModal({ ...exportOptionsModal, includePrazo: e.target.checked })}
+                    className="w-5 h-5 accent-emerald-700 rounded border-gray-300"
+                  />
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs font-bold text-gray-800">Prazo de Entrega</span>
+                    <span className="text-[10px] text-gray-400 font-semibold text-left">
+                      {selectedItem.prazo_entrega || "A Combinar"}
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              <div className="p-6 bg-white border-t border-gray-200 hide-on-print flex flex-col gap-3 shrink-0">
+                <button
+                  onClick={async () => {
+                    await handleDownloadPDF(
+                      modalType === "Visualizar Orcamento" ? "Orcamento" : "Pedido",
+                      modalType === "Visualizar Orcamento" ? "Orcamento" : "Pedido",
+                      exportOptionsModal.includeCondicao,
+                      exportOptionsModal.includePrazo,
+                      exportOptionsModal.nomeDocumento === "Pedido Sugestivo"
+                        ? "PEDIDO SUGESTIVO"
+                        : exportOptionsModal.nomeDocumento === "Pedido"
+                        ? "PEDIDO"
+                        : "ORÇAMENTO DE VENDA"
+                    );
                   }}
                   disabled={isGeneratingPDF}
-                  className={`w-10 h-10 border rounded-full flex items-center justify-center transition-all shadow-sm tooltip-trigger ${
-                    isGeneratingPDF ? "bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                  className={`w-full py-4 font-black text-xs uppercase tracking-widest rounded-xl shadow-md transition-all flex items-center justify-center gap-2 ${
+                    isGeneratingPDF ? "bg-emerald-800/50 text-white/50 cursor-not-allowed" : "bg-emerald-800 text-white hover:bg-emerald-900"
                   }`}
-                  title="Exportar Orçamento"
                 >
-                  <Printer size={18} />
-                </button>
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-all"
-                >
-                  <X size={20} />
+                  <Download size={16} />
+                  {isGeneratingPDF ? "Gerando..." : "Exportar PDF"}
                 </button>
               </div>
             </div>
 
-            <div className="p-12 overflow-y-auto print-content bg-white flex-1 animate-fadeIn">
-              <div className="hidden print-header mb-8 text-center pb-8 border-b-2 border-gray-200 font-sans">
-                <h1 className="text-3xl font-black uppercase tracking-tighter text-gray-900">
-                  GRUPO ENO
-                </h1>
-                <p className="text-sm text-gray-500 tracking-widest uppercase font-bold mt-1">
-                  Orçamento Comercial
-                </p>
+            {/* Right Panel: HTML Mockup Preview */}
+            <div className="flex-1 bg-gray-200 relative flex flex-col items-center p-8 overflow-y-auto">
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-gray-900/80 backdrop-blur-md text-white px-4 py-2 rounded-full text-xs font-bold tracking-widest uppercase z-10 shadow-xl hidden lg:block">
+                Pré-visualização do Documento
               </div>
-
-              <div className="mb-10 font-sans">
-                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
-                  Dados do Cliente
-                </h3>
-                <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="font-black text-gray-900 text-lg mb-1">
-                      {clientes.find((c) => c.id === selectedItem.cliente_id)?.razao_social}
-                    </p>
-                    <p className="text-sm text-gray-600 font-medium">
-                      CNPJ: {clientes.find((c) => c.id === selectedItem.cliente_id)?.cnpj_cpf}
-                    </p>
-                    <p className="text-sm text-gray-600 font-medium capitalize">
-                      Cidade: {clientes.find((c) => c.id === selectedItem.cliente_id)?.cidade} - {clientes.find((c) => c.id === selectedItem.cliente_id)?.estado}
-                    </p>
+              
+              <div className="bg-white shadow-2xl mt-8 mb-8 text-black w-full max-w-[800px] shrink-0 print-content" style={{ minHeight: '1122px' }}>
+                {/* Header (Mocks the jsPDF styling) */}
+                <div className="p-[40px] pb-6 flex items-center justify-between" style={{ backgroundColor: '#1b4332', color: 'white' }}>
+                  <div className="flex items-center gap-4">
+                    {logoSrc && (
+                      <div className="w-[60px] h-[60px] bg-white/10 rounded overflow-hidden flex items-center justify-center p-1 shrink-0">
+                        <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
+                      </div>
+                    )}
+                    <div>
+                      <h1 className="text-[28px] font-bold tracking-tight">ESTÂNCIA NOVA OLINDA</h1>
+                      <p className="text-[16px] font-medium opacity-90 mt-1 uppercase tracking-widest">
+                        {exportOptionsModal.nomeDocumento === "Pedido Sugestivo"
+                          ? "PEDIDO SUGESTIVO"
+                          : exportOptionsModal.nomeDocumento === "Pedido"
+                          ? "PEDIDO"
+                          : "ORÇAMENTO DE VENDA"}
+                      </p>
+                    </div>
                   </div>
-                  <div className="md:border-l md:pl-6 border-gray-200">
-                    <p className="text-sm font-bold text-gray-700">Condições Comerciais:</p>
-                    <p className="text-xs text-gray-600 mt-1"><strong>Pagamento:</strong> {selectedItem.condicao_pagamento || selectedItem.forma_pagamento_nf || "A Combinar"}</p>
-                    {(selectedItem as any).prazo_pagamento_dias !== undefined && (
-                      <p className="text-xs text-gray-600 mt-1"><strong>Prazo Pag. Faturamento:</strong> {(selectedItem as any).prazo_pagamento_dias} dias</p>
-                    )}
-                    {(selectedItem as any).data_vencimento && (
-                      <p className="text-xs text-gray-600 mt-1"><strong>Vencimento:</strong> {new Date((selectedItem as any).data_vencimento).toLocaleDateString("pt-BR", { timeZone: 'UTC' })}</p>
-                    )}
-                    <p className="text-xs text-gray-600 mt-1">
-                      <strong>Prazo de Entrega:</strong> {selectedItem.prazo_entrega || "A Combinar"}
-                    </p>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm opacity-80">Data: {new Date(selectedItem.data).toLocaleDateString("pt-BR")}</p>
+                    <p className="text-sm opacity-80 mt-1">Nº {selectedItem.id.split("_")[1] || selectedItem.id.substring(0, 8)}</p>
                   </div>
                 </div>
-              </div>
 
-              {/* Section 3: Removida conforme solicitação do usuário
-              {selectedItem.observacoes && (
-                <div className="mb-10 font-sans">
-                  <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
-                    Observações
-                  </h3>
-                  <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-100">
-                    <p className="text-sm text-gray-700 italic">{selectedItem.observacoes}</p>
+                <div className="p-[40px] pt-6 font-sans">
+                  {/* Client Data */}
+                  <div className="mb-8 border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 font-bold text-xs uppercase tracking-widest text-gray-700">
+                      Dados do Cliente
+                    </div>
+                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <p className="font-bold text-gray-900 text-sm mb-1">
+                          {clientes.find((c) => c.id === selectedItem.cliente_id)?.razao_social || "Desconhecido"}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          CNPJ/CPF: {clientes.find((c) => c.id === selectedItem.cliente_id)?.cnpj_cpf || "-"}
+                        </p>
+                      </div>
+                      <div className="md:border-l border-gray-200 md:pl-4">
+                        <p className="text-xs text-gray-600 mb-1">
+                          <span className="font-bold">Endereço:</span> {clientes.find((c) => c.id === selectedItem.cliente_id)?.endereco || "-"}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          <span className="font-bold">Cidade/UF:</span> {clientes.find((c) => c.id === selectedItem.cliente_id)?.cidade || "-"} - {clientes.find((c) => c.id === selectedItem.cliente_id)?.estado || "-"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
-              */}
 
-              <div className="font-sans">
-                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
-                  Itens
-                </h3>
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b-2 border-gray-900">
-                      <th className="py-4 text-xs font-black text-gray-900 uppercase tracking-widest">
-                        Produto
-                      </th>
-                      <th className="py-4 text-xs font-black text-gray-900 uppercase tracking-widest text-center">
-                        Qtd
-                      </th>
-                      <th className="py-4 text-xs font-black text-gray-900 uppercase tracking-widest text-right">
-                        Preço Unitário
-                      </th>
-                      <th className="py-4 text-xs font-black text-gray-900 uppercase tracking-widest text-right">
-                        Subtotal
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {selectedItem.items.map((it: any, i: number) => {
-                      const p = produtos.find((x) => x.id === it.produto_id);
-                      return (
-                        <tr key={i}>
-                          <td className="py-4 font-bold text-gray-800">
-                            {p?.nome}
+                  {/* Conditions */}
+                  {(exportOptionsModal.includeCondicao || exportOptionsModal.includePrazo) && (
+                    <div className="mb-8 grid grid-cols-2 gap-4">
+                      {exportOptionsModal.includeCondicao && (
+                        <div className="border border-gray-200 rounded-lg p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Condição de Pagamento</p>
+                          <p className="text-sm font-semibold text-gray-900">{selectedItem.condicao_pagamento || "A Combinar"}</p>
+                        </div>
+                      )}
+                      {exportOptionsModal.includePrazo && (
+                        <div className="border border-gray-200 rounded-lg p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Prazo de Entrega</p>
+                          <p className="text-sm font-semibold text-gray-900">{selectedItem.prazo_entrega ? (/^\d{4}-\d{2}-\d{2}/.test(selectedItem.prazo_entrega) ? new Date(selectedItem.prazo_entrega).toLocaleDateString("pt-BR", { timeZone: 'UTC' }) : selectedItem.prazo_entrega) : "A Combinar"}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Items */}
+                  <div className="mb-8">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr style={{ backgroundColor: '#1b4332', color: 'white' }}>
+                          <th className="p-3 text-xs font-bold w-[45%]">Produto</th>
+                          <th className="p-3 text-xs font-bold w-[15%] text-center">Qtd</th>
+                          <th className="p-3 text-xs font-bold w-[20%] text-right">Preço Un.</th>
+                          <th className="p-3 text-xs font-bold w-[20%] text-right">Subtotal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedItem.items.map((it: any, i: number) => {
+                          const p = produtos.find((x) => x.id === it.produto_id);
+                          const precoEf = it.tipo === 'bonificacao' ? 0 : it.preco - (it.desconto || 0);
+                          return (
+                            <tr key={i} className={i % 2 === 1 ? 'bg-gray-50' : 'bg-white'}>
+                              <td className="p-3 border-b border-gray-100">
+                                <span className="font-bold text-xs text-gray-900">{p?.nome || "Desconhecido"}</span>
+                                {it.tipo === 'bonificacao' && <span className="ml-2 text-[8px] font-black uppercase text-blue-600 bg-blue-50 px-1 py-0.5 rounded">Bonificação</span>}
+                                <span className="block text-[10px] text-gray-500 mt-0.5">
+                                  Peso: {p ? (p.unidade === 'g' ? ((it.quantidade * (p.quantidade_unidade || 1)) / 1000).toFixed(2) : (it.quantidade * (p.quantidade_unidade || 1)).toFixed(2)) : '0.00'} kg
+                                </span>
+                              </td>
+                              <td className="p-3 border-b border-gray-100 font-bold text-gray-900 text-center text-xs">
+                                {it.quantidade}
+                              </td>
+                              <td className="p-3 border-b border-gray-100 font-medium text-gray-700 text-right text-xs whitespace-nowrap">
+                                R$ {formatCurrency(precoEf)}
+                              </td>
+                              <td className="p-3 border-b border-gray-100 font-black text-gray-900 text-right text-xs whitespace-nowrap">
+                                R$ {formatCurrency((it.quantidade * precoEf))}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-gray-800">
+                          <td colSpan={3} className="py-4 font-black text-right tracking-widest uppercase text-gray-600 text-[10px]">
+                            Valor Total do Documento
                           </td>
-                          <td className="py-4 font-medium text-gray-600 text-center">
-                            {it.quantidade}
-                          </td>
-                          <td className="py-4 font-medium text-gray-600 text-right">
-                            R$ {formatCurrency(it.preco)}
-                          </td>
-                          <td className="py-4 font-black text-gray-900 text-right">
-                            R$ {formatCurrency((it.quantidade * it.preco))}
+                          <td className="py-4 font-black text-lg text-right text-gray-900 whitespace-nowrap">
+                            R$ {formatCurrency(selectedItem.valor_total)}
                           </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-gray-900">
-                      <td
-                        colSpan={3}
-                        className="py-6 font-black text-right tracking-widest uppercase text-gray-400 text-sm"
-                      >
-                        Total do Orçamento
-                      </td>
-                      <td className="py-6 font-black text-2xl text-right text-gray-900">
-                        R$ {formatCurrency(selectedItem.valor_total)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
+                      </tfoot>
+                    </table>
+                  </div>
 
-            <div className="p-6 bg-gray-50 border-t border-gray-200 hide-on-print flex flex-col sm:flex-row gap-4 shrink-0">
-              <button
-                onClick={() => {
-                  setIsConfirmOpen({
-                    isOpen: true,
-                    pedId: selectedItem.id,
-                    type: "DeleteOrcamento",
-                    message: "Tem certeza de que realmente deseja deletar este orçamento? Esta ação limpará de forma irreversível qualquer vínculo ou despesa associada."
-                  });
-                  setIsModalOpen(false);
-                }}
-                className="flex-1 px-4 py-4 bg-white border border-red-200 text-red-600 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red-50 transition-all text-center"
-              >
-                Deletar Orçamento
-              </button>
-              <button
-                onClick={() => {
-                  handleOpenEditarOrcamento(selectedItem as Orcamento);
-                }}
-                className="flex-1 px-4 py-4 bg-white border border-blue-200 text-blue-600 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-blue-50 transition-all text-center"
-              >
-                Editar Orçamento
-              </button>
-              <button
-                onClick={() => handleGerarPedido(selectedItem as Orcamento)}
-                disabled={isSaving}
-                className={`flex-[2] px-4 py-4 font-black text-xs uppercase tracking-widest rounded-xl shadow-md transition-all text-center ${isSaving ? "bg-primary/50 text-white/50 cursor-not-allowed" : "bg-primary text-white hover:bg-primary/90"}`}
-              >
-                {isSaving ? "Processando..." : "Gerar Pedido a Partir do Orçamento"}
-              </button>
+                  {selectedItem.observacoes && (
+                    <div className="mt-8 border-t border-gray-200 pt-4">
+                      <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Observações</h3>
+                      <p className="text-sm text-gray-700 italic whitespace-pre-wrap">{selectedItem.observacoes}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
-
-      {/* Pedido Visualizer */}
-      {isModalOpen && modalType === "Visualizar Pedido" && selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 bg-primary/40 backdrop-blur-sm">
-          <div
-            className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col scale-in relative"
-          >
-            <div className="p-8 bg-gray-50 border-b border-gray-100 flex justify-between items-start hide-on-print shrink-0">
-              <div>
-                <h2 className="text-2xl font-black tracking-tight text-gray-900">
-                  Pedido #{selectedItem.id.split("_")[1] || selectedItem.id.substring(0, 6)}
-                </h2>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={`px-2 py-0.5 text-[10px] font-black uppercase rounded ${
-                        selectedItem.status === "Faturado"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-amber-100 text-amber-700"
-                      }`}>
-                    {selectedItem.status}
-                  </span>
-                  <p className="text-sm font-medium text-gray-500">
-                    Data: {new Date(selectedItem.data).toLocaleDateString("pt-BR")}
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleDownloadPDF("Pedido", "Pedido")}
-                  disabled={isGeneratingPDF}
-                  className={`w-10 h-10 border rounded-full flex items-center justify-center transition-all shadow-sm tooltip-trigger ${
-                    isGeneratingPDF ? "bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                  }`}
-                  title="Exportar Pedido"
-                >
-                  <Printer size={18} />
-                </button>
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-all"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-
-            <div id="print-area-pedido-content" className="p-12 overflow-y-auto print-content bg-white flex-1 animate-fadeIn text-gray-900">
-              {/* Header inside print area */}
-              <div className="mb-8 text-center pb-8 border-b-2 border-gray-200 font-sans">
-                <h1 className="text-3xl font-black uppercase tracking-tighter text-gray-900">
-                  ESTÂNCIA NOVA OLINDA
-                </h1>
-                <p className="text-sm text-gray-500 tracking-widest uppercase font-bold mt-1">
-                  Confirmação de Pedido de Venda
-                </p>
-              </div>
-
-              <div className="mb-10 font-sans">
-                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
-                  Dados do Cliente
-                </h3>
-                <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="font-black text-gray-900 text-lg mb-1">
-                      {clientes.find((c) => c.id === selectedItem.cliente_id)?.razao_social}
-                    </p>
-                    <p className="text-sm text-gray-600 font-medium">
-                      CNPJ: {clientes.find((c) => c.id === selectedItem.cliente_id)?.cnpj_cpf}
-                    </p>
-                    <p className="text-sm text-gray-600 font-medium capitalize">
-                      Endereço: {clientes.find((c) => c.id === selectedItem.cliente_id)?.endereco}, {clientes.find((c) => c.id === selectedItem.cliente_id)?.cidade} - {clientes.find((c) => c.id === selectedItem.cliente_id)?.estado}
-                    </p>
-                  </div>
-                  <div className="md:border-l md:pl-6 border-gray-200">
-                    <p className="text-sm font-bold text-gray-700">Previsão e Logística:</p>
-                    <p className="text-xs text-gray-600 mt-1"><strong>Prazo de Entrega:</strong> {selectedItem.prazo_entrega || "A definir"}</p>
-                    {(selectedItem as any).prazo_pagamento_dias !== undefined && (
-                      <p className="text-xs text-gray-600 mt-1"><strong>Prazo Pag. Faturamento:</strong> {(selectedItem as any).prazo_pagamento_dias} dias</p>
-                    )}
-                    {(selectedItem as any).data_vencimento && (
-                      <p className="text-xs text-gray-600 mt-1"><strong>Data de Vencimento:</strong> {new Date((selectedItem as any).data_vencimento).toLocaleDateString("pt-BR", { timeZone: 'UTC' })}</p>
-                    )}
-                    {selectedItem.status === 'Faturado' && (
-                      <p className="text-xs text-gray-600 mt-1"><strong>Nº NF:</strong> {(selectedItem as Pedido).nf_numero || "N/A"}</p>
-                    )}
-                    <p className="text-xs text-gray-600 mt-1"><strong>Vendedor:</strong> {usuarios.find(u => u.id === selectedItem.representante_id)?.nome || "Venda Direta"}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 3: Removida conforme solicitação do usuário
-              {selectedItem.observacoes && (
-                <div className="mb-10 font-sans">
-                  <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
-                    Observações do Pedido
-                  </h3>
-                  <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-100">
-                    <p className="text-sm text-gray-700 italic">{selectedItem.observacoes}</p>
-                  </div>
-                </div>
-              )}
-              */}
-
-              <div className="font-sans">
-                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
-                  Itens do Pedido
-                </h3>
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b-2 border-gray-900">
-                      <th className="py-4 text-xs font-black text-gray-900 uppercase tracking-widest">
-                        Produto
-                      </th>
-                      <th className="py-4 text-xs font-black text-gray-900 uppercase tracking-widest text-center">
-                        Qtd
-                      </th>
-                      <th className="py-4 text-xs font-black text-gray-900 uppercase tracking-widest text-right">
-                        Preço Unit.
-                      </th>
-                      <th className="py-4 text-xs font-black text-gray-900 uppercase tracking-widest text-right">
-                        Subtotal
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {selectedItem.items.map((it: any, i: number) => {
-                      const p = produtos.find((x) => x.id === it.produto_id);
-                      const precoEf = it.tipo === 'bonificacao' ? 0 : it.preco - (it.desconto || 0);
-                      return (
-                        <tr key={i}>
-                          <td className="py-4">
-                            <span className="font-bold text-gray-800">{p?.nome}</span>
-                            {it.tipo === 'bonificacao' && <span className="ml-2 text-[8px] font-black uppercase text-blue-600 bg-blue-50 px-1 py-0.5 rounded">Bonificação</span>}
-                          </td>
-                          <td className="py-4 font-bold text-gray-900 text-center">
-                            {it.quantidade}
-                          </td>
-                          <td className="py-4 font-medium text-gray-600 text-right">
-                            R$ {formatCurrency(precoEf)}
-                          </td>
-                          <td className="py-4 font-black text-gray-950 text-right font-mono">
-                            R$ {formatCurrency((it.quantidade * precoEf))}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-gray-900">
-                      <td
-                        colSpan={3}
-                        className="py-6 font-black text-right tracking-widest uppercase text-gray-400 text-xs"
-                      >
-                        Valor Total do Pedido
-                      </td>
-                      <td className="py-6 font-black text-2xl text-right text-emerald-700 font-mono">
-                        R$ {selectedItem.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              {/* Signature section for printing */}
-              <div className="mt-20 grid grid-cols-2 gap-12 font-sans">
-                <div className="text-center pt-8 border-t border-gray-400">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Assinatura do Cliente</p>
-                  <p className="text-xs font-bold text-gray-800">{clientes.find((c) => c.id === selectedItem.cliente_id)?.razao_social}</p>
-                </div>
-                <div className="text-center pt-8 border-t border-gray-400">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Autorização de Venda</p>
-                  <p className="text-xs font-bold text-gray-800">Estância Nova Olinda</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 bg-gray-50 border-t border-gray-200 hide-on-print flex gap-4 shrink-0">
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="flex-1 px-6 py-4 bg-white border border-gray-200 text-gray-600 font-black text-sm uppercase tracking-widest rounded-xl hover:bg-gray-50 transition-all"
-              >
-                Fechar Visualização
-              </button>
-              <button
-                onClick={() => handleDownloadPDF("Pedido", "Pedido")}
-                disabled={isGeneratingPDF}
-                className={`flex-1 px-6 py-4 text-white font-black text-sm uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center justify-center gap-2 ${
-                  isGeneratingPDF ? "bg-emerald-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"
-                }`}
-              >
-                <Printer size={18} /> {isGeneratingPDF ? "Gerando..." : "Exportar Pedido"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isNfModalOpen && selectedNfPedido && (
+      
+{isNfModalOpen && selectedNfPedido && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 bg-primary/40 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-4xl h-[85vh] overflow-hidden flex flex-col scale-in relative">
             <div className="p-6 bg-gray-50 border-b border-gray-200 flex flex-col sm:flex-row justify-between sm:items-center gap-4 shrink-0 text-left">

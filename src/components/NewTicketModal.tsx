@@ -7,13 +7,32 @@ interface NewTicketModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  initialImages?: string[];
 }
 
-export const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose, onSuccess }) => {
+export const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose, onSuccess, initialImages }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [newTicket, setNewTicket] = useState({ titulo: '', descricao: '' });
   const [ticketImages, setTicketImages] = useState<string[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      if (initialImages && initialImages.length > 0) {
+        setTicketImages(prev => {
+          // Add new images that aren't already in the list
+          const newImages = initialImages.filter(img => !prev.includes(img));
+          const combined = [...prev, ...newImages];
+          // Limit to 2 images max
+          return combined.slice(0, 2);
+        });
+      }
+    } else {
+      // Reset form when modal closes
+      setNewTicket({ titulo: '', descricao: '' });
+      setTicketImages([]);
+    }
+  }, [isOpen, initialImages]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -22,7 +41,7 @@ export const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose,
         return new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
+          reader.readAsDataURL(file as Blob);
         });
       });
 

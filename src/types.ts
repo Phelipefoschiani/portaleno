@@ -58,6 +58,7 @@ export interface ItemPedido {
   tipo?: 'venda' | 'bonificacao';
   desconto?: number;
   quantidade_produzida?: number;
+  unidade_venda?: 'fardo' | 'unidade';
 }
 
 export interface SolicitacaoInsumo {
@@ -80,7 +81,6 @@ export interface Orcamento {
   condicao_pagamento: string;
   prazo_entrega: string;
   data_vencimento?: string;
-  prazo_pagamento_dias?: number;
   previsao_entrega?: string;
   observacoes?: string;
 }
@@ -106,7 +106,6 @@ export interface Pedido {
   previsao_entrega?: string;
   condicao_pagamento?: string;
   prazo_entrega?: string;
-  prazo_pagamento_dias?: number;
   observacoes?: string;
   solicitacoes_insumos?: SolicitacaoInsumo[];
   data_fabricacao?: string;
@@ -148,6 +147,8 @@ export interface Produto {
   estoque_atual: number;
   estoque_minimo: number;
   ativo: boolean;
+  codigo_barras?: string;
+  codigo_barras_unitario?: string;
 }
 
 export interface Despesa {

@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import {  useGlobalState } from '../GlobalStateContext';
 import {  Produto, CustoDiferenciado } from '../types';
 import {  Search, Plus, Edit2, X, Package, Trash2, PieChart, DollarSign, Calculator, ChevronDown, FileText, BarChart2 } from 'lucide-react';
+import { PriceTableModal } from "./PriceTableModal";
 
 const DEFAULT_CUSTO_GRUPOS = ['Matéria Prima', 'Insumos', 'Impostos', 'Comissão', 'Frete', 'Embalagem', 'Outros'];
 
@@ -54,6 +55,7 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPriceTableModalOpen, setIsPriceTableModalOpen] = useState(false);
   const [editingProduto, setEditingProduto] = useState<Produto | null>(null);
   const [deleteConf, setDeleteConf] = useState<string | null>(null);
 
@@ -76,6 +78,21 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
   const [formData, setFormData] = useState<Partial<Produto>>({
     codigo: '', nome: '', unidade: 'kg', quantidade_unidade: 1, preco_base: 0, categoria: 'Geral', ativo: true
   });
+
+  // Packaging Calculator Helpers
+  const [baseUnit, setBaseUnit] = useState<'kg' | 'g' | 'un'>('kg');
+  const [calcUnitWeight, setCalcUnitWeight] = useState<number>(0);
+  const [calcUnitPrice, setCalcUnitPrice] = useState<number>(0);
+  const [calcQty, setCalcQty] = useState<number>(1);
+
+  const updateCalculatedValues = (weight: number, price: number, qty: number, unit: 'kg' | 'g' | 'un' = baseUnit) => {
+    const weightInKg = unit === 'g' ? weight / 1000 : weight;
+    setFormData(prev => ({
+      ...prev,
+      quantidade_unidade: Number((weightInKg * qty).toFixed(3)),
+      preco_base: Number((price * qty).toFixed(2))
+    }));
+  };
 
   const [custos, setCustos] = useState<CustoDiferenciado[]>([]);
   const [novoCustoGrupo, setNovoCustoGrupo] = useState('Matéria Prima');
@@ -310,12 +327,40 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
       setEditingProduto(p);
       setFormData(p);
       setCustos(p.custos_detalhados || []);
+      
+      // Initialize calculator if possible
+      const qty = p.nome.match(/(\d+)x/)?.[1] || "1";
+      const nQty = parseInt(qty);
+      setCalcQty(nQty);
+      
+      // Determine base unit based on weight
+      if (p.quantidade_unidade && p.quantidade_unidade < 1 && p.quantidade_unidade > 0) {
+        setBaseUnit('g');
+        setCalcUnitWeight(Number(((p.quantidade_unidade * 1000) / nQty).toFixed(0)));
+      } else {
+        setBaseUnit('kg');
+        setCalcUnitWeight(Number(((p.quantidade_unidade || 0) / nQty).toFixed(3)));
+      }
+      
+      setCalcUnitPrice(Number(((p.preco_base || 0) / nQty).toFixed(2)));
     } else {
       setEditingProduto(null);
       setFormData({
-        codigo: '', nome: '', unidade: 'kg', quantidade_unidade: 1, preco_base: 0, categoria: 'Geral', ativo: true
+        codigo: '', 
+        nome: '', 
+        unidade: 'cx', 
+        quantidade_unidade: 1, 
+        preco_base: 0, 
+        categoria: 'Geral', 
+        ativo: true,
+        codigo_barras: '',
+        codigo_barras_unitario: ''
       });
       setCustos([]);
+      setBaseUnit('kg');
+      setCalcUnitWeight(0);
+      setCalcUnitPrice(0);
+      setCalcQty(1);
     }
     setDeleteConf(null);
     setIsModalOpen(true);
@@ -450,6 +495,14 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
           >
             <BarChart2 size={18} /> <span className="hidden sm:inline">Relatório</span>
           </button>
+          {(!empresa || empresa === 'estancia') && (
+            <button 
+              onClick={() => setIsPriceTableModalOpen(true)}
+              className="flex items-center justify-center gap-2 px-5 py-3 bg-white border border-gray-200 text-primary font-black text-sm uppercase tracking-widest rounded-xl hover:bg-gray-50 transition-all shadow-sm flex-shrink-0"
+            >
+              <FileText size={18} /> <span className="hidden sm:inline">Tabela de Preço</span>
+            </button>
+          )}
           <button 
             onClick={() => handleOpenForm()}
             className="flex items-center justify-center gap-2 px-5 py-3 bg-primary text-white font-black text-sm uppercase tracking-widest rounded-xl hover:bg-primary/90 transition-all shadow-lg flex-shrink-0"
@@ -470,31 +523,30 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
               <tr className="bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                 <th className="px-6 py-4">Cód.</th>
                 <th className="px-6 py-4">Nome</th>
-                <th className="px-6 py-4 text-center">Unidade</th>
-                <th className="px-6 py-4 text-right">Preço Venda</th>
-                <th className="px-6 py-4 text-right">Custo Total</th>
-                <th className="px-6 py-4 text-right">Margem</th>
+                <th className="px-6 py-4 text-right">Preço Unit.</th>
+                <th className="px-6 py-4 text-center">Qtd/Fardo</th>
+                <th className="px-6 py-4 text-right">Preço Fardo</th>
                 <th className="px-6 py-4 text-right">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {filteredProdutos.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-400 font-medium">Nenhum produto cadastrado.</td>
+                  <td colSpan={6} className="px-6 py-12 text-center text-gray-400 font-medium">Nenhum produto cadastrado.</td>
                 </tr>
               ) : (
                 filteredProdutos.map(p => {
-                  const mrg = p.preco_base > 0 ? ((p.preco_base - p.custo) / p.preco_base) * 100 : 0;
+                  const qtyMatch = p.nome.match(/\((\d+)x(\d+)\)/);
+                  const qtdFardo = qtyMatch ? parseInt(qtyMatch[2]) : 1;
+                  const precoUnit = qtdFardo > 0 ? p.preco_base / qtdFardo : p.preco_base;
+
                   return (
                   <tr key={p.id} className="hover:bg-gray-50/50 transition-colors text-sm font-medium text-gray-800">
                     <td className="px-6 py-4 font-bold text-gray-500">{p.codigo || '-'}</td>
                     <td className="px-6 py-4 font-bold text-gray-900">{p.nome}</td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-md text-[10px] font-bold uppercase">{p.quantidade_unidade} {p.unidade}</span>
-                    </td>
-                    <td className="px-6 py-4 text-right font-black text-gray-900">R$ {formatCurrency(p.preco_base)}</td>
-                    <td className="px-6 py-4 text-right font-black text-red-500">R$ {formatCurrency(p.custo)}</td>
-                    <td className="px-6 py-4 text-right font-black text-primary">{mrg.toFixed(1)}%</td>
+                    <td className="px-6 py-4 text-right font-black text-gray-900">R$ {formatCurrency(precoUnit)}</td>
+                    <td className="px-6 py-4 text-center font-black text-blue-600">{qtdFardo} un</td>
+                    <td className="px-6 py-4 text-right font-black text-primary">R$ {formatCurrency(p.preco_base)}</td>
                     <td className="px-6 py-4 text-right">
                       <button 
                         onClick={() => handleOpenForm(p)}
@@ -514,254 +566,181 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 bg-primary/40 backdrop-blur-sm">
-           <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-6xl h-[90vh] overflow-hidden flex flex-col scale-in">
+           <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col scale-in">
               
               <div className="p-8 bg-primary text-white flex justify-between items-center shrink-0">
                  <div>
                     <h2 className="text-2xl font-black tracking-tight">{editingProduto ? 'Editar Produto' : 'Novo Produto'}</h2>
-                    <p className="text-[10px] font-bold text-white/60 uppercase tracking-widest mt-1">Dados, Unidades e Composição de Custos</p>
+                    <p className="text-[10px] font-bold text-white/60 uppercase tracking-widest mt-1">Dados e Unidades</p>
                  </div>
                  <button onClick={() => setIsModalOpen(false)} className="hover:rotate-90 transition-all text-white/60 hover:text-white">
                    <X size={24} />
                  </button>
               </div>
 
-              <div className="flex-1 flex overflow-hidden">
-                 <div className="flex-1 overflow-y-auto bg-gray-50 p-6 flex flex-col gap-6 w-2/3">
+              <div className="flex-1 flex justify-center overflow-hidden bg-gray-50">
+                 <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 w-full max-w-4xl">
                     
-                    <form id="prod-form" onSubmit={handleSave} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="col-span-1">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Código</label>
-                          <input type="text" value={formData.codigo || ''} onChange={e => setFormData({...formData, codigo: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none hover:border-gray-300 focus:border-primary transition-all" />
+                    <form id="prod-form" onSubmit={handleSave} className="bg-white p-10 rounded-3xl border border-gray-100 shadow-sm space-y-10 w-full">
+                      {/* SEÇÃO 1: INFORMAÇÕES DA UNIDADE */}
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+                          <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">
+                            <Package size={16} />
+                          </div>
+                          <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">1. Informações do Produto Unitário</h3>
                         </div>
-                        <div className="col-span-1 md:col-span-3">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Nome do Produto <span className="text-red-500">*</span></label>
-                          <input required type="text" value={formData.nome || ''} onChange={e => setFormData({...formData, nome: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none hover:border-gray-300 focus:border-primary transition-all" />
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="col-span-1">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Código</label>
+                            <input type="text" value={formData.codigo || ''} onChange={e => setFormData({...formData, codigo: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none hover:border-gray-300 focus:border-blue-500 transition-all" />
+                          </div>
+                          <div className="col-span-1 md:col-span-3">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Nome do Produto <span className="text-red-500">*</span></label>
+                            <input required type="text" value={formData.nome || ''} onChange={e => setFormData({...formData, nome: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none hover:border-gray-300 focus:border-blue-500 transition-all" />
+                          </div>
+
+                          <div className="col-span-1">
+                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Unidade Base</label>
+                             <select 
+                               value={baseUnit} 
+                               onChange={(e) => {
+                                 const val = e.target.value as 'kg' | 'g' | 'un';
+                                 setBaseUnit(val);
+                                 updateCalculatedValues(calcUnitWeight, calcUnitPrice, calcQty, val);
+                               }} 
+                               className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none hover:border-gray-300 focus:border-blue-500 transition-all"
+                             >
+                               <option value="un">Unidade (un)</option>
+                               <option value="kg">Kilo (kg)</option>
+                               <option value="g">Grama (g)</option>
+                             </select>
+                          </div>
+
+                          <div className="col-span-1">
+                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Peso Unitário ({baseUnit})</label>
+                             <div className="relative">
+                               <input 
+                                 type="number" 
+                                 step="any" 
+                                 value={calcUnitWeight || ''} 
+                                 placeholder={baseUnit === 'g' ? "Ex: 500" : "Ex: 0.5"}
+                                 onChange={e => {
+                                   const val = Number(e.target.value);
+                                   setCalcUnitWeight(val);
+                                   updateCalculatedValues(val, calcUnitPrice, calcQty);
+                                 }} 
+                                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-blue-500 pr-8" 
+                               />
+                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">{baseUnit}</span>
+                             </div>
+                           </div>
+
+                           <div className="col-span-1">
+                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Valor Unitário</label>
+                             <div className="relative">
+                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">R$</span>
+                               <input 
+                                 type="number" 
+                                 step="any" 
+                                 value={calcUnitPrice || ''} 
+                                 placeholder="Ex: 5.00"
+                                 onChange={e => {
+                                   const val = Number(e.target.value);
+                                   setCalcUnitPrice(val);
+                                   updateCalculatedValues(calcUnitWeight, val, calcQty);
+                                 }} 
+                                 className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-blue-500" 
+                               />
+                             </div>
+                           </div>
+
+                           <div className="col-span-1">
+                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Cód. Barras Unitário</label>
+                             <input 
+                               type="text" 
+                               value={formData.codigo_barras_unitario || ''} 
+                               onChange={e => setFormData({...formData, codigo_barras_unitario: e.target.value})} 
+                               className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none hover:border-gray-300 focus:border-blue-500 transition-all" 
+                             />
+                           </div>
                         </div>
-                        
-                        <div className="col-span-1 border-t border-gray-100 pt-4 mt-2">
-                           <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Unidade</label>
-                           <select value={formData.unidade} onChange={e => setFormData({...formData, unidade: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none hover:border-gray-300 focus:border-primary transition-all">
-                             <option value="kg">KG</option>
-                             <option value="g">Grama (g)</option>
-                             <option value="un">Unidade (un)</option>
-                             <option value="cx">Caixa (cx)</option>
-                           </select>
+                      </div>
+
+                      {/* SEÇÃO 2: CONFIGURAÇÃO DE VENDA (FARDO/CAIXA) */}
+                      <div className="space-y-4 p-5 bg-primary/5 rounded-2xl border border-primary/10">
+                        <div className="flex items-center gap-2 pb-2 border-b border-primary/10">
+                          <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
+                            <Calculator size={16} />
+                          </div>
+                          <h3 className="text-sm font-black text-primary uppercase tracking-tight">2. Configuração de Venda (Fardo/Caixa)</h3>
                         </div>
-                        <div className="col-span-1 border-t border-gray-100 pt-4 mt-2">
-                           <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Quantidade ({formData.unidade})</label>
-                           <input type="number" step="any" value={formData.quantidade_unidade} onChange={e => setFormData({...formData, quantidade_unidade: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none hover:border-gray-300 focus:border-primary transition-all" />
-                        </div>
-                        <div className="col-span-2 border-t border-gray-100 pt-4 mt-2">
-                           <label className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-1 block">Preço de Venda (R$) <span className="text-red-500">*</span></label>
-                           <input 
-                             required 
-                             type="text" 
-                             value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(formData.preco_base) || 0)} 
-                             onChange={e => {
-                               const rawValue = e.target.value.replace(/\D/g, '');
-                               const numValue = Number(rawValue) / 100;
-                               setFormData({...formData, preco_base: numValue});
-                             }} 
-                             className="w-full bg-primary/5 border border-primary/20 rounded-lg px-3 py-2 text-lg font-black text-primary outline-none focus:border-primary transition-all" 
-                           />
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                           <div className="col-span-1">
+                             <label className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1 block">Tipo Embalagem</label>
+                             <select value={formData.unidade} onChange={e => setFormData({...formData, unidade: e.target.value})} className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-primary outline-none focus:border-primary">
+                               <option value="cx">Caixa (cx)</option>
+                               <option value="fd">Fardo (fd)</option>
+                               <option value="un">Unidade (un)</option>
+                             </select>
+                           </div>
+
+                           <div className="col-span-1">
+                             <label className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1 block">Qtd na Emb.</label>
+                             <input 
+                               type="number" 
+                               value={calcQty} 
+                               onChange={e => {
+                                 const val = Number(e.target.value);
+                                 setCalcQty(val);
+                                 updateCalculatedValues(calcUnitWeight, calcUnitPrice, val);
+                               }} 
+                               className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-primary outline-none focus:border-primary" 
+                             />
+                           </div>
+
+                           <div className="col-span-2">
+                             <label className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1 block">Cód. Barras Embalagem</label>
+                             <input 
+                               type="text" 
+                               value={formData.codigo_barras || ''} 
+                               onChange={e => setFormData({...formData, codigo_barras: e.target.value})} 
+                               className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-primary outline-none focus:border-primary transition-all" 
+                             />
+                           </div>
+
+                           <div className="col-span-2">
+                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Peso Total (kg)</label>
+                              <div className="relative">
+                                <input 
+                                  readOnly
+                                  type="number" 
+                                  step="any" 
+                                  value={formData.quantidade_unidade} 
+                                  className="w-full bg-gray-100 border border-gray-200 rounded-lg px-3 py-2 text-sm font-black text-gray-500 outline-none" 
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">kg</span>
+                              </div>
+                           </div>
+
+                           <div className="col-span-2">
+                              <label className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-1 block">Valor Total da Emb. (R$)</label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-primary/40">R$</span>
+                                <input 
+                                  readOnly
+                                  type="text" 
+                                  value={formatCurrency(formData.preco_base)} 
+                                  className="w-full bg-primary/5 border border-primary/20 rounded-lg pl-8 pr-3 py-2 text-lg font-black text-primary outline-none" 
+                                />
+                              </div>
+                           </div>
                         </div>
                       </div>
                     </form>
 
-                    <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-                       <div className="flex items-center gap-2 mb-4">
-                         <DollarSign size={20} className="text-orange-500" />
-                         <h3 className="font-bold text-gray-900 uppercase text-xs tracking-widest">Adicionar Custos</h3>
-                       </div>
-                       
-                       <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded-2xl border border-gray-200">
-                          <div className="min-w-[150px] flex-1">
-                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Tipo de Custo</label>
-                             <select 
-                                value={novoCustoGrupo} 
-                                onChange={e => {
-                                   const val = e.target.value;
-                                   setNovoCustoGrupo(val);
-                                   if (val !== 'Outros' && !['Matéria Prima', 'Insumos', 'Impostos', 'Comissão', 'Frete', 'Embalagem'].includes(val)) {
-                                      setCustoDetail(prev => ({ ...prev, nome: val }));
-                                   } else {
-                                      setCustoDetail(prev => ({ ...prev, nome: '' }));
-                                   }
-                                }} 
-                                className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary"
-                             >
-                                {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
-                             </select>
-                          </div>
-                          
-                          {novoCustoGrupo === 'Matéria Prima' && (
-                            <div className="w-32">
-                               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Valor KG (R$)</label>
-                               <input type="number" step="0.01" value={custoDetail.valorKg} onChange={e => setCustoDetail({...custoDetail, valorKg: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary" placeholder="0.00" />
-                            </div>
-                          )}
-
-                          {novoCustoGrupo === 'Insumos' && (
-                            <>
-                               <div className="min-w-[150px] flex-1">
-                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Nome</label>
-                                  <input type="text" value={custoDetail.nome} onChange={e => setCustoDetail({...custoDetail, nome: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary" placeholder="Ex: Sal" />
-                               </div>
-                               <div className="w-20"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Und</label><select value={custoDetail.undCompra} onChange={e => setCustoDetail({...custoDetail, undCompra: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-2 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary"><option value="kg">KG</option><option value="g">g</option><option value="l">L</option><option value="ml">ml</option><option value="un">un</option></select></div>
-                               <div className="w-20"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Qtd</label><input type="number" step="any" value={custoDetail.qtdCompra} onChange={e => setCustoDetail({...custoDetail, qtdCompra: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-2 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary" /></div>
-                               <div className="w-24"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">R$ Total</label><input type="number" step="0.01" value={custoDetail.valorCompra} onChange={e => setCustoDetail({...custoDetail, valorCompra: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-2 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary" /></div>
-                               
-                               <div className="w-20"><label className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1 block">Und Uso</label><select value={custoDetail.undUso} onChange={e => setCustoDetail({...custoDetail, undUso: e.target.value})} className="w-full bg-white border border-orange-200 rounded-lg px-2 py-2 text-sm font-bold text-gray-900 outline-none focus:border-orange-500"><option value="kg">KG</option><option value="g">g</option><option value="l">L</option><option value="ml">ml</option><option value="un">un</option></select></div>
-                               <div className="w-20"><label className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1 block">Qtd Usada</label><input type="number" step="any" value={custoDetail.qtdUso} onChange={e => setCustoDetail({...custoDetail, qtdUso: e.target.value})} className="w-full bg-white border border-orange-200 rounded-lg px-2 py-2 text-sm font-bold text-gray-900 outline-none focus:border-orange-500" /></div>
-                            </>
-                          )}
-
-                          {novoCustoGrupo === 'Impostos' && (
-                            <>
-                               <div className="min-w-[150px] flex-1">
-                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Nome do Imposto</label>
-                                  <input type="text" value={custoDetail.nome} onChange={e => setCustoDetail({...custoDetail, nome: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary" />
-                               </div>
-                               <div className="w-24">
-                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">% Valor</label>
-                                  <input type="number" step="0.01" value={custoDetail.perc} onChange={e => setCustoDetail({...custoDetail, perc: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary" placeholder="0.0" />
-                               </div>
-                            </>
-                          )}
-
-                          {(novoCustoGrupo === 'Comissão' || novoCustoGrupo === 'Frete') && (
-                            <div className="w-24">
-                               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">% Referência</label>
-                               <input type="number" step="0.01" value={custoDetail.perc} onChange={e => setCustoDetail({...custoDetail, perc: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary" placeholder="0.0" />
-                            </div>
-                          )}
-
-                          {novoCustoGrupo === 'Embalagem' && (
-                            <>
-                               <div className="min-w-[120px] flex-1">
-                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Nome</label>
-                                  <input type="text" value={custoDetail.nome} onChange={e => setCustoDetail({...custoDetail, nome: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary" />
-                               </div>
-                               <div className="w-28">
-                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Tipo</label>
-                                  <select value={custoDetail.tipoEmbalagem} onChange={e => setCustoDetail({...custoDetail, tipoEmbalagem: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary"><option value="Unitário">Unitário</option><option value="Fardo">Fardo</option><option value="Caixa">Caixa</option></select>
-                               </div>
-                               <div className="w-24">
-                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Valor (R$)</label>
-                                  <input type="number" step="0.01" value={custoDetail.valorEmbalagem} onChange={e => setCustoDetail({...custoDetail, valorEmbalagem: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary" />
-                               </div>
-                               {custoDetail.tipoEmbalagem !== 'Unitário' && (
-                                 <div className="w-20">
-                                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Qtd. Unid.</label>
-                                   <input type="number" step="1" value={custoDetail.qtdEmbalagem} onChange={e => setCustoDetail({...custoDetail, qtdEmbalagem: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary" />
-                                 </div>
-                               )}
-                            </>
-                          )}
-
-                          {(!DEFAULT_CUSTO_GRUPOS.includes(novoCustoGrupo) || novoCustoGrupo === 'Outros') && (
-                            <div className="w-full space-y-3">
-                               <div className="flex gap-3">
-                                 <div className="min-w-[120px] flex-1">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Nome do Custo</label>
-                                    <input type="text" value={custoDetail.nome} onChange={e => setCustoDetail({...custoDetail, nome: e.target.value})} placeholder={novoCustoGrupo === 'Outros' ? "Ex: Energia" : ""} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary" />
-                                 </div>
-                                 <div className="w-24">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Und</label>
-                                    <select value={custoDetail.undOutro} onChange={e => setCustoDetail({...custoDetail, undOutro: e.target.value, undUso: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary">
-                                        <option value="un">un</option>
-                                        <option value="kg">kg</option>
-                                        <option value="l">L</option>
-                                        <option value="ml">ml</option>
-                                        <option value="g">g</option>
-                                        <option value="kw">kw</option>
-                                        <option value="m³">m³</option>
-                                    </select>
-                                 </div>
-                                 <div className="w-28"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Valor da Und</label><input type="number" step="0.01" value={custoDetail.valorUndOutro} onChange={e => setCustoDetail({...custoDetail, valorUndOutro: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-primary" /></div>
-                               </div>
-                               <div className="flex gap-3">
-                                 <div className="w-32"><label className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1 block">Und Utilização</label><input type="text" value={custoDetail.undUso} readOnly className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-500 outline-none cursor-not-allowed" /></div>
-                                 <div className="w-28"><label className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1 block">Qtd. Utilização</label><input type="number" step="any" value={custoDetail.utilOutro} onChange={e => setCustoDetail({...custoDetail, utilOutro: e.target.value})} className="w-full bg-white border border-orange-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-orange-500" /></div>
-                               </div>
-                            </div>
-                          )}
-                          
-                          <div className="w-full flex justify-between items-end mt-2 pt-4 border-t border-gray-200">
-                             <div>
-                               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Prévia do Custo</p>
-                               <p className="text-xl font-black text-red-500">R$ {formatCurrency(previewCusto.valor)}</p>
-                             </div>
-                             <button type="button" onClick={handleAddCusto} className="h-10 px-6 bg-orange-500 text-white font-black text-sm uppercase tracking-widest rounded-lg hover:bg-orange-600 transition-all flex items-center gap-2">
-                                <Plus size={18} /> Adicionar
-                             </button>
-                          </div>
-                       </div>
-                    </div>
-
-                 </div>
-
-                 {/* Right Panel - Resumo de Custos */}
-                 <div className="w-1/3 bg-white border-l border-gray-100 p-6 flex flex-col h-full overflow-y-auto">
-                    <h3 className="font-bold text-gray-900 uppercase text-xs tracking-widest border-b border-gray-100 pb-4 mb-4">Composição do Preço</h3>
-                    
-                    <div className="space-y-4 mb-6 shrink-0">
-                       <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 flex justify-between items-center">
-                         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Preço de Venda</span>
-                         <span className="text-xl font-black text-gray-900">R$ {Number(formData.preco_base || 0).toFixed(2)}</span>
-                       </div>
-                       <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex justify-between items-center">
-                         <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">Custo Total</span>
-                         <span className="text-xl font-black text-red-600">R$ {formatCurrency(custoTotal)}</span>
-                       </div>
-                       <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 flex justify-between items-center">
-                         <div>
-                            <span className="text-[10px] font-black text-primary/70 uppercase tracking-widest block mb-1">Lucro Bruto</span>
-                            <span className="text-2xl font-black text-primary block">R$ {formatCurrency(valorBruto)}</span>
-                         </div>
-                         <div className="text-right">
-                            <span className="text-[10px] font-black text-primary/70 uppercase tracking-widest block mb-1">Margem</span>
-                            <span className="text-2xl font-black text-primary block">{margemBruta.toFixed(1)}%</span>
-                         </div>
-                       </div>
-                    </div>
-
-                    <h4 className="font-bold text-gray-600 uppercase text-[10px] tracking-widest mb-3">Custos Adicionados</h4>
-                    <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                       {custos.length === 0 ? (
-                         <p className="text-xs text-gray-400 font-medium text-center py-8">Nenhum custo adicionado.</p>
-                       ) : (
-                         <div className="flex flex-col gap-2">
-                           {custos.map((c) => {
-                             const pVenda = Number(formData.preco_base) || 0;
-                             const computedVal = c.tipo === 'Variavel' ? (pVenda * (c.proporcao || 0) / 100) : c.valor;
-                             const percentOfCost = custoTotal > 0 ? (computedVal / custoTotal) * 100 : 0;
-                             return (
-                               <div key={c.id} className="group relative bg-white border border-gray-100 flex items-center justify-between p-3 rounded-xl hover:border-gray-300 transition-all">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-bold text-gray-800 text-sm">{c.nome}</span>
-                                        <span className="text-[10px] text-gray-400 font-bold uppercase bg-gray-100 px-1.5 py-0.5 rounded">{c.grupo}</span>
-                                    </div>
-                                    <div className="text-xs font-medium text-gray-500">
-                                        {c.tipo === 'Variavel' ? `(${c.proporcao}%) de R$ ` : 'R$ '}{computedVal.toFixed(2)}
-                                    </div>
-                                  </div>
-                                  <div className="text-right">
-                                     <div className="font-black text-red-500 text-sm">R$ {formatCurrency(computedVal)}</div>
-                                     <div className="text-[10px] text-gray-400 font-bold">{percentOfCost.toFixed(1)}%</div>
-                                  </div>
-                                  <button onClick={() => handleRemoveCusto(c.id)} type="button" className="absolute top-1/2 -translate-y-1/2 -right-3 w-8 h-8 bg-white border border-gray-200 text-red-400 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 group-hover:-right-4 transition-all shadow-sm hover:text-red-600 hover:border-red-200">
-                                    <X size={14} />
-                                  </button>
-                               </div>
-                             );
-                           })}
-                         </div>
-                       )}
-                    </div>
                  </div>
               </div>
 
@@ -948,6 +927,7 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
         </div>
       )}
 
+      <PriceTableModal isOpen={isPriceTableModalOpen} onClose={() => setIsPriceTableModalOpen(false)} produtos={produtos} />
     </div>
   );
 };

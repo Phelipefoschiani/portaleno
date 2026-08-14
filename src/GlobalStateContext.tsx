@@ -87,7 +87,6 @@ interface GlobalStateContextType {
     usuario_id?: string,
     usuario_nome?: string,
   ) => void;
-  resetDatabase: () => Promise<void>;
 }
 
 const GlobalStateContext = createContext<GlobalStateContextType | undefined>(
@@ -388,11 +387,11 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     
     // Handle data_vencimento and prazo_entrega which don't exist natively
     const extraObs: string[] = [];
-    if ((payload as any).prazo_pagamento_dias !== undefined) { extraObs.push(`Prazo Pag. Faturamento: ${(payload as any).prazo_pagamento_dias} dias`); } if ((payload as any).data_vencimento) {
-      extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR')}`);
+    if ((payload as any).data_vencimento) {
+      extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`);
     }
     if ((payload as any).prazo_entrega) {
-      extraObs.push(`Prazo de Entrega: ${(payload as any).prazo_entrega}`);
+      const pe = (payload as any).prazo_entrega; if (/^\d{4}-\d{2}-\d{2}/.test(pe)) { extraObs.push(`Prazo de Entrega: ${new Date(pe).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`); } else { extraObs.push(`Prazo de Entrega: ${pe}`); }
     }
 
     if (extraObs.length > 0) {
@@ -412,7 +411,6 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     delete (payload as any).condicao_pagamento;
     delete (payload as any).prazo_entrega;
     delete (payload as any).data_vencimento;
-    delete (payload as any).prazo_pagamento_dias;
 
     const { data, error } = await supabase
       .from("pedidos")
@@ -486,16 +484,12 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       }
 
-      // Handle prazo_pagamento_dias, data_vencimento and prazo_entrega which don't exist natively
       const extraObs: string[] = [];
-      if ((payload as any).prazo_pagamento_dias !== undefined) {
-        extraObs.push(`Prazo Pag. Faturamento: ${(payload as any).prazo_pagamento_dias} dias`);
-      }
       if ((payload as any).data_vencimento) {
-        extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR')}`);
+        extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`);
       }
       if ((payload as any).prazo_entrega) {
-        extraObs.push(`Prazo de Entrega: ${(payload as any).prazo_entrega}`);
+        const pe = (payload as any).prazo_entrega; if (/^\d{4}-\d{2}-\d{2}/.test(pe)) { extraObs.push(`Prazo de Entrega: ${new Date(pe).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`); } else { extraObs.push(`Prazo de Entrega: ${pe}`); }
       }
 
       if (extraObs.length > 0) {
@@ -593,11 +587,11 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
     // Handle data_vencimento and prazo_entrega which don't exist natively
     const extraObs: string[] = [];
-    if ((payload as any).prazo_pagamento_dias !== undefined) { extraObs.push(`Prazo Pag. Faturamento: ${(payload as any).prazo_pagamento_dias} dias`); } if ((payload as any).data_vencimento) {
-      extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR')}`);
+    if ((payload as any).data_vencimento) {
+      extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`);
     }
     if ((payload as any).prazo_entrega) {
-      extraObs.push(`Prazo de Entrega: ${(payload as any).prazo_entrega}`);
+      const pe = (payload as any).prazo_entrega; if (/^\d{4}-\d{2}-\d{2}/.test(pe)) { extraObs.push(`Prazo de Entrega: ${new Date(pe).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`); } else { extraObs.push(`Prazo de Entrega: ${pe}`); }
     }
 
     if (extraObs.length > 0) {
@@ -661,11 +655,11 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
       // Handle fields that don't exist in the DB table
       const extraObs: string[] = [];
-      if ((payload as any).prazo_pagamento_dias !== undefined) { extraObs.push(`Prazo Pag. Faturamento: ${(payload as any).prazo_pagamento_dias} dias`); } if ((payload as any).data_vencimento) {
-        extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR')}`);
+      if ((payload as any).data_vencimento) {
+        extraObs.push(`Vencimento: ${new Date((payload as any).data_vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`);
       }
       if ((payload as any).prazo_entrega) {
-        extraObs.push(`Prazo de Entrega: ${(payload as any).prazo_entrega}`);
+        const pe = (payload as any).prazo_entrega; if (/^\d{4}-\d{2}-\d{2}/.test(pe)) { extraObs.push(`Prazo de Entrega: ${new Date(pe).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`); } else { extraObs.push(`Prazo de Entrega: ${pe}`); }
       }
 
       if (extraObs.length > 0) {
@@ -1054,7 +1048,8 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       .single();
     if (error) {
       console.error("Erro ao adicionar produto:", error);
-      alert("Erro ao adicionar produto: " + error.message);
+      alert("Erro ao adicionar produto: " + error.message + "\n\nVerifique se todas as colunas existem no banco de dados.");
+      return;
     }
     if (data) {
       const prod = { ...data, custos_detalhados: [] } as any;
@@ -1073,7 +1068,12 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
   const updateProduto = async (id: string, updatedFields: Partial<Produto>) => {
     const { custos_detalhados, ...rest } = updatedFields;
     if (Object.keys(rest).length > 0) {
-      await supabase.from("produtos").update(rest).eq("id", id);
+      const { error } = await supabase.from("produtos").update(rest).eq("id", id);
+      if (error) {
+        console.error("Erro ao atualizar produto:", error);
+        alert("Erro ao atualizar produto: " + error.message + "\n\nVerifique se todas as colunas existem no banco de dados.");
+        return;
+      }
     }
 
     let newCustos = produtos.find((p) => p.id === id)?.custos_detalhados || [];
@@ -1147,45 +1147,6 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
 
-  const resetDatabase = async () => {
-    setIsLoading(true);
-    try {
-      // Deletar os dados relacionados e principais
-      // Apaga dependencias primeiro
-      await supabase.from('log_eventos').delete().not('id', 'is', 'null');
-      await supabase.from('metas_representante').delete().not('id', 'is', 'null');
-      await supabase.from('objetivos_empresa').delete().not('ano', 'is', 'null');
-      
-      await supabase.from('pedidos').delete().not('id', 'is', 'null');
-      await supabase.from('orcamentos').delete().not('id', 'is', 'null');
-      await supabase.from('despesas').delete().not('id', 'is', 'null');
-      await supabase.from('comissoes').delete().not('id', 'is', 'null');
-      await supabase.from('compras_mandioca').delete().not('id', 'is', 'null');
-      await supabase.from('producoes').delete().not('id', 'is', 'null');
-
-      await supabase.from('fornecedores').delete().not('id', 'is', 'null');
-      await supabase.from('produtos').delete().not('id', 'is', 'null');
-      await supabase.from('clientes').delete().not('id', 'is', 'null');
-
-      setClientes([]);
-      setProdutos([]);
-      setPedidos([]);
-      setOrcamentos([]);
-      setDespesas([]);
-      setComissoes([]);
-      setProducao([]);
-      setFornecedores([]);
-      setComprasMandioca([]);
-      setEventos([]);
-      setObjetivosEmpresa([]);
-      setMetasRepresentantes([]);
-
-    } catch (e) {
-      console.error('Erro ao resetar: ', e);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <GlobalStateContext.Provider
@@ -1237,7 +1198,6 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         saveObjetivoEmpresa,
         saveMetaRepresentante,
         logEvent,
-        resetDatabase,
         isLoading,
       }}
     >

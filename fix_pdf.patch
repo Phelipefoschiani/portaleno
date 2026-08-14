@@ -1,0 +1,34 @@
+--- src/components/PedidosOrcamentos.tsx
++++ src/components/PedidosOrcamentos.tsx
+@@ -291,6 +291,7 @@
+   };
+ 
+   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
++  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+ 
+   const handleDownloadPDF = async (
+     mode: string,
+     filenamePrefix: string,
+     includeCondicao: boolean = true,
+     includePrazo: boolean = true,
+-    documentTitle: string = ""
++    documentTitle: string = "",
++    previewOnly: boolean = false
+   ) => {
+     if (!selectedItem) return;
+@@ -540,8 +541,14 @@
+         docType = filenamePrefix === "Orcamento" ? "Orçamento" : "Pedido";
+       }
+ 
+-      pdf.save(`${docType} - ${clientName}.pdf`);
+-      logEvent(`Exportou PDF do ${isOrcamentoPDF ? 'Orçamento' : 'Pedido'}: ${clientes.find(c => c.id === selectedItem?.cliente_id)?.nome_fantasia || 'Desconhecido'}`);
++      if (previewOnly) {
++        const blob = pdf.output("blob");
++        const url = URL.createObjectURL(blob);
++        setPdfPreviewUrl(url);
++      } else {
++        pdf.save(`${docType} - ${clientName}.pdf`);
++        logEvent(`Exportou PDF do ${isOrcamentoPDF ? 'Orçamento' : 'Pedido'}: ${clientes.find(c => c.id === selectedItem?.cliente_id)?.nome_fantasia || 'Desconhecido'}`);
++      }
+     } catch (error) {
+       console.error("Erro ao gerar PDF", error);

@@ -41,8 +41,8 @@ const getCompanyTheme = (empresa: string) => {
       };
     case 'empana':
       return {
-        primary: '#0369a1', // Sky 700
-        secondary: '#0284c7', // Sky 600
+        primary: '#05192d', // Very Deep Blue
+        secondary: '#0c3554', // Dark Blue
         accent: '#e0f2fe', // Sky 100
       };
     case 'estancia':
@@ -63,8 +63,43 @@ function AppContent() {
   const [empresa, setEmpresa] = useState('estancia');
   const [supportAutoOpen, setSupportAutoOpen] = useState(false);
   const [isGlobalTicketModalOpen, setIsGlobalTicketModalOpen] = useState(false);
+  const [globalPastedImages, setGlobalPastedImages] = useState<string[]>([]);
 
   const theme = getCompanyTheme(empresa);
+
+  React.useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      if (!user) return; // Só abre se estiver logado
+      
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      const imageItems = Array.from(items).filter(item => item.type.startsWith('image/'));
+      
+      if (imageItems.length > 0) {
+        const promises = imageItems.map(item => {
+          const file = item.getAsFile();
+          return new Promise<string>((resolve) => {
+            if (!file) return resolve('');
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          });
+        });
+
+        Promise.all(promises).then(images => {
+          const validImages = images.filter(Boolean);
+          if (validImages.length > 0) {
+            setGlobalPastedImages(validImages);
+            setIsGlobalTicketModalOpen(true);
+          }
+        });
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [user]);
 
   React.useEffect(() => {
     // Se não houver usuário, garantir que o tema seja o padrão (estancia/verde)
@@ -216,7 +251,11 @@ function AppContent() {
 
       <NewTicketModal 
         isOpen={isGlobalTicketModalOpen} 
-        onClose={() => setIsGlobalTicketModalOpen(false)} 
+        initialImages={globalPastedImages}
+        onClose={() => {
+          setIsGlobalTicketModalOpen(false);
+          setGlobalPastedImages([]);
+        }} 
       />
     </div>
   );
