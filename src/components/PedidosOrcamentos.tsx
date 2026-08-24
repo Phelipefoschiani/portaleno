@@ -81,12 +81,14 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
     isOpen: boolean;
     includeCondicao: boolean;
     includePrazo: boolean;
+    includeRepresentante: boolean;
     nomeDocumento: "Orçamento" | "Pedido Sugestivo" | "Pedido";
     selectedItem: Orcamento | null;
   }>({
     isOpen: false,
     includeCondicao: true,
     includePrazo: true,
+    includeRepresentante: true,
     nomeDocumento: "Orçamento",
     selectedItem: null,
   });
@@ -304,7 +306,8 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
     includeCondicao: boolean = true,
     includePrazo: boolean = true,
     documentTitle: string = "",
-    previewOnly: boolean = false
+    previewOnly: boolean = false,
+    includeRepresentante: boolean = true
   ) => {
     if (!selectedItem) return;
 
@@ -339,65 +342,66 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       const subtitle = documentTitle || (filenamePrefix === "Orcamento" ? "ORÇAMENTO DE VENDA" : "CONFIRMAÇÃO DE PEDIDO DE VENDA");
       pdf.text(subtitle, 105, 26, { align: "center" });
 
-      // Info Summary
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(10);
-      pdf.setTextColor(40, 40, 40);
-      
-      pdf.text(`Número: #${selectedItem.id.split("_")[1] || selectedItem.id.substring(0, 8)}`, 14, 45);
-      pdf.text(`Data: ${new Date(selectedItem.data).toLocaleDateString("pt-BR")}`, 14, 52);
-
       // Section 1: Cliente
       pdf.setFillColor(245, 247, 246);
-      pdf.rect(14, 60, 182, 8, 'F');
+      pdf.rect(14, 40, 182, 8, 'F');
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(9);
       pdf.setTextColor(27, 67, 50);
-      pdf.text("DADOS DO CLIENTE", 16, 66);
+      pdf.text("DADOS DO CLIENTE", 16, 46);
 
       pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(9);
       pdf.setTextColor(30, 30, 30);
-      pdf.text(`Razão Social:`, 16, 75);
+      pdf.text(`Razão Social:`, 16, 55);
       pdf.setFont("helvetica", "normal");
-      pdf.text(`${cliente?.razao_social || "Não Informado"}`, 42, 75);
+      pdf.text(`${cliente?.razao_social || "Não Informado"}`, 40, 55);
 
       pdf.setFont("helvetica", "bold");
-      pdf.text(`CNPJ/CPF:`, 16, 81);
+      pdf.text(`CNPJ/CPF:`, 16, 61);
       pdf.setFont("helvetica", "normal");
-      pdf.text(`${cliente?.cnpj_cpf || "Não Informado"}`, 36, 81);
+      pdf.text(`${cliente?.cnpj_cpf || "Não Informado"}`, 36, 61);
 
       pdf.setFont("helvetica", "bold");
-      pdf.text(`Insc. Estadual:`, 110, 81);
+      pdf.text(`Endereço:`, 16, 67);
       pdf.setFont("helvetica", "normal");
-      pdf.text(`${cliente?.inscricao_estadual || "Não Informado"}`, 135, 81);
+      pdf.text(`${cliente?.endereco || "Não Informado"}`, 36, 67);
 
       pdf.setFont("helvetica", "bold");
-      pdf.text(`Endereço:`, 16, 87);
+      pdf.text(`Cidade/UF:`, 16, 73);
       pdf.setFont("helvetica", "normal");
-      pdf.text(`${cliente?.endereco || "Não Informado"}${cliente?.numero ? ', ' + cliente.numero : ''}${cliente?.bairro ? ' - ' + cliente.bairro : ''}`, 36, 87);
+      pdf.text(`${cliente?.cidade || "Não Informado"} / ${cliente?.estado || "NI"}`, 37, 73);
+      
+      let yPos = 85;
 
-      pdf.setFont("helvetica", "bold");
-      pdf.text(`Cidade/UF:`, 16, 93);
-      pdf.setFont("helvetica", "normal");
-      pdf.text(`${cliente?.cidade || "Não Informado"} / ${cliente?.estado || "NI"}`, 37, 93);
-
-      // Section 2: Logística e Pagamento
-      let yPos = 101;
+      if (includeRepresentante && vendedor) {
+        pdf.setFillColor(245, 247, 246);
+        pdf.rect(14, yPos, 182, 8, 'F');
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(9);
+        pdf.setTextColor(27, 67, 50);
+        pdf.text("REPRESENTANTE", 16, yPos + 6);
+        
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(30, 30, 30);
+        pdf.text(`${vendedor.nome}`, 16, yPos + 14);
+        yPos += 20;
+      }
       const showPagamento = filenamePrefix !== "Orcamento" || includeCondicao;
       const showPrazo = filenamePrefix !== "Orcamento" || includePrazo;
 
       if (showPagamento || showPrazo) {
         pdf.setFillColor(245, 247, 246);
-        pdf.rect(14, 101, 182, 8, 'F');
+        pdf.rect(14, yPos, 182, 8, 'F');
         pdf.setFont("helvetica", "bold");
         pdf.setFontSize(9);
         pdf.setTextColor(27, 67, 50);
-        pdf.text("LOGÍSTICA E PAGAMENTO", 16, 107);
+        pdf.text("LOGÍSTICA E PAGAMENTO", 16, yPos + 6);
 
         pdf.setFont("helvetica", "bold");
         pdf.setTextColor(30, 30, 30);
 
-        let currentY = 116;
+        let currentY = yPos + 15;
 
         if (showPagamento) {
           pdf.setFont("helvetica", "bold");
@@ -2331,6 +2335,20 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                     </span>
                   </div>
                 </label>
+                <label className="flex items-center gap-3 p-4 bg-white hover:bg-gray-50 border border-gray-200/80 rounded-2xl cursor-pointer transition-all shadow-sm">
+                  <input
+                    type="checkbox"
+                    checked={exportOptionsModal.includeRepresentante}
+                    onChange={(e) => setExportOptionsModal({ ...exportOptionsModal, includeRepresentante: e.target.checked })}
+                    className="w-5 h-5 accent-emerald-700 rounded border-gray-300"
+                  />
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs font-bold text-gray-800">Representante</span>
+                    <span className="text-[10px] text-gray-400 font-semibold text-left">
+                      {usuarios.find(u => u.id === selectedItem.representante_id)?.nome || "Não Definido"}
+                    </span>
+                  </div>
+                </label>
               </div>
 
               <div className="p-6 bg-white border-t border-gray-200 hide-on-print flex flex-col gap-3 shrink-0">
@@ -2345,7 +2363,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                         ? "PEDIDO SUGESTIVO"
                         : exportOptionsModal.nomeDocumento === "Pedido"
                         ? "PEDIDO"
-                        : "ORÇAMENTO DE VENDA"
+                        : "ORÇAMENTO DE VENDA",
+                      false,
+                      exportOptionsModal.includeRepresentante
                     );
                   }}
                   disabled={isGeneratingPDF}
@@ -2416,6 +2436,13 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                       </div>
                     </div>
                   </div>
+
+                  {exportOptionsModal.includeRepresentante && (
+                    <div className="mb-8 border border-gray-200 rounded-lg p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Representante</p>
+                      <p className="text-sm font-semibold text-gray-900">{usuarios.find(u => u.id === selectedItem.representante_id)?.nome || "Não Definido"}</p>
+                    </div>
+                  )}
 
                   {/* Conditions */}
                   {(exportOptionsModal.includeCondicao || exportOptionsModal.includePrazo) && (
@@ -4145,6 +4172,28 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   </span>
                 </div>
               </label>
+
+              <label className="flex items-center gap-3 p-4 bg-gray-50 hover:bg-gray-100/70 border border-gray-200/80 rounded-2xl cursor-pointer transition-all">
+                <input
+                  type="checkbox"
+                  checked={exportOptionsModal.includeRepresentante}
+                  onChange={(e) =>
+                    setExportOptionsModal({
+                      ...exportOptionsModal,
+                      includeRepresentante: e.target.checked,
+                    })
+                  }
+                  className="w-5 h-5 accent-emerald-700 rounded border-gray-300"
+                />
+                <div className="flex flex-col text-left">
+                  <span className="text-xs font-bold text-gray-800">
+                    Nome do Representante
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-semibold text-left">
+                    {usuarios.find((u) => u.id === exportOptionsModal.selectedItem?.representante_id)?.nome || "Não Informado"}
+                  </span>
+                </div>
+              </label>
             </div>
 
             <div className="flex gap-3">
@@ -4168,7 +4217,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                       ? "PEDIDO SUGESTIVO"
                       : exportOptionsModal.nomeDocumento === "Pedido"
                       ? "PEDIDO"
-                      : "ORÇAMENTO DE VENDA"
+                      : "ORÇAMENTO DE VENDA",
+                    false, // previewOnly
+                    exportOptionsModal.includeRepresentante
                   );
                 }}
                 className="flex-1 py-3 bg-emerald-800 hover:bg-emerald-900 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-1 text-center"

@@ -430,7 +430,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       } as any;
       if (items && items.length > 0) {
         // Remove temporary ID and map to table
-        const mappedItems = items.map(({ id, orcamento_id, ...it }: any) => ({ ...it, pedido_id: data.id }));
+        const mappedItems = items.map(({ id, orcamento_id, unidade_venda, ...it }: any) => ({ ...it, pedido_id: data.id }));
         const { data: itemData, error: itemError } = await supabase
           .from("itens_pedido")
           .insert(mappedItems)
@@ -517,7 +517,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     if (items) {
       await supabase.from("itens_pedido").delete().eq("pedido_id", id);
       const mappedItems = items.map((it) => {
-        const { id: _, orcamento_id, ...noIdIt } = it as any;
+        const { id: _, orcamento_id, unidade_venda, ...noIdIt } = it as any;
         return { ...noIdIt, pedido_id: id };
       });
       const { data: newItems } = await supabase
@@ -616,7 +616,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
       const inserted = { ...data, items: [] } as any;
       if (items && items.length > 0) {
         // Remove temporary ID and map to table
-        const mappedItems = items.map(({ id, pedido_id, ...it }: any) => ({
+        const mappedItems = items.map(({ id, pedido_id, quantidade_produzida, unidade_venda, ...it }: any) => ({
           ...it,
           orcamento_id: data.id,
         }));
@@ -677,7 +677,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     if (items) {
       await supabase.from("itens_orcamento").delete().eq("orcamento_id", id);
       const mappedItems = items.map((it) => {
-        const { id: _, pedido_id, ...noIdIt } = it as any;
+        const { id: _, pedido_id, quantidade_produzida, unidade_venda, ...noIdIt } = it as any;
         return { ...noIdIt, orcamento_id: id };
       });
       const { data: newItems } = await supabase

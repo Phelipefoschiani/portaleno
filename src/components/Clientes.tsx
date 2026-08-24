@@ -12,10 +12,41 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
   const { user } = useAuth();
 
   const isEmpana = empresa === 'empana';
-  const clientes = isEmpana ? globalState.clientesEmpana : globalState.clientes;
-  const addCliente = isEmpana ? globalState.addClienteEmpana : globalState.addCliente;
-  const updateCliente = isEmpana ? globalState.updateClienteEmpana : globalState.updateCliente;
-  const deleteCliente = isEmpana ? globalState.deleteClienteEmpana : globalState.deleteCliente;
+  const isTempera = empresa === 'tempera';
+
+  // Local state for Tempera clients
+  const [temperaClientes, setTemperaClientes] = useState<Cliente[]>(() => {
+    const saved = localStorage.getItem('tempera_clientes');
+    if (saved) return JSON.parse(saved);
+    // 2 Fictitious clients
+    return [
+      { id: 't1', representante_id: '', razao_social: 'Cliente Tempera 1', nome_fantasia: 'CT1', cnpj_cpf: '00.000.000/0001-01', telefone: '(11) 99999-9999', email: 'c1@tempera.com', cep: '', endereco: '', bairro: '', cidade: 'Cidade T', estado: 'ST', data_cadastro: new Date().toISOString(), status: 'Liberado' },
+      { id: 't2', representante_id: '', razao_social: 'Cliente Tempera 2', nome_fantasia: 'CT2', cnpj_cpf: '00.000.000/0001-02', telefone: '(11) 98888-8888', email: 'c2@tempera.com', cep: '', endereco: '', bairro: '', cidade: 'Cidade T', estado: 'ST', data_cadastro: new Date().toISOString(), status: 'Liberado' }
+    ] as Cliente[];
+  });
+
+  // Save to local storage whenever temperaClientes changes
+  React.useEffect(() => {
+    if (isTempera) {
+      localStorage.setItem('tempera_clientes', JSON.stringify(temperaClientes));
+    }
+  }, [temperaClientes, isTempera]);
+
+  const clientes = isEmpana ? globalState.clientesEmpana : (isTempera ? temperaClientes : globalState.clientes);
+  
+  const addCliente = isEmpana ? globalState.addClienteEmpana : (isTempera ? (c: Omit<Cliente, 'id'>) => {
+    const newCliente = { ...c, id: Date.now().toString() } as Cliente;
+    setTemperaClientes(prev => [...prev, newCliente]);
+  } : globalState.addCliente);
+
+  const updateCliente = isEmpana ? globalState.updateClienteEmpana : (isTempera ? (id: string, c: Partial<Cliente>) => {
+    setTemperaClientes(prev => prev.map(cl => cl.id === id ? { ...cl, ...c } : cl));
+  } : globalState.updateCliente);
+
+  const deleteCliente = isEmpana ? globalState.deleteClienteEmpana : (isTempera ? (id: string) => {
+    setTemperaClientes(prev => prev.filter(cl => cl.id !== id));
+  } : globalState.deleteCliente);
+  
   const pedidos = globalState.pedidos;
   const orcamentos = globalState.orcamentos;
 
@@ -48,7 +79,7 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
     categorias: [],
   });
 
-  if (empresa !== 'estancia' && empresa !== 'empana') {
+  if (empresa !== 'estancia' && empresa !== 'empana' && empresa !== 'tempera') {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] bg-white rounded-3xl border border-gray-100 shadow-sm p-8 text-center">
         <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6">
@@ -56,7 +87,7 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
         </div>
         <h2 className="text-2xl font-black text-gray-900 tracking-tight mb-2">Empresa em Configuração</h2>
         <p className="text-gray-500 max-w-md font-medium">
-          O painel de Clientes para esta empresa será configurado em breve. Atualmente, os cadastros estão disponíveis apenas para a Estância Nova Olinda.
+          O painel de Clientes para esta empresa será configurado em breve.
         </p>
       </div>
     );
@@ -193,7 +224,7 @@ const Clientes: React.FC<{ empresa?: string }> = ({ empresa }) => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
         <div>
           <h2 className="text-2xl font-black text-gray-900 tracking-tight">Clientes</h2>
-          <p className="text-sm font-medium text-gray-500">Gerencie a base de clientes {empresa === 'empana' ? 'da RCA' : 'da Estância Nova Olinda'}</p>
+          <p className="text-sm font-medium text-gray-500">Gerencie a base de clientes {empresa === 'empana' ? 'da RCA' : empresa === 'tempera' ? 'da Tempera' : 'da Estância Nova Olinda'}</p>
         </div>
         <div className="flex items-center gap-4 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">

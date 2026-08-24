@@ -6,16 +6,20 @@ import {
   LogOut,
   Building2,
   Users,
-  Package,
-  FileText,
-  Activity,
-  DollarSign,
-  Receipt,
-  Coins,
+  Briefcase,
+  Box,
+  ShoppingCart,
+  Factory,
+  CreditCard,
+  ReceiptText,
+  HandCoins,
   Target,
-  TrendingUp,
+  BarChart4,
   Settings,
-  LifeBuoy
+  LifeBuoy,
+  FileText,
+  Layers,
+  ChefHat
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -88,41 +92,68 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, empresa, set
       items: user?.perfil === 'suporte' ? [
         { id: 'suporte', label: 'Portal Suporte', icon: LifeBuoy }
       ] : [
-        { id: 'dashboard', label: 'Início', icon: LayoutDashboard },
+        { id: 'dashboard', label: 'INÍCIO', icon: LayoutDashboard },
         ...(user?.perfil === 'empana' ? [
-          { id: 'clientes', label: 'Clientes', icon: Users }
+          { id: 'clientes', label: 'CLIENTES', icon: Users }
         ] : [
           ...(user?.perfil === 'producao' ? [
-            { id: 'producao', label: 'Produção / Início', icon: LayoutDashboard },
-            { id: 'despesas', label: 'Despesas', icon: DollarSign }
+            { id: 'producao', label: 'PRODUÇÃO / INÍCIO', icon: LayoutDashboard },
+            { id: 'despesas', label: 'DESPESAS', icon: CreditCard }
           ] : [
             ...(empresa === 'estancia' ? [
-              { id: 'clientes', label: 'Clientes', icon: Users },
-              { id: 'fornecedores', label: 'Fornecedores', icon: Users },
-              { id: 'produtos', label: 'Produtos', icon: Package },
-              { id: 'pedidos', label: 'Orçamentos / Pedidos', icon: FileText },
-              { id: 'producao', label: 'Fabricação / Produção', icon: Activity },
-              { id: 'despesas', label: 'Despesas', icon: DollarSign },
-              { id: 'controle-nf', label: 'Controle de NF', icon: Receipt },
-              { id: 'a-receber', label: 'A Receber', icon: Coins },
-              { id: 'objetivo', label: 'Objetivo do Mês', icon: Target },
-              { id: 'dre', label: 'DRE - Demonstração', icon: TrendingUp },
+              { id: 'clientes', label: 'CLIENTES', icon: Users },
+              { id: 'fornecedores', label: 'FORNECEDORES', icon: Briefcase },
+              { id: 'produtos', label: 'PRODUTOS', icon: Box },
+              { id: 'pedidos', label: 'ORÇAMENTOS / PEDIDOS', icon: ShoppingCart },
+              { id: 'producao', label: 'FABRICAÇÃO / PRODUÇÃO', icon: Factory },
+              { id: 'despesas', label: 'DESPESAS', icon: CreditCard },
+              { id: 'controle-nf', label: 'CONTROLE DE NF', icon: ReceiptText },
+              { id: 'a-receber', label: 'A RECEBER', icon: HandCoins },
+              { id: 'objetivo', label: 'OBJETIVO DO MÊS', icon: Target },
+              { id: 'dre', label: 'DRE - DEMONSTRAÇÃO', icon: BarChart4 },
               ...(user?.perfil === 'gerente' ? [
-                { id: 'configuracoes', label: 'Configurações', icon: Settings },
-                { id: 'eventos', label: 'Eventos do Sistema', icon: Activity },
-                { id: 'chamados', label: 'Chamados / Suporte', icon: LifeBuoy } 
+                { id: 'configuracoes', label: 'CONFIGURAÇÕES', icon: Settings },
+                { id: 'eventos', label: 'EVENTOS DO SISTEMA', icon: FileText },
+                { id: 'chamados', label: 'CHAMADOS / SUPORTE', icon: LifeBuoy } 
               ] : [])
             ] : empresa === 'empana' ? [
-              { id: 'clientes', label: 'Clientes', icon: Users },
+              { id: 'clientes', label: 'CLIENTES', icon: Users },
               ...(user?.perfil === 'gerente' ? [
-                { id: 'configuracoes-empana', label: 'Configurações', icon: Settings }
+                { id: 'configuracoes-empana', label: 'CONFIGURAÇÕES', icon: Settings }
               ] : [])
+            ] : empresa === 'tempera' ? [
+              { id: 'clientes', label: 'CLIENTES', icon: Users },
+              { id: 'produtos-tempera', label: 'PRODUTOS', icon: Box },
+              { id: 'receitas-tempera', label: 'RECEITAS', icon: ChefHat },
+              { id: 'custos-tempera', label: 'CUSTOS', icon: CreditCard },
+              { id: 'pedidos-tempera', label: 'PEDIDOS', icon: ShoppingCart },
+              { id: 'lotes-tempera', label: 'LOTES', icon: Layers },
+              { id: 'a-receber-tempera', label: 'A RECEBER', icon: HandCoins },
+              { id: 'a-pagar-tempera', label: 'A PAGAR', icon: ReceiptText },
             ] : [])
           ])
         ])
       ]
     }
   ];
+
+  const getIconColor = (id: string, active: boolean) => {
+    if (active) return isSupport ? 'text-black' : 'text-primary';
+    
+    if (id.includes('produto')) return 'text-green-400 group-hover:text-green-300';
+    if (id.includes('lote')) return 'text-teal-400 group-hover:text-teal-300';
+    if (id.includes('custo') || id.includes('despesa') || id.includes('pagar')) return 'text-rose-400 group-hover:text-rose-300';
+    if (id.includes('pedido') || id.includes('nf')) return 'text-amber-400 group-hover:text-amber-300';
+    if (id.includes('receber')) return 'text-emerald-400 group-hover:text-emerald-300';
+    if (id.includes('cliente') || id.includes('fornecedor')) return 'text-purple-400 group-hover:text-purple-300';
+    if (id.includes('producao')) return 'text-orange-400 group-hover:text-orange-300';
+    if (id.includes('objetivo')) return 'text-indigo-400 group-hover:text-indigo-300';
+    if (id.includes('dre')) return 'text-blue-400 group-hover:text-blue-300';
+    if (id.includes('config')) return 'text-slate-400 group-hover:text-slate-300';
+    if (id === 'dashboard') return 'text-sky-400 group-hover:text-sky-300';
+    
+    return isSupport ? 'text-gray-500 group-hover:text-white' : 'text-white/70 group-hover:text-white';
+  };
 
   return (
     <div className={`w-72 h-screen sticky top-0 flex flex-col shadow-2xl z-20 hide-on-print ${
@@ -146,6 +177,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, empresa, set
                 <Building2 size={16} className="text-accent" />
                 <span>RCA</span>
               </div>
+            ) : (user?.perfil === 'rca' || user?.perfil === 'RCA') ? (
+              <div className="mt-6 flex items-center gap-2 bg-white/5 p-2 px-3.5 rounded-xl border border-white/10 text-xs font-black uppercase tracking-wider text-accent/90">
+                <Building2 size={16} className="text-accent" />
+                <span>Tempera e Empana</span>
+              </div>
             ) : (
               <div className="mt-6 flex items-center gap-2 bg-white/5 p-2 rounded-xl border border-white/10">
                 <Building2 size={16} className="text-accent ml-2" />
@@ -163,6 +199,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, empresa, set
                   <option value="sitio" className="text-gray-900">Sítio</option>
                   <option value="empana" className="text-gray-900">RCA</option>
                   <option value="bigorna" className="text-gray-900">Bigorna</option>
+                  <option value="tempera" className="text-gray-900">Tempera e Empana</option>
                 </select>
               </div>
             )}
@@ -186,14 +223,20 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, empresa, set
                 <li key={item.id}>
                   <button
                     onClick={() => setActiveTab(item.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 group ${
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${
                       activeTab === item.id 
                         ? (isSupport ? 'bg-white text-black font-bold shadow-lg' : 'bg-accent text-primary font-bold shadow-lg')
-                        : (isSupport ? 'text-gray-400 hover:bg-white/5 hover:text-white' : 'text-accent/60 hover:bg-white/5 hover:text-white')
+                        : (isSupport ? 'text-gray-300 hover:bg-white/10 hover:text-white' : 'text-white/90 font-medium hover:bg-white/10 hover:text-white')
                     }`}
                   >
-                    <item.icon size={18} className={activeTab === item.id ? (isSupport ? 'text-black' : 'text-primary') : (isSupport ? 'text-gray-600 group-hover:text-white' : 'text-accent/40 group-hover:text-accent')} />
-                    <span className="text-sm flex-1 text-left">{item.label}</span>
+                    <div className={`p-1.5 rounded-lg flex items-center justify-center transition-colors ${
+                      activeTab === item.id 
+                        ? (isSupport ? 'bg-black/10' : 'bg-primary/10')
+                        : 'bg-white/5 group-hover:bg-white/10'
+                    }`}>
+                      <item.icon size={16} className={getIconColor(item.id, activeTab === item.id)} />
+                    </div>
+                    <span className="text-xs tracking-wider flex-1 text-left">{item.label}</span>
                     {item.id === 'objetivo' && hasRealignForwardNeeded && (
                       <span className="w-2 h-2 bg-red-500 rounded-full inline-block animate-pulse shrink-0" title="Alinhamento de metas necessário" />
                     )}

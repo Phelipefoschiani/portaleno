@@ -245,3 +245,11 @@ export function formatCurrency(value: number): string {
   if (isNaN(value) || value === null || value === undefined) return "0,00";
   return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+
+export function formatWeight(value: number): string {
+  if (isNaN(value) || value === null || value === undefined) return "0";
+  return value.toLocaleString('pt-BR', { 
+    minimumFractionDigits: 0, 
+    maximumFractionDigits: 3 
+  });
+}

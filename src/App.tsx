@@ -25,6 +25,15 @@ import GrupoEnoLanding from './components/GrupoEnoLanding';
 import { GlobalStateProvider } from './GlobalStateContext';
 import { AnimatePresence, motion } from 'motion/react';
 
+// Novos componentes Tempera
+import ProdutosTempera from './components/tempera/ProdutosTempera';
+import CustosTempera from './components/tempera/CustosTempera';
+import ReceitasTempera from './components/tempera/ReceitasTempera';
+import PedidosTempera from './components/tempera/PedidosTempera';
+import AReceberTempera from './components/tempera/AReceberTempera';
+import APagarTempera from './components/tempera/APagarTempera';
+import LotesTempera from './components/tempera/LotesTempera';
+
 const getCompanyTheme = (empresa: string) => {
   switch (empresa) {
     case 'bigorna':
@@ -38,6 +47,12 @@ const getCompanyTheme = (empresa: string) => {
         primary: '#5c3d2e', // Deep Earth Brown
         secondary: '#8b5a2b', // Light Brown
         accent: '#f5ebe0', // Warm Sand / Cream
+      };
+    case 'tempera':
+      return {
+        primary: '#1e3a8a', // Commercial Blue Dark
+        secondary: '#2563eb', // Commercial Blue Light
+        accent: '#dbeafe', // Very Light Blue
       };
     case 'empana':
       return {
@@ -123,6 +138,9 @@ function AppContent() {
       } else if (user.perfil === 'empana') {
         setEmpresa('empana');
         // Mantém dashboard se estiver nele
+      } else if (user.perfil === 'RCA' || user.perfil === 'rca') {
+        setEmpresa('tempera');
+        if (activeTab === 'dashboard') setActiveTab('produtos-tempera');
       }
     }
   }, [user, activeTab]);
@@ -182,6 +200,20 @@ function AppContent() {
         return <Eventos />;
       case 'chamados':
         return <SuportePortal autoOpen={supportAutoOpen} />;
+      case 'produtos-tempera':
+        return <ProdutosTempera empresa={empresa} />;
+      case 'lotes-tempera':
+        return <LotesTempera empresa={empresa} />;
+      case 'custos-tempera':
+        return <CustosTempera empresa={empresa} />;
+      case 'receitas-tempera':
+        return <ReceitasTempera empresa={empresa} />;
+      case 'pedidos-tempera':
+        return <PedidosTempera empresa={empresa} />;
+      case 'a-receber-tempera':
+        return <AReceberTempera empresa={empresa} />;
+      case 'a-pagar-tempera':
+        return <APagarTempera empresa={empresa} />;
       case 'suporte':
         return user?.perfil === 'suporte' ? <SuportePortal /> : <Dashboard setActiveTab={setActiveTab} empresa={empresa} />;
       default: return <Dashboard setActiveTab={setActiveTab} empresa={empresa} />;

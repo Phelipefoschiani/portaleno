@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
@@ -148,7 +149,7 @@ async function startServer() {
   });
 
   app.post("/api/log", (req, res) => {
-    require('fs').appendFileSync('frontend-error.log', JSON.stringify(req.body) + '\n');
+    fs.appendFileSync('frontend-error.log', JSON.stringify(req.body) + '\n');
     console.log("FRONTEND ERROR:", req.body);
     res.json({ ok: true });
   });
