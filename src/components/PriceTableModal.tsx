@@ -52,6 +52,14 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
     return 1;
   };
 
+
+  
+  const getPesoFardo = (p) => {
+    let basePeso = p.quantidade_unidade || 0;
+    if (basePeso === 0) return '-';
+    return `${Number(basePeso).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`;
+  };
+
   const getDisplayUnit = (p: Produto, viewMode: 'unidade' | 'fardo', multiplier: number, hasPack: boolean) => {
     const name = p.nome.toLowerCase();
     const unit = (p.unidade || '').toLowerCase();
@@ -115,7 +123,7 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
   const handleDownload = async () => {
     setIsGenerating(true);
     try {
-      const doc = new jsPDF();
+      const doc = new jsPDF({ orientation: viewMode === 'unidade' ? 'landscape' : 'portrait' });
       const selectedProds = produtos.filter(p => selectedProductIds.includes(p.id));
 
       if (logoSrc) {
@@ -126,7 +134,7 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
         doc.text("ESTÂNCIA NOVA OLINDA", 50, 24);
         doc.setFontSize(12);
         doc.setTextColor(100, 100, 100);
-        doc.text(`Tabela de Preços - ${viewMode === 'unidade' ? 'Unitário' : 'Fardo/CX'}`, 50, 32);
+        doc.text(`${viewMode === 'unidade' ? 'Cadastramento' : 'Tabela de Preços'}`, 50, 32);
       } else {
         doc.setFontSize(22);
         doc.setFont("helvetica", "bold");
@@ -134,7 +142,7 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
         doc.text("ESTÂNCIA NOVA OLINDA", 14, 22);
         doc.setFontSize(12);
         doc.setTextColor(100, 100, 100);
-        doc.text(`Tabela de Preços - ${viewMode === 'unidade' ? 'Unitário' : 'Fardo/CX'}`, 14, 30);
+        doc.text(`${viewMode === 'unidade' ? 'Cadastramento' : 'Tabela de Preços'}`, 14, 30);
       }
       
       const tableData = selectedProds.map(p => {
@@ -155,39 +163,77 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
         let barcodeExibicao = viewMode === 'fardo' ? (barcodeFardo || barcodeUnit) : barcodeUnit;
         let nomeExibicao = nomeProduto;
         
-        if (viewMode === 'fardo' && hasPack && barcodeUnit && barcodeUnit !== '-') {
+        if (viewMode === 'unidade' && hasPack && barcodeUnit && barcodeUnit !== '-') {
           nomeExibicao = `${nomeProduto}\n${barcodeUnit}`;
         }
 
         let precoExibicao = p.preco_base;
+        let valorUnitarioExibicao = p.preco_base;
+        
+        if (hasPack) {
+           valorUnitarioExibicao = p.preco_base / multiplier;
+        }
+
         if (hasPack && viewMode === 'unidade') {
           precoExibicao = p.preco_base / multiplier;
         }
+
         const unidadeExibicao = getDisplayUnit(p, viewMode, multiplier, hasPack);
+        const pesoFardo = getPesoFardo(p);
         
-        return [
-          p.codigo || '-',
-          nomeExibicao,
-          barcodeExibicao,
-          unidadeExibicao,
-          `R$ ${formatCurrency(precoExibicao)}`
-        ];
+        if (viewMode === 'fardo') {
+           return [
+             nomeProduto,
+             `R$ ${formatCurrency(valorUnitarioExibicao)}`,
+             unidadeExibicao,
+             `R$ ${formatCurrency(precoExibicao)}`
+           ];
+        } else {
+           return [
+             nomeProduto,
+             `R$ ${formatCurrency(valorUnitarioExibicao)}`,
+             barcodeUnit && barcodeUnit !== '-' ? barcodeUnit : '-',
+             `R$ ${formatCurrency(p.preco_base)}`,
+             `${multiplier} un`,
+             pesoFardo,
+             barcodeFardo && barcodeFardo !== '-' ? barcodeFardo : '-'
+           ];
+        }
       });
+
+      const headRows = viewMode === 'fardo' 
+        ? [['Produto', 'Valor Unitário', 'Qtd. Fardo/Caixa', 'Preço Fardo/Caixa']]
+        : [['Produto', 'Valor Unitário', 'Cód. Barras Unitário', 'Valor Fardo/Caixa', 'Qtd. Fardo/Caixa', 'Peso Fardo/Caixa', 'Cód. Barras Fardo/Caixa']];
+        
+      const colStyles = viewMode === 'fardo' 
+        ? {
+          0: { cellWidth: 'auto', fontSize: 7.5, halign: 'left' },
+          1: { cellWidth: 25, halign: 'center' },
+          2: { cellWidth: 35, halign: 'center' },
+          3: { cellWidth: 35, halign: 'center' }
+        } : {
+          0: { cellWidth: 'auto', fontSize: 7.5, halign: 'left' },
+          1: { cellWidth: 20, halign: 'center' },
+          2: { cellWidth: 35, halign: 'center' },
+          3: { cellWidth: 20, halign: 'center' },
+          4: { cellWidth: 15, halign: 'center' },
+          5: { cellWidth: 20, halign: 'center' },
+          6: { cellWidth: 35, halign: 'center' }
+        };
 
       autoTable(doc, {
         startY: 40,
-        head: [['Cód.', 'Produto', 'Cód. Barras', 'Unidade', 'Preço (R$)']],
+        head: headRows,
         body: tableData,
         theme: 'striped',
-        headStyles: { fillColor: [27, 67, 50] },
+        headStyles: { fillColor: [27, 67, 50], halign: 'center' },
+        didParseCell: (data) => {
+          if (data.section === 'head' && data.column.index === 0) {
+            data.cell.styles.halign = 'left';
+          }
+        },
         styles: { fontSize: 8, cellPadding: 3 },
-        columnStyles: {
-          0: { cellWidth: 15 },
-          1: { cellWidth: 'auto', fontSize: 7.5 },
-          2: { cellWidth: 35 },
-          3: { cellWidth: 20, halign: 'center' },
-          4: { cellWidth: 25, halign: 'right' }
-        }
+        columnStyles: colStyles as any
       });
 
       if (observacao.trim()) {
@@ -245,7 +291,7 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
-                    Visualizar Preços Como:
+                    Exportar como:
                   </label>
                   <div className="flex bg-white p-1 rounded-2xl border border-gray-200 shadow-sm">
                     <button
@@ -256,7 +302,7 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
                           : 'text-gray-400 hover:text-gray-600'
                       }`}
                     >
-                      Unitário
+                      Cadastramento
                     </button>
                     <button
                       onClick={() => setViewMode('fardo')}
@@ -266,7 +312,7 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
                           : 'text-gray-400 hover:text-gray-600'
                       }`}
                     >
-                      Fardo / CX
+                      Tabela de Preço
                     </button>
                   </div>
                 </div>
@@ -403,20 +449,31 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
                   <div>
                     <h1 className="text-[28px] font-bold tracking-tight" style={{ color: '#1b4332' }}>ESTÂNCIA NOVA OLINDA</h1>
                     <p className="text-[16px] text-gray-500 font-medium">
-                      Tabela de Preços - {viewMode === 'unidade' ? 'Unitário' : 'Fardo / CX'}
+                      {viewMode === 'unidade' ? 'Cadastramento' : 'Tabela de Preços'}
                     </p>
                   </div>
                 </div>
 
                 <table className="w-full text-left border-collapse text-[12px] mb-8 mt-4">
                   <thead>
-                    <tr style={{ backgroundColor: '#1b4332', color: 'white' }}>
-                      <th className="p-2 font-bold w-[10%]">Cód.</th>
-                      <th className="p-2 font-bold w-[40%]">Produto</th>
-                      <th className="p-2 font-bold w-[20%]">Cód. Barras</th>
-                      <th className="p-2 font-bold w-[12%] text-center">Unidade</th>
-                      <th className="p-2 font-bold w-[18%] text-right">Preço (R$)</th>
-                    </tr>
+                    {viewMode === 'fardo' ? (
+                      <tr style={{ backgroundColor: '#1b4332', color: 'white' }}>
+                        <th className="p-2 font-bold w-[50%] text-left">Produto</th>
+                        <th className="p-2 font-bold w-[15%] text-center">Valor Unitário</th>
+                        <th className="p-2 font-bold w-[15%] text-center">Qtd. Fardo/Caixa</th>
+                        <th className="p-2 font-bold w-[20%] text-center">Preço Fardo/Caixa</th>
+                      </tr>
+                    ) : (
+                      <tr style={{ backgroundColor: '#1b4332', color: 'white' }}>
+                        <th className="p-2 font-bold w-[30%] text-left">Produto</th>
+                        <th className="p-2 font-bold w-[10%] text-center">Valor Unitário</th>
+                        <th className="p-2 font-bold w-[15%] text-center">Cód. Barras Unitário</th>
+                        <th className="p-2 font-bold w-[10%] text-center">Valor Fardo/Caixa</th>
+                        <th className="p-2 font-bold w-[10%] text-center">Qtd. Fardo/Caixa</th>
+                        <th className="p-2 font-bold w-[10%] text-center">Peso Fardo/Caixa</th>
+                        <th className="p-2 font-bold w-[15%] text-center">Cód. Barras Fardo/Caixa</th>
+                      </tr>
+                    )}
                   </thead>
                   <tbody>
                     {selectedProds.map((p, idx) => {
@@ -436,26 +493,60 @@ export const PriceTableModal: React.FC<PriceTableModalProps> = ({ isOpen, onClos
                       const barcodeExibicao = viewMode === 'fardo' ? (barcodeFardo || barcodeUnit) : barcodeUnit;
 
                       let precoExibicao = p.preco_base;
+                      let valorUnitarioExibicao = p.preco_base;
+                      
+                      if (hasPack) {
+                        valorUnitarioExibicao = p.preco_base / multiplier;
+                      }
+
                       if (hasPack && viewMode === 'unidade') {
                         precoExibicao = p.preco_base / multiplier;
                       }
+
                       const unidadeExibicao = getDisplayUnit(p, viewMode, multiplier, hasPack);
+                      const pesoFardo = getPesoFardo(p);
+
+                      if (viewMode === 'fardo') {
+                        return (
+                          <tr key={p.id} className={idx % 2 === 1 ? 'bg-gray-50' : 'bg-white'}>
+                            <td className="p-2 font-medium text-[11px]">
+                              <div>{nomeProduto}</div>
+                            </td>
+                            <td className="p-2 text-center text-gray-600 font-medium">
+                              R$ {formatCurrency(valorUnitarioExibicao)}
+                            </td>
+                            <td className="p-2 text-center text-gray-600 font-medium">
+                              {unidadeExibicao}
+                            </td>
+                            <td className="p-2 text-center font-medium">
+                              R$ {formatCurrency(precoExibicao)}
+                            </td>
+                          </tr>
+                        );
+                      }
 
                       return (
                         <tr key={p.id} className={idx % 2 === 1 ? 'bg-gray-50' : 'bg-white'}>
-                          <td className="p-2 text-gray-600 font-medium">{p.codigo || '-'}</td>
                           <td className="p-2 font-medium text-[11px]">
                             <div>{nomeProduto}</div>
-                            {viewMode === 'fardo' && hasPack && barcodeUnit && barcodeUnit !== '-' && (
-                              <div className="text-[9px] text-gray-400 font-normal">{barcodeUnit}</div>
-                            )}
                           </td>
-                          <td className="p-2 text-gray-600 font-medium text-[11px] break-all">{barcodeExibicao}</td>
                           <td className="p-2 text-center text-gray-600 font-medium">
-                            {unidadeExibicao}
+                            R$ {formatCurrency(valorUnitarioExibicao)}
                           </td>
-                          <td className="p-2 text-right font-medium">
-                            R$ {formatCurrency(precoExibicao)}
+                          <td className="p-2 text-center text-gray-600 font-medium text-[11px] break-all">
+                            {barcodeUnit && barcodeUnit !== '-' ? barcodeUnit : '-'}
+                          </td>
+                          <td className="p-2 text-center text-gray-600 font-medium">
+                            R$ {formatCurrency(p.preco_base)}
+                          </td>
+                          <td className="p-2 text-center text-gray-600 font-medium">
+                            {multiplier} un
+                          </td>
+                          <td className="p-2 text-center text-gray-600 font-medium">
+                            {pesoFardo}
+                          </td>
+                          <td className="p-2 text-center text-gray-600 font-medium text-[11px] break-all">
+                            {barcodeFardo && barcodeFardo !== '-' ? barcodeFardo : '-'}
                           </td>
                         </tr>
                       );

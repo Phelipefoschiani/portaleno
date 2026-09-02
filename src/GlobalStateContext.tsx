@@ -3,6 +3,7 @@ import {
   Cliente,
   Produto,
   Pedido,
+  ItemPedido,
   Orcamento,
   Despesa,
   Comissao,
@@ -200,8 +201,22 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
           );
         }
 
-        if (qPedidos) setPedidos(qPedidos as Pedido[]);
-        if (qOrcamentos) setOrcamentos(qOrcamentos as unknown as Orcamento[]);
+        if (qPedidos) {
+          const normalizedPedidos = (qPedidos as any[]).map((p) => ({
+            ...p,
+            items: (p.items && p.items.length > 0 ? p.items : (p.itens_pedido || [])) as ItemPedido[],
+            solicitacoes_insumos: (p.solicitacoes_insumos && p.solicitacoes_insumos.length > 0 ? p.solicitacoes_insumos : (p.solicitacoes_insumo || [])),
+          }));
+          setPedidos(normalizedPedidos as Pedido[]);
+        }
+
+        if (qOrcamentos) {
+          const normalizedOrcamentos = (qOrcamentos as any[]).map((o) => ({
+            ...o,
+            items: (o.items && o.items.length > 0 ? o.items : (o.itens_orcamento || [])) as ItemPedido[],
+          }));
+          setOrcamentos(normalizedOrcamentos as Orcamento[]);
+        }
       } catch (err) {
         console.error("Erro fatal no fetchData:", err);
       } finally {
@@ -429,8 +444,16 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         solicitacoes_insumos: [], // Ensure key matches join and interface
       } as any;
       if (items && items.length > 0) {
-        // Remove temporary ID and map to table
-        const mappedItems = items.map(({ id, orcamento_id, unidade_venda, ...it }: any) => ({ ...it, pedido_id: data.id }));
+        // Remove extraneous properties and strictly map columns
+        const mappedItems = items.map((it: any) => ({
+          pedido_id: data.id,
+          produto_id: it.produto_id,
+          quantidade: Number(it.quantidade) || 0,
+          preco: Number(it.preco) || 0,
+          tipo: it.tipo || 'venda',
+          desconto: Number(it.desconto) || 0,
+          quantidade_produzida: Number(it.quantidade_produzida) || 0,
+        }));
         const { data: itemData, error: itemError } = await supabase
           .from("itens_pedido")
           .insert(mappedItems)
@@ -439,7 +462,12 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         if (itemError) {
           console.error("Erro ao inserir itens do pedido:", itemError);
         }
-        if (itemData) insertedPedido.items = itemData;
+        if (itemData && itemData.length > 0) {
+          insertedPedido.items = itemData;
+        } else {
+          // Fallback to locally passed items with generated/passed data
+          insertedPedido.items = mappedItems;
+        }
       }
       if (solicitacoes_insumos && solicitacoes_insumos.length > 0) {
         const mapped = solicitacoes_insumos.map(({ id, ...s }: any) => ({
@@ -516,15 +544,27 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     let updatedItems = oldPedido.items;
     if (items) {
       await supabase.from("itens_pedido").delete().eq("pedido_id", id);
-      const mappedItems = items.map((it) => {
-        const { id: _, orcamento_id, unidade_venda, ...noIdIt } = it as any;
-        return { ...noIdIt, pedido_id: id };
-      });
-      const { data: newItems } = await supabase
+      const mappedItems = items.map((it: any) => ({
+        pedido_id: id,
+        produto_id: it.produto_id,
+        quantidade: Number(it.quantidade) || 0,
+        preco: Number(it.preco) || 0,
+        tipo: it.tipo || 'venda',
+        desconto: Number(it.desconto) || 0,
+        quantidade_produzida: Number(it.quantidade_produzida) || 0,
+      }));
+      const { data: newItems, error: itemError } = await supabase
         .from("itens_pedido")
         .insert(mappedItems)
         .select();
-      if (newItems) updatedItems = newItems;
+      if (itemError) {
+        console.error("Erro ao atualizar itens do pedido:", itemError);
+      }
+      if (newItems && newItems.length > 0) {
+        updatedItems = newItems;
+      } else {
+        updatedItems = mappedItems as any;
+      }
     }
 
     const pName = items ? "Itens do Pedido" : "Detalhes do Pedido";
@@ -615,10 +655,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     if (data) {
       const inserted = { ...data, items: [] } as any;
       if (items && items.length > 0) {
-        // Remove temporary ID and map to table
-        const mappedItems = items.map(({ id, pedido_id, quantidade_produzida, unidade_venda, ...it }: any) => ({
-          ...it,
+        const mappedItems = items.map((it: any) => ({
           orcamento_id: data.id,
+          produto_id: it.produto_id,
+          quantidade: Number(it.quantidade) || 0,
+          preco: Number(it.preco) || 0,
+          tipo: it.tipo || 'venda',
+          desconto: Number(it.desconto) || 0,
         }));
         const { data: itemData, error: itemError } = await supabase
           .from("itens_orcamento")
@@ -628,7 +671,11 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
         if (itemError) {
           console.error("Erro ao inserir itens do orçamento:", itemError);
         }
-        if (itemData) inserted.items = itemData;
+        if (itemData && itemData.length > 0) {
+          inserted.items = itemData;
+        } else {
+          inserted.items = mappedItems;
+        }
       }
       logEvent(`Adicionou novo orçamento.`, inserted.valor_total);
       setOrcamentos((prev) => [...prev, inserted]);
@@ -676,15 +723,26 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({
     let updatedItems = oldOrcamento.items;
     if (items) {
       await supabase.from("itens_orcamento").delete().eq("orcamento_id", id);
-      const mappedItems = items.map((it) => {
-        const { id: _, pedido_id, quantidade_produzida, unidade_venda, ...noIdIt } = it as any;
-        return { ...noIdIt, orcamento_id: id };
-      });
-      const { data: newItems } = await supabase
+      const mappedItems = items.map((it: any) => ({
+        orcamento_id: id,
+        produto_id: it.produto_id,
+        quantidade: Number(it.quantidade) || 0,
+        preco: Number(it.preco) || 0,
+        tipo: it.tipo || 'venda',
+        desconto: Number(it.desconto) || 0,
+      }));
+      const { data: newItems, error: itemError } = await supabase
         .from("itens_orcamento")
         .insert(mappedItems)
         .select();
-      if (newItems) updatedItems = newItems as any;
+      if (itemError) {
+        console.error("Erro ao atualizar itens do orçamento:", itemError);
+      }
+      if (newItems && newItems.length > 0) {
+        updatedItems = newItems as any;
+      } else {
+        updatedItems = mappedItems as any;
+      }
     }
 
     setOrcamentos((prev) => prev.map((o) => o.id === id ? { ...o, ...rest, items: updatedItems } : o)); logEvent(`Atualizou orçamento`, (rest as any).valor_total); };

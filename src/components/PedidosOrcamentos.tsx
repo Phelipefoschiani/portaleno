@@ -98,6 +98,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
   const [selectedNfPedido, setSelectedNfPedido] = useState<Pedido | null>(null);
 
   // Form State for "Novo"
+  const [faturamentoDias, setFaturamentoDias] = useState<string>("");
   const [formData, setFormData] = useState({
     cliente_id: "",
     representante_id: "",
@@ -105,6 +106,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
     prazo_entrega: "",
     previsao_entrega: "",
     data_vencimento: "",
+    data_emissao: "",
     observacoes: "",
     condicao_pagamento: "A Combinar",
   });
@@ -147,7 +149,166 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
     document.body.removeChild(link);
   };
 
+  const formatDateBR = (dateStr?: string): string => {
+    if (!dateStr || dateStr === "A Combinar") return "A Combinar";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const [y, m, d] = dateStr.split("-");
+      return `${d}/${m}/${y}`;
+    }
+    if (dateStr.includes("T")) {
+      const datePart = dateStr.split("T")[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+        const [y, m, d] = datePart.split("-");
+        return `${d}/${m}/${y}`;
+      }
+    }
+    return dateStr;
+  };
+
+  const toInputDate = (dateVal?: any): string => {
+    if (!dateVal) return "";
+    if (typeof dateVal === "string") {
+      const trimmed = dateVal.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+      if (trimmed.includes("T")) {
+        const p = trimmed.split("T")[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(p)) return p;
+      }
+      if (trimmed.includes(" ")) {
+        const p = trimmed.split(" ")[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(p)) return p;
+      }
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+        const [d, m, y] = trimmed.split("/");
+        return `${y}-${m}-${d}`;
+      }
+    }
+    try {
+      const d = new Date(dateVal);
+      if (!isNaN(d.getTime())) {
+        const yyyy = d.getUTCFullYear();
+        const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+        const dd = String(d.getUTCDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+      }
+    } catch (e) {}
+    return "";
+  };
+
+  const extractDatesForEdit = (item: any) => {
+    const dataEmissao = toInputDate(item.data) || new Date().toISOString().split("T")[0];
+
+    let dataVencimento = toInputDate(item.data_vencimento);
+    if (!dataVencimento && item.observacoes) {
+      const matchVenc = item.observacoes.match(/Vencimento:\s*(\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2})/i);
+      if (matchVenc) {
+        dataVencimento = toInputDate(matchVenc[1]);
+      }
+    }
+
+    let prazoEntrega = toInputDate(item.prazo_entrega) || toInputDate(item.previsao_entrega);
+    if (!prazoEntrega && item.observacoes) {
+      const matchEnt = item.observacoes.match(/(?:Entrega Programada|Prazo de Entrega|Programado):\s*(\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}|[^|\n]+)/i);
+      if (matchEnt) {
+        prazoEntrega = toInputDate(matchEnt[1].trim());
+      }
+    }
+
+    const cond = item.condicao_pagamento || item.forma_pagamento_nf || item.forma_pagamento || item.condicao_pagamento_nf || "";
+    const diasMatch = cond.match(/(\d+)\s*dias/i);
+    let diasStr = diasMatch ? diasMatch[1] : "";
+
+    if (!diasStr && dataEmissao && dataVencimento) {
+      const t1 = new Date(dataEmissao).getTime();
+      const t2 = new Date(dataVencimento).getTime();
+      if (!isNaN(t1) && !isNaN(t2) && t2 >= t1) {
+        const diffDays = Math.round((t2 - t1) / (1000 * 3600 * 24));
+        if (diffDays > 0) {
+          diasStr = String(diffDays);
+        }
+      }
+    }
+
+    return {
+      dataEmissao,
+      dataVencimento,
+      prazoEntrega,
+      diasStr,
+    };
+  };
+
+  const addDaysToDateString = (dateStr: string, days: number): string => {
+    let base: Date;
+    if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const [y, m, d] = dateStr.split("-").map(Number);
+      base = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    } else {
+      const now = new Date();
+      base = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0));
+    }
+    base.setUTCDate(base.getUTCDate() + days);
+    const yyyy = base.getUTCFullYear();
+    const mm = String(base.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(base.getUTCDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const handleDataEmissaoChange = (newEmissionDate: string) => {
+    const dias = parseInt(faturamentoDias, 10);
+    if (!isNaN(dias) && dias >= 0) {
+      const calcDate = addDaysToDateString(newEmissionDate, dias);
+      setFormData((prev) => ({
+        ...prev,
+        data_emissao: newEmissionDate,
+        data_vencimento: calcDate,
+      }));
+    } else {
+      setFormData((prev) => ({ ...prev, data_emissao: newEmissionDate }));
+    }
+  };
+
+  const handleFaturamentoDiasChange = (daysVal: string) => {
+    setFaturamentoDias(daysVal);
+    const dias = parseInt(daysVal, 10);
+    const emissionDate = formData.data_emissao || new Date().toISOString().split("T")[0];
+    if (!isNaN(dias) && dias >= 0) {
+      const calcDate = addDaysToDateString(emissionDate, dias);
+      
+      let currentBase = formData.condicao_pagamento || "A Combinar";
+      if (currentBase.includes("(")) {
+        currentBase = currentBase.split("(")[0].trim();
+      }
+      if (!currentBase || currentBase === "A Combinar") {
+        currentBase = "Boleto";
+      }
+      const newCond = `${currentBase} (${dias} dias)`;
+
+      setFormData((prev) => ({
+        ...prev,
+        data_vencimento: calcDate,
+        condicao_pagamento: newCond,
+      }));
+    }
+  };
+
+  const handleCondicaoSelectChange = (newCond: string) => {
+    const dias = parseInt(faturamentoDias, 10);
+    if (!isNaN(dias) && dias >= 0 && newCond !== "A Combinar") {
+      setFormData((prev) => ({
+        ...prev,
+        condicao_pagamento: `${newCond} (${dias} dias)`,
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        condicao_pagamento: newCond,
+      }));
+    }
+  };
+
   const resetForm = () => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    setFaturamentoDias("");
     setFormData({ 
       cliente_id: "", 
       representante_id: "", 
@@ -155,6 +316,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       prazo_entrega: "",
       previsao_entrega: "",
       data_vencimento: "",
+      data_emissao: todayStr,
       observacoes: "",
       condicao_pagamento: "A Combinar"
     });
@@ -175,30 +337,44 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
   };
 
   const handleOpenVisualizarOrcamento = (o: Orcamento) => {
-    setSelectedItem(o);
+    const fresh = orcamentos.find(x => x.id === o.id) || o;
+    const items = (fresh.items && fresh.items.length > 0) ? fresh.items : ((fresh as any).itens_orcamento || []);
+    const completeItem = { ...fresh, items };
+    setSelectedItem(completeItem);
     setModalType("Visualizar Orcamento");
-    setExportOptionsModal(prev => ({ ...prev, nomeDocumento: "Orçamento" }));
+    setExportOptionsModal(prev => ({ ...prev, nomeDocumento: "Orçamento", selectedItem: completeItem }));
     setIsModalOpen(true);
   };
 
   const handleOpenVisualizarPedido = (p: Pedido) => {
-    setSelectedItem(p);
+    const fresh = pedidos.find(x => x.id === p.id) || p;
+    const items = (fresh.items && fresh.items.length > 0) ? fresh.items : ((fresh as any).itens_pedido || []);
+    const completeItem = { ...fresh, items };
+    setSelectedItem(completeItem);
     setModalType("Visualizar Pedido");
-    setExportOptionsModal(prev => ({ ...prev, nomeDocumento: "Pedido" }));
+    setExportOptionsModal(prev => ({ ...prev, nomeDocumento: "Pedido", selectedItem: completeItem }));
     setIsModalOpen(true);
   };
 
   const handleOpenEditarOrcamento = (o: Orcamento) => {
-    setSelectedItem(o);
+    const fresh = orcamentos.find(x => x.id === o.id) || o;
+    const items = (fresh.items && fresh.items.length > 0) ? fresh.items : ((fresh as any).itens_orcamento || []);
+    const completeItem = { ...fresh, items };
+    setSelectedItem(completeItem);
+
+    const dates = extractDatesForEdit(fresh);
+    const condicao = fresh.condicao_pagamento || (fresh as any).forma_pagamento_nf || (fresh as any).forma_pagamento || (fresh as any).condicao_pagamento_nf || "A Combinar";
+    setFaturamentoDias(dates.diasStr);
     setFormData({
-      cliente_id: o.cliente_id || "",
-      representante_id: o.representante_id || "",
-      items: [...(o.items || [])],
-      prazo_entrega: o.prazo_entrega || "",
-      previsao_entrega: o.previsao_entrega || "",
-      data_vencimento: (o as any).data_vencimento || "",
-      observacoes: o.observacoes || "",
-      condicao_pagamento: o.condicao_pagamento || "A Combinar",
+      cliente_id: fresh.cliente_id || "",
+      representante_id: fresh.representante_id || "",
+      items: [...items],
+      prazo_entrega: dates.prazoEntrega,
+      previsao_entrega: dates.prazoEntrega,
+      data_vencimento: dates.dataVencimento,
+      data_emissao: dates.dataEmissao,
+      observacoes: fresh.observacoes || "",
+      condicao_pagamento: condicao,
     });
     setNewItem({
       produto_id: "",
@@ -212,16 +388,24 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
   };
 
   const handleOpenEditarPedido = (p: Pedido) => {
-    setSelectedItem(p);
+    const fresh = pedidos.find(x => x.id === p.id) || p;
+    const items = (fresh.items && fresh.items.length > 0) ? fresh.items : ((fresh as any).itens_pedido || []);
+    const completeItem = { ...fresh, items };
+    setSelectedItem(completeItem);
+
+    const dates = extractDatesForEdit(fresh);
+    const condicao = fresh.condicao_pagamento || (fresh as any).forma_pagamento_nf || (fresh as any).forma_pagamento || (fresh as any).condicao_pagamento_nf || "A Combinar";
+    setFaturamentoDias(dates.diasStr);
     setFormData({
-      cliente_id: p.cliente_id || "",
-      representante_id: p.representante_id || "",
-      items: [...(p.items || [])],
-      prazo_entrega: p.prazo_entrega || "",
-      previsao_entrega: p.previsao_entrega || "",
-      data_vencimento: p.data_vencimento || "",
-      observacoes: p.observacoes || "",
-      condicao_pagamento: p.condicao_pagamento || "A Combinar",
+      cliente_id: fresh.cliente_id || "",
+      representante_id: fresh.representante_id || "",
+      items: [...items],
+      prazo_entrega: dates.prazoEntrega,
+      previsao_entrega: dates.prazoEntrega,
+      data_vencimento: dates.dataVencimento,
+      data_emissao: dates.dataEmissao,
+      observacoes: fresh.observacoes || "",
+      condicao_pagamento: condicao,
     });
     setNewItem({
       produto_id: "",
@@ -248,6 +432,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       await updateOrcamento(selectedItem.id, {
         cliente_id: formData.cliente_id,
         representante_id: formData.representante_id,
+        data: formData.data_emissao,
         items: formData.items,
         valor_total: cartSummary.valor_total,
         condicao_pagamento: formData.condicao_pagamento,
@@ -278,12 +463,14 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       await updatePedido(selectedItem.id, {
         cliente_id: formData.cliente_id,
         representante_id: formData.representante_id,
+        data: formData.data_emissao,
         items: formData.items,
         valor_total: cartSummary.valor_total,
         custo_total: cartSummary.custo_total,
         margem: cartSummary.margem,
         condicao_pagamento: formData.condicao_pagamento,
         prazo_entrega: formData.prazo_entrega,
+        previsao_entrega: formData.prazo_entrega,
         data_vencimento: formData.data_vencimento,
         observacoes: formData.observacoes,
       });
@@ -408,37 +595,23 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
           pdf.text(`Pagamento:`, 16, currentY);
           pdf.setFont("helvetica", "normal");
           let condTxt = selectedItem.condicao_pagamento || selectedItem.forma_pagamento_nf || "A Combinar";
-          
-          // Tentar pegar vencimento se não estiver no objeto mas estiver nas observações
-          let vencimento = (selectedItem as any).data_vencimento;
-          if (!vencimento && selectedItem.observacoes?.includes("Vencimento:")) {
-             const match = selectedItem.observacoes.match(/Vencimento: (\d{2}\/\d{2}\/\d{4})/);
-             if (match) vencimento = match[1];
-          }
-
-          if (vencimento) {
-            const vencTxt = vencimento.includes('-') 
-              ? new Date(vencimento).toLocaleDateString("pt-BR", { timeZone: 'UTC' })
-              : vencimento;
-            condTxt += ` | Vencimento: ${vencTxt}`;
-          }
-          
           pdf.text(condTxt, 39, currentY);
           currentY += 6;
         }
 
         if (showPrazo) {
           pdf.setFont("helvetica", "bold");
-          pdf.text(`Prazo de Entrega:`, 16, currentY);
+          pdf.text(`Entrega Programada:`, 16, currentY);
           pdf.setFont("helvetica", "normal");
           
           let deliveryText = selectedItem.prazo_entrega || "A Combinar";
-          if ((!selectedItem.prazo_entrega || deliveryText === "A Combinar") && selectedItem.observacoes?.includes("Prazo de Entrega:")) {
-             const match = selectedItem.observacoes.match(/Prazo de Entrega: ([^|\n]+)/);
+          if ((!selectedItem.prazo_entrega || deliveryText === "A Combinar") && selectedItem.observacoes?.includes("Programado:")) {
+             const match = selectedItem.observacoes.match(/(?:Programado|Entrega Programada): ([^|\n]+)/);
              if (match) deliveryText = match[1].trim();
           }
+          deliveryText = formatDateBR(deliveryText);
 
-          pdf.text(deliveryText, 47, currentY);
+          pdf.text(deliveryText, 55, currentY);
           currentY += 6;
         }
 
@@ -464,32 +637,59 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
       }
       */
 
-      // Preparar Itens da Tabela
-      const tableData = selectedItem.items.map((it: any) => {
+      // Preparar Itens da Tabela com resiliência total
+      const rawItems = (selectedItem.items && selectedItem.items.length > 0)
+        ? selectedItem.items
+        : ((selectedItem as any).itens_pedido && (selectedItem as any).itens_pedido.length > 0)
+          ? (selectedItem as any).itens_pedido
+          : ((selectedItem as any).itens_orcamento && (selectedItem as any).itens_orcamento.length > 0)
+            ? (selectedItem as any).itens_orcamento
+            : (pedidos.find((p) => p.id === selectedItem.id)?.items || orcamentos.find((o) => o.id === selectedItem.id)?.items || []);
+
+      let tableData = rawItems.map((it: any) => {
         const p = produtos.find((x) => x.id === it.produto_id);
         const precoEf = it.tipo === 'bonificacao' ? 0 : it.preco - (it.desconto || 0);
         const tipoLabel = it.tipo === 'bonificacao' ? " (Bonificação)" : "";
-        const peso = p ? (p.unidade === 'g' ? ((it.quantidade * (p.quantidade_unidade || 1)) / 1000).toFixed(2) : (it.quantidade * (p.quantidade_unidade || 1)).toFixed(2)) : '0.00';
+        
+        let nomeProduto = p?.nome || it.nome_produto || "Produto";
+        const qtyMatch = nomeProduto.match(/\s*\((\d+)[xX](\d+)\)/);
+        if (qtyMatch) {
+          if (it.unidade_venda === 'fardo') {
+            nomeProduto = nomeProduto.replace(qtyMatch[0], ` (1x${qtyMatch[2]})`);
+          } else if (it.unidade_venda === 'unidade') {
+            nomeProduto = nomeProduto.replace(qtyMatch[0], '');
+          }
+        }
+
+        const qtdFardo = qtyMatch ? parseInt(qtyMatch[2]) : 1;
+        const pesoUnitario = p ? ((p.quantidade_unidade || 1) / qtdFardo) : 0;
+        const pesoBase = it.unidade_venda === 'unidade' ? pesoUnitario : (p?.quantidade_unidade || 1);
+        const peso = p ? (p.unidade === 'g' ? ((it.quantidade * pesoBase) / 1000).toFixed(2) : (it.quantidade * pesoBase).toFixed(2)) : '0.00';
+
         return [
-          (p?.nome || "Produto Desconhecido") + tipoLabel + "\nPeso: " + peso + " kg",
-          it.quantidade.toString(),
+          nomeProduto + tipoLabel + "\nPeso: " + peso + " kg",
           `R$ ${formatCurrency(precoEf)}`,
+          it.quantidade.toString(),
           `R$ ${formatCurrency((it.quantidade * precoEf))}`
         ];
       });
 
+      if (tableData.length === 0) {
+        tableData = [["Nenhum produto listado no pedido/orçamento", "R$ 0,00", "0", "R$ 0,00"]];
+      }
+
       autoTable(pdf, {
         startY: yPos,
-        head: [['Produto', 'Qtd.', 'Preço Unitário', 'Subtotal']],
+        head: [['Produto', 'Preço Unitário', 'Qtd.', 'Subtotal']],
         body: tableData,
         theme: 'striped',
         styles: { fontSize: 9, cellPadding: 3, textColor: [60,60,60] },
         alternateRowStyles: { fillColor: [245, 247, 246] },
         columnStyles: {
-          0: { halign: 'left' },
-          1: { halign: 'center' },
-          2: { halign: 'center' },
-          3: { halign: 'center' }
+          0: { halign: 'left', cellWidth: 80, fontStyle: 'bold' },
+          1: { halign: 'right', cellWidth: 40 },
+          2: { halign: 'center', cellWidth: 30, fontStyle: 'bold' },
+          3: { halign: 'right', cellWidth: 40, fontStyle: 'bold' }
         },
         headStyles: { 
           fillColor: [27, 67, 50], 
@@ -890,7 +1090,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         const success = await addOrcamento({
           cliente_id: formData.cliente_id,
           representante_id: formData.representante_id,
-          data: new Date().toISOString().split("T")[0],
+          data: formData.data_emissao || new Date().toISOString().split("T")[0],
           items: formData.items,
           valor_total: cartSummary.valor_total,
           status: "Orçamento",
@@ -940,7 +1140,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         const success = await addPedido({
           cliente_id: fromOrcamento.cliente_id,
           representante_id: fromOrcamento.representante_id,
-          data: new Date().toISOString().split("T")[0],
+          data: fromOrcamento.data || new Date().toISOString().split("T")[0],
           items: fromOrcamento.items,
           valor_total: fromOrcamento.valor_total,
           custo_total: fromOrcamento.valor_total * 0.4, // Estimate 40%
@@ -970,7 +1170,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
         const success = await addPedido({
           cliente_id: formData.cliente_id,
           representante_id: formData.representante_id,
-          data: new Date().toISOString().split("T")[0],
+          data: formData.data_emissao || new Date().toISOString().split("T")[0],
           items: formData.items,
           valor_total: cartSummary.valor_total,
           custo_total: cartSummary.custo_total,
@@ -1721,41 +1921,78 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                   <div>
                     <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-3 block">
-                      Condição de Pagamento
-                    </label>
-                    <select
-                      value={formData.condicao_pagamento}
-                      onChange={(e) =>
-                        setFormData({ ...formData, condicao_pagamento: e.target.value })
-                      }
-                      className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-base font-bold text-gray-900 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
-                    >
-                      <option value="A Combinar">A Combinar</option>
-                      <option value="Boleto">Boleto</option>
-                      <option value="Pix">Pix</option>
-                      <option value="Dinheiro">Dinheiro</option>
-                      <option value="Bonificação">Bonificação</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-3 block">
-                      Data de Vencimento
+                      Data de Emissão
                     </label>
                     <input
                       type="date"
-                      value={formData.data_vencimento}
-                      onChange={(e) => setFormData({ ...formData, data_vencimento: e.target.value })}
+                      value={formData.data_emissao}
+                      onChange={(e) => handleDataEmissaoChange(e.target.value)}
                       className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-base font-bold text-gray-900 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
                     />
                   </div>
+
                   <div>
                     <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-3 block">
-                      Data de Entrega
+                      Condição de Pagamento
+                    </label>
+                    {(() => {
+                      const baseOptions = [
+                        "A Combinar",
+                        "Boleto",
+                        "Pix",
+                        "Dinheiro",
+                        "Cartão de Crédito",
+                        "Transferência",
+                        "Depósito",
+                        "À Vista",
+                        "Bonificação",
+                      ];
+                      let rawCond = formData.condicao_pagamento || "A Combinar";
+                      let currentBase = rawCond.includes("(") ? rawCond.split("(")[0].trim() : rawCond.trim();
+                      if (!currentBase) currentBase = "A Combinar";
+
+                      const optionsToShow = baseOptions.includes(currentBase)
+                        ? baseOptions
+                        : [...baseOptions, currentBase];
+
+                      return (
+                        <select
+                          value={currentBase}
+                          onChange={(e) => handleCondicaoSelectChange(e.target.value)}
+                          className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-base font-bold text-gray-900 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
+                        >
+                          {optionsToShow.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    })()}
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-3 block">
+                      Prazo em Dias (Boleto)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Ex: 15, 30, 45"
+                      value={faturamentoDias}
+                      onChange={(e) => handleFaturamentoDiasChange(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-base font-bold text-gray-900 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-3 block">
+                      Programado (Entrega)
                     </label>
                     <input
                       type="date"
                       value={formData.prazo_entrega}
-                      onChange={(e) => setFormData({ ...formData, prazo_entrega: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, prazo_entrega: e.target.value, previsao_entrega: e.target.value })}
                       className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-base font-bold text-gray-900 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
                     />
                   </div>
@@ -2316,7 +2553,8 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   <div className="flex flex-col text-left">
                     <span className="text-xs font-bold text-gray-800">Condição de Pagamento</span>
                     <span className="text-[10px] text-gray-400 font-semibold text-left">
-                      {selectedItem.condicao_pagamento || "A Combinar"}
+                      {selectedItem.condicao_pagamento || (selectedItem as any).forma_pagamento_nf || (selectedItem as any).forma_pagamento || "A Combinar"}
+                      {(selectedItem as any)?.faturamento_dias ? ` (${(selectedItem as any).faturamento_dias} dias)` : ""}
                     </span>
                   </div>
                 </label>
@@ -2329,9 +2567,9 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                     className="w-5 h-5 accent-emerald-700 rounded border-gray-300"
                   />
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-bold text-gray-800">Prazo de Entrega</span>
+                    <span className="text-xs font-bold text-gray-800">Entrega Programada</span>
                     <span className="text-[10px] text-gray-400 font-semibold text-left">
-                      {selectedItem.prazo_entrega || "A Combinar"}
+                      {formatDateBR(selectedItem.prazo_entrega)}
                     </span>
                   </div>
                 </label>
@@ -2450,13 +2688,16 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                       {exportOptionsModal.includeCondicao && (
                         <div className="border border-gray-200 rounded-lg p-3">
                           <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Condição de Pagamento</p>
-                          <p className="text-sm font-semibold text-gray-900">{selectedItem.condicao_pagamento || "A Combinar"}</p>
+                          <p className="text-sm font-semibold text-gray-900">
+                             {selectedItem.condicao_pagamento || (selectedItem as any).forma_pagamento_nf || (selectedItem as any).forma_pagamento || "A Combinar"}
+                             {(selectedItem as any)?.faturamento_dias ? ` (${(selectedItem as any).faturamento_dias} dias)` : ""}
+                          </p>
                         </div>
                       )}
                       {exportOptionsModal.includePrazo && (
                         <div className="border border-gray-200 rounded-lg p-3">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Prazo de Entrega</p>
-                          <p className="text-sm font-semibold text-gray-900">{selectedItem.prazo_entrega ? (/^\d{4}-\d{2}-\d{2}/.test(selectedItem.prazo_entrega) ? new Date(selectedItem.prazo_entrega).toLocaleDateString("pt-BR", { timeZone: 'UTC' }) : selectedItem.prazo_entrega) : "A Combinar"}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Entrega Programada</p>
+                          <p className="text-sm font-semibold text-gray-900">{formatDateBR(selectedItem.prazo_entrega)}</p>
                         </div>
                       )}
                     </div>
@@ -2468,36 +2709,72 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                       <thead>
                         <tr style={{ backgroundColor: '#1b4332', color: 'white' }}>
                           <th className="p-3 text-xs font-bold w-[45%]">Produto</th>
-                          <th className="p-3 text-xs font-bold w-[15%] text-center">Qtd</th>
                           <th className="p-3 text-xs font-bold w-[20%] text-right">Preço Un.</th>
+                          <th className="p-3 text-xs font-bold w-[15%] text-center">Qtd</th>
                           <th className="p-3 text-xs font-bold w-[20%] text-right">Subtotal</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedItem.items.map((it: any, i: number) => {
-                          const p = produtos.find((x) => x.id === it.produto_id);
-                          const precoEf = it.tipo === 'bonificacao' ? 0 : it.preco - (it.desconto || 0);
-                          return (
-                            <tr key={i} className={i % 2 === 1 ? 'bg-gray-50' : 'bg-white'}>
-                              <td className="p-3 border-b border-gray-100">
-                                <span className="font-bold text-xs text-gray-900">{p?.nome || "Desconhecido"}</span>
-                                {it.tipo === 'bonificacao' && <span className="ml-2 text-[8px] font-black uppercase text-blue-600 bg-blue-50 px-1 py-0.5 rounded">Bonificação</span>}
-                                <span className="block text-[10px] text-gray-500 mt-0.5">
-                                  Peso: {p ? (p.unidade === 'g' ? ((it.quantidade * (p.quantidade_unidade || 1)) / 1000).toFixed(2) : (it.quantidade * (p.quantidade_unidade || 1)).toFixed(2)) : '0.00'} kg
-                                </span>
-                              </td>
-                              <td className="p-3 border-b border-gray-100 font-bold text-gray-900 text-center text-xs">
-                                {it.quantidade}
-                              </td>
-                              <td className="p-3 border-b border-gray-100 font-medium text-gray-700 text-right text-xs whitespace-nowrap">
-                                R$ {formatCurrency(precoEf)}
-                              </td>
-                              <td className="p-3 border-b border-gray-100 font-black text-gray-900 text-right text-xs whitespace-nowrap">
-                                R$ {formatCurrency((it.quantidade * precoEf))}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                        {(() => {
+                          const displayItems = (selectedItem.items && selectedItem.items.length > 0)
+                            ? selectedItem.items
+                            : ((selectedItem as any).itens_pedido && (selectedItem as any).itens_pedido.length > 0)
+                              ? (selectedItem as any).itens_pedido
+                              : ((selectedItem as any).itens_orcamento && (selectedItem as any).itens_orcamento.length > 0)
+                                ? (selectedItem as any).itens_orcamento
+                                : (pedidos.find((p) => p.id === selectedItem.id)?.items || orcamentos.find((o) => o.id === selectedItem.id)?.items || []);
+
+                          if (displayItems.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan={4} className="p-6 text-center text-gray-500 font-semibold text-xs">
+                                  Nenhum item registrado para este documento.
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          return displayItems.map((it: any, i: number) => {
+                            const p = produtos.find((x) => x.id === it.produto_id);
+                            const precoEf = it.tipo === 'bonificacao' ? 0 : it.preco - (it.desconto || 0);
+                            
+                            let nomeProduto = p?.nome || it.nome_produto || "Produto";
+                            const qtyMatch = nomeProduto.match(/\s*\((\d+)[xX](\d+)\)/);
+                            if (qtyMatch) {
+                              if (it.unidade_venda === 'fardo') {
+                                nomeProduto = nomeProduto.replace(qtyMatch[0], ` (1x${qtyMatch[2]})`);
+                              } else if (it.unidade_venda === 'unidade') {
+                                nomeProduto = nomeProduto.replace(qtyMatch[0], '');
+                              }
+                            }
+                            
+                            const qtdFardo = qtyMatch ? parseInt(qtyMatch[2]) : 1;
+                            const pesoUnitario = p ? ((p.quantidade_unidade || 1) / qtdFardo) : 0;
+                            const pesoBase = it.unidade_venda === 'unidade' ? pesoUnitario : (p?.quantidade_unidade || 1);
+                            const peso = p ? (p.unidade === 'g' ? ((it.quantidade * pesoBase) / 1000).toFixed(2) : (it.quantidade * pesoBase).toFixed(2)) : '0.00';
+
+                            return (
+                              <tr key={i} className={i % 2 === 1 ? 'bg-gray-50' : 'bg-white'}>
+                                <td className="p-3 border-b border-gray-100">
+                                  <span className="font-bold text-xs text-gray-900">{nomeProduto}</span>
+                                  {it.tipo === 'bonificacao' && <span className="ml-2 text-[8px] font-black uppercase text-blue-600 bg-blue-50 px-1 py-0.5 rounded">Bonificação</span>}
+                                  <span className="block text-[10px] text-gray-500 mt-0.5">
+                                    Peso: {peso} kg
+                                  </span>
+                                </td>
+                                <td className="p-3 border-b border-gray-100 font-medium text-gray-700 text-right text-xs whitespace-nowrap">
+                                  R$ {formatCurrency(precoEf)}
+                                </td>
+                                <td className="p-3 border-b border-gray-100 font-bold text-gray-900 text-center text-xs">
+                                  {it.quantidade}
+                                </td>
+                                <td className="p-3 border-b border-gray-100 font-black text-gray-900 text-right text-xs whitespace-nowrap">
+                                  R$ {formatCurrency((it.quantidade * precoEf))}
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })()}
                       </tbody>
                       <tfoot>
                         <tr className="border-t-2 border-gray-800">
@@ -2839,7 +3116,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                             <div className="border border-black p-2 text-left">
                               <p className="font-extrabold text-[7.5px] uppercase text-gray-500 tracking-wider font-sans">INFORMAÇÕES COMPLEMENTARES</p>
                               <p className="text-[7px] text-gray-650 font-sans">EMITIDA CONFORME SEFAZ DO ESTADO DO PARÁ - HOMOLOGADA VIA PROCESSO SELETIVO MANUAL E CONTINGÊNCIA FINANCEIRA.</p>
-                              <p className="text-[7px] text-gray-650 leading-tight font-sans">PRAZO DE ENTREGA: {selectedNfPedido.prazo_entrega || 'A COMBINAR'}.</p>
+                              <p className="text-[7px] text-gray-650 leading-tight font-sans">ENTREGA PROGRAMADA: {formatDateBR(selectedNfPedido.prazo_entrega)}.</p>
                             </div>
                           </div>
                         </div>
@@ -3233,8 +3510,8 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                           FINANCEIRA.
                         </p>
                         <p className="text-[7px] text-gray-650 leading-tight">
-                          PRAZO DE ENTREGA:{" "}
-                          {selectedNfPedido.prazo_entrega || "A COMBINAR"}
+                          ENTREGA PROGRAMADA:{" "}
+                          {formatDateBR(selectedNfPedido.prazo_entrega)}
                           .
                         </p>
                       </div>
@@ -3530,7 +3807,7 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
               {/* DATA VENCIMENTO */}
               <div>
                 <label className="block text-xs font-black text-gray-400 uppercase tracking-wider mb-1.5">
-                  Data de Vencimento <span className="text-red-500">*</span>
+                  Faturado para Tantos dias <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="date"
@@ -4145,8 +4422,6 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                   </span>
                   <span className="text-[10px] text-gray-400 font-semibold text-left">
                     {exportOptionsModal.selectedItem?.condicao_pagamento || "A Combinar"}
-                    {(exportOptionsModal.selectedItem as any)?.data_vencimento && 
-                      ` | Vencimento: ${new Date((exportOptionsModal.selectedItem as any).data_vencimento).toLocaleDateString("pt-BR", { timeZone: 'UTC' })}`}
                   </span>
                 </div>
               </label>
@@ -4165,10 +4440,10 @@ const PedidosOrcamentos: React.FC<{ empresa?: string; setActiveTab?: (tab: strin
                 />
                 <div className="flex flex-col text-left">
                   <span className="text-xs font-bold text-gray-800">
-                    Prazo de Entrega
+                    Entrega Programada
                   </span>
                   <span className="text-[10px] text-gray-400 font-semibold text-left">
-                    {exportOptionsModal.selectedItem?.prazo_entrega || "A Combinar"}
+                    {formatDateBR(exportOptionsModal.selectedItem?.prazo_entrega)}
                   </span>
                 </div>
               </label>

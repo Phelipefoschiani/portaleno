@@ -81,6 +81,7 @@ export interface Orcamento {
   condicao_pagamento: string;
   prazo_entrega: string;
   data_vencimento?: string;
+  data_emissao?: string;
   previsao_entrega?: string;
   observacoes?: string;
 }
@@ -106,6 +107,7 @@ export interface Pedido {
   previsao_entrega?: string;
   condicao_pagamento?: string;
   prazo_entrega?: string;
+  data_emissao?: string;
   observacoes?: string;
   solicitacoes_insumos?: SolicitacaoInsumo[];
   data_fabricacao?: string;

@@ -466,7 +466,7 @@ const Produtos: React.FC<{ empresa?: string }> = ({ empresa }) => {
     
     // If has package, append the correct suffix
     const finalName = temEmbalagem 
-      ? `${cleanName} (${calcUnitWeight}x${calcQty})`
+      ? `${cleanName} (1x${calcQty})`
       : cleanName;
 
     // Determine final selling unit
