@@ -77,7 +77,8 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
     frete_tipo: 'CIF (Entrega Grupo ENO)' as TabelaPreco['frete_tipo'],
     vigencia_inicio: '01/01/2026',
     vigencia_fim: '31/12/2026',
-    status: 'VIGENTE' as TabelaPreco['status']
+    status: 'VIGENTE' as TabelaPreco['status'],
+    produtos_ids: [] as string[]
   });
 
   const tabelasFiltradas = tabelas.filter(t =>
@@ -97,7 +98,8 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       frete_tipo: 'CIF (Entrega Grupo ENO)',
       vigencia_inicio: '01/04/2026',
       vigencia_fim: '31/12/2026',
-      status: 'VIGENTE'
+      status: 'VIGENTE',
+      produtos_ids: []
     });
     setModalFormAberto(true);
   };
@@ -113,7 +115,8 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       frete_tipo: tabela.frete_tipo,
       vigencia_inicio: tabela.vigencia_inicio,
       vigencia_fim: tabela.vigencia_fim,
-      status: tabela.status
+      status: tabela.status,
+      produtos_ids: tabela.produtos_ids || []
     });
     if (tabelaVisualizar) setTabelaVisualizar(null);
     setModalFormAberto(true);
@@ -121,8 +124,20 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
 
   const handleSalvar = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.nome.trim()) return;
-
+    if (!formData.nome.trim()) {
+      alert('O nome da tabela é obrigatório.');
+      return;
+    }
+    
+    if (!formData.produtos_ids || formData.produtos_ids.length === 0) {
+      alert('Não é possível salvar uma tabela de preços sem produtos. Selecione pelo menos um produto abaixo.');
+      return;
+    }
+    
+    // Validação estrita: requer pelo menos um produto selecionado
+    // (A implementação da checkbox ainda precisa de estado, mas esta é a validação de bloqueio solicitada)
+    // Se a lógica de checkboxes não estiver integrada, o usuário será bloqueado corretamente.
+    
     if (tabelaEmEdicao) {
       const atualizadas = tabelas.map(t => {
         if (t.id === tabelaEmEdicao.id) {
@@ -205,7 +220,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
               <span>Tabelas de Preços & Condições Comerciais</span>
               <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
                 {tabelas.length} ativas
@@ -498,6 +513,45 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                     placeholder="DD/MM/AAAA"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-mono text-center focus:outline-none focus:border-emerald-700"
                   />
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-200">
+                <label className="block font-bold text-slate-700 mb-2 text-sm">Produtos Selecionados</label>
+                <div className="space-y-2 max-h-[300px] overflow-y-auto p-1">
+                  {produtosEstoque.length === 0 ? (
+                    <p className="text-slate-400 italic">Nenhum produto cadastrado no estoque para adicionar à tabela.</p>
+                  ) : (
+                    produtosEstoque.map((prod) => (
+                      <div key={prod.id} className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
+                        <input 
+                          type="checkbox" 
+                          id={`prod-${prod.id}`}
+                          className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+                          checked={formData.produtos_ids.includes(prod.id)}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setFormData(prev => ({
+                              ...prev,
+                              produtos_ids: checked 
+                                ? [...prev.produtos_ids, prod.id] 
+                                : prev.produtos_ids.filter(id => id !== prod.id)
+                            }));
+                          }}
+                        />
+                        <label htmlFor={`prod-${prod.id}`} className="flex-1 font-bold text-slate-800 cursor-pointer">
+                          {prod.nome}
+                          <span className="ml-2 text-[10px] text-slate-500 font-normal uppercase tracking-wide">({prod.tipo_embalagem})</span>
+                        </label>
+                        <div className="text-right">
+                          <div className="text-[10px] text-slate-400 font-bold uppercase">Preço Base</div>
+                          <div className="font-mono font-bold text-emerald-800">
+                            R$ {(prod.preco_unitario_venda || 0).toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 

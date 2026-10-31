@@ -35,37 +35,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts';
-
-export interface Cliente {
-  id: string;
-  empresa_id: string;
-  tipo_pessoa: 'PF' | 'PJ';
-  razao_nome: string;
-  fantasia?: string;
-  cpf_cnpj: string;
-  ie_rg?: string;
-  email: string;
-  telefone: string;
-  endereco: {
-    cep: string;
-    logradouro: string;
-    numero: string;
-    bairro: string;
-    municipio: string;
-    uf: string;
-    complemento?: string;
-  };
-  forma_pagamento_id: string;
-  forma_pagamento_nome?: string;
-  prazo_pagamento_id: string;
-  prazo_pagamento_nome?: string;
-  vendedor_id?: string;
-  vendedor_nome?: string;
-  tabela_preco_id?: string;
-  tabela_preco_nome?: string;
-  ativo: boolean;
-  criado_em: string;
-}
+import { carregarClientes, salvarClientes, Cliente } from '../../data/clientesData';
 
 // Estrutura de Itens do Pedido
 export interface CompraItem {
@@ -641,7 +611,7 @@ export interface CadastroClientesProps {
 }
 
 export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {}) {
-  const [clientes, setClientes] = useState<Cliente[]>(CLIENTES_INICIAIS);
+  const [clientes, setClientes] = useState<Cliente[]>(() => carregarClientes());
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'PJ' | 'PF'>('TODOS');
   const [filtroStatus, setFiltroStatus] = useState<'TODOS' | 'ATIVOS' | 'INATIVOS'>('TODOS');
@@ -649,6 +619,18 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
   // Controle de Navegação: 'lista', 'formulario' ou 'historico'
   const [modo, setModo] = useState<'lista' | 'formulario' | 'historico'>('lista');
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
+
+  React.useEffect(() => {
+    const handleUpdate = () => {
+      setClientes(carregarClientes());
+    };
+    window.addEventListener('clientes_updated', handleUpdate);
+    window.addEventListener('sistema_reset_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('clientes_updated', handleUpdate);
+      window.removeEventListener('sistema_reset_updated', handleUpdate);
+    };
+  }, []);
 
   React.useEffect(() => {
     if (clienteIdInicial) {
@@ -770,11 +752,18 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
   };
 
   const alternarStatusCliente = (id: string) => {
-    setClientes(prev => prev.map(c => c.id === id ? { ...c, ativo: !c.ativo } : c));
+    const atualizados = clientes.map(c => c.id === id ? { ...c, ativo: !c.ativo } : c);
+    setClientes(atualizados);
+    salvarClientes(atualizados);
   };
 
   const salvarCliente = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!formData.razao_nome.trim() || !formData.cpf_cnpj.trim()) {
+      alert('A Razão Social/Nome e o CPF/CNPJ são campos obrigatórios para o cadastro.');
+      return;
+    }
 
     const fp = FORMAS_PAGAMENTO_OPTIONS.find(f => f.id === formData.forma_pagamento_id);
     const pp = PRAZOS_PAGAMENTO_OPTIONS.find(p => p.id === formData.prazo_pagamento_id);
@@ -783,7 +772,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
 
     if (clienteSelecionado) {
       // UPDATE
-      setClientes(prev => prev.map(c => c.id === clienteSelecionado.id ? {
+      const atualizados = clientes.map(c => c.id === clienteSelecionado.id ? {
         ...c,
         tipo_pessoa: formData.tipo_pessoa,
         razao_nome: formData.razao_nome,
@@ -810,7 +799,9 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
         tabela_preco_id: formData.tabela_preco_id,
         tabela_preco_nome: tab?.nome,
         ativo: formData.ativo,
-      } : c));
+      } : c);
+      setClientes(atualizados);
+      salvarClientes(atualizados);
     } else {
       // INSERT
       const novo: Cliente = {
@@ -843,7 +834,9 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
         ativo: formData.ativo,
         criado_em: new Date().toISOString(),
       };
-      setClientes(prev => [novo, ...prev]);
+      const atualizados = [novo, ...clientes];
+      setClientes(atualizados);
+      salvarClientes(atualizados);
     }
 
     setModo('lista');
@@ -1456,6 +1449,22 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
                   />
                 </div>
 
+                {/* UF */}
+                <div className="sm:col-span-1 lg:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Estado (UF) <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.uf}
+                    onChange={(e) => setFormData({ ...formData, uf: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                  >
+                    {['SP', 'MG', 'RJ', 'PR', 'SC', 'RS', 'GO', 'MS', 'MT', 'BA', 'ES', 'DF'].map(uf => (
+                      <option key={uf} value={uf}>{uf}</option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Município */}
                 <div className="sm:col-span-2 lg:col-span-3">
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -1469,22 +1478,6 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
                     placeholder="Ex: Mogi Guaçu"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
                   />
-                </div>
-
-                {/* UF */}
-                <div className="sm:col-span-1 lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    UF <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.uf}
-                    onChange={(e) => setFormData({ ...formData, uf: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
-                  >
-                    {['SP', 'MG', 'RJ', 'PR', 'SC', 'RS', 'GO', 'MS', 'MT', 'BA', 'ES', 'DF'].map(uf => (
-                      <option key={uf} value={uf}>{uf}</option>
-                    ))}
-                  </select>
                 </div>
 
                 {/* Complemento */}

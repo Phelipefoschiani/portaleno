@@ -158,7 +158,7 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
       <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
               <span>Matéria-Prima & Insumos Industriais</span>
               <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
                 {materias.length} insumos

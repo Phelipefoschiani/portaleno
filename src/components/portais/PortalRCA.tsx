@@ -149,6 +149,8 @@ export function PortalRCA({ onVoltar, rcaIdInicial }: PortalRCAProps) {
 
   // Vendas filtradas
   const vendasFiltradas = useMemo(() => {
+    const modoLimpo = typeof window !== 'undefined' && localStorage.getItem('grupo_eno_modo_limpo_v1') === 'true';
+    if (modoLimpo) return [];
     return VENDAS_RCA_MOCK.filter(v => {
       if (filtroMes === 'TODOS') return true;
       return v.mes_referencia.toLowerCase().includes(filtroMes.toLowerCase());

@@ -13,7 +13,6 @@ import {
 export interface ProdutosNavTabsProps {
   activeTab: 
     | 'produtos_receita'
-    | 'produtos_configurar_custo'
     | 'produtos_estoque_cadastro'
     | 'produtos_materia_prima'
     | 'produtos_relatorios'
@@ -39,11 +38,6 @@ export function ProdutosNavTabs({ activeTab, onNavigate }: ProdutosNavTabsProps)
       id: 'produtos_receita',
       label: 'Receitas & Rendimento',
       icon: <FlaskConical className="w-3.5 h-3.5" />
-    },
-    {
-      id: 'produtos_configurar_custo',
-      label: 'Configurar Custo',
-      icon: <Calculator className="w-3.5 h-3.5" />
     },
     {
       id: 'produtos_ficha_tecnica',

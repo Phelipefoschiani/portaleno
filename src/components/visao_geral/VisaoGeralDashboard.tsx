@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   TrendingUp,
   Package,
@@ -18,7 +18,8 @@ import {
   ChevronRight,
   RefreshCw,
   Fuel,
-  Wallet
+  Wallet,
+  Trash2
 } from 'lucide-react';
 import {
   AreaChart,
@@ -35,6 +36,7 @@ import { carregarPedidosVenda, PedidoVenda } from '../../data/pedidosVendaData';
 import { carregarEstoqueProdutos, ProdutoEstoque } from '../../data/produtosData';
 import { carregarCalculosNaRoca, CalculoNaRoca } from '../../data/calculoRocaData';
 import { obterConsolidadoGeral } from '../../data/pipelineIntegrado';
+import { limparTodoOSistema } from '../../data/sistemaReset';
 
 interface VisaoGeralProps {
   onNavigate: (pageId: string) => void;
@@ -73,14 +75,25 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
     };
   }, []);
 
-  // Dados para o gráfico de faturamento
-  const dadosFaturamento = [
-    { semana: 'Sem 01', faturado: 48200 },
-    { semana: 'Sem 02', faturado: 62400 },
-    { semana: 'Sem 03', faturado: 78900 },
-    { semana: 'Sem 04', faturado: 94100 },
-    { semana: 'Sem 05', faturado: consolidado.faturamentoTotal > 0 ? consolidado.faturamentoTotal : 105000 }
-  ];
+  // Dados para o gráfico de faturamento baseados no faturamento real (ou zerados)
+  const dadosFaturamento = useMemo(() => {
+    if (consolidado.faturamentoTotal === 0 && pedidos.length === 0) {
+      return [
+        { semana: 'Sem 01', faturado: 0 },
+        { semana: 'Sem 02', faturado: 0 },
+        { semana: 'Sem 03', faturado: 0 },
+        { semana: 'Sem 04', faturado: 0 },
+        { semana: 'Sem 05', faturado: 0 }
+      ];
+    }
+    return [
+      { semana: 'Sem 01', faturado: 0 },
+      { semana: 'Sem 02', faturado: 0 },
+      { semana: 'Sem 03', faturado: 0 },
+      { semana: 'Sem 04', faturado: 0 },
+      { semana: 'Sem 05', faturado: consolidado.faturamentoTotal }
+    ];
+  }, [consolidado.faturamentoTotal, pedidos]);
 
   // Dados para distribuição de produtos em estoque
   const dadosMixProducao = produtos.slice(0, 5).map(p => ({
@@ -99,7 +112,7 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
       {/* 1. Header Principal */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-slate-200/80">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
             Visão Geral
           </h1>
         </div>
@@ -463,6 +476,35 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
           </div>
         </div>
 
+      </div>
+
+      {/* 6. Danger Zone - Reset do Sistema (Solicitado pelo Usuário) */}
+      <div className="pt-8 pb-4">
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-red-900 uppercase tracking-wider">Zona de Risco</h3>
+              <p className="text-xs text-red-700 font-medium mt-0.5">
+                Esta ação apaga permanentemente todos os pedidos, clientes, produtos, receitas e financeiro para que você possa iniciar o cadastro do zero.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              if (window.confirm('⚠️ ATENÇÃO: Deseja REALMENTE apagar TODOS os dados do sistema? Esta ação não pode ser desfeita.')) {
+                limparTodoOSistema(false);
+                window.location.reload();
+              }
+            }}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs shadow-md transition-all cursor-pointer whitespace-nowrap active:scale-95"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>Zerar Banco de Dados Todo</span>
+          </button>
+        </div>
       </div>
 
     </div>

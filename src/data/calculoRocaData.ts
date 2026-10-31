@@ -160,16 +160,21 @@ export const CALCULOS_ROCA_INICIAIS: CalculoNaRoca[] = [
 ];
 
 export function carregarCalculosNaRoca(): CalculoNaRoca[] {
-  if (typeof window === 'undefined') return CALCULOS_ROCA_INICIAIS;
+  const modoLimpo = typeof window !== 'undefined' && localStorage.getItem('grupo_eno_modo_limpo_v1') === 'true';
+  if (typeof window === 'undefined') return modoLimpo ? [] : CALCULOS_ROCA_INICIAIS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CALCULOS_ROCA);
-    if (!raw) {
+    if (raw === null) {
+      if (modoLimpo) {
+        localStorage.setItem(STORAGE_KEY_CALCULOS_ROCA, JSON.stringify([]));
+        return [];
+      }
       localStorage.setItem(STORAGE_KEY_CALCULOS_ROCA, JSON.stringify(CALCULOS_ROCA_INICIAIS));
       return CALCULOS_ROCA_INICIAIS;
     }
     return JSON.parse(raw);
   } catch (e) {
-    return CALCULOS_ROCA_INICIAIS;
+    return [];
   }
 }
 

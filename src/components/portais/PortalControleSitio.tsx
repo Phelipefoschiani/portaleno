@@ -63,7 +63,8 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
     quantidadeLitros: 120,
     custoLitro: 5.89,
     operacao: 'Aração e Preparo do Solo',
-    numeroNF: ''
+    numeroNF: '',
+    horasTrabalhadas: 0
   });
 
   // 3. Modal Lançar Despesa Situacional (Peças / Manutenção / Insumos)
@@ -256,6 +257,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
       valorTotal: totalCalculado,
       maquinaTrator: formTrator.maquinaTrator,
       responsavel: formTrator.responsavel,
+      horasTrabalhadas: formTrator.horasTrabalhadas,
       notaFiscal: {
         numero: numeroNF,
         serie: '1',
@@ -592,6 +594,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                   <th className="py-3 px-4">Tipo de Ação</th>
                   <th className="py-3 px-4">Produto</th>
                   <th className="py-3 px-4 text-center">Quantidade</th>
+                  <th className="py-3 px-4 text-center whitespace-nowrap">Horas Máquina</th>
                   <th className="py-3 px-4 text-right">Valor Unitário</th>
                   <th className="py-3 px-4 text-right">Valor Total</th>
                   <th className="py-3 px-4 sm:px-6 text-center">Ver Nota</th>
@@ -637,6 +640,17 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                           <span className="font-bold text-slate-900">
                             {mov.quantidade} {mov.unidade}
                           </span>
+                        </td>
+
+                        {/* 5. Horas Máquina (apenas se for abastecimento) */}
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          {mov.horasTrabalhadas !== undefined ? (
+                            <span className="font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                              {mov.horasTrabalhadas}h
+                            </span>
+                          ) : (
+                            <span className="text-slate-300">-</span>
+                          )}
                         </td>
 
                         {/* 5. Valor Unitário */}
@@ -952,6 +966,19 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                     className="w-full px-3 py-2 border rounded-xl border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Horas Máquina</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  required
+                  value={formTrator.horasTrabalhadas}
+                  onChange={e => setFormTrator({ ...formTrator, horasTrabalhadas: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border rounded-xl border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                />
               </div>
 
               {/* Box de Saldo */}

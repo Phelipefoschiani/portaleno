@@ -41,8 +41,13 @@ import {
   CLIENTES_LOOKUP,
   RCAS_LOOKUP,
   PRODUTOS_VENDA_DISPONIVEIS,
-  obterProdutosVendaDisponiveis
+  obterProdutosVendaDisponiveis,
+  obterClientesDisponiveis
 } from '../../data/pedidosVendaData';
+import {
+  carregarTabelasPreco
+} from '../../data/produtosData';
+import { criarCenarioTesteNovoUsuario } from '../../data/sistemaReset';
 import { PedidosNavTabs } from './PedidosNavTabs';
 
 interface Props {
@@ -59,10 +64,16 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
   const [modalNovo, setModalNovo] = useState(false);
   const [modalDetalhes, setModalDetalhes] = useState<PedidoVenda | null>(null);
 
+  // Clientes e Produtos de venda carregados dinamicamente dos cadastros
+  const [clientesDisponiveis, setClientesDisponiveis] = useState(() => obterClientesDisponiveis());
+  const [produtosDisponiveis, setProdutosDisponiveis] = useState(() => obterProdutosVendaDisponiveis());
+  const [tabelasDisponiveis, setTabelasDisponiveis] = useState(() => carregarTabelasPreco());
+
   // Form State
   const [subtipoForm, setSubtipoForm] = useState<'Orçamento' | 'Pedido Sugestivo' | 'Pedido'>('Orçamento');
   const [modoLancamentoForm, setModoLancamentoForm] = useState<'FARDO' | 'UNITARIO'>('FARDO');
-  const [clienteIdForm, setClienteIdForm] = useState(CLIENTES_LOOKUP[0].id);
+  const [clienteIdForm, setClienteIdForm] = useState(() => obterClientesDisponiveis()[0]?.id || '');
+  const [tabelaIdForm, setTabelaIdForm] = useState('');
   const [rcaIdForm, setRcaIdForm] = useState(RCAS_LOOKUP[0].id);
   const [tipoFreteForm, setTipoFreteForm] = useState<'FOB (Retira na Fábrica)' | 'CIF (Entrega Grupo ENO)'>('CIF (Entrega Grupo ENO)');
   const [prazoPagamentoForm, setPrazoPagamentoForm] = useState('Boleto Bancário 28 Dias');
@@ -78,9 +89,6 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
   const [gerandoExportacao, setGerandoExportacao] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
-  // Produtos de venda carregados dinamicamente dos cadastros de produtos e custos
-  const [produtosDisponiveis, setProdutosDisponiveis] = useState(() => obterProdutosVendaDisponiveis());
-
   // Itens do Form
   const [itensForm, setItensForm] = useState<Array<{
     produtoId: string;
@@ -90,7 +98,10 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     unidadesPorFardo?: number;
   }>>(() => {
     const list = obterProdutosVendaDisponiveis();
-    const prod0 = list[0] || PRODUTOS_VENDA_DISPONIVEIS[0];
+    const prod0 = list[0];
+    if (!prod0) {
+      return [];
+    }
     return [
       {
         produtoId: prod0.id,
@@ -102,11 +113,19 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     ];
   });
 
-  // Carregar pedidos
+  // Carregar pedidos, produtos e clientes
   const recarregar = () => {
     const todos = carregarPedidosVenda();
     setPedidos(todos.filter(p => p.etapa === 'ORCAMENTO'));
-    setProdutosDisponiveis(obterProdutosVendaDisponiveis());
+    const prods = obterProdutosVendaDisponiveis();
+    const clis = obterClientesDisponiveis();
+    const tabs = carregarTabelasPreco();
+    setProdutosDisponiveis(prods);
+    setClientesDisponiveis(clis);
+    setTabelasDisponiveis(tabs);
+    if (clis.length > 0 && !clienteIdForm) {
+      setClienteIdForm(clis[0].id);
+    }
   };
 
   useEffect(() => {
@@ -114,11 +133,33 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     const handleUpdate = () => recarregar();
     window.addEventListener('pedidos_venda_updated', handleUpdate);
     window.addEventListener('produtos_updated', handleUpdate);
+    window.addEventListener('clientes_updated', handleUpdate);
+    window.addEventListener('tabelas_preco_updated', handleUpdate);
+    window.addEventListener('sistema_reset_updated', handleUpdate);
     return () => {
       window.removeEventListener('pedidos_venda_updated', handleUpdate);
       window.removeEventListener('produtos_updated', handleUpdate);
+      window.removeEventListener('clientes_updated', handleUpdate);
+      window.removeEventListener('tabelas_preco_updated', handleUpdate);
+      window.removeEventListener('sistema_reset_updated', handleUpdate);
     };
   }, []);
+
+  const produtosFiltradosPorTabela = useMemo(() => {
+    if (!tabelaIdForm) return [];
+    const tab = tabelasDisponiveis.find(t => t.id === tabelaIdForm);
+    if (!tab || !tab.produtos_ids) return [];
+    return produtosDisponiveis.filter(p => tab.produtos_ids?.includes(p.id)).map(p => {
+      const desconto = tab.desconto_padrao_percentual || 0;
+      const precoUnit = p.preco_unitario * (1 - desconto / 100);
+      const precoAvulso = (p.preco_unitario_avulso || 0) * (1 - desconto / 100);
+      return {
+        ...p,
+        preco_unitario: precoUnit,
+        preco_unitario_avulso: precoAvulso
+      };
+    });
+  }, [tabelaIdForm, tabelasDisponiveis, produtosDisponiveis]);
 
   // Quando abrir o modal de detalhes (Visualizador de Documento)
   const abrirVisualizacao = (pedido: PedidoVenda) => {
@@ -337,16 +378,23 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     });
   }, [pedidos, busca, filtroOrigem, filtroSubtipo]);
 
-  // Adicionar item no formulário
   const handleAddItem = () => {
-    const defaultProd = produtosDisponiveis[0] || PRODUTOS_VENDA_DISPONIVEIS[0];
+    if (!tabelaIdForm) {
+      alert('Por favor, selecione primeiro uma Tabela de Preço para carregar os produtos e preços permitidos.');
+      return;
+    }
+    const defaultProd = produtosFiltradosPorTabela[0];
+    if (!defaultProd) {
+      alert('Esta tabela de preços não possui produtos vinculados ou disponíveis.');
+      return;
+    }
     setItensForm([
       ...itensForm,
       {
         produtoId: defaultProd.id,
         tipoEmbalagem: defaultProd.tipo_embalagem,
         quantidade: 100,
-        precoUnitario: modoLancamentoForm === 'FARDO' ? defaultProd.preco_unitario : ((defaultProd as any).preco_unitario_avulso || defaultProd.preco_unitario / (defaultProd.unidades_por_fardo || 1)),
+        precoUnitario: modoLancamentoForm === 'FARDO' ? defaultProd.preco_unitario : (defaultProd.preco_unitario_avulso || defaultProd.preco_unitario / (defaultProd.unidades_por_fardo || 1)),
         unidadesPorFardo: defaultProd.unidades_por_fardo || 10
       }
     ]);
@@ -360,6 +408,21 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
   // Salvar novo registro de venda (Orçamento, Sugestivo ou Pedido)
   const handleSalvarNovo = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!clienteIdForm) {
+      alert('Selecione um cliente para prosseguir com a venda ou orçamento.');
+      return;
+    }
+
+    if (!tabelaIdForm) {
+      alert('Selecione uma Tabela de Preço válida para prosseguir.');
+      return;
+    }
+
+    if (itensForm.length === 0 || !itensForm[0].produtoId) {
+      alert('Adicione pelo menos um produto à proposta para salvar.');
+      return;
+    }
     const clienteSel = CLIENTES_LOOKUP.find(c => c.id === clienteIdForm) || CLIENTES_LOOKUP[0];
     const rcaSel = RCAS_LOOKUP.find(r => r.id === rcaIdForm) || RCAS_LOOKUP[0];
 
@@ -370,7 +433,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     const dataValidadeStr = dataValidade.toISOString().split('T')[0];
 
     const itensMapeados = itensForm.map(it => {
-      const prod = produtosDisponiveis.find(p => p.id === it.produtoId) || PRODUTOS_VENDA_DISPONIVEIS.find(p => p.id === it.produtoId) || PRODUTOS_VENDA_DISPONIVEIS[0];
+      const prod = produtosFiltradosPorTabela.find(p => p.id === it.produtoId) || produtosDisponiveis.find(p => p.id === it.produtoId);
+      if (!prod) return null;
       const fator = it.unidadesPorFardo || prod.unidades_por_fardo || (it.tipoEmbalagem === 'Fardo 10x1kg' ? 10 : it.tipoEmbalagem === 'Caixa' ? 10 : 25);
       
       let qtdReal = it.quantidade;
@@ -396,7 +460,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
         subtotal,
         unidades_por_fardo: fator
       };
-    });
+    }).filter(Boolean) as any[];
 
     const valorTotal = itensMapeados.reduce((acc, i) => acc + i.subtotal, 0);
     const pesoTotal = itensMapeados.reduce((acc, i) => acc + i.peso_total_kg, 0);
@@ -405,13 +469,17 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     const prefixo = subtipoForm === 'Orçamento' ? 'ORC' : subtipoForm === 'Pedido Sugestivo' ? 'SUG' : 'PED';
     const novoNum = `${prefixo}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    const novoRegistro: PedidoVenda = {
+    const tabelaSel = tabelasDisponiveis.find(t => t.id === tabelaIdForm);
+
+    const novoRegistro: PedidoVenda & { tabela_id?: string; tabela_nome?: string } = {
       id: `ped_venda_${Date.now()}`,
       numero_pedido: novoNum,
       tipo: subtipoForm === 'Pedido' ? 'PEDIDO_VENDA' : 'ORCAMENTO',
       etapa: 'ORCAMENTO',
       subtipo_venda: subtipoForm,
       modo_exibicao_padrao: modoLancamentoForm,
+      tabela_id: tabelaIdForm,
+      tabela_nome: tabelaSel?.nome,
       cliente_id: clienteSel.id,
       cliente_nome: clienteSel.nome,
       cliente_cnpj_cpf: clienteSel.cnpj,
@@ -626,8 +694,32 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
             <tbody className="divide-y divide-slate-100 text-xs">
               {pedidosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
-                    Nenhuma venda ou proposta encontrada com os filtros selecionados.
+                  <td colSpan={8} className="py-10 px-6 text-center">
+                    <div className="max-w-xl mx-auto bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 text-center">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto border border-emerald-200">
+                        <Sparkles className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-base">Modo Novo Usuário - Sistema Limpo para Teste</h3>
+                        <p className="text-slate-500 text-xs mt-1">
+                          Nenhuma proposta ou venda cadastrada ainda. Você pode formular um novo orçamento do zero ou criar um cenário de teste com 1 clique!
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSubtipoForm('Orçamento');
+                            setModoLancamentoForm('FARDO');
+                            setModalNovo(true);
+                          }}
+                          className="px-4 py-2 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>+ Nova Venda / Proposta</span>
+                        </button>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -841,18 +933,112 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                 </div>
               </div>
 
+              {/* Verificação se existem produtos cadastrados */}
+              {produtosDisponiveis.length === 0 && (
+                <div className="p-3.5 bg-orange-50 border-2 border-orange-300 rounded-xl space-y-2">
+                  <div className="flex items-start gap-2.5">
+                    <Package className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-bold text-orange-900 text-xs">⚠️ Nenhum Produto Cadastrado no Catálogo!</h4>
+                      <p className="text-orange-800 text-[11px] mt-0.5">
+                        Não há produtos no catálogo da fábrica. Cadastre seus produtos acabados antes de formular orçamentos ou vendas.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalNovo(false);
+                        onNavigate?.('produtos_estoque_cadastro');
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Package className="w-3.5 h-3.5" />
+                      <span>+ Cadastrar Produto no Estoque</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        criarCenarioTesteNovoUsuario();
+                        recarregar();
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-white border border-orange-300 hover:bg-orange-100 text-orange-900 font-bold text-xs transition-colors cursor-pointer"
+                    >
+                      ⚡ Inserir Produto de Teste (Sem Custo e Sem Receita)
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Cliente Solicitante *</label>
-                  <select
-                    value={clienteIdForm}
-                    onChange={(e) => setClienteIdForm(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
-                  >
-                    {CLIENTES_LOOKUP.map(c => (
-                      <option key={c.id} value={c.id}>{c.nome} ({c.cidade_uf})</option>
-                    ))}
-                  </select>
+                  {clientesDisponiveis.length === 0 ? (
+                    <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-[11px] text-amber-900 space-y-1.5">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                        <span>Falta Cadastrar Cliente!</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalNovo(false);
+                            onNavigate?.('cadastro_clientes');
+                          }}
+                          className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] cursor-pointer"
+                        >
+                          + Cadastrar Cliente
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            criarCenarioTesteNovoUsuario();
+                            recarregar();
+                          }}
+                          className="px-2 py-1 rounded bg-white border border-amber-300 text-amber-900 font-bold text-[10px] cursor-pointer"
+                        >
+                          ⚡ Teste Rápido
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <select
+                      value={clienteIdForm}
+                      onChange={(e) => setClienteIdForm(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
+                    >
+                      {clientesDisponiveis.map(c => (
+                        <option key={c.id} value={c.id}>{c.nome} ({c.cidade_uf})</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Tabela de Preço *</label>
+                  {tabelasDisponiveis.length === 0 ? (
+                    <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-[11px] text-amber-900">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                        <span>Falta Cadastrar Tabela!</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <select
+                      value={tabelaIdForm}
+                      onChange={(e) => setTabelaIdForm(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-bold text-slate-800 focus:outline-none focus:border-emerald-700 cursor-pointer"
+                    >
+                      <option value="">-- Selecione a Tabela --</option>
+                      {tabelasDisponiveis.map((tab) => (
+                        <option key={tab.id} value={tab.id}>
+                          {tab.nome} ({tab.codigo})
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div>
@@ -908,111 +1094,199 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                   </button>
                 </div>
 
-                <div className="space-y-2">
-                  {itensForm.map((item, idx) => {
-                    const prod = produtosDisponiveis.find(p => p.id === item.produtoId) || PRODUTOS_VENDA_DISPONIVEIS.find(p => p.id === item.produtoId) || PRODUTOS_VENDA_DISPONIVEIS[0];
+                <div className="space-y-3">
+                  {itensForm.length === 0 ? (
+                    <div className="p-3 bg-slate-100 rounded-lg text-slate-500 text-center text-xs font-medium">
+                      Nenhum item adicionado. Clique no botão acima para escolher produtos.
+                    </div>
+                  ) : (
+                    itensForm.map((item, idx) => {
+                      const prod = produtosDisponiveis.find(p => p.id === item.produtoId) || PRODUTOS_VENDA_DISPONIVEIS.find(p => p.id === item.produtoId);
+                      const faltaReceita = prod && !prod.receita_id;
+                      const faltaCusto = prod && (!prod.custo_total || prod.custo_total <= 0);
 
-                    return (
-                      <div key={idx} className="flex flex-wrap items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                        <div className="flex-1 min-w-[200px]">
-                          <select
-                            value={item.produtoId}
-                            onChange={(e) => {
-                              const newProd = produtosDisponiveis.find(p => p.id === e.target.value) || PRODUTOS_VENDA_DISPONIVEIS.find(p => p.id === e.target.value);
-                              const updated = [...itensForm];
-                              updated[idx].produtoId = e.target.value;
-                              if (newProd) {
-                                updated[idx].tipoEmbalagem = newProd.tipo_embalagem;
-                                updated[idx].unidadesPorFardo = newProd.unidades_por_fardo || 10;
-                                if (modoLancamentoForm === 'FARDO') {
-                                  updated[idx].precoUnitario = newProd.preco_unitario;
-                                } else {
-                                  updated[idx].precoUnitario = (newProd as any).preco_unitario_avulso || (newProd.preco_unitario / (newProd.unidades_por_fardo || 1));
-                                }
-                              }
-                              setItensForm(updated);
-                            }}
-                            className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs cursor-pointer font-medium"
-                          >
-                            {produtosDisponiveis.map(p => (
-                              <option key={p.id} value={p.id}>
-                                {p.nome} ({p.tipo_embalagem || 'Un'})
-                              </option>
-                            ))}
-                          </select>
+                      return (
+                        <div key={idx} className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex-1 min-w-[200px]">
+                              <select
+                                value={item.produtoId}
+                                onChange={(e) => {
+                                  const newProd = produtosFiltradosPorTabela.find(p => p.id === e.target.value);
+                                  const updated = [...itensForm];
+                                  updated[idx].produtoId = e.target.value;
+                                  if (newProd) {
+                                    updated[idx].tipoEmbalagem = newProd.tipo_embalagem;
+                                    updated[idx].unidadesPorFardo = newProd.unidades_por_fardo || 10;
+                                    if (modoLancamentoForm === 'FARDO') {
+                                      updated[idx].precoUnitario = newProd.preco_unitario;
+                                    } else {
+                                      updated[idx].precoUnitario = newProd.preco_unitario_avulso || (newProd.preco_unitario / (newProd.unidades_por_fardo || 1));
+                                    }
+                                  }
+                                  setItensForm(updated);
+                                }}
+                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs cursor-pointer font-medium"
+                              >
+                                <option value="">-- Selecione o Produto --</option>
+                                {produtosFiltradosPorTabela.map(p => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.nome} ({p.tipo_embalagem || 'Un'})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="w-36">
+                              <select
+                                value={item.tipoEmbalagem}
+                                onChange={(e) => {
+                                  const updated = [...itensForm];
+                                  updated[idx].tipoEmbalagem = e.target.value as any;
+                                  setItensForm(updated);
+                                }}
+                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs cursor-pointer font-semibold text-slate-700"
+                                title="Apresentação (Fardo, Caixa, Saco, Big Bag)"
+                              >
+                                <option value="Saco 25kg">Saco 25kg</option>
+                                <option value="Big Bag 1000kg">Big Bag 1000kg</option>
+                                <option value="Fardo 10x1kg">Fardo 10x1kg</option>
+                                <option value="Caixa">Caixa</option>
+                                <option value="Granel">Granel</option>
+                              </select>
+                            </div>
+
+                            <div className="w-24">
+                              <label className="text-[10px] text-slate-400 block -mb-0.5">
+                                {modoLancamentoForm === 'FARDO' ? 'Qtd (Fardos)' : 'Qtd (Unid/Kg)'}
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.quantidade}
+                                onChange={(e) => {
+                                  const updated = [...itensForm];
+                                  updated[idx].quantidade = parseInt(e.target.value) || 1;
+                                  setItensForm(updated);
+                                }}
+                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-center font-bold"
+                              />
+                            </div>
+
+                            <div className="w-28">
+                              <label className="text-[10px] text-slate-400 block -mb-0.5">
+                                {modoLancamentoForm === 'FARDO' ? 'Preço Fardo' : 'Preço Unitário'}
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={item.precoUnitario}
+                                onChange={(e) => {
+                                  const updated = [...itensForm];
+                                  updated[idx].precoUnitario = parseFloat(e.target.value) || 0;
+                                  setItensForm(updated);
+                                }}
+                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-center font-mono font-bold"
+                              />
+                            </div>
+
+                            <div className="w-28 text-right font-mono font-bold text-slate-900">
+                              {(item.quantidade * item.precoUnitario).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </div>
+
+                            {itensForm.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(idx)}
+                                className="p-1 hover:text-red-600 text-slate-400 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* AVISOS ESPECÍFICOS DE FALTA DE RECEITA E DE FALTA DE CUSTO */}
+                          {faltaReceita && (
+                            <div className="p-2 bg-amber-100/90 border border-amber-300 rounded-md text-[11px] text-amber-900 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 font-medium">
+                                <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                <span>
+                                  <strong>⚠️ Sem Receita / Ficha Técnica:</strong> Este produto não tem fórmula de matéria-prima vinculada. A fábrica não saberá quais insumos baixar do estoque ao produzir.
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setModalNovo(false);
+                                  onNavigate?.('produtos_receita');
+                                }}
+                                className="px-2 py-0.5 rounded bg-amber-700 hover:bg-amber-800 text-white font-bold text-[10px] cursor-pointer transition-colors shadow-2xs"
+                              >
+                                Configurar Receita
+                              </button>
+                            </div>
+                          )}
+
+                          {faltaCusto && (
+                            <div className="p-2 bg-orange-100/90 border border-orange-300 rounded-md text-[11px] text-orange-900 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 font-medium">
+                                <AlertCircle className="w-3.5 h-3.5 text-orange-700 shrink-0" />
+                                <span>
+                                  <strong>⚠️ Sem Custo de Produção:</strong> Custo industrial não apurado. O produto pode ser orçado pelo preço informado, mas o CMV e a margem bruta ficarão zerados.
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setModalNovo(false);
+                                  onNavigate?.('produtos_configurar_custo');
+                                }}
+                                className="px-2 py-0.5 rounded bg-orange-700 hover:bg-orange-800 text-white font-bold text-[10px] cursor-pointer transition-colors shadow-2xs"
+                              >
+                                Configurar Custo
+                              </button>
+                            </div>
+                          )}
                         </div>
-
-                        <div className="w-36">
-                          <select
-                            value={item.tipoEmbalagem}
-                            onChange={(e) => {
-                              const updated = [...itensForm];
-                              updated[idx].tipoEmbalagem = e.target.value as any;
-                              setItensForm(updated);
-                            }}
-                            className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs cursor-pointer font-semibold text-slate-700"
-                            title="Apresentação (Fardo, Caixa, Saco, Big Bag)"
-                          >
-                            <option value="Saco 25kg">Saco 25kg</option>
-                            <option value="Big Bag 1000kg">Big Bag 1000kg</option>
-                            <option value="Fardo 10x1kg">Fardo 10x1kg</option>
-                            <option value="Caixa">Caixa</option>
-                            <option value="Granel">Granel</option>
-                          </select>
-                        </div>
-
-                        <div className="w-24">
-                          <label className="text-[10px] text-slate-400 block -mb-0.5">
-                            {modoLancamentoForm === 'FARDO' ? 'Qtd (Fardos)' : 'Qtd (Unid/Kg)'}
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.quantidade}
-                            onChange={(e) => {
-                              const updated = [...itensForm];
-                              updated[idx].quantidade = parseInt(e.target.value) || 1;
-                              setItensForm(updated);
-                            }}
-                            className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-center font-bold"
-                          />
-                        </div>
-
-                        <div className="w-28">
-                          <label className="text-[10px] text-slate-400 block -mb-0.5">
-                            {modoLancamentoForm === 'FARDO' ? 'Preço Fardo' : 'Preço Unitário'}
-                          </label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={item.precoUnitario}
-                            onChange={(e) => {
-                              const updated = [...itensForm];
-                              updated[idx].precoUnitario = parseFloat(e.target.value) || 0;
-                              setItensForm(updated);
-                            }}
-                            className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-center font-mono font-bold"
-                          />
-                        </div>
-
-                        <div className="w-28 text-right font-mono font-bold text-slate-900">
-                          {(item.quantidade * item.precoUnitario).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </div>
-
-                        {itensForm.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(idx)}
-                            className="p-1 hover:text-red-600 text-slate-400 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </div>
+
+              {/* DIAGNÓSTICO E CHECKLIST DA VENDA */}
+              {(() => {
+                const temAlgumaFaltaReceita = itensForm.some(it => {
+                  const p = produtosDisponiveis.find(x => x.id === it.produtoId);
+                  return p && !p.receita_id;
+                });
+                const temAlgumaFaltaCusto = itensForm.some(it => {
+                  const p = produtosDisponiveis.find(x => x.id === it.produtoId);
+                  return p && (!p.custo_total || p.custo_total <= 0);
+                });
+
+                return (
+                  <div className="p-3 bg-slate-900 text-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs border border-slate-800">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-bold text-white uppercase text-[10px] tracking-wider">Status do Pedido:</span>
+                      <span className={clienteIdForm ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                        {clienteIdForm ? '✓ Cliente OK' : '❌ Falta Cliente'}
+                      </span>
+                      <span className={temAlgumaFaltaReceita ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
+                        {temAlgumaFaltaReceita ? '⚠️ Receita Pendente' : '✓ Receita OK'}
+                      </span>
+                      <span className={temAlgumaFaltaCusto ? 'text-orange-400 font-bold' : 'text-emerald-400 font-bold'}>
+                        {temAlgumaFaltaCusto ? '⚠️ Custo Pendente' : '✓ Custo OK'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 italic">
+                      {temAlgumaFaltaReceita || temAlgumaFaltaCusto
+                        ? 'Você pode salvar como orçamento. O sistema emitirá alertas quando enviado para produção.'
+                        : 'Apuração comercial e técnica completa!'}
+                    </p>
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Observações da Proposta Comercial</label>

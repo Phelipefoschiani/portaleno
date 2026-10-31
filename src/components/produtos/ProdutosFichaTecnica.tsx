@@ -53,6 +53,7 @@ function normalizarFichas(fichas: FichaTecnica[]): FichaTecnica[] {
 export function ProdutosFichaTecnica({ onNavigate }: Props) {
   const [fichas, setFichas] = useState<FichaTecnica[]>(() => normalizarFichas(carregarFichasTecnicas()));
   const [busca, setBusca] = useState('');
+  const [produtosEstoque, setProdutosEstoque] = useState(() => carregarEstoqueProdutos());
   
   // Modais
   const [fichaVisualizar, setFichaVisualizar] = useState<FichaTecnica | null>(null);
@@ -64,6 +65,7 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
   const [copiado, setCopiado] = useState(false);
 
   // Form State: Dinâmico sem espaços fixos forçados!
+  const [formProdutoId, setFormProdutoId] = useState('');
   const [formProdutoNome, setFormProdutoNome] = useState('');
   const [formCodigo, setFormCodigo] = useState('');
   const [formDescricao, setFormDescricao] = useState('');
@@ -82,9 +84,14 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
   useEffect(() => {
     const handleAtualizacao = () => {
       setFichas(normalizarFichas(carregarFichasTecnicas()));
+      setProdutosEstoque(carregarEstoqueProdutos());
     };
     window.addEventListener('fichas_tecnicas_updated', handleAtualizacao);
-    return () => window.removeEventListener('fichas_tecnicas_updated', handleAtualizacao);
+    window.addEventListener('produtos_updated', handleAtualizacao);
+    return () => {
+      window.removeEventListener('fichas_tecnicas_updated', handleAtualizacao);
+      window.removeEventListener('produtos_updated', handleAtualizacao);
+    };
   }, []);
 
   const fichasFiltradas = fichas.filter(f =>
@@ -118,6 +125,7 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
   // Abrir Modal para Nova Ficha
   const handleAbrirNova = () => {
     setFichaEmEdicao(null);
+    setFormProdutoId('');
     setFormProdutoNome('');
     setFormCodigo(`FT-${Date.now().toString().slice(-4)}`);
     setFormDescricao('');
@@ -133,6 +141,7 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
   // Abrir Modal para Editar Ficha
   const handleAbrirEdicao = (ficha: FichaTecnica) => {
     setFichaEmEdicao(ficha);
+    setFormProdutoId(ficha.produto_id || '');
     setFormProdutoNome(ficha.produto_nome);
     setFormCodigo(ficha.codigo || `FT-${Date.now().toString().slice(-4)}`);
     setFormDescricao(ficha.descricao_padrao || '');
@@ -167,6 +176,7 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
         if (f.id === fichaEmEdicao.id) {
           return {
             ...f,
+            produto_id: formProdutoId,
             produto_nome: formProdutoNome,
             codigo: formCodigo,
             descricao_padrao: formDescricao,
@@ -182,6 +192,7 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
     } else {
       const nova: FichaTecnica = {
         id: `ft_${Date.now()}`,
+        produto_id: formProdutoId,
         produto_nome: formProdutoNome,
         codigo: formCodigo,
         descricao_padrao: formDescricao,
@@ -237,7 +248,7 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
       <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
               <span>Fichas Técnicas & Especificações</span>
               <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
                 {fichas.length} cadastradas
@@ -430,16 +441,30 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
                 <div className="sm:col-span-8">
                   <label className="block font-bold text-slate-800 mb-1">
-                    Nome do Produto ou Ficha Técnica *
+                    Vincular ao Produto do Estoque *
                   </label>
-                  <input
-                    type="text"
+                  <select
                     required
-                    value={formProdutoNome}
-                    onChange={(e) => setFormProdutoNome(e.target.value)}
-                    placeholder="Ex: Mandioca Gourmet Palito, Fécula Doce, etc."
+                    value={formProdutoId}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      const prod = produtosEstoque.find(p => p.id === selectedId);
+                      setFormProdutoId(selectedId);
+                      if (prod) setFormProdutoNome(prod.nome);
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
-                  />
+                  >
+                    <option value="">-- Selecione um Produto --</option>
+                    {produtosEstoque.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.nome} ({p.tipo_embalagem})
+                      </option>
+                    ))}
+                    {/* Opção para nome livre caso não queira vincular (opcional, mas o user pediu pra puxar o produto) */}
+                    {formProdutoId === '' && formProdutoNome !== '' && (
+                      <option value="">{formProdutoNome} (Não vinculado)</option>
+                    )}
+                  </select>
                 </div>
 
                 <div className="sm:col-span-4">

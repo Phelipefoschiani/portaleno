@@ -24,6 +24,7 @@ import {
 import {
   ProdutoEstoque,
   ReceitaIndustrial,
+  ImpostoProduto,
   carregarEstoqueProdutos,
   salvarEstoqueProdutos,
   carregarReceitas
@@ -60,7 +61,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
     receita_id: '',
     receita_nome: '',
     custo_materia_prima: 0,
-    impostos_percentual: 8.0,
+    impostos: [] as ImpostoProduto[],
     custo_operacional: 0.85,
     tipo_acondicionamento: 'Caixa' as 'Fardo' | 'Caixa' | 'Saco' | 'Avulso',
     unidades_por_acondicionamento: 10
@@ -122,10 +123,24 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
     const custoMp = formData.custo_materia_prima || 0;
     const custoOp = formData.custo_operacional || 0;
     const baseCusto = custoMp + custoOp;
-    const impostosPct = formData.impostos_percentual || 0;
-    const impostosValor = (baseCusto * impostosPct) / 100;
-    const custoTotal = baseCusto + impostosValor;
     const precoUnit = formData.preco_unitario_venda || 0;
+
+    let totalImpostosValor = 0;
+    formData.impostos.forEach(imp => {
+      let baseCalculo = 0;
+      if (imp.base === 'Venda') baseCalculo = precoUnit;
+      else if (imp.base === 'Custo') baseCalculo = baseCusto;
+      else baseCalculo = 0; // Fixo não depende de base se for Valor, mas se for %? Tratamos abaixo.
+
+      if (imp.tipo === 'Porcentagem') {
+        // Se a base for 'Fixo' e o tipo 'Porcentagem', não faz muito sentido, mas evitamos erro.
+        totalImpostosValor += (baseCalculo * (imp.valor || 0)) / 100;
+      } else {
+        totalImpostosValor += (imp.valor || 0);
+      }
+    });
+
+    const custoTotal = baseCusto + totalImpostosValor;
     const unidades = formData.unidades_por_acondicionamento || 1;
     const precoPacoteFechado = precoUnit * unidades;
     const lucroUnitario = precoUnit - custoTotal;
@@ -134,7 +149,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
     return {
       custoMp,
       custoOp,
-      impostosValor,
+      impostosValor: totalImpostosValor,
       custoTotal,
       precoUnit,
       precoPacoteFechado,
@@ -142,6 +157,28 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
       margemPercentual
     };
   }, [formData]);
+
+  const handleAdicionarImposto = () => {
+    const novo: ImpostoProduto = {
+      id: `imp_${Date.now()}`,
+      nome: 'ICMS',
+      base: 'Venda',
+      tipo: 'Porcentagem',
+      valor: 7.0
+    };
+    setFormData(prev => ({ ...prev, impostos: [...prev.impostos, novo] }));
+  };
+
+  const handleRemoverImposto = (id: string) => {
+    setFormData(prev => ({ ...prev, impostos: prev.impostos.filter(i => i.id !== id) }));
+  };
+
+  const handleAtualizarImposto = (id: string, campo: keyof ImpostoProduto, valor: any) => {
+    setFormData(prev => ({
+      ...prev,
+      impostos: prev.impostos.map(i => i.id === id ? { ...i, [campo]: valor } : i)
+    }));
+  };
 
   // Métricas
   const metricas = useMemo(() => {
@@ -189,10 +226,15 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
       localizacao_galpao: 'Galpão C - Setor Congelados & Gourmet',
       preco_unitario_venda: 12.50,
       lote_recente: `LOTE-ENO-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`,
+      preco_unitario_venda: 12.50,
+      lote_recente: `LOTE-ENO-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`,
       receita_id: recPadrao ? recPadrao.id : '',
       receita_nome: recPadrao ? (recPadrao.nome || recPadrao.produto_nome || '') : '',
       custo_materia_prima: parseFloat(custoMp.toFixed(2)),
-      impostos_percentual: 8.0,
+      impostos: [
+        { id: 'imp_icms', nome: 'ICMS', base: 'Venda', tipo: 'Porcentagem', valor: 7.0 },
+        { id: 'imp_ipi', nome: 'IPI', base: 'Custo', tipo: 'Porcentagem', valor: 2.0 }
+      ],
       custo_operacional: 0.85,
       tipo_acondicionamento: acond,
       unidades_por_acondicionamento: unidades
@@ -213,10 +255,12 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
       localizacao_galpao: prod.localizacao_galpao,
       preco_unitario_venda: prod.preco_unitario_venda,
       lote_recente: prod.lote_recente,
+      preco_unitario_venda: prod.preco_unitario_venda,
+      lote_recente: prod.lote_recente,
       receita_id: prod.receita_id || '',
       receita_nome: prod.receita_nome || '',
       custo_materia_prima: prod.custo_materia_prima || 0,
-      impostos_percentual: prod.impostos_percentual ?? 8.0,
+      impostos: prod.impostos || [],
       custo_operacional: prod.custo_operacional || 0,
       tipo_acondicionamento: (prod.tipo_acondicionamento as any) || 'Caixa',
       unidades_por_acondicionamento: prod.unidades_por_acondicionamento || 10
@@ -235,7 +279,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
       receita_id: formData.receita_id || undefined,
       receita_nome: formData.receita_nome || undefined,
       custo_materia_prima: calculosFormulario.custoMp,
-      impostos_percentual: formData.impostos_percentual,
+      impostos: formData.impostos,
       impostos_valor: parseFloat(calculosFormulario.impostosValor.toFixed(2)),
       custo_operacional: formData.custo_operacional,
       custo_total: parseFloat(calculosFormulario.custoTotal.toFixed(2)),
@@ -244,6 +288,16 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
       preco_venda_acondicionamento: parseFloat(calculosFormulario.precoPacoteFechado.toFixed(2)),
       margem_lucro_percentual: parseFloat(calculosFormulario.margemPercentual.toFixed(1))
     };
+
+    // Validação estrita
+    if (!formData.receita_id) {
+      alert('Erro: É obrigatório selecionar uma receita válida para o produto.');
+      return;
+    }
+    if (calculosFormulario.custoTotal <= 0) {
+      alert('Erro: O produto deve possuir um custo de produção calculado (Ficha Técnica/Receita).');
+      return;
+    }
 
     if (modoEdicao) {
       const atualizados = produtos.map(p => {
@@ -289,7 +343,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
       <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
               <span>Produtos Acabados (Estoque & Cadastro)</span>
               <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
                 {metricas.totalItens} produtos
@@ -423,9 +477,9 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
 
                       <td className="py-3.5 px-3 text-right font-mono font-bold text-slate-700">
                         {custoTotalUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        {item.impostos_percentual && (
+                        {item.impostos_valor !== undefined && item.impostos_valor > 0 && (
                           <div className="text-[10px] text-slate-400 font-normal">
-                            (+{item.impostos_percentual}% imp.)
+                            (+{item.impostos_valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} imp.)
                           </div>
                         )}
                       </td>
@@ -757,7 +811,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                   4. Custos, Impostos & Preço de Venda
                 </span>
 
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Custo Insumos (R$)</label>
                     <input
@@ -768,21 +822,6 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                       className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 text-right focus:outline-none focus:border-emerald-700 shadow-2xs"
                     />
                     <span className="text-[10px] text-slate-400 block text-right mt-0.5">da receita</span>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Impostos sobre o Produto (%)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      value={formData.impostos_percentual}
-                      onChange={(e) => setFormData({ ...formData, impostos_percentual: parseFloat(e.target.value) || 0 })}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 text-right focus:outline-none focus:border-emerald-700 shadow-2xs"
-                    />
-                    <span className="text-[10px] text-slate-500 block text-right mt-0.5 font-mono">
-                      + R$ {calculosFormulario.impostosValor.toFixed(2)} / un
-                    </span>
                   </div>
 
                   <div>
@@ -800,13 +839,130 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
 
                   <div className="bg-emerald-950 p-3 rounded-xl text-white flex flex-col justify-center text-right shadow-xs">
                     <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">
-                      Custo Total Unitário
+                      Custo Total s/ Impostos
                     </span>
                     <span className="font-mono text-base font-black text-lime-300">
+                      {(formData.custo_materia_prima + formData.custo_operacional).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* SEÇÃO DE IMPOSTOS DINÂMICOS - SOLICITADO PELO USUÁRIO */}
+                <div className="p-3 bg-white/40 border border-slate-200 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Percent className="w-4 h-4 text-emerald-700" />
+                      <span className="text-[11px] font-black text-slate-700 uppercase tracking-wide">
+                        Impostos e Taxas sobre o Produto
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAdicionarImposto}
+                      className="text-[10px] bg-emerald-800 hover:bg-emerald-950 text-white px-2.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer shadow-2xs"
+                    >
+                      + Adicionar Imposto
+                    </button>
+                  </div>
+
+                  {formData.impostos.length === 0 ? (
+                    <div className="py-4 text-center text-[10px] text-slate-400 italic">
+                      Nenhum imposto configurado para este produto.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {formData.impostos.map((imp) => (
+                        <div key={imp.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end bg-white p-2.5 rounded-xl border border-slate-100 shadow-3xs">
+                          <div className="sm:col-span-3">
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5">Nome do Imposto</label>
+                            <input
+                              type="text"
+                              value={imp.nome}
+                              onChange={(e) => handleAtualizarImposto(imp.id, 'nome', e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5">Base de Calc.</label>
+                            <select
+                              value={imp.base}
+                              onChange={(e) => handleAtualizarImposto(imp.id, 'base', e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-1.5 text-[11px] font-medium text-slate-700 focus:outline-none focus:border-emerald-600 cursor-pointer"
+                            >
+                              <option value="Venda">Preço Venda</option>
+                              <option value="Custo">Custo Prod.</option>
+                              <option value="Fixo">Valor Fixo</option>
+                            </select>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5">Tipo</label>
+                            <select
+                              value={imp.tipo}
+                              onChange={(e) => handleAtualizarImposto(imp.id, 'tipo', e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-1.5 text-[11px] font-medium text-slate-700 focus:outline-none focus:border-emerald-600 cursor-pointer"
+                            >
+                              <option value="Porcentagem">% Porcentagem</option>
+                              <option value="Valor">$ Valor Real</option>
+                            </select>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5">Valor / Alíquota</label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={imp.valor}
+                              onChange={(e) => handleAtualizarImposto(imp.id, 'valor', parseFloat(e.target.value) || 0)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-mono font-bold text-right text-emerald-950 focus:outline-none focus:border-emerald-600"
+                            />
+                          </div>
+                          <div className="sm:col-span-2 text-right px-1">
+                            <div className="text-[9px] font-bold text-slate-400 uppercase">Impacto Un.</div>
+                            <div className="text-[11px] font-mono font-black text-emerald-800">
+                              {(() => {
+                                const baseCusto = formData.custo_materia_prima + formData.custo_operacional;
+                                const baseCalc = imp.base === 'Venda' ? formData.preco_unitario_venda : imp.base === 'Custo' ? baseCusto : 0;
+                                const res = imp.tipo === 'Porcentagem' ? (baseCalc * (imp.valor || 0)) / 100 : (imp.valor || 0);
+                                return res.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                              })()}
+                            </div>
+                          </div>
+                          <div className="sm:col-span-1 text-center pb-1">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoverImposto(imp.id)}
+                              className="p-1.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer"
+                              title="Remover imposto"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Resumo Consolidado de Impostos */}
+                  <div className="pt-2 flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-slate-500">Custo Total de Impostos:</span>
+                    <span className="font-mono font-black text-slate-900 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
+                      {calculosFormulario.impostosValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} / unidade
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-emerald-900 p-4 rounded-2xl text-white flex items-center justify-between shadow-md">
+                  <div>
+                    <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">
+                      Custo Final Industrial (Insumos + Operacional + Impostos)
+                    </span>
+                    <span className="font-mono text-xl font-black text-lime-300">
                       {calculosFormulario.custoTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </span>
-                    <span className="text-[10px] text-emerald-200/80 font-mono">
-                      ({(calculosFormulario.custoTotal * formData.unidades_por_acondicionamento).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} /{formData.tipo_acondicionamento.toLowerCase()})
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-emerald-300 font-bold uppercase block">Por {formData.tipo_acondicionamento}</span>
+                    <span className="font-mono text-sm font-bold text-emerald-100">
+                      {(calculosFormulario.custoTotal * formData.unidades_por_acondicionamento).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </span>
                   </div>
                 </div>

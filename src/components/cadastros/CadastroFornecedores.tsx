@@ -1752,6 +1752,22 @@ export function CadastroFornecedores() {
                   />
                 </div>
 
+                {/* UF */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Estado (UF) <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.uf}
+                    onChange={(e) => setFormData({ ...formData, uf: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                  >
+                    {['SP', 'MG', 'PR', 'RJ', 'SC', 'RS', 'GO', 'MS', 'MT', 'BA', 'ES', 'DF'].map(uf => (
+                      <option key={uf} value={uf}>{uf}</option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Município */}
                 <div className="sm:col-span-2 md:col-span-3">
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -1765,22 +1781,6 @@ export function CadastroFornecedores() {
                     placeholder="Ex: Paulínia"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
                   />
-                </div>
-
-                {/* UF */}
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    UF <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.uf}
-                    onChange={(e) => setFormData({ ...formData, uf: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
-                  >
-                    {['SP', 'MG', 'PR', 'RJ', 'SC', 'RS', 'GO', 'MS', 'MT', 'BA', 'ES', 'DF'].map(uf => (
-                      <option key={uf} value={uf}>{uf}</option>
-                    ))}
-                  </select>
                 </div>
 
                 {/* Complemento */}

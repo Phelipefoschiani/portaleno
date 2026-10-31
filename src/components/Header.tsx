@@ -6,11 +6,11 @@ type HeaderProps = {
 
 /**
  * Header - Grupo ENO v13
- * Faixa de fora a fora (full width) em tom escuro com sombra sobreposta.
+ * Faixa de fora a fora (full width) em preto com sombra sobreposta.
  */
 export function Header({ onOpenLogin }: HeaderProps) {
   return (
-    <header className="w-full bg-white/95 backdrop-blur-md text-slate-900 border-b border-slate-200/80 shadow-xs shrink-0">
+    <header className="w-full bg-black backdrop-blur-md text-white border-b border-neutral-800 shadow-lg shrink-0">
       <div className="mx-auto flex h-16 sm:h-20 w-full max-w-7xl items-center justify-between px-6 sm:px-10 lg:px-12">
         
         {/* Brand / Logo */}
@@ -21,10 +21,10 @@ export function Header({ onOpenLogin }: HeaderProps) {
             </svg>
           </div>
           <div className="flex flex-col">
-            <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 leading-none">
+            <span className="text-xl sm:text-2xl font-black tracking-tight text-white leading-none">
               GRUPO ENO
             </span>
-            <span className="text-[10px] font-bold text-emerald-700 tracking-wider uppercase mt-0.5">
+            <span className="text-[10px] font-bold text-emerald-400 tracking-wider uppercase mt-0.5">
               Agroindústria & Mandiocultura
             </span>
           </div>
@@ -35,7 +35,7 @@ export function Header({ onOpenLogin }: HeaderProps) {
           <button
             onClick={onOpenLogin}
             className="
-              inline-flex items-center justify-center gap-2
+              inline-flex items-center justify-center gap-2.5
               rounded-xl
               bg-emerald-600 hover:bg-emerald-700
               border border-emerald-600
@@ -48,10 +48,11 @@ export function Header({ onOpenLogin }: HeaderProps) {
               cursor-pointer whitespace-nowrap
             "
           >
-            <span>Acessar o Sistema</span>
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M5 12h14M12 5l7 7-7 7" />
+            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
             </svg>
+            <span>Acessar o Sistema</span>
           </button>
         </div>
 

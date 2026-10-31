@@ -607,7 +607,15 @@ export interface CadastroRCAProps {
 
 export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
   const [rcas, setRcas] = useState<RCA[]>(RCAS_INICIAIS);
-  const [vendas, setVendas] = useState<VendaComissaoRCA[]>(VENDAS_RCAS_INICIAIS);
+  const [vendas, setVendas] = useState<VendaComissaoRCA[]>(() => {
+    const modoLimpo = typeof window !== 'undefined' && localStorage.getItem('grupo_eno_modo_limpo_v1') === 'true';
+    if (modoLimpo) return [];
+    try {
+      const raw = localStorage.getItem('grupo_eno_vendas_rca_v1');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return VENDAS_RCAS_INICIAIS;
+  });
   const [clientesDisponiveis] = useState<ClienteVinculado[]>(CLIENTES_DISPONIVEIS);
   
   const [busca, setBusca] = useState('');
@@ -1699,20 +1707,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Município</label>
-                      <input
-                        type="text"
-                        value={formData.endereco?.municipio || ''}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          endereco: { ...(formData.endereco || { cep: '', logradouro: '', numero: '', bairro: '', uf: 'PR' }), municipio: e.target.value } 
-                        })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900"
-                        placeholder="Jacarezinho"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">UF</label>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">Estado (UF)</label>
                       <select
                         value={formData.endereco?.uf || 'PR'}
                         onChange={(e) => setFormData({ 
@@ -1726,6 +1721,19 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                         <option value="MS">Mato Grosso do Sul (MS)</option>
                         <option value="SC">Santa Catarina (SC)</option>
                       </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">Município</label>
+                      <input
+                        type="text"
+                        value={formData.endereco?.municipio || ''}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          endereco: { ...(formData.endereco || { cep: '', logradouro: '', numero: '', bairro: '', municipio: '' }), municipio: e.target.value } 
+                        })}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900"
+                        placeholder="Jacarezinho"
+                      />
                     </div>
                   </div>
                 </div>

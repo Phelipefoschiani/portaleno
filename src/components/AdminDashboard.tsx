@@ -9,6 +9,7 @@ import {
   DollarSign, 
   ChevronDown
 } from 'lucide-react';
+import { isModoLimpoAtivo } from '../data/sistemaReset';
 import { CadastroClientes } from './cadastros/CadastroClientes';
 import { CadastroFornecedores } from './cadastros/CadastroFornecedores';
 import { CadastroAgricultores } from './cadastros/CadastroAgricultores';
@@ -24,7 +25,6 @@ import { PedidosFaturados } from './pedidos/PedidosFaturados';
 import { PedidosEntregues } from './pedidos/PedidosEntregues';
 import { PedidosRelatorios } from './pedidos/PedidosRelatorios';
 import { ProdutosReceita } from './produtos/ProdutosReceita';
-import { ProdutosConfigurarCusto } from './produtos/ProdutosConfigurarCusto';
 import { ProdutosEstoqueCadastro } from './produtos/ProdutosEstoqueCadastro';
 import { ProdutosMateriaPrima } from './produtos/ProdutosMateriaPrima';
 import { ProdutosRelatorios } from './produtos/ProdutosRelatorios';
@@ -147,9 +147,8 @@ export function AdminDashboard({ onLogout, initialPageId }: AdminDashboardProps)
       label: 'Produtos',
       icon: <Package className="w-4.5 h-4.5 shrink-0" />,
       items: [
-        { id: 'produtos_receita', label: 'Receita' },
-        { id: 'produtos_configurar_custo', label: 'Configurar Custo' },
         { id: 'produtos_estoque_cadastro', label: 'Produtos (Estoque e Cadastro)' },
+        { id: 'produtos_receita', label: 'Receita' },
         { id: 'produtos_materia_prima', label: 'Matéria Prima (Estoque e Cadastro)' },
         { id: 'produtos_relatorios', label: 'Relatórios' },
         { id: 'produtos_ficha_tecnica', label: 'Ficha Técnica' },
@@ -211,9 +210,8 @@ export function AdminDashboard({ onLogout, initialPageId }: AdminDashboardProps)
 
   const handleSelectProdutosPage = (tabId: string) => {
     const itemMap: Record<string, string> = {
-      'produtos_receita': 'Receita',
-      'produtos_configurar_custo': 'Configurar Custo',
       'produtos_estoque_cadastro': 'Produtos (Estoque e Cadastro)',
+      'produtos_receita': 'Receita',
       'produtos_materia_prima': 'Matéria Prima (Estoque e Cadastro)',
       'produtos_relatorios': 'Relatórios',
       'produtos_ficha_tecnica': 'Ficha Técnica',
@@ -278,18 +276,13 @@ export function AdminDashboard({ onLogout, initialPageId }: AdminDashboardProps)
             </span>
           </div>
 
-          {/* Perfil (Administrador) & Botão Sair Vermelho */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm text-white font-bold bg-emerald-950/60 px-3.5 py-1.5 rounded-xl border border-emerald-800/60">
-              <span className="text-emerald-300 text-xs font-semibold">Perfil:</span>
-              <span>Administrador</span>
-            </div>
-
+          {/* Perfil (Administrador), Controles de Teste e Botão Sair */}
+          <div className="flex items-center gap-2.5">
             {/* Botão Sair Vermelho */}
             <button
               onClick={onLogout}
               className="
-                flex items-center gap-2 px-4 py-2 rounded-xl
+                flex items-center gap-2 px-3.5 py-1.5 rounded-xl
                 bg-red-600 text-white border border-red-500 text-xs sm:text-sm font-extrabold
                 hover:bg-red-700 hover:border-red-400
                 transition-colors cursor-pointer shadow-md active:bg-red-800
@@ -434,12 +427,10 @@ export function AdminDashboard({ onLogout, initialPageId }: AdminDashboardProps)
             <PedidosEntregues onNavigate={handleSelectPedidosPage} />
           ) : activePage.id === 'pedidos_relatorios' ? (
             <PedidosRelatorios onNavigate={handleSelectPedidosPage} />
-          ) : activePage.id === 'produtos_receita' ? (
-            <ProdutosReceita onNavigate={handleSelectProdutosPage} />
-          ) : activePage.id === 'produtos_configurar_custo' ? (
-            <ProdutosConfigurarCusto onNavigate={handleSelectProdutosPage} />
           ) : activePage.id === 'produtos_estoque_cadastro' ? (
             <ProdutosEstoqueCadastro onNavigate={handleSelectProdutosPage} />
+          ) : activePage.id === 'produtos_receita' ? (
+            <ProdutosReceita onNavigate={handleSelectProdutosPage} />
           ) : activePage.id === 'produtos_materia_prima' ? (
             <ProdutosMateriaPrima onNavigate={handleSelectProdutosPage} />
           ) : activePage.id === 'produtos_relatorios' ? (

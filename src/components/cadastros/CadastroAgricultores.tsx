@@ -1244,6 +1244,20 @@ export function CadastroAgricultores() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Estado (UF) <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.uf}
+                      onChange={(e) => setFormData({ ...formData, uf: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold bg-white focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                    >
+                      {['PR', 'SP', 'MG', 'RJ', 'SC', 'RS', 'GO', 'MS', 'MT', 'BA', 'ES', 'DF'].map(uf => (
+                        <option key={uf} value={uf}>{uf}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       Município <span className="text-red-500">*</span>
@@ -1255,20 +1269,6 @@ export function CadastroAgricultores() {
                       onChange={(e) => setFormData({ ...formData, municipio: e.target.value })}
                       placeholder="Ex: Jacarezinho"
                       className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Estado (UF) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      maxLength={2}
-                      value={formData.uf}
-                      onChange={(e) => setFormData({ ...formData, uf: e.target.value.toUpperCase() })}
-                      placeholder="PR"
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold uppercase focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
                     />
                   </div>
                   <div>
