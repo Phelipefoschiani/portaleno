@@ -33,22 +33,6 @@ export interface ReceitaIndustrial {
   aditivos_permitidos?: string;
 }
 
-export interface ConfiguracaoCusto {
-  id: string;
-  produto_id: string;
-  produto_nome: string;
-  custo_materia_prima_kg: number; // baseada na cotação da raiz
-  custo_energia_lenha_kg: number; // biomassa caldeira e eletricidade moagem
-  custo_embalagem_unit: number; // saco 25kg ráfia ou liner big bag
-  custo_mao_obra_kg: number;
-  custo_operacional_fixo_kg: number;
-  custo_total_producao_kg: number;
-  margem_lucro_alvo_percentual: number;
-  preco_sugerido_venda_kg: number;
-  preco_sugerido_saco_25kg: number;
-  ultima_atualizacao: string;
-}
-
 export interface ImpostoProduto {
   id: string;
   nome: string;
@@ -139,12 +123,141 @@ export interface TabelaPreco {
   produtos_ids?: string[];
 }
 
+// ============================================================
+// UNIDADES DE MEDIDA (normalização e conversão)
+// ============================================================
+
+export type UnidadeNormalizada = 'KG' | 'TON' | 'UN' | 'LITRO' | 'M3' | string;
+
+// Normaliza variações de escrita ('Toneladas', 'TON', 't', 'Kg', 'Litros', 'Sacos'...) para um código único
+export function normalizarUnidade(unidade?: string | null): UnidadeNormalizada {
+  const s = String(unidade || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ');
+  if (!s) return '';
+  if (['KG', 'KGS', 'QUILO', 'QUILOS', 'KILO', 'KILOS', 'QUILOGRAMA', 'QUILOGRAMAS'].includes(s)) return 'KG';
+  if (['TON', 'TONS', 'T', 'TONELADA', 'TONELADAS'].includes(s)) return 'TON';
+  if (['L', 'LT', 'LTS', 'LITRO', 'LITROS'].includes(s)) return 'LITRO';
+  if (s.startsWith('ESTEREO') || s === 'M3' || s === 'M³') return 'M3';
+  if ([
+    'UN', 'UND', 'UNID', 'UNIDADE', 'UNIDADES', 'PC', 'PCS', 'PECA', 'PECAS',
+    'SACO', 'SACOS', 'PACOTE', 'PACOTES', 'CAIXA', 'CAIXAS', 'FARDO', 'FARDOS'
+  ].includes(s)) return 'UN';
+  return s;
+}
+
+// Converte quantidade entre unidades. Retorna null quando as unidades não são compatíveis (ex.: UN -> TON).
+export function converterQuantidade(quantidade: number, de?: string | null, para?: string | null): number | null {
+  const a = normalizarUnidade(de);
+  const b = normalizarUnidade(para);
+  if (!a || !b || a === b) return quantidade;
+  if (a === 'KG' && b === 'TON') return quantidade / 1000;
+  if (a === 'TON' && b === 'KG') return quantidade * 1000;
+  return null;
+}
+
+// ============================================================
+// STATUS DE ESTOQUE (regra única para todo o sistema)
+// CRÍTICO: zerado ou até 50% do mínimo | BAIXO: abaixo do mínimo | NORMAL: no mínimo ou acima
+// ============================================================
+
+function nivelEstoque(atual: number, minimo: number): 'CRITICO' | 'BAIXO' | 'NORMAL' {
+  const a = Number(atual) || 0;
+  const m = Number(minimo) || 0;
+  if (a <= 0 || (m > 0 && a <= m * 0.5)) return 'CRITICO';
+  if (a < m) return 'BAIXO';
+  return 'NORMAL';
+}
+
+export function calcularStatusProduto(estoqueKg: number, minimoKg: number): ProdutoEstoque['status'] {
+  const n = nivelEstoque(estoqueKg, minimoKg);
+  return n === 'CRITICO' ? 'CRITICO' : n === 'BAIXO' ? 'ESTOQUE_BAIXO' : 'EM_ESTOQUE';
+}
+
+export function calcularStatusMateriaPrima(estoque: number, minimo: number): MateriaPrimaEstoque['status'] {
+  const n = nivelEstoque(estoque, minimo);
+  return n === 'CRITICO' ? 'CRITICO' : n === 'BAIXO' ? 'REPOSICAO_NECESSARIA' : 'NORMAL';
+}
+
+// ============================================================
+// CUSTOS SEMPRE ATUALIZADOS (receita <- matéria-prima, produto <- receita)
+// ============================================================
+
+const arred = (v: number, casas = 4) => {
+  const f = Math.pow(10, casas);
+  return Math.round((Number(v) || 0) * f) / f;
+};
+
+// Recalcula o custo de uma receita a partir do custo médio ATUAL de cada matéria-prima
+export function recalcularCustoReceita(receita: ReceitaIndustrial, materias: MateriaPrimaEstoque[]): ReceitaIndustrial {
+  const itens = (receita.materias_primas || []).map(item => {
+    const mp = materias.find(m => m.id === item.materia_prima_id);
+    if (!mp) return item;
+    const fator = converterQuantidade(1, item.unidade_medida, mp.unidade_medida) ?? 1;
+    const custoUnit = (Number(mp.custo_medio_unitario) || 0) * fator;
+    return {
+      ...item,
+      materia_prima_nome: mp.nome || item.materia_prima_nome,
+      custo_unitario: arred(custoUnit),
+      custo_total: arred((Number(item.quantidade) || 0) * custoUnit)
+    };
+  });
+  const total = itens.reduce((acc, it) => acc + (Number(it.custo_total) || 0), 0);
+  const rendimento = Number(receita.rendimento_pacotes) || 0;
+  return {
+    ...receita,
+    materias_primas: itens,
+    custo_total_materias_primas: arred(total, 2),
+    custo_por_pacote: rendimento > 0 ? arred(total / rendimento) : 0
+  };
+}
+
+// Soma dos impostos de um produto (mesma regra do cadastro de produtos)
+export function calcularImpostosProduto(impostos: ImpostoProduto[] | undefined, precoUnitario: number, baseCusto: number): number {
+  return (impostos || []).reduce((acc, imp) => {
+    if (imp.tipo === 'Porcentagem') {
+      const base = imp.base === 'Venda' ? precoUnitario : imp.base === 'Custo' ? baseCusto : 0;
+      return acc + (base * (Number(imp.valor) || 0)) / 100;
+    }
+    return acc + (Number(imp.valor) || 0);
+  }, 0);
+}
+
+// Recalcula custo/margem do produto a partir da receita atual. Receita excluída não deixa vínculo órfão.
+export function recalcularCustoProduto(
+  produto: ProdutoEstoque,
+  receitas: ReceitaIndustrial[],
+  materias: MateriaPrimaEstoque[]
+): ProdutoEstoque {
+  if (!produto.receita_id) return produto;
+  const rec = receitas.find(r => r.id === produto.receita_id);
+  if (!rec) {
+    // Receita foi excluída: remove o vínculo e mantém o último custo conhecido
+    return { ...produto, receita_id: undefined, receita_nome: undefined };
+  }
+  const recAtual = recalcularCustoReceita(rec, materias);
+  const custoMp = arred(recAtual.custo_por_pacote || 0, 2);
+  const custoOp = Number(produto.custo_operacional) || 0;
+  const preco = Number(produto.preco_unitario_venda) || 0;
+  const impostosValor = produto.impostos && produto.impostos.length > 0
+    ? calcularImpostosProduto(produto.impostos, preco, custoMp + custoOp)
+    : (Number(produto.impostos_valor) || 0);
+  const custoTotal = custoMp + custoOp + impostosValor;
+  return {
+    ...produto,
+    receita_nome: rec.nome || rec.produto_nome || produto.receita_nome,
+    custo_materia_prima: custoMp,
+    impostos_valor: arred(impostosValor, 2),
+    custo_total: arred(custoTotal, 2),
+    margem_lucro_percentual: preco > 0 ? arred(((preco - custoTotal) / preco) * 100, 1) : 0
+  };
+}
+
 // DADOS INICIAIS DE RECEITAS INDUSTRIAIS
 export const RECEITAS_INICIAIS: ReceitaIndustrial[] = [];
-
-
-// DADOS DE CONFIGURAÇÃO DE CUSTO
-export const CONFIGURACOES_CUSTO_INICIAIS: ConfiguracaoCusto[] = [];
 
 
 // ESTOQUE DE PRODUTOS ACABADOS
@@ -167,14 +280,22 @@ export const TABELAS_PRECO_INICIAIS: TabelaPreco[] = [];
 const STORAGE_KEY_PRODUTOS_ESTOQUE = 'grupo_eno_produtos_estoque_v1';
 const STORAGE_KEY_MATERIA_PRIMA = 'grupo_eno_materia_prima_v1';
 const STORAGE_KEY_RECEITAS = 'grupo_eno_receitas_v1';
-const STORAGE_KEY_CUSTOS = 'grupo_eno_custos_v1';
 
 function verificarModoLimpo(): boolean {
   if (typeof window === 'undefined') return true;
   return localStorage.getItem('grupo_eno_modo_limpo_v1') === 'true';
 }
 
+// Lê os produtos já com custo/margem recalculados a partir da receita e da matéria-prima atuais
 export function carregarEstoqueProdutos(): ProdutoEstoque[] {
+  const lista = lerEstoqueProdutosBruto();
+  if (lista.length === 0) return lista;
+  const receitas = carregarReceitas();
+  const materias = carregarMateriaPrima();
+  return lista.map(p => recalcularCustoProduto(p, receitas, materias));
+}
+
+function lerEstoqueProdutosBruto(): ProdutoEstoque[] {
   if (typeof window === 'undefined') return verificarModoLimpo() ? [] : ESTOQUE_PRODUTOS_INICIAIS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PRODUTOS_ESTOQUE);
@@ -222,7 +343,15 @@ export function salvarMateriaPrima(dados: MateriaPrimaEstoque[]): void {
   window.dispatchEvent(new Event('produtos_updated'));
 }
 
+// Lê as receitas com custos recalculados pelo custo médio atual das matérias-primas
 export function carregarReceitas(): ReceitaIndustrial[] {
+  const lista = lerReceitasBruto();
+  if (lista.length === 0) return lista;
+  const materias = carregarMateriaPrima();
+  return lista.map(r => recalcularCustoReceita(r, materias));
+}
+
+function lerReceitasBruto(): ReceitaIndustrial[] {
   if (typeof window === 'undefined') return verificarModoLimpo() ? [] : RECEITAS_INICIAIS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_RECEITAS);

@@ -93,7 +93,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       codigo: `TAB-${Date.now().toString().slice(-4)}`,
       nome: '',
       tipo: 'Atacado / Distribuidor',
-      desconto_padrao_percentual: 5,
+      desconto_padrao_percentual: 0,
       prazo_padrao: 'Boleto Bancário 28 Dias',
       frete_tipo: 'CIF (Entrega Grupo ENO)',
       vigencia_inicio: '01/04/2026',
@@ -175,6 +175,10 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
     }
   };
 
+  // Somente os produtos vinculados à tabela (produtos_ids); tabela antiga sem lista mostra todos
+  const produtosDaTabelaPreco = (tab: TabelaPreco) =>
+    Array.isArray(tab.produtos_ids) ? produtosEstoque.filter(p => tab.produtos_ids!.includes(p.id)) : produtosEstoque;
+
   // Copiar resumo formatado para WhatsApp ou texto
   const handleCopiarTabela = (tab: TabelaPreco) => {
     const desconto = tab.desconto_padrao_percentual || 0;
@@ -187,7 +191,10 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
     texto += `*Vigência:* ${tab.vigencia_inicio} a ${tab.vigencia_fim}\n\n`;
     texto += `*PRODUTOS & PREÇOS:*\n`;
 
-    produtosEstoque.forEach(p => {
+    const produtosDaTabela = produtosDaTabelaPreco(tab);
+    if (produtosDaTabela.length === 0) texto += `(Nenhum produto vinculado a esta tabela)
+`;
+    produtosDaTabela.forEach(p => {
       const precoBase = p.preco_unitario_venda || 0;
       const precoFinal = precoBase * (1 - desconto / 100);
       const acondQtd = p.unidades_por_acondicionamento || 1;
@@ -695,7 +702,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
-                      {produtosEstoque.map((p) => {
+                      {produtosDaTabelaPreco(tabelaVisualizar).map((p) => {
                         const desconto = tabelaVisualizar.desconto_padrao_percentual || 0;
                         const precoBase = p.preco_unitario_venda || 0;
                         const precoFinal = precoBase * (1 - desconto / 100);

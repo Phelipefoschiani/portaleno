@@ -18,7 +18,9 @@ import {
 import {
   CaixaInvestimento,
   carregarCaixaInvestimento,
-  salvarCaixaInvestimento
+  salvarCaixaInvestimento,
+  formatarMoeda,
+  numeroSeguro
 } from '../../data/financeiroData';
 import { FinanceiroNavTabs } from './FinanceiroNavTabs';
 
@@ -27,7 +29,7 @@ interface Props {
 }
 
 export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
-  const [caixa, setCaixa] = useState<CaixaInvestimento>(carregarCaixaInvestimento());
+  const [caixa, setCaixa] = useState<CaixaInvestimento>(() => carregarCaixaInvestimento());
   const [modalNovoInvest, setModalNovoInvest] = useState(false);
   const [modalTransferencia, setModalTransferencia] = useState(false);
 
@@ -51,14 +53,19 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
     const handleUpdate = () => {
       setCaixa(carregarCaixaInvestimento());
     };
+    handleUpdate();
     window.addEventListener('financeiro_updated', handleUpdate);
-    return () => window.removeEventListener('financeiro_updated', handleUpdate);
+    window.addEventListener('sistema_reset_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('financeiro_updated', handleUpdate);
+      window.removeEventListener('sistema_reset_updated', handleUpdate);
+    };
   }, []);
 
   const totalPatrimonioLiquido =
-    caixa.saldo_disponivel_industrial +
-    caixa.fundo_reserva_safra +
-    caixa.fundo_modernizacao_maquinario;
+    numeroSeguro(caixa.saldo_disponivel_industrial) +
+    numeroSeguro(caixa.fundo_reserva_safra) +
+    numeroSeguro(caixa.fundo_modernizacao_maquinario);
 
   const handleSalvarInvestimento = (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +75,7 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
       id: `inv_${Date.now()}`,
       data: formInvest.data,
       titulo: formInvest.titulo,
-      valor: parseFloat(formInvest.valor) || 0,
+      valor: numeroSeguro(formInvest.valor),
       categoria: formInvest.categoria,
       status: formInvest.status
     };
@@ -92,7 +99,7 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
 
   const handleEfetuarTransferencia = (e: React.FormEvent) => {
     e.preventDefault();
-    const v = parseFloat(formTransf.valor);
+    const v = numeroSeguro(formTransf.valor);
     if (!v || v <= 0) return;
     if (formTransf.origem === formTransf.destino) {
       alert('Origem e destino devem ser diferentes.');
@@ -173,7 +180,7 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
               </div>
             </div>
             <div className="text-2xl font-black text-slate-900 font-mono mt-3">
-              R$ {caixa.saldo_disponivel_industrial.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {formatarMoeda(caixa.saldo_disponivel_industrial)}
             </div>
             <div className="text-xs text-slate-500 mt-2 flex items-center justify-between pt-3 border-t border-slate-100">
               <span>Liquidez imediata (D+0)</span>
@@ -192,7 +199,7 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
               </div>
             </div>
             <div className="text-2xl font-black text-amber-950 font-mono mt-3">
-              R$ {caixa.fundo_reserva_safra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {formatarMoeda(caixa.fundo_reserva_safra)}
             </div>
             <div className="text-xs text-slate-500 mt-2 flex items-center justify-between pt-3 border-t border-slate-100">
               <span>Garantia de compra à vista</span>
@@ -211,12 +218,12 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
               </div>
             </div>
             <div className="text-2xl font-black text-blue-950 font-mono mt-3">
-              R$ {caixa.fundo_modernizacao_maquinario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {formatarMoeda(caixa.fundo_modernizacao_maquinario)}
             </div>
             <div className="text-xs text-slate-500 mt-2 flex items-center justify-between pt-3 border-t border-slate-100">
               <span>Rendimento mensal:</span>
               <span className="font-mono font-bold text-blue-700">
-                + R$ {caixa.rendimento_mensal_estimado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/mês
+                + {formatarMoeda(caixa.rendimento_mensal_estimado)}/mês
               </span>
             </div>
           </div>
@@ -265,7 +272,7 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
                   </td>
 
                   <td className="py-3.5 px-4 font-mono font-black text-slate-900">
-                    R$ {inv.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    {formatarMoeda(inv.valor)}
                   </td>
 
                   <td className="py-3.5 px-6 text-right">
@@ -450,9 +457,9 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
                     onChange={(e) => setFormTransf({ ...formTransf, origem: e.target.value as any })}
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 text-slate-900 font-semibold focus:outline-none focus:border-emerald-700 bg-slate-50 cursor-pointer"
                   >
-                    <option value="saldo_disponivel_industrial">Caixa Industrial (Disp: R$ {caixa.saldo_disponivel_industrial.toLocaleString('pt-BR')})</option>
-                    <option value="fundo_reserva_safra">Reserva de Safra (Disp: R$ {caixa.fundo_reserva_safra.toLocaleString('pt-BR')})</option>
-                    <option value="fundo_modernizacao_maquinario">Modernização CAPEX (Disp: R$ {caixa.fundo_modernizacao_maquinario.toLocaleString('pt-BR')})</option>
+                    <option value="saldo_disponivel_industrial">Caixa Industrial (Disp: {formatarMoeda(caixa.saldo_disponivel_industrial)})</option>
+                    <option value="fundo_reserva_safra">Reserva de Safra (Disp: {formatarMoeda(caixa.fundo_reserva_safra)})</option>
+                    <option value="fundo_modernizacao_maquinario">Modernização CAPEX (Disp: {formatarMoeda(caixa.fundo_modernizacao_maquinario)})</option>
                   </select>
                 </div>
 

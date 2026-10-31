@@ -40,6 +40,8 @@ import { FinanceiroLancarReceita } from './financeiro/FinanceiroLancarReceita';
 import { FinanceiroCaixaInvestimento } from './financeiro/FinanceiroCaixaInvestimento';
 import { VisaoGeralDashboard } from './visao_geral/VisaoGeralDashboard';
 import { PortalControleSitio } from './portais/PortalControleSitio';
+import { UsuariosAcessos } from './cadastros/UsuariosAcessos';
+import { obterSessao } from '../lib/auth';
 
 type AdminDashboardProps = {
   onLogout: () => void;
@@ -125,6 +127,8 @@ export function AdminDashboard({ onLogout, initialPageId }: AdminDashboardProps)
         { id: 'cadastro_provisorio_portifolio', label: 'Cadastro Provisório Portifólio' },
         { id: 'cadastro_producao_usuarios', label: 'Cadastro Produção' },
         { id: 'cadastro_controle_sitio', label: 'Cadastro Controle do Sítio' },
+        // Gestão de logins: somente ADMIN
+        ...(obterSessao()?.perfil === 'ADMIN' ? [{ id: 'usuarios_acessos', label: 'Usuários e Acessos' }] : []),
       ],
     },
     {
@@ -411,6 +415,8 @@ export function AdminDashboard({ onLogout, initialPageId }: AdminDashboardProps)
             <CadastroProvisorioPortifolio onNavigateToCliente={handleNavigateToCliente} />
           ) : activePage.id === 'cadastro_producao_usuarios' ? (
             <CadastroProducao />
+          ) : activePage.id === 'usuarios_acessos' && obterSessao()?.perfil === 'ADMIN' ? (
+            <UsuariosAcessos />
           ) : activePage.id === 'cadastro_controle_sitio' ? (
             <PortalControleSitio onVoltar={handleSelectVisaoGeral} />
           ) : activePage.id === 'pedidos_compra' ? (

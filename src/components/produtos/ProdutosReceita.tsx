@@ -32,7 +32,9 @@ import {
   MateriaPrimaEstoque,
   carregarReceitas,
   salvarReceitas,
-  carregarMateriaPrima
+  carregarMateriaPrima,
+  carregarEstoqueProdutos,
+  salvarEstoqueProdutos
 } from '../../data/produtosData';
 import { ProdutosNavTabs } from './ProdutosNavTabs';
 
@@ -61,10 +63,10 @@ export function ProdutosReceita({ onNavigate }: Props) {
   const [formNome, setFormNome] = useState('');
   const [formCodigo, setFormCodigo] = useState('');
   const [formTipoEmbalagem, setFormTipoEmbalagem] = useState<'Saco 25kg' | 'Fardo 10x1kg' | 'Pacote 1kg' | 'Big Bag 1000kg' | 'Caixa' | 'Granel'>('Saco 25kg');
-  const [formRendimentoPacotes, setFormRendimentoPacotes] = useState('400');
+  const [formRendimentoPacotes, setFormRendimentoPacotes] = useState('');
   const [formPesoPorPacoteKg, setFormPesoPorPacoteKg] = useState('25');
   const [formMateriasPrimas, setFormMateriasPrimas] = useState<ItemMateriaPrimaReceita[]>([]);
-  const [formTempoHoras, setFormTempoHoras] = useState('4.5');
+  const [formTempoHoras, setFormTempoHoras] = useState('');
   const [formObservacoes, setFormObservacoes] = useState('');
   const [formErro, setFormErro] = useState<string | null>(null);
 
@@ -119,9 +121,9 @@ export function ProdutosReceita({ onNavigate }: Props) {
     const proxNum = receitas.length + 1;
     setFormCodigo(`REC-ENO-${String(proxNum).padStart(2, '0')}`);
     setFormTipoEmbalagem('Pacote 1kg');
-    setFormRendimentoPacotes('500');
+    setFormRendimentoPacotes('');
     setFormPesoPorPacoteKg('1');
-    setFormTempoHoras('2.0');
+    setFormTempoHoras('');
     setFormObservacoes('');
     setFormErro(null);
 
@@ -151,7 +153,7 @@ export function ProdutosReceita({ onNavigate }: Props) {
     setFormRendimentoPacotes(String(rec.rendimento_pacotes || 400));
     setFormPesoPorPacoteKg(String(rec.peso_por_pacote_kg || 25));
     setFormMateriasPrimas(rec.materias_primas || []);
-    setFormTempoHoras(String(rec.tempo_processamento_horas || 4.5));
+    setFormTempoHoras(rec.tempo_processamento_horas ? String(rec.tempo_processamento_horas) : '');
     setFormObservacoes(rec.observacoes_tecnicas || '');
     setFormErro(null);
     setModalReceitaAberto(true);
@@ -177,6 +179,8 @@ export function ProdutosReceita({ onNavigate }: Props) {
     if (confirm(`Deseja realmente excluir a receita "${rec.nome || rec.produto_nome}"?`)) {
       const novas = receitas.filter(r => r.id !== rec.id);
       salvarReceitas(novas);
+      // Produtos que usavam esta receita perdem o vínculo (sem receita_id órfão)
+      salvarEstoqueProdutos(carregarEstoqueProdutos());
       setReceitas(novas);
       dispararToast('Receita removida com sucesso.');
     }
@@ -190,8 +194,8 @@ export function ProdutosReceita({ onNavigate }: Props) {
       materia_prima_nome: primeiro ? primeiro.nome : 'Nova Matéria-Prima',
       quantidade: 1,
       unidade_medida: primeiro ? primeiro.unidade_medida : 'KG',
-      custo_unitario: primeiro ? primeiro.custo_medio_unitario : 10.00,
-      custo_total: primeiro ? primeiro.custo_medio_unitario : 10.00
+      custo_unitario: primeiro ? primeiro.custo_medio_unitario : 0,
+      custo_total: primeiro ? primeiro.custo_medio_unitario : 0
     };
     setFormMateriasPrimas([...formMateriasPrimas, novaLinha]);
   };
@@ -268,7 +272,8 @@ export function ProdutosReceita({ onNavigate }: Props) {
       custoTotalMateriasPrimas,
       custoPorPacote,
       custoPorKg,
-      fatorConversaoRaiz
+      fatorConversaoRaiz,
+      temRaiz: rendimentoTotalKg > 0 && kgMandiocaTotal > 0
     };
   }, [formRendimentoPacotes, formPesoPorPacoteKg, formMateriasPrimas]);
 
@@ -303,14 +308,15 @@ export function ProdutosReceita({ onNavigate }: Props) {
       materias_primas: formMateriasPrimas,
       custo_total_materias_primas: calculosFormulario.custoTotalMateriasPrimas,
       custo_por_pacote: calculosFormulario.custoPorPacote,
-      tempo_processamento_horas: parseFloat(formTempoHoras) || 4.5,
+      tempo_processamento_horas: parseFloat(formTempoHoras) || undefined,
       observacoes_tecnicas: formObservacoes.trim() || undefined,
       data_criacao: receitaEmEdicao?.data_criacao || new Date().toLocaleDateString('pt-BR'),
-      rendimento_amido_percentual: 26.5,
-      kg_mandioca_por_kg_produto: calculosFormulario.fatorConversaoRaiz,
-      agua_m3_por_ton: 3.2,
-      perda_destopo_casca_percentual: 6.0,
-      bagaço_umido_gerado_kg: 710
+      // Parâmetros técnicos: só o fator real da mandioca (quando a receita tem raiz); demais mantidos se já existiam
+      rendimento_amido_percentual: receitaEmEdicao?.rendimento_amido_percentual,
+      kg_mandioca_por_kg_produto: calculosFormulario.temRaiz ? calculosFormulario.fatorConversaoRaiz : undefined,
+      agua_m3_por_ton: receitaEmEdicao?.agua_m3_por_ton,
+      perda_destopo_casca_percentual: receitaEmEdicao?.perda_destopo_casca_percentual,
+      bagaço_umido_gerado_kg: receitaEmEdicao?.bagaço_umido_gerado_kg
     };
 
     let listaAtualizada: ReceitaIndustrial[];

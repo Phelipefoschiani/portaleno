@@ -20,8 +20,14 @@ import {
 import {
   TituloReceber,
   carregarTitulosReceber,
-  salvarTitulosReceber
+  salvarTitulosReceber,
+  statusEfetivoReceber,
+  dataNoMesAtual,
+  somarValores,
+  formatarMoeda,
+  registrarBaixaNoCaixa
 } from '../../data/financeiroData';
+import { hojeISO, somarDias, paraISO, formatarDataBR, compararDatas } from '../../lib/datas';
 import { FinanceiroNavTabs } from './FinanceiroNavTabs';
 
 interface Props {
@@ -40,16 +46,20 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
     numero_documento: '',
     cliente_nome: '',
     cliente_cnpj: '',
-    valor: 10000,
-    data_emissao: new Date().toLocaleDateString('pt-BR'),
+    valor: 0,
+    data_emissao: hojeISO(),
     data_vencimento: '',
-    forma_pagamento: 'Boleto Bancário 28 Dias',
-    banco_emissor: 'Banco do Brasil S.A.',
+    forma_pagamento: '',
+    banco_emissor: '',
     observacoes: ''
   });
 
+  // Status VENCIDO é calculado na exibição (não pago + vencimento anterior a hoje)
   const recarregar = () => {
-    setTitulos(carregarTitulosReceber());
+    const lista = carregarTitulosReceber()
+      .map(t => ({ ...t, status: statusEfetivoReceber(t) }))
+      .sort((a, b) => compararDatas(a.data_vencimento, b.data_vencimento));
+    setTitulos(lista);
   };
 
   useEffect(() => {
@@ -61,19 +71,24 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
 
   // Métricas
   const metricas = useMemo(() => {
-    const emAberto = titulos.filter(t => t.status === 'EM_ABERTO').reduce((acc, t) => acc + t.valor, 0);
-    const recebidoMes = titulos.filter(t => t.status === 'PAGO').reduce((acc, t) => acc + t.valor, 0);
-    const qtdAberto = titulos.filter(t => t.status === 'EM_ABERTO').length;
+    const pendentes = titulos.filter(t => t.status !== 'PAGO');
+    const emAberto = somarValores(pendentes, t => t.valor);
+    const recebidoMes = somarValores(
+      titulos.filter(t => t.status === 'PAGO' && dataNoMesAtual(t.data_pagamento)),
+      t => t.valor
+    );
+    const qtdAberto = pendentes.length;
+    const qtdVencidos = titulos.filter(t => t.status === 'VENCIDO').length;
 
-    return { emAberto, recebidoMes, qtdAberto };
+    return { emAberto, recebidoMes, qtdAberto, qtdVencidos };
   }, [titulos]);
 
   const titulosFiltrados = useMemo(() => {
     return titulos.filter(t => {
       const match =
-        t.cliente_nome.toLowerCase().includes(busca.toLowerCase()) ||
-        t.numero_documento.toLowerCase().includes(busca.toLowerCase()) ||
-        t.cliente_cnpj.includes(busca);
+        (t.cliente_nome || '').toLowerCase().includes(busca.toLowerCase()) ||
+        (t.numero_documento || '').toLowerCase().includes(busca.toLowerCase()) ||
+        (t.cliente_cnpj || '').includes(busca);
 
       if (!match) return false;
       if (filtroStatus !== 'TODOS' && t.status !== filtroStatus) return false;
@@ -84,17 +99,16 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
   // Baixa de título
   const handleBaixarTitulo = (id: string, doc: string) => {
     if (confirm(`Confirmar liquidação / baixa do título ${doc}?`)) {
-      const atualizados: TituloReceber[] = titulos.map(t => {
-        if (t.id === id) {
-          return {
-            ...t,
-            status: 'PAGO' as const,
-            data_pagamento: new Date().toLocaleDateString('pt-BR')
-          };
-        }
-        return t;
-      });
+      // Atualiza a partir do armazenamento (sem gravar o status calculado de exibição)
+      const armazenados = carregarTitulosReceber();
+      const alvo = armazenados.find(t => t.id === id);
+      if (!alvo || alvo.status === 'PAGO') return;
+      const atualizados: TituloReceber[] = armazenados.map(t =>
+        t.id === id ? { ...t, status: 'PAGO' as const, data_pagamento: hojeISO() } : t
+      );
       salvarTitulosReceber(atualizados);
+      // Entrada no caixa (uma única vez por título)
+      registrarBaixaNoCaixa(`receber:${id}`, alvo.valor);
     }
   };
 
@@ -106,12 +120,18 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
 
   const handleSalvarNovo = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!(formData.valor > 0)) {
+      alert('Informe um valor maior que zero.');
+      return;
+    }
     const novo: TituloReceber = {
       id: `rec_${Date.now()}`,
       ...formData,
+      data_emissao: paraISO(formData.data_emissao) || hojeISO(),
+      data_vencimento: paraISO(formData.data_vencimento),
       status: 'EM_ABERTO'
     };
-    salvarTitulosReceber([novo, ...titulos]);
+    salvarTitulosReceber([novo, ...carregarTitulosReceber()]);
     setModalNovo(false);
   };
 
@@ -130,22 +150,25 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
               <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
                 {metricas.qtdAberto} em aberto
               </span>
+              {metricas.qtdVencidos > 0 && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-red-50 text-red-700 font-mono">
+                  {metricas.qtdVencidos} vencidos
+                </span>
+              )}
             </h1>
           </div>
 
           <button
             onClick={() => {
-              const d = new Date();
-              d.setDate(d.getDate() + 28);
               setFormData({
                 numero_documento: `DUP-${Math.floor(1000 + Math.random() * 9000)}`,
                 cliente_nome: '',
                 cliente_cnpj: '',
-                valor: 25000,
-                data_emissao: new Date().toLocaleDateString('pt-BR'),
-                data_vencimento: d.toLocaleDateString('pt-BR'),
-                forma_pagamento: 'Boleto Bancário 28 Dias',
-                banco_emissor: 'Banco do Brasil S.A.',
+                valor: 0,
+                data_emissao: hojeISO(),
+                data_vencimento: somarDias(hojeISO(), 28),
+                forma_pagamento: '',
+                banco_emissor: '',
                 observacoes: ''
               });
               setModalNovo(true);
@@ -166,14 +189,14 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
           <div className="flex items-center gap-2">
             <span className="text-slate-400 font-medium">Total em Aberto na Carteira:</span>
             <span className="font-mono font-bold text-slate-900 text-sm">
-              {metricas.emAberto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              {formatarMoeda(metricas.emAberto)}
             </span>
           </div>
           <div className="w-px h-4 bg-slate-200 hidden sm:block" />
           <div className="flex items-center gap-2">
             <span className="text-slate-400 font-medium">Recebido no Mês:</span>
             <span className="font-mono font-bold text-emerald-700">
-              {metricas.recebidoMes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              {formatarMoeda(metricas.recebidoMes)}
             </span>
           </div>
         </div>
@@ -199,6 +222,7 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
         >
           <option value="TODOS">Todos os Status</option>
           <option value="EM_ABERTO">Em Aberto</option>
+          <option value="VENCIDO">Vencidos</option>
           <option value="PAGO">Liquidados / Pagos</option>
         </select>
       </div>
@@ -254,12 +278,12 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
                       </td>
 
                       <td className="py-3.5 px-4 font-mono">
-                        <div className="font-bold text-slate-800">{item.data_vencimento}</div>
-                        <div className="text-[10px] text-slate-400 font-sans">Emitido em {item.data_emissao}</div>
+                        <div className="font-bold text-slate-800">{formatarDataBR(item.data_vencimento)}</div>
+                        <div className="text-[10px] text-slate-400 font-sans">Emitido em {formatarDataBR(item.data_emissao)}</div>
                       </td>
 
                       <td className="py-3.5 px-4 font-mono font-bold text-slate-900 text-sm">
-                        {item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {formatarMoeda(item.valor)}
                       </td>
 
                       <td className="py-3.5 px-4">
@@ -267,6 +291,11 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
                           <div className="flex items-center gap-1.5 text-emerald-700">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
                             <span className="font-medium">Liquidado</span>
+                          </div>
+                        ) : item.status === 'VENCIDO' ? (
+                          <div className="flex items-center gap-1.5 text-red-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
+                            <span className="font-medium">Vencido</span>
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5 text-amber-700">
@@ -277,7 +306,7 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
                       </td>
 
                       <td className="py-3.5 px-5 text-right">
-                        {item.status === 'EM_ABERTO' ? (
+                        {item.status !== 'PAGO' ? (
                           <button
                             onClick={() => handleBaixarTitulo(item.id, item.numero_documento)}
                             className="
@@ -292,7 +321,7 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
                           </button>
                         ) : (
                           <span className="text-[11px] text-slate-400 font-mono">
-                            Pago em {item.data_pagamento}
+                            Pago em {formatarDataBR(item.data_pagamento)}
                           </span>
                         )}
                       </td>
@@ -343,9 +372,9 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
                   <input
                     type="number"
                     step="0.01"
-                    min="1"
+                    min="0.01"
                     required
-                    value={formData.valor}
+                    value={formData.valor || ''}
                     onChange={(e) => setFormData({ ...formData, valor: parseFloat(e.target.value) || 0 })}
                     placeholder="0.00"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
@@ -378,11 +407,10 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Data de Vencimento</label>
                   <input
-                    type="text"
+                    type="date"
                     required
-                    value={formData.data_vencimento}
+                    value={paraISO(formData.data_vencimento)}
                     onChange={(e) => setFormData({ ...formData, data_vencimento: e.target.value })}
-                    placeholder="DD/MM/AAAA"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
                   />
                 </div>

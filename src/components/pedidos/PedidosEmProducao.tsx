@@ -32,6 +32,7 @@ import {
   salvarPedidosVenda,
   moverPedidoEtapa
 } from '../../data/pedidosVendaData';
+import { pesoDoItemKg } from '../../data/pedidosVendaData';
 import { PedidosNavTabs } from './PedidosNavTabs';
 
 interface Props {
@@ -123,7 +124,8 @@ export function PedidosEmProducao({ onNavigate }: Props) {
     const itemAlvo = pedidoAtual.itens[itemAlvoIndex];
     const qtdAnterior = itemAlvo.quantidade_produzida || 0;
     const novaQtdProduzida = qtdAnterior + qtdEmbalagens;
-    const pesoKgApontado = qtdEmbalagens * itemAlvo.peso_unitario_kg;
+    // Peso considera os pacotes de cada fardo/caixa
+    const pesoKgApontado = pesoDoItemKg(itemAlvo, qtdEmbalagens);
 
     // Atualiza o item específico
     const itensAtualizados = [...pedidoAtual.itens];

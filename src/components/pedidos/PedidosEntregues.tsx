@@ -21,6 +21,8 @@ import {
   salvarPedidosVenda
 } from '../../data/pedidosVendaData';
 import { PedidosNavTabs } from './PedidosNavTabs';
+import { limparEstadoProducaoFaturamento } from '../../data/pedidosVendaData';
+import { hojeISO, somarDias, formatarDataBR } from '../../lib/datas';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -67,18 +69,17 @@ export function PedidosEntregues({ onNavigate }: Props) {
   // Ação Rápida: Repetir Pedido (cria um novo orçamento idêntico)
   const handleRepetirPedido = (pedidoOrigem: PedidoVenda) => {
     if (confirm(`Duplicar este pedido e gerar uma nova cotação para ${pedidoOrigem.cliente_nome}?`)) {
-      const dataHoje = new Date();
-      const dataHojeStr = dataHoje.toISOString().split('T')[0];
-      const dataValidade = new Date();
-      dataValidade.setDate(dataValidade.getDate() + 7);
-      const dataValidadeStr = dataValidade.toISOString().split('T')[0];
+      const dataHojeStr = hojeISO();
+      const dataValidadeStr = somarDias(dataHojeStr, 7);
 
+      // Copia só os dados comerciais: todo estado de produção/faturamento/entrega é limpo
       const novoOrcamento: PedidoVenda = {
-        ...pedidoOrigem,
+        ...limparEstadoProducaoFaturamento(pedidoOrigem),
         id: `ped_venda_${Date.now()}`,
         numero_pedido: `ORC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
         tipo: 'ORCAMENTO',
         etapa: 'ORCAMENTO',
+        comissao_valor: pedidoOrigem.comissao_valor,
         data_emissao: dataHojeStr,
         data_validade_orcamento: dataValidadeStr,
         data_previsao_entrega: dataValidadeStr,
@@ -191,7 +192,7 @@ export function PedidosEntregues({ onNavigate }: Props) {
                       </td>
 
                       <td className="py-3.5 px-4 font-mono text-slate-700">
-                        {item.data_entrega_realizada || item.data_previsao_entrega.split('-').reverse().join('/')}
+                        {formatarDataBR(item.data_entrega_realizada || item.data_previsao_entrega)}
                         <div className="flex items-center gap-1 text-[10px] text-emerald-700 font-sans mt-0.5">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                           <span>Recebido</span>

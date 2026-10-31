@@ -39,10 +39,10 @@ import {
 } from 'recharts';
 import {
   PedidoVenda,
-  carregarPedidosVenda,
-  RCAS_LOOKUP,
-  CLIENTES_LOOKUP
+  carregarPedidosVenda
 } from '../../data/pedidosVendaData';
+import { converterQuantidade, normalizarUnidade } from '../../data/produtosData';
+import { hojeISO } from '../../lib/datas';
 import {
   PedidoCompraGeral,
   carregarPedidosCompra
@@ -101,8 +101,8 @@ export function PedidosRelatorios({ onNavigate }: Props) {
     };
 
     const volumeMandiocaKg = pedidosCompra
-      .filter(p => p.categoria === 'Mandioca / Matéria-Prima')
-      .reduce((acc, p) => acc + p.quantidade, 0);
+      .filter(p => p.categoria === 'Mandioca / Matéria-Prima' && ['KG', 'TON'].includes(normalizarUnidade(p.unidade_medida)))
+      .reduce((acc, p) => acc + (converterQuantidade(p.quantidade, p.unidade_medida, 'KG') || 0), 0);
 
     const refugoDestopoKg = pedidosCompra
       .filter(p => p.residuo_destopo_casca_kg !== undefined)
@@ -129,15 +129,18 @@ export function PedidosRelatorios({ onNavigate }: Props) {
     const faturados = pedidosVenda.filter(p => p.etapa === 'FATURADO');
     const entregues = pedidosVenda.filter(p => p.etapa === 'ENTREGUE');
 
-    const faturamentoTotalRealizado = [...faturados, ...entregues].reduce((acc, p) => acc + p.valor_total, 0);
+    const faturamentoTotalRealizado = [...faturados, ...entregues].reduce((acc, p) => acc + (p.valor_faturado || p.valor_total), 0);
     const volumeTotalRealizadoKg = [...faturados, ...entregues].reduce((acc, p) => acc + p.peso_total_kg, 0);
     const saldoAFaturar = aFaturar.reduce((acc, p) => acc + p.valor_total, 0);
     const saldoEmProducao = producao.reduce((acc, p) => acc + p.valor_total, 0);
     const valorEmOrcamentos = orcamentos.reduce((acc, p) => acc + p.valor_total, 0);
 
-    const taxaConversao = (orcamentos.length + producao.length + aFaturar.length + faturados.length + entregues.length) > 0
-      ? Math.round(((producao.length + aFaturar.length + faturados.length + entregues.length) / pedidosVenda.length) * 100)
-      : 80;
+    const totalFunil = orcamentos.length + producao.length + aFaturar.length + faturados.length + entregues.length;
+    const taxaConversao = totalFunil > 0
+      ? Math.round(((producao.length + aFaturar.length + faturados.length + entregues.length) / totalFunil) * 100)
+      : 0;
+    const valorFaturados = faturados.reduce((acc, p) => acc + (p.valor_faturado || p.valor_total), 0);
+    const valorEntregues = entregues.reduce((acc, p) => acc + (p.valor_faturado || p.valor_total), 0);
 
     return {
       totalPedidos: pedidosVenda.length,
@@ -147,6 +150,8 @@ export function PedidosRelatorios({ onNavigate }: Props) {
       saldoEmProducao,
       valorEmOrcamentos,
       taxaConversao,
+      valorFaturados,
+      valorEntregues,
       contagens: {
         orcamentos: orcamentos.length,
         producao: producao.length,
@@ -195,8 +200,8 @@ export function PedidosRelatorios({ onNavigate }: Props) {
       { etapa: 'Orçamentos', quantidade: metricasVendas.contagens.orcamentos, valor: metricasVendas.valorEmOrcamentos },
       { etapa: 'Em Produção', quantidade: metricasVendas.contagens.producao, valor: metricasVendas.saldoEmProducao },
       { etapa: 'A Faturar', quantidade: metricasVendas.contagens.aFaturar, valor: metricasVendas.saldoAFaturar },
-      { etapa: 'Faturados / Em Rota', quantidade: metricasVendas.contagens.faturados, valor: metricasVendas.faturamentoTotalRealizado * 0.45 },
-      { etapa: 'Entregues', quantidade: metricasVendas.contagens.entregues, valor: metricasVendas.faturamentoTotalRealizado * 0.55 }
+      { etapa: 'Faturados / Em Rota', quantidade: metricasVendas.contagens.faturados, valor: metricasVendas.valorFaturados },
+      { etapa: 'Entregues', quantidade: metricasVendas.contagens.entregues, valor: metricasVendas.valorEntregues }
     ];
   }, [metricasVendas]);
 
@@ -221,7 +226,7 @@ export function PedidosRelatorios({ onNavigate }: Props) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `relatorio_${relatorioAtivo.toLowerCase()}_grupo_eno_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `relatorio_${relatorioAtivo.toLowerCase()}_grupo_eno_${hojeISO()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

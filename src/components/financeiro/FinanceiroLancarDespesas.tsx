@@ -32,17 +32,28 @@ import {
 } from 'lucide-react';
 import {
   DespesaOperacional,
+  TituloPagar,
   carregarDespesas,
-  salvarDespesas
+  salvarDespesas,
+  carregarTitulosPagar,
+  salvarTitulosPagar,
+  ehDespesaProgramada,
+  dataNoMesAtual,
+  somarValores,
+  formatarMoeda,
+  numeroSeguro,
+  registrarBaixaNoCaixa,
+  estornarBaixaNoCaixa
 } from '../../data/financeiroData';
+import { carregarAgricultores, carregarFornecedores, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
+import { hojeISO, paraISO, formatarDataBR, compararDatas } from '../../lib/datas';
 import {
   PedidoCompraGeral,
   carregarPedidosCompra,
   salvarPedidosCompra,
+  efetivarPedidoCompra,
   Agricultor,
-  AGRICULTORES_CADASTRADOS,
   Fornecedor,
-  FORNECEDORES_CADASTRADOS,
   CategoriaCompra,
   StatusPedidoCompra
 } from '../../data/mockStore';
@@ -59,8 +70,8 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
   // Dados
   const [despesas, setDespesas] = useState<DespesaOperacional[]>([]);
   const [pedidosCompra, setPedidosCompra] = useState<PedidoCompraGeral[]>([]);
-  const [agricultores] = useState<Agricultor[]>(AGRICULTORES_CADASTRADOS);
-  const [fornecedores] = useState<Fornecedor[]>(FORNECEDORES_CADASTRADOS);
+  const [agricultores, setAgricultores] = useState<Agricultor[]>(() => carregarAgricultores());
+  const [fornecedores, setFornecedores] = useState<Fornecedor[]>(() => carregarFornecedores());
 
   // Filtros
   const [busca, setBusca] = useState('');
@@ -69,10 +80,10 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
   // Modal Nova Despesa Operacional Direta
   const [modalNovaDespesa, setModalNovaDespesa] = useState(false);
   const [formDespesa, setFormDespesa] = useState({
-    data: new Date().toLocaleDateString('pt-BR'),
+    data: hojeISO(),
     categoria: 'Manutenção Mecânica & Peças',
     descricao: '',
-    valor: 250,
+    valor: 0,
     setor: 'Fábrica & Moagem' as DespesaOperacional['setor'],
     responsavel: '',
     forma_pagamento: 'PIX'
@@ -81,8 +92,8 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
   // Modal Novo Pedido de Compra / Programação (Simples: Fornecedor, Data, Valor e Descrição)
   const [modalNovoPedido, setModalNovoPedido] = useState(false);
   const [novoTipoParceiro, setNovoTipoParceiro] = useState<'AGRICULTOR' | 'FORNECEDOR'>('FORNECEDOR');
-  const [novoParceiroId, setNovoParceiroId] = useState(FORNECEDORES_CADASTRADOS[0]?.id || '');
-  const [novoData, setNovoData] = useState(new Date().toLocaleDateString('pt-BR'));
+  const [novoParceiroId, setNovoParceiroId] = useState('');
+  const [novoData, setNovoData] = useState(hojeISO());
   const [novoValorTotal, setNovoValorTotal] = useState('');
   const [novoItem, setNovoItem] = useState('');
   const [novoComprador, setNovoComprador] = useState('Equipe de Compras');
@@ -110,7 +121,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
   const [valorTotalFinalizacao, setValorTotalFinalizacao] = useState('');
   const [categoriaFinalizacao, setCategoriaFinalizacao] = useState<CategoriaCompra>('Embalagens');
   const [tipoFinalizacao, setTipoFinalizacao] = useState<'JA_PAGO' | 'A_PAGAR'>('JA_PAGO');
-  const [dataFinalizacao, setDataFinalizacao] = useState(new Date().toLocaleDateString('pt-BR'));
+  const [dataFinalizacao, setDataFinalizacao] = useState(hojeISO());
   const [formaPagamentoFinalizacao, setFormaPagamentoFinalizacao] = useState('PIX');
   const [obsFinalizacao, setObsFinalizacao] = useState('');
 
@@ -127,13 +138,37 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
   useEffect(() => {
     recarregar();
     const handleUpdate = () => recarregar();
+    const handleCadastros = () => {
+      setAgricultores(carregarAgricultores());
+      setFornecedores(carregarFornecedores());
+    };
     window.addEventListener('financeiro_updated', handleUpdate);
     window.addEventListener('pedidos_compra_updated', handleUpdate);
+    window.addEventListener('sistema_reset_updated', handleUpdate);
+    window.addEventListener(EVENTO_CADASTROS_ATUALIZADOS, handleCadastros);
     return () => {
       window.removeEventListener('financeiro_updated', handleUpdate);
       window.removeEventListener('pedidos_compra_updated', handleUpdate);
+      window.removeEventListener('sistema_reset_updated', handleUpdate);
+      window.removeEventListener(EVENTO_CADASTROS_ATUALIZADOS, handleCadastros);
     };
   }, []);
+
+  // Mantém o parceiro selecionado válido conforme o tipo e os cadastros atuais
+  useEffect(() => {
+    const lista = novoTipoParceiro === 'AGRICULTOR' ? agricultores : fornecedores;
+    if (!lista.some(p => p.id === novoParceiroId)) {
+      setNovoParceiroId(lista[0]?.id || '');
+    }
+  }, [novoTipoParceiro, agricultores, fornecedores, novoParceiroId]);
+
+  // Despesas realizadas = apenas lançamentos efetivamente pagos.
+  // Registros "desp_prog_*" (programadas) nunca contam como realizadas.
+  const despesasRealizadas = useMemo(() => {
+    return despesas
+      .filter(d => !ehDespesaProgramada(d))
+      .sort((a, b) => compararDatas(b.data, a.data));
+  }, [despesas]);
 
   // Lista de Pedidos Programados (A Lembrar / A Comprar)
   const pedidosProgramados = useMemo(() => {
@@ -145,29 +180,33 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
   }, [pedidosCompra]);
 
   // Métricas
+  const despesasRealizadasMes = useMemo(() => {
+    return despesasRealizadas.filter(d => dataNoMesAtual(d.data));
+  }, [despesasRealizadas]);
+
   const totalDespesasRealizadas = useMemo(() => {
-    return despesas.reduce((acc, d) => acc + d.valor, 0);
-  }, [despesas]);
+    return somarValores(despesasRealizadasMes, d => d.valor);
+  }, [despesasRealizadasMes]);
 
   const totalDespesasProgramadas = useMemo(() => {
-    return pedidosProgramados.reduce((acc, p) => acc + p.valor_total, 0);
+    return somarValores(pedidosProgramados, p => p.valor_total);
   }, [pedidosProgramados]);
 
   // Filtros de busca
   const despesasRealizadasFiltradas = useMemo(() => {
     const termo = busca.toLowerCase();
-    return despesas.filter(d =>
-      d.descricao.toLowerCase().includes(termo) ||
-      d.categoria.toLowerCase().includes(termo) ||
-      d.responsavel.toLowerCase().includes(termo)
+    return despesasRealizadas.filter(d =>
+      (d.descricao || '').toLowerCase().includes(termo) ||
+      (d.categoria || '').toLowerCase().includes(termo) ||
+      (d.responsavel || '').toLowerCase().includes(termo)
     );
-  }, [despesas, busca]);
+  }, [despesasRealizadas, busca]);
 
   const pedidosProgramadosFiltrados = useMemo(() => {
     const termo = busca.toLowerCase();
     return pedidosProgramados.filter(p =>
-      p.item_descricao.toLowerCase().includes(termo) ||
-      p.categoria.toLowerCase().includes(termo) ||
+      (p.item_descricao || '').toLowerCase().includes(termo) ||
+      (p.categoria || '').toLowerCase().includes(termo) ||
       (p.fornecedor_nome && p.fornecedor_nome.toLowerCase().includes(termo)) ||
       (p.agricultor_nome && p.agricultor_nome.toLowerCase().includes(termo))
     );
@@ -176,11 +215,19 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
   // Ação: Lançar Despesa Operacional Direta
   const handleSalvarDespesaDireta = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!(numeroSeguro(formDespesa.valor) > 0)) {
+      alert('Informe um valor maior que zero.');
+      return;
+    }
     const nova: DespesaOperacional = {
       id: `desp_${Date.now()}`,
-      ...formDespesa
+      ...formDespesa,
+      valor: numeroSeguro(formDespesa.valor),
+      data: paraISO(formDespesa.data) || hojeISO()
     };
-    salvarDespesas([nova, ...despesas]);
+    salvarDespesas([nova, ...carregarDespesas()]);
+    // Despesa realizada já foi paga: sai do caixa uma única vez
+    registrarBaixaNoCaixa(`despesa:${nova.id}`, -nova.valor);
     setModalNovaDespesa(false);
     setMensagemFeedback('Despesa operacional lançada com sucesso!');
     setTimeout(() => setMensagemFeedback(null), 5000);
@@ -189,7 +236,9 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
   // Ação: Excluir Despesa Direta
   const handleExcluirDespesa = (id: string) => {
     if (confirm('Deseja excluir este lançamento de despesa?')) {
-      salvarDespesas(despesas.filter(d => d.id !== id));
+      salvarDespesas(carregarDespesas().filter(d => d.id !== id));
+      // Estorna no caixa o que esta despesa havia debitado (se debitou)
+      estornarBaixaNoCaixa(`despesa:${id}`);
       setMensagemFeedback('Despesa excluída com sucesso!');
       setTimeout(() => setMensagemFeedback(null), 5000);
     }
@@ -199,6 +248,18 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
   const handleSalvarNovoPedidoProgramado = (e: React.FormEvent) => {
     e.preventDefault();
     const total = parseFloat(novoValorTotal.replace(',', '.')) || (Number(novoQtd) * Number(novoUnitario)) || 0;
+    if (total <= 0) {
+      alert('Informe um valor estimado maior que zero.');
+      return;
+    }
+    const listaParceiros = novoTipoParceiro === 'AGRICULTOR' ? agricultores : fornecedores;
+    if (listaParceiros.length === 0) {
+      alert(novoTipoParceiro === 'AGRICULTOR'
+        ? 'Nenhum produtor rural cadastrado. Cadastre o agricultor antes de programar a compra.'
+        : 'Nenhum fornecedor cadastrado. Cadastre o fornecedor antes de programar a compra.');
+      return;
+    }
+    const dataPrevista = paraISO(novoData) || hojeISO();
 
     let novo: PedidoCompraGeral;
 
@@ -206,14 +267,14 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       const agr = agricultores.find(a => a.id === novoParceiroId) || agricultores[0];
       novo = {
         id: `ped_${Date.now()}`,
-        data: novoData,
+        data: dataPrevista,
         tipo_parceiro: 'AGRICULTOR',
         agricultor_id: agr?.id,
         agricultor_nome: agr?.nome_completo,
         agricultor_propriedade: agr?.nome_propriedade,
         agricultor_cpf_cnpj: agr?.cpf_cnpj,
         agricultor_ie: agr?.ie_rural,
-        agricultor_cidade_uf: agr ? `${agr.endereco.municipio}/${agr.endereco.uf}` : '',
+        agricultor_cidade_uf: agr?.endereco ? `${agr.endereco.municipio}/${agr.endereco.uf}` : '',
         agricultor_chave_pix: agr ? `${agr.chave_pix} (${agr.tipo_chave_pix})` : '',
         comprador_nome: 'Equipe de Compras',
         local_compra: agr?.nome_propriedade || '',
@@ -231,14 +292,14 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       const forn = fornecedores.find(f => f.id === novoParceiroId) || fornecedores[0];
       novo = {
         id: `ped_${Date.now()}`,
-        data: novoData,
+        data: dataPrevista,
         tipo_parceiro: 'FORNECEDOR',
         fornecedor_id: forn?.id,
         fornecedor_nome: forn?.razao_nome,
         fornecedor_fantasia: forn?.fantasia,
         fornecedor_cnpj: forn?.cpf_cnpj,
         fornecedor_ie: forn?.ie_rg,
-        fornecedor_cidade_uf: forn ? `${forn.endereco.municipio}/${forn.endereco.uf}` : '',
+        fornecedor_cidade_uf: forn?.endereco ? `${forn.endereco.municipio}/${forn.endereco.uf}` : '',
         fornecedor_chave_pix: forn?.chave_pix,
         fornecedor_telefone: forn?.telefone,
         comprador_nome: 'Equipe de Compras',
@@ -255,41 +316,16 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       };
     }
 
-    const atualizados = [novo, ...pedidosCompra];
+    const atualizados = [novo, ...carregarPedidosCompra()];
     salvarPedidosCompra(atualizados);
     setPedidosCompra(atualizados);
-
-    // Registra como despesa programada vinculada no financeiro
-    try {
-      const rawDespesas = localStorage.getItem('grupo_eno_financeiro_despesas_v1');
-      const despesasAtuais = rawDespesas ? JSON.parse(rawDespesas) : [];
-      const parceiroNome = novo.tipo_parceiro === 'AGRICULTOR' 
-        ? novo.agricultor_nome 
-        : (novo.fornecedor_fantasia || novo.fornecedor_nome);
-      despesasAtuais.unshift({
-        id: `desp_prog_${novo.id}`,
-        pedido_compra_id: novo.id,
-        tipo_despesa: 'PROGRAMADA',
-        status_despesa: 'A_PAGAR',
-        data: novo.data,
-        categoria: novo.categoria,
-        descricao: `[Programado] ${novo.item_descricao} - ${parceiroNome}`,
-        valor: novo.valor_total,
-        setor: 'Fábrica & Moagem',
-        responsavel: 'Equipe de Compras',
-        forma_pagamento: 'PIX',
-        comprovante_anexo: false
-      });
-      localStorage.setItem('grupo_eno_financeiro_despesas_v1', JSON.stringify(despesasAtuais));
-      setDespesas(despesasAtuais);
-    } catch (err) {
-      console.error(err);
-    }
+    // A despesa programada é o próprio pedido (aba "Programadas"); não grava lançamento em
+    // despesas realizadas, para não somar em dobro na previsão nem aparecer como quitada.
 
     setModalNovoPedido(false);
     setNovoItem('');
     setNovoValorTotal('');
-    setMensagemFeedback('Pedido de compra programado com sucesso! Já disponível como despesa programada.');
+    setMensagemFeedback('Pedido de compra programado com sucesso! Já disponível em Despesas Programadas.');
     setTimeout(() => setMensagemFeedback(null), 5000);
   };
 
@@ -301,7 +337,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
     setEditQtd(String(pedido.quantidade));
     setEditUnidade(pedido.unidade_medida);
     setEditUnitario(String(pedido.valor_unitario));
-    setEditData(pedido.data);
+    setEditData(paraISO(pedido.data) || pedido.data);
     setEditObservacoes(pedido.observacoes || '');
   };
 
@@ -310,11 +346,12 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
     e.preventDefault();
     if (!pedidoEditando) return;
 
-    const qtd = Number(editQtd) || 0;
-    const unit = Number(editUnitario) || 0;
+    const qtd = numeroSeguro(editQtd);
+    const unit = numeroSeguro(editUnitario);
     const total = qtd * unit;
+    const dataEditada = paraISO(editData) || editData;
 
-    const atualizados = pedidosCompra.map(p => {
+    const atualizados = carregarPedidosCompra().map(p => {
       if (p.id === pedidoEditando.id) {
         return {
           ...p,
@@ -324,7 +361,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
           unidade_medida: editUnidade,
           valor_unitario: unit,
           valor_total: total,
-          data: editData,
+          data: dataEditada,
           observacoes: editObservacoes || undefined
         };
       }
@@ -333,6 +370,26 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
 
     salvarPedidosCompra(atualizados);
     setPedidosCompra(atualizados);
+
+    // Se existir lançamento programado vinculado (criado por outras telas), atualiza junto
+    const pedidoAtualizado = atualizados.find(p => p.id === pedidoEditando.id);
+    const despesasAtuais = carregarDespesas();
+    if (pedidoAtualizado && despesasAtuais.some(d => ehDespesaProgramada(d) && vinculadaAoPedido(d, pedidoEditando.id))) {
+      const parceiroNome = pedidoAtualizado.tipo_parceiro === 'AGRICULTOR'
+        ? pedidoAtualizado.agricultor_nome
+        : (pedidoAtualizado.fornecedor_fantasia || pedidoAtualizado.fornecedor_nome);
+      salvarDespesas(despesasAtuais.map(d =>
+        ehDespesaProgramada(d) && vinculadaAoPedido(d, pedidoEditando.id)
+          ? {
+              ...d,
+              data: dataEditada,
+              categoria: editCategoria,
+              descricao: `[Programado] ${editItem} - ${parceiroNome || ''}`,
+              valor: total
+            }
+          : d
+      ));
+    }
     setPedidoEditando(null);
     setMensagemFeedback('Pedido de compra e despesa programada atualizados com sucesso!');
     setTimeout(() => setMensagemFeedback(null), 5000);
@@ -341,22 +398,12 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
   // Ação: Excluir Pedido Programado (Se deletar, ele some!)
   const handleExcluirProgramado = (pedidoId: string) => {
     if (confirm('Deseja excluir este pedido de compra programado? Ele sumirá desta lista e de pedidos de compra.')) {
-      const atualizados = pedidosCompra.filter(p => p.id !== pedidoId);
+      const atualizados = carregarPedidosCompra().filter(p => p.id !== pedidoId);
       salvarPedidosCompra(atualizados);
       setPedidosCompra(atualizados);
 
-      // Limpa também despesas vinculadas se houver
-      try {
-        const raw = localStorage.getItem('grupo_eno_financeiro_despesas_v1');
-        if (raw) {
-          const list = JSON.parse(raw);
-          const filtered = list.filter((d: any) => !d.id.includes(pedidoId) && d.pedido_compra_id !== pedidoId);
-          localStorage.setItem('grupo_eno_financeiro_despesas_v1', JSON.stringify(filtered));
-          setDespesas(filtered);
-        }
-      } catch (err) {
-        console.error(err);
-      }
+      // Limpa também lançamentos programados vinculados, se houver
+      removerProgramadasDoPedido(pedidoId);
 
       setMensagemFeedback('Pedido de compra e despesa programada excluídos com sucesso!');
       setTimeout(() => setMensagemFeedback(null), 5000);
@@ -370,7 +417,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
     setValorTotalFinalizacao(pedido.valor_total ? pedido.valor_total.toString() : '');
     setCategoriaFinalizacao(pedido.categoria || 'Embalagens');
     setTipoFinalizacao('JA_PAGO');
-    setDataFinalizacao(new Date().toLocaleDateString('pt-BR'));
+    setDataFinalizacao(hojeISO());
     setFormaPagamentoFinalizacao(pedido.forma_pagamento || 'PIX');
     setObsFinalizacao('');
   };
@@ -380,78 +427,34 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
     e.preventDefault();
     if (!pedidoFinalizando) return;
 
-    const parceiroNome = pedidoFinalizando.tipo_parceiro === 'AGRICULTOR' 
-      ? pedidoFinalizando.agricultor_nome 
-      : (pedidoFinalizando.fornecedor_fantasia || pedidoFinalizando.fornecedor_nome);
-
     const itemEfetivado = produtoFinalizacao.trim() || pedidoFinalizando.item_descricao;
-    const valTotal = parseFloat(valorTotalFinalizacao.replace(',', '.')) || pedidoFinalizando.valor_total;
-
-    // 1. Atualiza o status do pedido de compra
-    const novoStatus: StatusPedidoCompra = tipoFinalizacao === 'JA_PAGO' ? 'Pago' : 'Entregue (A Pagar)';
-    const pedidosAtualizados = pedidosCompra.map(p => {
-      if (p.id === pedidoFinalizando.id) {
-        return {
-          ...p,
-          item_descricao: itemEfetivado,
-          valor_total: valTotal,
-          categoria: categoriaFinalizacao,
-          status_pedido: novoStatus,
-          data_pagamento: tipoFinalizacao === 'JA_PAGO' ? dataFinalizacao : undefined,
-          forma_pagamento: (formaPagamentoFinalizacao as any) || p.forma_pagamento,
-          observacoes: `${p.observacoes || ''} | Efetivado como ${itemEfetivado} em ${dataFinalizacao}.`
-        };
-      }
-      return p;
-    });
-    salvarPedidosCompra(pedidosAtualizados);
-    setPedidosCompra(pedidosAtualizados);
-
-    // 2. Se Já Pago: Lança diretamente como Despesa Realizada
-    if (tipoFinalizacao === 'JA_PAGO') {
-      // Remove despesa programada prévia vinculada
-      const despesasFiltradas = despesas.filter(d => !d.id.includes(pedidoFinalizando.id) && (d as any).pedido_compra_id !== pedidoFinalizando.id);
-
-      const novaDespesa: DespesaOperacional = {
-        id: `desp_finalizada_${pedidoFinalizando.id}_${Date.now()}`,
-        data: dataFinalizacao,
-        categoria: categoriaFinalizacao,
-        descricao: `[Compra Efetivada] ${itemEfetivado} - ${parceiroNome}`,
-        valor: valTotal,
-        setor: 'Fábrica & Moagem',
-        responsavel: pedidoFinalizando.comprador_nome || 'Gestão de Suprimentos',
-        forma_pagamento: formaPagamentoFinalizacao,
-        comprovante_anexo: true
-      };
-      const despesasAtualizadas = [novaDespesa, ...despesasFiltradas];
-      salvarDespesas(despesasAtualizadas);
-      setDespesas(despesasAtualizadas);
-    } else {
-      // Se A Pagar: Lança no Contas a Pagar
-      try {
-        const rawPagar = localStorage.getItem('grupo_eno_financeiro_pagar_v1');
-        const titulosPagar = rawPagar ? JSON.parse(rawPagar) : [];
-        const titulosFiltrados = titulosPagar.filter((t: any) => t.pedido_compra_id !== pedidoFinalizando.id);
-        titulosFiltrados.unshift({
-          id: `pag_pc_${pedidoFinalizando.id}_${Date.now()}`,
-          pedido_compra_id: pedidoFinalizando.id,
-          numero_documento: `PC-${pedidoFinalizando.id.toUpperCase()}`,
-          favorecido_nome: parceiroNome || 'Fornecedor',
-          tipo_favorecido: pedidoFinalizando.tipo_parceiro === 'AGRICULTOR' ? 'Agricultor' : 'Fornecedor',
-          categoria: categoriaFinalizacao,
-          valor: valTotal,
-          data_emissao: pedidoFinalizando.data,
-          data_vencimento: dataFinalizacao,
-          status: 'A_PAGAR',
-          forma_pagamento: formaPagamentoFinalizacao,
-          chave_pix: pedidoFinalizando.agricultor_chave_pix || pedidoFinalizando.fornecedor_chave_pix,
-          observacoes: itemEfetivado
-        });
-        localStorage.setItem('grupo_eno_financeiro_pagar_v1', JSON.stringify(titulosFiltrados));
-      } catch (err) {
-        console.error(err);
-      }
+    const valTotal = parseFloat(valorTotalFinalizacao.replace(',', '.')) || numeroSeguro(pedidoFinalizando.valor_total);
+    if (!(valTotal > 0)) {
+      alert('Informe o valor total da compra.');
+      return;
     }
+    const dataEfetiva = paraISO(dataFinalizacao) || hojeISO();
+
+    // 1. O lançamento programado anterior (desp_prog_*) deixa de existir
+    removerProgramadasDoPedido(pedidoFinalizando.id);
+
+    // 2. Efetivação única (mesma do Pedido de Compra): status do pedido, despesa paga OU título
+    // a pagar, entrada no estoque de matéria-prima e baixa no caixa — sem duplicar
+    const res = efetivarPedidoCompra(pedidoFinalizando.id, {
+      tipo: tipoFinalizacao === 'JA_PAGO' ? 'JA_PAGO' : 'A_PAGAR',
+      data: dataEfetiva,
+      forma_pagamento: formaPagamentoFinalizacao,
+      item_descricao: itemEfetivado,
+      valor_total: valTotal,
+      categoria: categoriaFinalizacao as CategoriaCompra,
+      observacao: obsFinalizacao || undefined
+    });
+    if (!res.sucesso) {
+      alert(res.mensagem);
+      return;
+    }
+    setPedidosCompra(carregarPedidosCompra());
+    setDespesas(carregarDespesas());
 
     window.dispatchEvent(new Event('financeiro_updated'));
     window.dispatchEvent(new Event('pedidos_compra_updated'));
@@ -460,6 +463,21 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
     setMensagemFeedback(`Pedido transformado em despesa com sucesso! Produto: "${itemEfetivado}" | Categoria: "${categoriaFinalizacao}" | Pagamento: ${formaPagamentoFinalizacao}`);
     setTimeout(() => setMensagemFeedback(null), 5000);
   };
+
+  // Lançamento programado vinculado a um pedido de compra
+  function vinculadaAoPedido(d: DespesaOperacional, pedidoId: string): boolean {
+    const extra = d as DespesaOperacional & { pedido_compra_id?: string };
+    return extra.pedido_compra_id === pedidoId || d.id === `desp_prog_${pedidoId}`;
+  }
+
+  function removerProgramadasDoPedido(pedidoId: string) {
+    const atuais = carregarDespesas();
+    const filtradas = atuais.filter(d => !(ehDespesaProgramada(d) && vinculadaAoPedido(d, pedidoId)));
+    if (filtradas.length !== atuais.length) {
+      salvarDespesas(filtradas);
+      setDespesas(filtradas);
+    }
+  }
 
   // Gerar e Baixar PDF Oficial
   const gerarEBaixarPDF = (pedido: PedidoCompraGeral) => {
@@ -501,7 +519,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8.5);
       pdf.setTextColor(51, 65, 85);
-      pdf.text(`Emissão: ${pedido.data}`, 195, 28, { align: 'right' });
+      pdf.text(`Emissão: ${formatarDataBR(pedido.data)}`, 195, 28, { align: 'right' });
 
       // Dados do parceiro
       pdf.setFillColor(248, 250, 252);
@@ -537,9 +555,9 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       pdf.setFontSize(8);
       pdf.setTextColor(15, 23, 42);
       pdf.text(pedido.item_descricao, 18, 88);
-      pdf.text(`${pedido.quantidade.toLocaleString('pt-BR')} ${pedido.unidade_medida}`, 125, 88, { align: 'right' });
-      pdf.text(`R$ ${pedido.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 158, 88, { align: 'right' });
-      pdf.text(`R$ ${pedido.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 191, 88, { align: 'right' });
+      pdf.text(`${numeroSeguro(pedido.quantidade).toLocaleString('pt-BR')} ${pedido.unidade_medida}`, 125, 88, { align: 'right' });
+      pdf.text(formatarMoeda(pedido.valor_unitario), 158, 88, { align: 'right' });
+      pdf.text(formatarMoeda(pedido.valor_total), 191, 88, { align: 'right' });
 
       // Total a pagar
       pdf.setFillColor(236, 253, 245);
@@ -550,7 +568,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       pdf.setTextColor(6, 78, 59);
       pdf.text('TOTAL PREVISTO / A PAGAR:', 20, 105.5);
       pdf.setFontSize(13);
-      pdf.text(`R$ ${pedido.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 190, 106, { align: 'right' });
+      pdf.text(formatarMoeda(pedido.valor_total), 190, 106, { align: 'right' });
 
       // Assinaturas
       const signY = 150;
@@ -562,7 +580,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       pdf.text('Grupo ENO Alimentos', 57.5, signY + 5, { align: 'center' });
       pdf.text(nome || 'Fornecedor', 152.5, signY + 5, { align: 'center' });
 
-      pdf.save(`Pedido_Compra_${(nome || 'Item').replace(/[^a-zA-Z0-9]/g, '_')}_${pedido.data.replace(/\//g, '-')}.pdf`);
+      pdf.save(`Pedido_Compra_${(nome || 'Item').replace(/[^a-zA-Z0-9]/g, '_')}_${(paraISO(pedido.data) || 'sem-data')}.pdf`);
     } catch (err) {
       console.error(err);
     } finally {
@@ -595,10 +613,10 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
               <button
                 onClick={() => {
                   setFormDespesa({
-                    data: new Date().toLocaleDateString('pt-BR'),
+                    data: hojeISO(),
                     categoria: 'Manutenção Mecânica & Peças',
                     descricao: '',
-                    valor: 250,
+                    valor: 0,
                     setor: 'Fábrica & Moagem',
                     responsavel: '',
                     forma_pagamento: 'PIX'
@@ -637,10 +655,10 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
               Despesas Realizadas no Mês
             </span>
             <span className="font-mono font-black text-slate-900 text-sm">
-              {totalDespesasRealizadas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              {formatarMoeda(totalDespesasRealizadas)}
             </span>
             <span className="text-[10px] text-slate-400 block mt-0.5">
-              {despesas.length} despesas quitadas
+              {despesasRealizadasMes.length} despesas pagas no mês
             </span>
           </div>
 
@@ -650,7 +668,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
               <Clock className="w-3.5 h-3.5 text-blue-700" />
             </span>
             <span className="font-mono font-black text-blue-950 text-sm">
-              {totalDespesasProgramadas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              {formatarMoeda(totalDespesasProgramadas)}
             </span>
             <span className="text-[10px] text-blue-700 font-semibold block mt-0.5">
               {pedidosProgramados.length} compras a lembrar / realizar
@@ -659,10 +677,10 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
 
           <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200">
             <span className="text-emerald-900 font-semibold block text-[11px] uppercase tracking-wider">
-              Previsão Total (Realizado + Programado)
+              Previsão Total (Realizado no Mês + Programado)
             </span>
             <span className="font-mono font-black text-emerald-950 text-sm">
-              {(totalDespesasRealizadas + totalDespesasProgramadas).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              {formatarMoeda(totalDespesasRealizadas + totalDespesasProgramadas)}
             </span>
             <span className="text-[10px] text-emerald-700 font-semibold block mt-0.5">
               Planejamento orçamentário fabril
@@ -683,7 +701,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
             `}
           >
             <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-            <span>Despesas Realizadas ({despesas.length})</span>
+            <span>Despesas Realizadas ({despesasRealizadas.length})</span>
           </button>
 
           <button
@@ -763,7 +781,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                   despesasRealizadasFiltradas.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3.5 px-5 font-mono text-slate-600 font-bold whitespace-nowrap">
-                        {item.data}
+                        {formatarDataBR(item.data)}
                       </td>
                       <td className="py-3.5 px-4 font-bold text-slate-900">
                         {item.descricao}
@@ -779,7 +797,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                         {item.forma_pagamento}
                       </td>
                       <td className="py-3.5 px-4 font-mono font-black text-slate-900 text-right whitespace-nowrap">
-                        {item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {formatarMoeda(item.valor)}
                       </td>
                       <td className="py-3.5 px-5 text-right">
                         <button
@@ -828,7 +846,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                       <tr key={pedido.id} className="hover:bg-blue-50/30 transition-colors group">
                         {/* Data */}
                         <td className="py-3.5 px-5 font-mono text-slate-700 font-bold whitespace-nowrap">
-                          {pedido.data}
+                          {formatarDataBR(pedido.data)}
                         </td>
 
                         {/* Item */}
@@ -864,13 +882,13 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                             {pedido.categoria === 'Mandioca / Matéria-Prima' && <Sprout className="w-3 h-3 text-emerald-700" />}
                             {pedido.categoria === 'Químicos & Laboratório' && <FlaskConical className="w-3 h-3 text-purple-700" />}
                             {pedido.categoria === 'Mercado / Cozinha / Copa' && <UtensilsCrossed className="w-3 h-3 text-amber-700" />}
-                            <span>{pedido.categoria.split('/')[0]}</span>
+                            <span>{(pedido.categoria || '').split('/')[0]}</span>
                           </span>
                         </td>
 
                         {/* Valor Estimado */}
                         <td className="py-3.5 px-4 text-right font-mono font-black text-slate-900 text-sm whitespace-nowrap">
-                          {pedido.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          {formatarMoeda(pedido.valor_total)}
                         </td>
 
                         {/* Status com botão Virar Despesa */}
@@ -967,11 +985,10 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Data da Despesa</label>
                   <input
-                    type="text"
+                    type="date"
                     required
-                    value={formDespesa.data}
+                    value={paraISO(formDespesa.data)}
                     onChange={(e) => setFormDespesa({ ...formDespesa, data: e.target.value })}
-                    placeholder="DD/MM/AAAA"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
                   />
                 </div>
@@ -983,7 +1000,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                     step="0.01"
                     min="1"
                     required
-                    value={formDespesa.valor}
+                    value={formDespesa.valor || ''}
                     onChange={(e) => setFormDespesa({ ...formDespesa, valor: parseFloat(e.target.value) || 0 })}
                     placeholder="0.00"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-red-700 focus:outline-none focus:border-emerald-700"
@@ -1120,11 +1137,10 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Data Prevista da Compra *</label>
                   <input
-                    type="text"
+                    type="date"
                     required
-                    value={novoData}
+                    value={paraISO(novoData)}
                     onChange={(e) => setNovoData(e.target.value)}
-                    placeholder="DD/MM/AAAA"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-slate-800 focus:outline-none focus:border-blue-700"
                   />
                 </div>
@@ -1240,9 +1256,9 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Data Prevista</label>
                   <input
-                    type="text"
+                    type="date"
                     required
-                    value={editData}
+                    value={paraISO(editData)}
                     onChange={(e) => setEditData(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-slate-800 focus:outline-none focus:border-blue-700"
                   />
@@ -1293,7 +1309,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                     Total Recalculado
                   </span>
                   <span className="text-base font-black font-mono text-white">
-                    {((Number(editQtd) || 0) * (Number(editUnitario) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {formatarMoeda(numeroSeguro(editQtd) * numeroSeguro(editUnitario))}
                   </span>
                 </div>
 
@@ -1476,11 +1492,10 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                   {tipoFinalizacao === 'JA_PAGO' ? 'Data do Pagamento Efetuado *' : 'Data de Vencimento *'}
                 </label>
                 <input
-                  type="text"
+                  type="date"
                   required
-                  value={dataFinalizacao}
+                  value={paraISO(dataFinalizacao)}
                   onChange={(e) => setDataFinalizacao(e.target.value)}
-                  placeholder="DD/MM/AAAA"
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
                 />
               </div>
@@ -1569,7 +1584,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                     <span className="inline-block px-2 py-0.5 bg-emerald-900 text-white font-black text-[10px] rounded uppercase">
                       Pedido de Compra
                     </span>
-                    <div className="text-xs font-bold text-slate-800 mt-1">Data: {pedidoVisualizarA4.data}</div>
+                    <div className="text-xs font-bold text-slate-800 mt-1">Data: {formatarDataBR(pedidoVisualizarA4.data)}</div>
                   </div>
                 </div>
 
@@ -1596,15 +1611,15 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                   </div>
                   <div className="p-2 border-x border-b border-slate-200 flex justify-between font-medium">
                     <span className="w-1/2 font-bold text-slate-900">{pedidoVisualizarA4.item_descricao}</span>
-                    <span className="w-1/6 text-right font-mono">{pedidoVisualizarA4.quantidade.toLocaleString('pt-BR')} {pedidoVisualizarA4.unidade_medida}</span>
-                    <span className="w-1/6 text-right font-mono">R$ {pedidoVisualizarA4.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                    <span className="w-1/6 text-right font-mono font-bold text-slate-900">R$ {pedidoVisualizarA4.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    <span className="w-1/6 text-right font-mono">{numeroSeguro(pedidoVisualizarA4.quantidade).toLocaleString('pt-BR')} {pedidoVisualizarA4.unidade_medida}</span>
+                    <span className="w-1/6 text-right font-mono">{formatarMoeda(pedidoVisualizarA4.valor_unitario)}</span>
+                    <span className="w-1/6 text-right font-mono font-bold text-slate-900">{formatarMoeda(pedidoVisualizarA4.valor_total)}</span>
                   </div>
 
                   <div className="mt-4 p-2.5 rounded bg-emerald-50 border border-emerald-300 flex justify-between items-center">
                     <span className="font-bold text-emerald-950 uppercase text-[10px]">Total a Pagar / Previsto:</span>
                     <span className="font-mono font-black text-emerald-950 text-base">
-                      {pedidoVisualizarA4.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {formatarMoeda(pedidoVisualizarA4.valor_total)}
                     </span>
                   </div>
                 </div>

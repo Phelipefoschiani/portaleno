@@ -37,6 +37,13 @@ import { carregarEstoqueProdutos, ProdutoEstoque } from '../../data/produtosData
 import { carregarCalculosNaRoca, CalculoNaRoca } from '../../data/calculoRocaData';
 import { obterConsolidadoGeral } from '../../data/pipelineIntegrado';
 import { limparTodoOSistema } from '../../data/sistemaReset';
+import {
+  carregarTitulosReceber,
+  carregarReceitasExtras,
+  formatarMoeda as formatarMoedaSegura,
+  numeroSeguro
+} from '../../data/financeiroData';
+import { parseData, somarDias, hojeISO, formatarDataBR, compararDatas } from '../../lib/datas';
 
 interface VisaoGeralProps {
   onNavigate: (pageId: string) => void;
@@ -64,8 +71,10 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
     window.addEventListener('produtos_updated', handleUpdate);
     window.addEventListener('calculos_roca_updated', handleUpdate);
     window.addEventListener('sitio_controle_despesas_updated', handleUpdate);
+    window.addEventListener('sistema_reset_updated', handleUpdate);
 
     return () => {
+      window.removeEventListener('sistema_reset_updated', handleUpdate);
       window.removeEventListener('pedidos_venda_updated', handleUpdate);
       window.removeEventListener('pedidos_compra_updated', handleUpdate);
       window.removeEventListener('financeiro_updated', handleUpdate);
@@ -75,35 +84,52 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
     };
   }, []);
 
-  // Dados para o gráfico de faturamento baseados no faturamento real (ou zerados)
+  // Gráfico de faturamento real das últimas 5 semanas (títulos a receber por emissão + receitas extras por data)
   const dadosFaturamento = useMemo(() => {
-    if (consolidado.faturamentoTotal === 0 && pedidos.length === 0) {
-      return [
-        { semana: 'Sem 01', faturado: 0 },
-        { semana: 'Sem 02', faturado: 0 },
-        { semana: 'Sem 03', faturado: 0 },
-        { semana: 'Sem 04', faturado: 0 },
-        { semana: 'Sem 05', faturado: 0 }
-      ];
-    }
-    return [
-      { semana: 'Sem 01', faturado: 0 },
-      { semana: 'Sem 02', faturado: 0 },
-      { semana: 'Sem 03', faturado: 0 },
-      { semana: 'Sem 04', faturado: 0 },
-      { semana: 'Sem 05', faturado: consolidado.faturamentoTotal }
-    ];
-  }, [consolidado.faturamentoTotal, pedidos]);
+    const hoje = hojeISO();
+    const semanas = Array.from({ length: 5 }, (_, i) => {
+      const fim = somarDias(hoje, -7 * (4 - i));
+      const inicio = somarDias(fim, -6);
+      return { inicio, fim, semana: formatarDataBR(inicio).slice(0, 5), faturado: 0 };
+    });
+    const lancar = (data: string | undefined, valor: unknown) => {
+      if (!parseData(data)) return;
+      const s = semanas.find(w => compararDatas(data, w.inicio) >= 0 && compararDatas(data, w.fim) <= 0);
+      if (s) s.faturado += numeroSeguro(valor);
+    };
+    carregarTitulosReceber().forEach(t => lancar(t.data_emissao, t.valor));
+    carregarReceitasExtras().forEach(r => lancar(r.data, r.valor));
+    return semanas.map(({ semana, faturado }) => ({ semana, faturado: Number(faturado.toFixed(2)) }));
+  }, [consolidado]);
 
   // Dados para distribuição de produtos em estoque
   const dadosMixProducao = produtos.slice(0, 5).map(p => ({
-    nome: p.nome.length > 18 ? p.nome.substring(0, 16) + '...' : p.nome,
-    sacos: p.estoque_atual_sacos || 0,
-    kg: p.estoque_atual_kg || 0
+    nome: (p.nome || '').length > 18 ? (p.nome || '').substring(0, 16) + '...' : (p.nome || ''),
+    sacos: numeroSeguro(p.estoque_atual_sacos),
+    kg: numeroSeguro(p.estoque_atual_kg)
   }));
 
-  const formatarMoeda = (val: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  // Formatação de moeda protegida contra NaN/undefined
+  const formatarMoeda = (val: unknown) => formatarMoedaSegura(val);
+
+  const handleZerarSistema = () => {
+    const ok = window.confirm(
+      'ATENÇÃO: isto vai APAGAR PERMANENTEMENTE todos os dados do sistema:\n\n' +
+      '• Pedidos de venda, orçamentos e pedidos de compra\n' +
+      '• Cálculos na roça\n' +
+      '• Clientes, agricultores, fornecedores, produtos, receitas e tabelas de preço\n' +
+      '• Todo o financeiro (a receber, a pagar, despesas, receitas, notas e caixa)\n' +
+      '• Controle do sítio (combustível e despesas)\n\n' +
+      'Os usuários e o login são mantidos. Esta ação NÃO pode ser desfeita.\n\nDeseja continuar?'
+    );
+    if (!ok) return;
+    const digitado = window.prompt('Para confirmar, digite APAGAR (em maiúsculas):');
+    if ((digitado || '').trim() !== 'APAGAR') {
+      window.alert('Confirmação não conferiu. Nenhum dado foi apagado.');
+      return;
+    }
+    limparTodoOSistema(false);
+    window.location.reload();
   };
 
   return (
@@ -192,7 +218,7 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
           </div>
           <div className="mt-3">
             <div className="text-2xl sm:text-2xl font-black text-slate-900 tracking-tight font-mono tabular-nums">
-              {consolidado.totalMateriaPrimaTon.toFixed(1)} <span className="text-sm font-medium text-slate-500">Ton</span>
+              {numeroSeguro(consolidado.totalMateriaPrimaTon).toFixed(1)} <span className="text-sm font-medium text-slate-500">Ton</span>
             </div>
             <div className="mt-1 text-xs text-slate-500 font-medium">
               Raiz e insumos em estoque
@@ -215,10 +241,10 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
           </div>
           <div className="mt-3">
             <div className="text-2xl sm:text-2xl font-black text-slate-900 tracking-tight font-mono tabular-nums">
-              {consolidado.totalSacosEstoque.toLocaleString('pt-BR')} <span className="text-sm font-medium text-slate-500">sacos</span>
+              {numeroSeguro(consolidado.totalSacosEstoque).toLocaleString('pt-BR')} <span className="text-sm font-medium text-slate-500">sacos</span>
             </div>
             <div className="mt-1 text-xs text-slate-500 font-medium">
-              ~{(consolidado.totalKgEstoque / 1000).toFixed(1)} Ton disponíveis
+              ~{(numeroSeguro(consolidado.totalKgEstoque) / 1000).toFixed(1)} Ton disponíveis
             </div>
           </div>
         </div>
@@ -238,7 +264,7 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
           </div>
           <div className="mt-3">
             <div className="text-2xl sm:text-2xl font-black text-slate-900 tracking-tight font-mono tabular-nums">
-              {consolidado.totalLitrosCombustivelSitio.toLocaleString('pt-BR')} <span className="text-sm font-medium text-slate-500">L</span>
+              {numeroSeguro(consolidado.totalLitrosCombustivelSitio).toLocaleString('pt-BR')} <span className="text-sm font-medium text-slate-500">L</span>
             </div>
             <div className="mt-1 text-xs text-slate-500 font-medium">
               Tanque disponível
@@ -321,6 +347,7 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
         <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-bold text-slate-900">Evolução de Vendas</h3>
+            <span className="text-[11px] font-semibold text-slate-400">Últimas 5 semanas (início da semana)</span>
           </div>
 
           <div className="h-[240px] w-full">
@@ -336,7 +363,7 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
                 <XAxis dataKey="semana" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                 <Tooltip 
-                  formatter={(value: any) => [`R$ ${Number(value).toLocaleString('pt-BR')}`, '']}
+                  formatter={(value: any) => [formatarMoeda(value), 'Faturado']}
                   contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '12px' }}
                 />
                 <Area type="monotone" dataKey="faturado" name="Faturado" stroke="#059669" strokeWidth={2.5} fillOpacity={1} fill="url(#corRealizado)" />
@@ -402,6 +429,11 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
+                {pedidos.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-6 text-center text-slate-400">Nenhum pedido cadastrado.</td>
+                  </tr>
+                )}
                 {pedidos.slice(0, 5).map((ped) => (
                   <tr key={ped.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-2.5 font-bold text-slate-800 font-mono">
@@ -421,7 +453,7 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
                           ? 'bg-amber-100 text-amber-800'
                           : 'bg-blue-100 text-blue-800'
                       }`}>
-                        {ped.etapa.replace('_', ' ')}
+                        {String(ped.etapa || '').replace('_', ' ')}
                       </span>
                     </td>
                   </tr>
@@ -455,6 +487,11 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
+                {calculosRoca.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-6 text-center text-slate-400">Nenhuma entrada registrada.</td>
+                  </tr>
+                )}
                 {calculosRoca.slice(0, 5).map((calc) => (
                   <tr key={calc.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-2.5 font-bold text-slate-800 font-mono">
@@ -464,7 +501,7 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
                       {calc.fornecedor_nome}
                     </td>
                     <td className="py-2.5 font-semibold text-slate-900 font-mono tabular-nums">
-                      {calc.peso_total_kg.toLocaleString('pt-BR')} kg
+                      {numeroSeguro(calc.peso_total_kg).toLocaleString('pt-BR')} kg
                     </td>
                     <td className="py-2.5 text-right font-bold text-emerald-800 font-mono tabular-nums">
                       {formatarMoeda(calc.valor_total_estimado)}
@@ -488,17 +525,12 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
             <div>
               <h3 className="text-sm font-black text-red-900 uppercase tracking-wider">Zona de Risco</h3>
               <p className="text-xs text-red-700 font-medium mt-0.5">
-                Esta ação apaga permanentemente todos os pedidos, clientes, produtos, receitas e financeiro para que você possa iniciar o cadastro do zero.
+                Esta ação apaga permanentemente todos os pedidos, cadastros, produtos, receitas, financeiro e controle do sítio para que você possa iniciar do zero. Usuários e login são mantidos.
               </p>
             </div>
           </div>
           <button
-            onClick={() => {
-              if (window.confirm('⚠️ ATENÇÃO: Deseja REALMENTE apagar TODOS os dados do sistema? Esta ação não pode ser desfeita.')) {
-                limparTodoOSistema(false);
-                window.location.reload();
-              }
-            }}
+            onClick={handleZerarSistema}
             className="flex items-center gap-2 px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs shadow-md transition-all cursor-pointer whitespace-nowrap active:scale-95"
           >
             <Trash2 className="w-4 h-4" />

@@ -1,74 +1,20 @@
 rules_version = '2';
+
+// O sistema do Grupo ENO hoje funciona 100% OFFLINE: todos os dados ficam no
+// armazenamento local do navegador (localStorage) e o app NÃO lê nem grava no Firestore.
+// Por isso, todo acesso ao banco fica NEGADO.
+//
+// Quando o app for conectado ao Firestore, cada coleção deve exigir usuário autenticado
+// (request.auth != null) e checar o perfil/vínculo do usuário (ex.: via custom claims),
+// por exemplo:
+//   match /pedidos_venda/{id} {
+//     allow read, write: if request.auth != null && request.auth.token.perfil == 'ADMIN';
+//   }
+// Nunca liberar leitura/escrita pública.
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    // Default deny
     match /{document=**} {
       allow read, write: if false;
-    }
-
-    // Módulo de Produtos & Receitas
-    match /produtos/{produtoId} {
-      allow read, write: if isValidId(produtoId);
-    }
-    match /materias_primas/{materiaPrimaId} {
-      allow read, write: if isValidId(materiaPrimaId);
-    }
-    match /receitas/{receitaId} {
-      allow read, write: if isValidId(receitaId);
-    }
-    match /fichas_tecnicas/{fichaId} {
-      allow read, write: if isValidId(fichaId);
-    }
-    match /tabelas_preco/{tabelaId} {
-      allow read, write: if isValidId(tabelaId);
-    }
-
-    // Módulo de Pedidos & Vendas
-    match /pedidos_venda/{pedidoId} {
-      allow read, write: if isValidId(pedidoId);
-    }
-
-    // Módulo de Cadastros
-    match /agricultores/{agricultorId} {
-      allow read, write: if isValidId(agricultorId);
-    }
-    match /clientes/{clienteId} {
-      allow read, write: if isValidId(clienteId);
-    }
-    match /fornecedores/{fornecedorId} {
-      allow read, write: if isValidId(fornecedorId);
-    }
-    match /rcas/{rcaId} {
-      allow read, write: if isValidId(rcaId);
-    }
-    match /ordens_producao/{ordemId} {
-      allow read, write: if isValidId(ordemId);
-    }
-
-    // Módulo de Compras & Roça
-    match /pedidos_compra/{compraId} {
-      allow read, write: if isValidId(compraId);
-    }
-    match /calculos_roca/{calculoId} {
-      allow read, write: if isValidId(calculoId);
-    }
-
-    // Módulo Financeiro
-    match /titulos_pagar/{tituloId} {
-      allow read, write: if isValidId(tituloId);
-    }
-    match /titulos_receber/{tituloId} {
-      allow read, write: if isValidId(tituloId);
-    }
-    match /despesas_operacionais/{despesaId} {
-      allow read, write: if isValidId(despesaId);
-    }
-    match /notas_fiscais/{notaId} {
-      allow read, write: if isValidId(notaId);
     }
   }
 }

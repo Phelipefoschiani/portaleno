@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   QrCode,
   Printer,
@@ -9,9 +9,8 @@ import {
   CheckCircle2,
   Package
 } from 'lucide-react';
-import {
-  PRODUTOS_VENDA_DISPONIVEIS
-} from '../../data/pedidosVendaData';
+import { carregarEstoqueProdutos, carregarFichasTecnicas, ProdutoEstoque } from '../../data/produtosData';
+import { hojeISO, parseData, formatarDataBR } from '../../lib/datas';
 import { ProdutosNavTabs } from './ProdutosNavTabs';
 
 interface Props {
@@ -19,21 +18,57 @@ interface Props {
 }
 
 export function ProdutosEtiqueta({ onNavigate }: Props) {
-  const [produtoSelId, setProdutoSelId] = useState(PRODUTOS_VENDA_DISPONIVEIS[0].id);
-  const [lote, setLote] = useState(`LOTE-ENO-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`);
-  const [dataFabricacao, setDataFabricacao] = useState(new Date().toISOString().split('T')[0]);
-  const [quantidadeEtiquetas, setQuantidadeEtiquetas] = useState('40'); // ex: 1 palete de 40 sacos
+  // Produtos reais do estoque (Cadastro de Produtos)
+  const [produtos, setProdutos] = useState<ProdutoEstoque[]>(() => carregarEstoqueProdutos());
+  const [produtoSelId, setProdutoSelId] = useState(() => carregarEstoqueProdutos()[0]?.id || '');
+  const [lote, setLote] = useState(`LOTE-ENO-${hojeISO().slice(2).replace(/-/g, '')}`);
+  const [dataFabricacao, setDataFabricacao] = useState(hojeISO());
+  const [quantidadeEtiquetas, setQuantidadeEtiquetas] = useState('1');
 
-  const produto = PRODUTOS_VENDA_DISPONIVEIS.find(p => p.id === produtoSelId) || PRODUTOS_VENDA_DISPONIVEIS[0];
+  useEffect(() => {
+    const atualizar = () => setProdutos(carregarEstoqueProdutos());
+    window.addEventListener('produtos_updated', atualizar);
+    return () => window.removeEventListener('produtos_updated', atualizar);
+  }, []);
 
-  // Cálculo de validade (24 meses)
+  useEffect(() => {
+    if (!produtos.some(p => p.id === produtoSelId)) setProdutoSelId(produtos[0]?.id || '');
+  }, [produtos]);
+
+  const produto = produtos.find(p => p.id === produtoSelId) || produtos[0];
+
+  // Validade pela ficha técnica do produto (prazo em meses); 24 meses quando não informado
   const calcValidade = () => {
-    const d = new Date(dataFabricacao);
-    d.setFullYear(d.getFullYear() + 2);
-    return d.toLocaleDateString('pt-BR');
+    const d = parseData(dataFabricacao);
+    if (!d || !produto) return '-';
+    const ficha = carregarFichasTecnicas().find(f => f.produto_id === produto.id || f.produto_nome === produto.nome);
+    const meses = ficha?.prazo_validade_meses && ficha.prazo_validade_meses > 0 ? ficha.prazo_validade_meses : 24;
+    d.setMonth(d.getMonth() + meses);
+    return formatarDataBR(hojeISO(d));
   };
 
-  const dataFabricacaoFormatada = new Date(dataFabricacao).toLocaleDateString('pt-BR');
+  if (!produto) {
+    return (
+      <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-hidden">
+        <ProdutosNavTabs activeTab="produtos_etiqueta" onNavigate={onNavigate} />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="max-w-md text-center bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-3">
+            <Package className="w-8 h-8 text-slate-400 mx-auto" />
+            <h2 className="font-black text-slate-900">Nenhum produto cadastrado</h2>
+            <p className="text-xs text-slate-500">Cadastre um produto acabado no estoque para emitir etiquetas.</p>
+            <button
+              onClick={() => onNavigate?.('produtos_estoque_cadastro')}
+              className="px-4 py-2 rounded-lg bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs cursor-pointer"
+            >
+              Ir para Cadastro de Produtos
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const dataFabricacaoFormatada = formatarDataBR(dataFabricacao);
   const validadeFormatada = calcValidade();
   const codigoBarrasSimulado = `78989${Math.abs(produto.nome.length * 12345678).toString().padEnd(8, '0')}`;
 
@@ -88,7 +123,7 @@ export function ProdutosEtiqueta({ onNavigate }: Props) {
               onChange={(e) => setProdutoSelId(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
             >
-              {PRODUTOS_VENDA_DISPONIVEIS.map(p => (
+              {produtos.map(p => (
                 <option key={p.id} value={p.id}>{p.nome} ({p.tipo_embalagem})</option>
               ))}
             </select>

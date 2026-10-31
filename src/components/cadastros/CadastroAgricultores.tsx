@@ -34,317 +34,27 @@ import {
   CartesianGrid,
   Legend,
 } from 'recharts';
+import type { Agricultor } from '../../data/mockStore';
+import {
+  carregarAgricultores,
+  salvarAgricultores,
+  carregarRomaneiosMandioca,
+  salvarRomaneiosMandioca,
+  EVENTO_CADASTROS_ATUALIZADOS,
+  EntregaRomaneioMandioca,
+} from '../../data/cadastrosData';
+import { useListaPersistida } from '../../lib/useListaPersistida';
+import { formatarDataBR, hojeISO } from '../../lib/datas';
+import { mesReferenciaDe, ultimosMesesReferencia } from '../../lib/mesesReferencia';
 
-export interface EntregaRomaneioMandioca {
-  id: string;
-  empresa_id: string;
-  agricultor_id: string;
-  numero_romaneio: string;
-  data: string; // Ex: '08/03/2026'
-  safra_referencia: string;
-  mes_referencia: string; // Ex: 'Out/25', 'Nov/25', 'Dez/25', 'Jan/26', 'Fev/26', 'Mar/26'
-  // DADOS DA MANDIOCA & PAGAMENTO AO PRODUTOR
-  peso_mandioca_kg: number; // Peso total da mandioca entregue pelo agricultor
-  preco_kg: number; // Preço negociado por kg (R$/kg)
-  valor_total: number; // peso_mandioca_kg * preco_kg (pago integralmente ao agricultor)
-  // RESÍDUO, DESTOPO E CASCA (APENAS PARA CÁLCULO DE APROVEITAMENTO INDUSTRIAL DA FÁBRICA - NÃO DESCONTA DO AGRICULTOR)
-  residuo_destopo_casca_kg: number; // Lançado pelo gerente (pode ser editado a qualquer momento)
-  status_pagamento: 'Pago (PIX)' | 'Pendente';
-  data_liquidacao_pix?: string;
-  observacoes?: string;
-}
-
-export interface Agricultor {
-  id: string;
-  empresa_id: string;
-  tipo_pessoa: 'PF' | 'PJ';
-  nome_completo: string; // ou Razão Social
-  nome_propriedade: string; // Sítio, Fazenda, Chácara
-  cpf_cnpj: string;
-  ie_rural: string; // Inscrição Estadual de Produtor Rural
-  telefone: string;
-  email?: string;
-  endereco: {
-    estrada_linha: string; // Ex: Linha Pinhalzinho, Km 4
-    comunidade_bairro: string; // Ex: Bairro Água Doce
-    municipio: string;
-    uf: string;
-    cep: string;
-    ponto_referencia?: string; // Ponto de encontro para o caminhão
-  };
-  area_hectares?: number; // Área plantada de mandioca
-  capacidade_estimada_safra_ton?: number;
-  // DADOS FINANCEIROS & PIX
-  chave_pix: string;
-  tipo_chave_pix: 'CPF' | 'CNPJ' | 'Celular' | 'E-mail' | 'Aleatória';
-  titular_pix?: string;
-  banco_nome?: string;
-  agencia?: string;
-  conta?: string;
-  observacoes_financeiras?: string;
-  ativo: boolean;
-  criado_em: string;
-}
-
-// Mock inicial de agricultores fornecedores de mandioca do Grupo ENO
-const AGRICULTORES_INICIAIS: Agricultor[] = [
-  {
-    id: 'agr_001',
-    empresa_id: 'emp_grupo_eno',
-    tipo_pessoa: 'PF',
-    nome_completo: 'Sebastião Moreira dos Santos',
-    nome_propriedade: 'Sítio São José',
-    cpf_cnpj: '241.882.909-44',
-    ie_rural: 'PR-904.312.11-0',
-    telefone: '(43) 99654-2211',
-    email: 'sebastiao.moreira.agro@gmail.com',
-    endereco: {
-      estrada_linha: 'Estrada Municipal da Água Doce, Km 6',
-      comunidade_bairro: 'Bairro Água Doce',
-      municipio: 'Jacarezinho',
-      uf: 'PR',
-      cep: '86400-000',
-      ponto_referencia: 'Próximo à Capela São José (Entrada da Porteira Branca)'
-    },
-    area_hectares: 24,
-    capacidade_estimada_safra_ton: 480,
-    chave_pix: '241.882.909-44',
-    tipo_chave_pix: 'CPF',
-    titular_pix: 'Sebastião Moreira dos Santos',
-    banco_nome: 'Banco do Brasil',
-    agencia: '0158-9',
-    conta: '14.520-X (Conta Produtor)',
-    observacoes_financeiras: 'Pagamento de safra via PIX na pesagem',
-    ativo: true,
-    criado_em: '2026-01-10T08:00:00Z',
-  },
-  {
-    id: 'agr_002',
-    empresa_id: 'emp_grupo_eno',
-    tipo_pessoa: 'PF',
-    nome_completo: 'Antônio Carlos de Oliveira',
-    nome_propriedade: 'Fazenda Santa Helena',
-    cpf_cnpj: '315.774.208-15',
-    ie_rural: 'PR-842.119.50-2',
-    telefone: '(43) 99877-3344',
-    email: 'antoniocarlos.helena@hotmail.com',
-    endereco: {
-      estrada_linha: 'Rodovia PR-431, Km 12 (Entrada da Barra Grande)',
-      comunidade_bairro: 'Barra Grande',
-      municipio: 'Ribeirão Claro',
-      uf: 'PR',
-      cep: '86410-000',
-      ponto_referencia: 'Caminho do Lago, após o silo de grãos'
-    },
-    area_hectares: 58,
-    capacidade_estimada_safra_ton: 1100,
-    chave_pix: '43998773344',
-    tipo_chave_pix: 'Celular',
-    titular_pix: 'Antônio Carlos de Oliveira',
-    banco_nome: 'Sicredi Agro',
-    agencia: '0718',
-    conta: '55.431-2',
-    observacoes_financeiras: 'PIX celular com confirmação imediata',
-    ativo: true,
-    criado_em: '2026-01-18T10:30:00Z',
-  },
-  {
-    id: 'agr_003',
-    empresa_id: 'emp_grupo_eno',
-    tipo_pessoa: 'PJ',
-    nome_completo: 'Agropecuária & Mandioca Terra Viva Ltda',
-    nome_propriedade: 'Fazenda Terra Viva',
-    cpf_cnpj: '18.442.890/0001-62',
-    ie_rural: 'SP-458.910.334',
-    telefone: '(19) 3862-9900',
-    email: 'financeiro@terravivaagro.com.br',
-    endereco: {
-      estrada_linha: 'Estrada Velha de Mogi, Gleba 4',
-      comunidade_bairro: 'Zona Rural Sul',
-      municipio: 'Mogi Mirim',
-      uf: 'SP',
-      cep: '13800-970',
-      ponto_referencia: 'Em frente ao entreposto da cooperativa'
-    },
-    area_hectares: 120,
-    capacidade_estimada_safra_ton: 2600,
-    chave_pix: '18.442.890/0001-62',
-    tipo_chave_pix: 'CNPJ',
-    titular_pix: 'Agropecuária & Mandioca Terra Viva Ltda',
-    banco_nome: 'Bradesco',
-    agencia: '2104',
-    conta: '0018542-9',
-    observacoes_financeiras: 'PIX corporativo CNPJ',
-    ativo: true,
-    criado_em: '2026-02-05T14:15:00Z',
-  },
-  {
-    id: 'agr_004',
-    empresa_id: 'emp_grupo_eno',
-    tipo_pessoa: 'PF',
-    nome_completo: 'Benedito Ramos da Silva',
-    nome_propriedade: 'Chácara Bela Vista',
-    cpf_cnpj: '109.845.228-70',
-    ie_rural: 'PR-775.402.19-8',
-    telefone: '(43) 99120-8855',
-    email: 'benedito.ramos.rural@gmail.com',
-    endereco: {
-      estrada_linha: 'Estrada do Bairro dos Macacos, Lote 14',
-      comunidade_bairro: 'Bairro dos Macacos',
-      municipio: 'Carlópolis',
-      uf: 'PR',
-      cep: '86420-000',
-      ponto_referencia: 'Segunda porteira de aroeira à direita da ponte'
-    },
-    area_hectares: 18,
-    capacidade_estimada_safra_ton: 360,
-    chave_pix: 'benedito.ramos.rural@gmail.com',
-    tipo_chave_pix: 'E-mail',
-    titular_pix: 'Benedito Ramos da Silva',
-    banco_nome: 'Sicoob',
-    agencia: '4350',
-    conta: '19.880-1',
-    observacoes_financeiras: 'PIX e-mail após conferência da pesagem',
-    ativo: true,
-    criado_em: '2026-02-20T11:40:00Z',
-  }
-];
-
-// Romaneios de recebimento de mandioca (Valor pago = Mandioca KG * Preço/KG. Destopo/Casca é controle interno)
-const ENTREGAS_MANDIOCA_MOCK: EntregaRomaneioMandioca[] = [
-  // Sebastião Moreira (agr_001)
-  {
-    id: 'rom_001',
-    empresa_id: 'emp_grupo_eno',
-    agricultor_id: 'agr_001',
-    numero_romaneio: 'ROM-MAN-2026-0042',
-    data: '08/03/2026',
-    safra_referencia: 'Safra 2026',
-    mes_referencia: 'Mar/26',
-    peso_mandioca_kg: 24500,
-    preco_kg: 0.60,
-    valor_total: 14700.00,
-    residuo_destopo_casca_kg: 2100,
-    status_pagamento: 'Pago (PIX)',
-    data_liquidacao_pix: '08/03/2026 15:42',
-    observacoes: 'Carga sadia de boa qualidade. Aproveitamento industrial de 91,4%.'
-  },
-  {
-    id: 'rom_002',
-    empresa_id: 'emp_grupo_eno',
-    agricultor_id: 'agr_001',
-    numero_romaneio: 'ROM-MAN-2026-0031',
-    data: '22/02/2026',
-    safra_referencia: 'Safra 2026',
-    mes_referencia: 'Fev/26',
-    peso_mandioca_kg: 18200,
-    preco_kg: 0.65,
-    valor_total: 11830.00,
-    residuo_destopo_casca_kg: 1450,
-    status_pagamento: 'Pago (PIX)',
-    data_liquidacao_pix: '22/02/2026 17:10',
-    observacoes: 'Raízes recém-arrancadas de alta qualidade.'
-  },
-  {
-    id: 'rom_003',
-    empresa_id: 'emp_grupo_eno',
-    agricultor_id: 'agr_001',
-    numero_romaneio: 'ROM-MAN-2026-0012',
-    data: '16/01/2026',
-    safra_referencia: 'Safra 2026',
-    mes_referencia: 'Jan/26',
-    peso_mandioca_kg: 21000,
-    preco_kg: 0.60,
-    valor_total: 12600.00,
-    residuo_destopo_casca_kg: 1890,
-    status_pagamento: 'Pago (PIX)',
-    data_liquidacao_pix: '16/01/2026 14:05',
-    observacoes: 'Primeiro lote do ano.'
-  },
-  {
-    id: 'rom_004',
-    empresa_id: 'emp_grupo_eno',
-    agricultor_id: 'agr_001',
-    numero_romaneio: 'ROM-MAN-2025-0188',
-    data: '18/12/2025',
-    safra_referencia: 'Safra 2025/2026',
-    mes_referencia: 'Dez/25',
-    peso_mandioca_kg: 19500,
-    preco_kg: 0.58,
-    valor_total: 11310.00,
-    residuo_destopo_casca_kg: 1650,
-    status_pagamento: 'Pago (PIX)',
-    data_liquidacao_pix: '18/12/2025 16:30',
-    observacoes: 'Encerramento de dezembro.'
-  },
-  {
-    id: 'rom_005',
-    empresa_id: 'emp_grupo_eno',
-    agricultor_id: 'agr_001',
-    numero_romaneio: 'ROM-MAN-2025-0145',
-    data: '14/11/2025',
-    safra_referencia: 'Safra 2025/2026',
-    mes_referencia: 'Nov/25',
-    peso_mandioca_kg: 22800,
-    preco_kg: 0.58,
-    valor_total: 13224.00,
-    residuo_destopo_casca_kg: 2200,
-    status_pagamento: 'Pago (PIX)',
-    data_liquidacao_pix: '14/11/2025 18:00',
-    observacoes: 'Lote recebido em período de chuva.'
-  },
-  {
-    id: 'rom_006',
-    empresa_id: 'emp_grupo_eno',
-    agricultor_id: 'agr_001',
-    numero_romaneio: 'ROM-MAN-2025-0102',
-    data: '20/10/2025',
-    safra_referencia: 'Safra 2025/2026',
-    mes_referencia: 'Out/25',
-    peso_mandioca_kg: 16000,
-    preco_kg: 0.56,
-    valor_total: 8960.00,
-    residuo_destopo_casca_kg: 1300,
-    status_pagamento: 'Pago (PIX)',
-    data_liquidacao_pix: '20/10/2025 15:15',
-    observacoes: 'Início da safra intermediária.'
-  },
-  // Antônio Carlos (agr_002)
-  {
-    id: 'rom_007',
-    empresa_id: 'emp_grupo_eno',
-    agricultor_id: 'agr_002',
-    numero_romaneio: 'ROM-MAN-2026-0048',
-    data: '06/03/2026',
-    safra_referencia: 'Safra 2026',
-    mes_referencia: 'Mar/26',
-    peso_mandioca_kg: 32000,
-    preco_kg: 0.60,
-    valor_total: 19200.00,
-    residuo_destopo_casca_kg: 2900,
-    status_pagamento: 'Pago (PIX)',
-    data_liquidacao_pix: '06/03/2026 16:20',
-  },
-  {
-    id: 'rom_008',
-    empresa_id: 'emp_grupo_eno',
-    agricultor_id: 'agr_002',
-    numero_romaneio: 'ROM-MAN-2026-0025',
-    data: '12/02/2026',
-    safra_referencia: 'Safra 2026',
-    mes_referencia: 'Fev/26',
-    peso_mandioca_kg: 28500,
-    preco_kg: 0.60,
-    valor_total: 17100.00,
-    residuo_destopo_casca_kg: 2400,
-    status_pagamento: 'Pago (PIX)',
-    data_liquidacao_pix: '12/02/2026 14:00',
-  }
-];
+// Tipos unificados: o cadastro grava exatamente o formato de mockStore (lido pelos outros módulos)
+export type { Agricultor } from '../../data/mockStore';
+export type { EntregaRomaneioMandioca } from '../../data/cadastrosData';
 
 export function CadastroAgricultores() {
-  const [agricultores, setAgricultores] = useState<Agricultor[]>(AGRICULTORES_INICIAIS);
-  const [romaneios, setRomaneios] = useState<EntregaRomaneioMandioca[]>(ENTREGAS_MANDIOCA_MOCK);
+  // Persistidos no armazenamento local (cadastrosData) e sincronizados entre telas
+  const [agricultores, setAgricultores] = useListaPersistida<Agricultor>(carregarAgricultores, salvarAgricultores, EVENTO_CADASTROS_ATUALIZADOS);
+  const [romaneios, setRomaneios] = useListaPersistida<EntregaRomaneioMandioca>(carregarRomaneiosMandioca, salvarRomaneiosMandioca, EVENTO_CADASTROS_ATUALIZADOS);
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'PF' | 'PJ'>('TODOS');
   const [filtroStatus, setFiltroStatus] = useState<'TODOS' | 'ATIVOS' | 'INATIVOS'>('TODOS');
@@ -356,9 +66,9 @@ export function CadastroAgricultores() {
   // Modal para lançamento de novo Romaneio
   const [modalNovoRomaneio, setModalNovoRomaneio] = useState(false);
   const [novoRomaneioForm, setNovoRomaneioForm] = useState({
-    data: new Date().toLocaleDateString('pt-BR'),
+    data: formatarDataBR(hojeISO()),
     peso_mandioca_kg: '',
-    preco_kg: '0.60',
+    preco_kg: '',
     residuo_destopo_casca_kg: '',
     status_pagamento: 'Pago (PIX)' as 'Pago (PIX)' | 'Pendente',
     observacoes: ''
@@ -443,16 +153,16 @@ export function CadastroAgricultores() {
       email: '',
       estrada_linha: '',
       comunidade_bairro: '',
-      municipio: 'Jacarezinho',
+      municipio: '',
       uf: 'PR',
-      cep: '86400-000',
+      cep: '',
       ponto_referencia: '',
       area_hectares: '',
       capacidade_estimada_safra_ton: '',
       chave_pix: '',
       tipo_chave_pix: 'CPF',
       titular_pix: '',
-      banco_nome: 'Banco do Brasil',
+      banco_nome: '',
       agencia: '',
       conta: '',
       observacoes_financeiras: '',
@@ -617,22 +327,24 @@ export function CadastroAgricultores() {
     if (!agricultorSelecionado) return;
 
     const pesoMandioca = Number(novoRomaneioForm.peso_mandioca_kg) || 0;
-    const preco = Number(novoRomaneioForm.preco_kg) || 0.60;
+    const preco = Number(String(novoRomaneioForm.preco_kg).replace(',', '.')) || 0;
+    if (pesoMandioca <= 0 || preco <= 0) {
+      alert('Informe o peso da mandioca e o preço por kg.');
+      return;
+    }
     // O valor pago é calculado pelo peso total de mandioca entregue (não desconta destopo/casca do agricultor)
     const valorTotal = pesoMandioca * preco;
     const residuo = Number(novoRomaneioForm.residuo_destopo_casca_kg) || 0;
 
-    const dataObj = new Date();
-    const mesesAbrev = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-    const mesRef = `${mesesAbrev[dataObj.getMonth()]}/${String(dataObj.getFullYear()).slice(-2)}`;
+    const mesRef = mesReferenciaDe(novoRomaneioForm.data) || mesReferenciaDe(new Date());
 
     const novoRom: EntregaRomaneioMandioca = {
       id: `rom_${Date.now()}`,
       empresa_id: 'emp_grupo_eno',
       agricultor_id: agricultorSelecionado.id,
-      numero_romaneio: `ROM-MAN-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      numero_romaneio: `ROM-MAN-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       data: novoRomaneioForm.data,
-      safra_referencia: 'Safra 2026',
+      safra_referencia: `Safra ${new Date().getFullYear()}`,
       mes_referencia: mesRef,
       peso_mandioca_kg: pesoMandioca,
       preco_kg: preco,
@@ -646,9 +358,9 @@ export function CadastroAgricultores() {
     setRomaneios(prev => [novoRom, ...prev]);
     setModalNovoRomaneio(false);
     setNovoRomaneioForm({
-      data: new Date().toLocaleDateString('pt-BR'),
+      data: formatarDataBR(hojeISO()),
       peso_mandioca_kg: '',
-      preco_kg: '0.60',
+      preco_kg: '',
       residuo_destopo_casca_kg: '',
       status_pagamento: 'Pago (PIX)',
       observacoes: ''
@@ -713,15 +425,10 @@ export function CadastroAgricultores() {
   // 2. Linha de Valor Total (R$)
   // 3. Linha de Resíduo, Destopo e Casca (KG de refugo apontado pelo gerente)
   const dadosGrafico3Linhas = useMemo(() => {
-    const ordemMeses = ['Out/25', 'Nov/25', 'Dez/25', 'Jan/26', 'Fev/26', 'Mar/26'];
-    const mapa: Record<string, { kgMandioca: number; valorTotal: number; kgResiduo: number }> = {
-      'Out/25': { kgMandioca: 0, valorTotal: 0, kgResiduo: 0 },
-      'Nov/25': { kgMandioca: 0, valorTotal: 0, kgResiduo: 0 },
-      'Dez/25': { kgMandioca: 0, valorTotal: 0, kgResiduo: 0 },
-      'Jan/26': { kgMandioca: 0, valorTotal: 0, kgResiduo: 0 },
-      'Fev/26': { kgMandioca: 0, valorTotal: 0, kgResiduo: 0 },
-      'Mar/26': { kgMandioca: 0, valorTotal: 0, kgResiduo: 0 },
-    };
+    const ordemMeses = ultimosMesesReferencia(6);
+    const mapa: Record<string, { kgMandioca: number; valorTotal: number; kgResiduo: number }> = Object.fromEntries(
+      ordemMeses.map(m => [m, { kgMandioca: 0, valorTotal: 0, kgResiduo: 0 }])
+    );
 
     entregasDoAgricultor.forEach(e => {
       if (e.mes_referencia in mapa) {

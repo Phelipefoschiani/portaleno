@@ -16,8 +16,13 @@ import {
 import {
   LancamentoReceita,
   carregarReceitasExtras,
-  salvarReceitasExtras
+  salvarReceitasExtras,
+  somarValores,
+  formatarMoeda,
+  registrarBaixaNoCaixa,
+  estornarBaixaNoCaixa
 } from '../../data/financeiroData';
+import { hojeISO, paraISO, formatarDataBR, compararDatas } from '../../lib/datas';
 import { FinanceiroNavTabs } from './FinanceiroNavTabs';
 
 interface Props {
@@ -33,83 +38,100 @@ const ORIGENS_RECEITA = [
 ] as const;
 
 export function FinanceiroLancarReceita({ onNavigate }: Props) {
-  const [receitas, setReceitas] = useState<LancamentoReceita[]>(carregarReceitasExtras());
+  const ordenar = (lista: LancamentoReceita[]) => [...lista].sort((a, b) => compararDatas(b.data, a.data));
+  const [receitas, setReceitas] = useState<LancamentoReceita[]>(() => ordenar(carregarReceitasExtras()));
   const [busca, setBusca] = useState('');
   const [filtroOrigem, setFiltroOrigem] = useState<string>('TODAS');
   const [modalNovo, setModalNovo] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
-    data: new Date().toLocaleDateString('pt-BR'),
+    data: hojeISO(),
     origem: 'Venda de Resíduo/Bagaço Úmido' as typeof ORIGENS_RECEITA[number],
     comprador_origem: '',
     descricao: '',
     valor: '',
-    conta_creditada: 'Banco do Brasil - Conta Movimento',
-    forma_recebimento: 'PIX à Vista'
+    conta_creditada: '',
+    forma_recebimento: ''
   });
 
   useEffect(() => {
     const handleUpdate = () => {
-      setReceitas(carregarReceitasExtras());
+      setReceitas(ordenar(carregarReceitasExtras()));
     };
+    handleUpdate();
     window.addEventListener('financeiro_updated', handleUpdate);
-    return () => window.removeEventListener('financeiro_updated', handleUpdate);
+    window.addEventListener('sistema_reset_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('financeiro_updated', handleUpdate);
+      window.removeEventListener('sistema_reset_updated', handleUpdate);
+    };
   }, []);
 
   const receitasFiltradas = receitas.filter((item) => {
     const matchBusca =
-      item.descricao.toLowerCase().includes(busca.toLowerCase()) ||
-      item.comprador_origem.toLowerCase().includes(busca.toLowerCase()) ||
-      item.conta_creditada.toLowerCase().includes(busca.toLowerCase());
+      (item.descricao || '').toLowerCase().includes(busca.toLowerCase()) ||
+      (item.comprador_origem || '').toLowerCase().includes(busca.toLowerCase()) ||
+      (item.conta_creditada || '').toLowerCase().includes(busca.toLowerCase());
     const matchOrigem = filtroOrigem === 'TODAS' || item.origem === filtroOrigem;
     return matchBusca && matchOrigem;
   });
 
   // Métricas
-  const totalReceitas = receitas.reduce((acc, curr) => acc + curr.valor, 0);
-  const receitasSubprodutos = receitas
-    .filter((r) => r.origem.includes('Bagaço') || r.origem.includes('Cascas'))
-    .reduce((acc, curr) => acc + curr.valor, 0);
-  const rendimentosAplicacoes = receitas
-    .filter((r) => r.origem.includes('Aplicação'))
-    .reduce((acc, curr) => acc + curr.valor, 0);
+  const totalReceitas = somarValores(receitas, r => r.valor);
+  const receitasSubprodutos = somarValores(
+    receitas.filter((r) => (r.origem || '').includes('Bagaço') || (r.origem || '').includes('Cascas')),
+    r => r.valor
+  );
+  const rendimentosAplicacoes = somarValores(
+    receitas.filter((r) => (r.origem || '').includes('Aplicação')),
+    r => r.valor
+  );
 
   const handleSalvar = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.comprador_origem || !formData.valor) return;
+    const valor = parseFloat(String(formData.valor).replace(',', '.')) || 0;
+    if (valor <= 0) {
+      alert('Informe um valor maior que zero.');
+      return;
+    }
 
     const novoLancamento: LancamentoReceita = {
       id: `rec_extra_${Date.now()}`,
-      data: formData.data,
+      data: paraISO(formData.data) || hojeISO(),
       origem: formData.origem,
       comprador_origem: formData.comprador_origem,
       descricao: formData.descricao || `${formData.origem} - ${formData.comprador_origem}`,
-      valor: parseFloat(formData.valor) || 0,
+      valor,
       conta_creditada: formData.conta_creditada,
       forma_recebimento: formData.forma_recebimento
     };
 
-    const atualizadas = [novoLancamento, ...receitas];
-    setReceitas(atualizadas);
+    const atualizadas = [novoLancamento, ...carregarReceitasExtras()];
+    setReceitas(ordenar(atualizadas));
     salvarReceitasExtras(atualizadas);
+    // Receita lançada já foi recebida: entra no caixa uma única vez
+    registrarBaixaNoCaixa(`receita:${novoLancamento.id}`, novoLancamento.valor);
     setModalNovo(false);
     setFormData({
-      data: new Date().toLocaleDateString('pt-BR'),
+      data: hojeISO(),
       origem: 'Venda de Resíduo/Bagaço Úmido',
       comprador_origem: '',
       descricao: '',
       valor: '',
-      conta_creditada: 'Banco do Brasil - Conta Movimento',
-      forma_recebimento: 'PIX à Vista'
+      conta_creditada: '',
+      forma_recebimento: ''
     });
   };
 
   const handleExcluir = (id: string) => {
     if (confirm('Deseja realmente estornar este lançamento de receita?')) {
-      const atualizadas = receitas.filter((r) => r.id !== id);
-      setReceitas(atualizadas);
+      const atualizadas = carregarReceitasExtras().filter((r) => r.id !== id);
+      setReceitas(ordenar(atualizadas));
       salvarReceitasExtras(atualizadas);
+      // Estorno: retira do caixa o que esta receita havia somado
+      estornarBaixaNoCaixa(`receita:${id}`);
     }
   };
 
@@ -147,7 +169,7 @@ export function FinanceiroLancarReceita({ onNavigate }: Props) {
             <div>
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Receitas Extras</div>
               <div className="text-sm font-black text-emerald-900 font-mono">
-                R$ {totalReceitas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                {formatarMoeda(totalReceitas)}
               </div>
             </div>
           </div>
@@ -157,7 +179,7 @@ export function FinanceiroLancarReceita({ onNavigate }: Props) {
             <div>
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Subprodutos (Bagaço / Cascas)</div>
               <div className="text-sm font-black text-amber-900 font-mono">
-                R$ {receitasSubprodutos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                {formatarMoeda(receitasSubprodutos)}
               </div>
             </div>
           </div>
@@ -167,7 +189,7 @@ export function FinanceiroLancarReceita({ onNavigate }: Props) {
             <div>
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Rendimentos Financeiros</div>
               <div className="text-sm font-black text-blue-900 font-mono">
-                R$ {rendimentosAplicacoes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                {formatarMoeda(rendimentosAplicacoes)}
               </div>
             </div>
           </div>
@@ -231,7 +253,7 @@ export function FinanceiroLancarReceita({ onNavigate }: Props) {
                 receitasFiltradas.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3.5 px-5 font-mono font-semibold text-slate-700 whitespace-nowrap">
-                      {item.data}
+                      {formatarDataBR(item.data)}
                     </td>
 
                     <td className="py-3.5 px-4">
@@ -262,7 +284,7 @@ export function FinanceiroLancarReceita({ onNavigate }: Props) {
                     </td>
 
                     <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-700 text-sm whitespace-nowrap">
-                      + R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      + {formatarMoeda(item.valor)}
                     </td>
 
                     <td className="py-3.5 px-5 text-right">
@@ -313,11 +335,10 @@ export function FinanceiroLancarReceita({ onNavigate }: Props) {
                     Data do Recebimento *
                   </label>
                   <input
-                    type="text"
+                    type="date"
                     required
-                    value={formData.data}
+                    value={paraISO(formData.data)}
                     onChange={(e) => setFormData({ ...formData, data: e.target.value })}
-                    placeholder="DD/MM/AAAA"
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono text-slate-900 focus:outline-none focus:border-emerald-700 bg-slate-50"
                   />
                 </div>

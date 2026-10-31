@@ -150,10 +150,7 @@ export function PedidosFaturados({ onNavigate }: Props) {
   // Confirmar / Assinalar Entrega Realizada
   const handleConfirmarEntrega = (pedidoId: string, numero: string) => {
     if (confirm(`Confirmar e assinalar entrega do pedido ${numero} como entregue ao cliente?`)) {
-      const dataHoje = new Date().toLocaleDateString('pt-BR');
-      moverPedidoEtapa(pedidoId, 'ENTREGUE', {
-        data_entrega_realizada: dataHoje
-      });
+      moverPedidoEtapa(pedidoId, 'ENTREGUE');
       if (onNavigate) onNavigate('pedidos_entregues');
     }
   };

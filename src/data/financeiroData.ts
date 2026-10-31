@@ -2,6 +2,8 @@
 // Integra Contas a Receber (Vendas Faturadas), Contas a Pagar (Compras de Mandioca / Insumos),
 // Lançamento de Despesas, Notas Fiscais (Entrada/Saída), Receitas Extras e Caixa de Investimento.
 
+import { parseData, mesAtualKey, hojeISO } from '../lib/datas';
+
 export interface TituloReceber {
   id: string;
   pedido_venda_id?: string;
@@ -161,7 +163,8 @@ export function carregarTitulosReceber(): TituloReceber[] {
       localStorage.setItem(STORAGE_KEY_RECEBER, JSON.stringify(TITULOS_RECEBER_INICIAIS));
       return TITULOS_RECEBER_INICIAIS;
     }
-    return JSON.parse(raw);
+    const lista = JSON.parse(raw);
+    return Array.isArray(lista) ? lista : [];
   } catch (e) {
     return [];
   }
@@ -185,7 +188,8 @@ export function carregarTitulosPagar(): TituloPagar[] {
       localStorage.setItem(STORAGE_KEY_PAGAR, JSON.stringify(TITULOS_PAGAR_INICIAIS));
       return TITULOS_PAGAR_INICIAIS;
     }
-    return JSON.parse(raw);
+    const lista = JSON.parse(raw);
+    return Array.isArray(lista) ? lista : [];
   } catch (e) {
     return [];
   }
@@ -209,7 +213,8 @@ export function carregarDespesas(): DespesaOperacional[] {
       localStorage.setItem(STORAGE_KEY_DESPESAS, JSON.stringify(DESPESAS_OPERACIONAIS_INICIAIS));
       return DESPESAS_OPERACIONAIS_INICIAIS;
     }
-    return JSON.parse(raw);
+    const lista = JSON.parse(raw);
+    return Array.isArray(lista) ? lista : [];
   } catch (e) {
     return [];
   }
@@ -233,7 +238,8 @@ export function carregarReceitasExtras(): LancamentoReceita[] {
       localStorage.setItem(STORAGE_KEY_RECEITAS_EXTRAS, JSON.stringify(RECEITAS_EXTRAS_INICIAIS));
       return RECEITAS_EXTRAS_INICIAIS;
     }
-    return JSON.parse(raw);
+    const lista = JSON.parse(raw);
+    return Array.isArray(lista) ? lista : [];
   } catch (e) {
     return [];
   }
@@ -261,7 +267,8 @@ export function carregarNotasSaida(): NotaFiscalSaida[] {
       localStorage.setItem(STORAGE_KEY_NOTAS_SAIDA, JSON.stringify(NOTAS_SAIDA_INICIAIS));
       return NOTAS_SAIDA_INICIAIS;
     }
-    return JSON.parse(raw);
+    const lista = JSON.parse(raw);
+    return Array.isArray(lista) ? lista : [];
   } catch (e) {
     return [];
   }
@@ -285,7 +292,8 @@ export function carregarNotasEntrada(): NotaFiscalEntrada[] {
       localStorage.setItem(STORAGE_KEY_NOTAS_ENTRADA, JSON.stringify(NOTAS_ENTRADA_INICIAIS));
       return NOTAS_ENTRADA_INICIAIS;
     }
-    return JSON.parse(raw);
+    const lista = JSON.parse(raw);
+    return Array.isArray(lista) ? lista : [];
   } catch (e) {
     return [];
   }
@@ -297,28 +305,43 @@ export function salvarNotasEntrada(dados: NotaFiscalEntrada[]): void {
   window.dispatchEvent(new Event('financeiro_updated'));
 }
 
+function caixaZerado(): CaixaInvestimento {
+  return {
+    saldo_disponivel_industrial: 0,
+    fundo_reserva_safra: 0,
+    fundo_modernizacao_maquinario: 0,
+    rendimento_mensal_estimado: 0,
+    investimentos_recentes: []
+  };
+}
+
+// Valida o formato gravado; qualquer coisa fora do formato (ex.: [] gravado por reset antigo) vira caixa zerado
+function normalizarCaixa(dados: unknown): CaixaInvestimento {
+  if (!dados || typeof dados !== 'object' || Array.isArray(dados)) return caixaZerado();
+  const d = dados as Partial<CaixaInvestimento>;
+  return {
+    saldo_disponivel_industrial: numeroSeguro(d.saldo_disponivel_industrial),
+    fundo_reserva_safra: numeroSeguro(d.fundo_reserva_safra),
+    fundo_modernizacao_maquinario: numeroSeguro(d.fundo_modernizacao_maquinario),
+    rendimento_mensal_estimado: numeroSeguro(d.rendimento_mensal_estimado),
+    investimentos_recentes: Array.isArray(d.investimentos_recentes)
+      ? d.investimentos_recentes.filter(i => i && typeof i === 'object').map(i => ({ ...i, valor: numeroSeguro(i.valor) }))
+      : []
+  };
+}
+
 export function carregarCaixaInvestimento(): CaixaInvestimento {
-  if (typeof window === 'undefined') return CAIXA_INVESTIMENTO_INICIAL;
+  if (typeof window === 'undefined') return caixaZerado();
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CAIXA_INVEST);
     if (raw === null) {
-      if (verificarModoLimpo()) {
-        const vazio: CaixaInvestimento = {
-          saldo_disponivel_industrial: 0,
-          fundo_reserva_safra: 0,
-          fundo_modernizacao_maquinario: 0,
-          rendimento_mensal_estimado: 0,
-          investimentos_recentes: []
-        };
-        localStorage.setItem(STORAGE_KEY_CAIXA_INVEST, JSON.stringify(vazio));
-        return vazio;
-      }
-      localStorage.setItem(STORAGE_KEY_CAIXA_INVEST, JSON.stringify(CAIXA_INVESTIMENTO_INICIAL));
-      return CAIXA_INVESTIMENTO_INICIAL;
+      const vazio = caixaZerado();
+      localStorage.setItem(STORAGE_KEY_CAIXA_INVEST, JSON.stringify(vazio));
+      return vazio;
     }
-    return JSON.parse(raw);
+    return normalizarCaixa(JSON.parse(raw));
   } catch (e) {
-    return CAIXA_INVESTIMENTO_INICIAL;
+    return caixaZerado();
   }
 }
 
@@ -328,3 +351,105 @@ export function salvarCaixaInvestimento(dados: CaixaInvestimento): void {
   window.dispatchEvent(new Event('financeiro_updated'));
 }
 
+
+// ============================================================
+// BAIXAS NO CAIXA (cada título/despesa movimenta o saldo uma única vez)
+// ============================================================
+const STORAGE_KEY_CAIXA_BAIXAS = 'grupo_eno_financeiro_caixa_baixas_v1';
+
+function carregarBaixasCaixa(): Record<string, number> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_CAIXA_BAIXAS);
+    const obj = raw ? JSON.parse(raw) : {};
+    return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+/**
+ * Movimenta o saldo disponível do caixa (positivo = entrada, negativo = saída).
+ * `chave` identifica o lançamento (ex.: 'pagar:<id>', 'receber:<id>', 'despesa:<id>');
+ * se a chave já foi aplicada, nada acontece. Retorna true se movimentou.
+ */
+export function registrarBaixaNoCaixa(chave: string, delta: number): boolean {
+  if (typeof window === 'undefined') return false;
+  const valor = numeroSeguro(delta);
+  if (!chave || valor === 0) return false;
+  const baixas = carregarBaixasCaixa();
+  if (Object.prototype.hasOwnProperty.call(baixas, chave)) return false;
+  const caixa = carregarCaixaInvestimento();
+  caixa.saldo_disponivel_industrial = numeroSeguro(caixa.saldo_disponivel_industrial + valor);
+  baixas[chave] = valor;
+  localStorage.setItem(STORAGE_KEY_CAIXA_BAIXAS, JSON.stringify(baixas));
+  salvarCaixaInvestimento(caixa);
+  return true;
+}
+
+/** Desfaz a movimentação de uma chave (ex.: lançamento pago excluído). Retorna true se estornou. */
+export function estornarBaixaNoCaixa(chave: string): boolean {
+  if (typeof window === 'undefined') return false;
+  const baixas = carregarBaixasCaixa();
+  if (!Object.prototype.hasOwnProperty.call(baixas, chave)) return false;
+  const caixa = carregarCaixaInvestimento();
+  caixa.saldo_disponivel_industrial = numeroSeguro(caixa.saldo_disponivel_industrial - numeroSeguro(baixas[chave]));
+  delete baixas[chave];
+  localStorage.setItem(STORAGE_KEY_CAIXA_BAIXAS, JSON.stringify(baixas));
+  salvarCaixaInvestimento(caixa);
+  return true;
+}
+
+// ============================================================
+// HELPERS DE EXIBIÇÃO (status vencido, mês corrente, moeda)
+// ============================================================
+
+// Converte qualquer valor em número finito (NaN/undefined/string inválida viram 0)
+export function numeroSeguro(valor: unknown): number {
+  const n = typeof valor === 'number' ? valor : parseFloat(String(valor ?? '').replace(',', '.'));
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function formatarMoeda(valor: unknown): string {
+  return numeroSeguro(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+// Soma protegida contra NaN/undefined. Uso: somarValores(lista, item => item.valor)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function somarValores(lista: readonly any[] | null | undefined, seletor: (item: any) => unknown): number {
+  if (!Array.isArray(lista)) return 0;
+  return lista.reduce((acc: number, item) => acc + numeroSeguro(seletor(item)), 0);
+}
+
+// true se a data (qualquer formato aceito) cai no mês corrente
+export function dataNoMesAtual(valor?: string | null): boolean {
+  const d = parseData(valor);
+  return !!d && mesAtualKey(d) === mesAtualKey();
+}
+
+// true se a data é anterior a hoje (vencimento passado)
+export function dataVencida(valor?: string | null): boolean {
+  const d = parseData(valor);
+  const hoje = parseData(hojeISO());
+  return !!d && !!hoje && d.getTime() < hoje.getTime();
+}
+
+// Status calculado na exibição: título não pago com vencimento passado aparece como VENCIDO
+export function statusEfetivoPagar(t: TituloPagar): TituloPagar['status'] {
+  if (t.status === 'PAGO') return 'PAGO';
+  if (dataVencida(t.data_vencimento)) return 'VENCIDO';
+  return t.status === 'VENCIDO' && !parseData(t.data_vencimento) ? 'VENCIDO' : 'A_PAGAR';
+}
+
+export function statusEfetivoReceber(t: TituloReceber): TituloReceber['status'] {
+  if (t.status === 'PAGO') return 'PAGO';
+  if (dataVencida(t.data_vencimento)) return 'VENCIDO';
+  return t.status === 'VENCIDO' && !parseData(t.data_vencimento) ? 'VENCIDO' : 'EM_ABERTO';
+}
+
+// Lançamento de despesa PROGRAMADA (pedido de compra ainda não efetivado, ids 'desp_prog_*').
+// Nunca deve contar como despesa realizada/paga nem aparecer como quitada.
+export function ehDespesaProgramada(d: DespesaOperacional): boolean {
+  const extra = d as DespesaOperacional & { tipo_despesa?: string };
+  return String(d?.id || '').startsWith('desp_prog_') || extra?.tipo_despesa === 'PROGRAMADA';
+}

@@ -27,8 +27,12 @@ import {
   ImpostoProduto,
   carregarEstoqueProdutos,
   salvarEstoqueProdutos,
-  carregarReceitas
+  carregarReceitas,
+  calcularStatusProduto
 } from '../../data/produtosData';
+import { hojeISO } from '../../lib/datas';
+
+const loteSugerido = () => `LOTE-ENO-${hojeISO().slice(2).replace(/-/g, '')}`;
 import { ProdutosNavTabs } from './ProdutosNavTabs';
 
 interface Props {
@@ -52,17 +56,17 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
     categoria: 'Mandioca Gourmet' as ProdutoEstoque['categoria'],
     tipo_embalagem: 'Pacote 1kg' as ProdutoEstoque['tipo_embalagem'],
     peso_unitario_kg: 1,
-    estoque_atual_sacos: 100,
-    estoque_minimo_kg: 500,
-    localizacao_galpao: 'Galpão C',
-    preco_unitario_venda: 12.50,
-    lote_recente: `LOTE-ENO-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`,
+    estoque_atual_sacos: 0,
+    estoque_minimo_kg: 0,
+    localizacao_galpao: '',
+    preco_unitario_venda: 0,
+    lote_recente: loteSugerido(),
     // Vínculo com a Receita e Custos
     receita_id: '',
     receita_nome: '',
     custo_materia_prima: 0,
     impostos: [] as ImpostoProduto[],
-    custo_operacional: 0.85,
+    custo_operacional: 0,
     tipo_acondicionamento: 'Caixa' as 'Fardo' | 'Caixa' | 'Saco' | 'Avulso',
     unidades_por_acondicionamento: 10
   });
@@ -221,21 +225,16 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
       categoria: 'Mandioca Gourmet',
       tipo_embalagem: tipoEmb,
       peso_unitario_kg: recPadrao?.peso_por_pacote_kg || 1,
-      estoque_atual_sacos: 100,
-      estoque_minimo_kg: 500,
-      localizacao_galpao: 'Galpão C - Setor Congelados & Gourmet',
-      preco_unitario_venda: 12.50,
-      lote_recente: `LOTE-ENO-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`,
-      preco_unitario_venda: 12.50,
-      lote_recente: `LOTE-ENO-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`,
+      estoque_atual_sacos: 0,
+      estoque_minimo_kg: 0,
+      localizacao_galpao: '',
+      preco_unitario_venda: 0,
+      lote_recente: loteSugerido(),
       receita_id: recPadrao ? recPadrao.id : '',
       receita_nome: recPadrao ? (recPadrao.nome || recPadrao.produto_nome || '') : '',
       custo_materia_prima: parseFloat(custoMp.toFixed(2)),
-      impostos: [
-        { id: 'imp_icms', nome: 'ICMS', base: 'Venda', tipo: 'Porcentagem', valor: 7.0 },
-        { id: 'imp_ipi', nome: 'IPI', base: 'Custo', tipo: 'Porcentagem', valor: 2.0 }
-      ],
-      custo_operacional: 0.85,
+      impostos: [],
+      custo_operacional: 0,
       tipo_acondicionamento: acond,
       unidades_por_acondicionamento: unidades
     });
@@ -255,8 +254,6 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
       localizacao_galpao: prod.localizacao_galpao,
       preco_unitario_venda: prod.preco_unitario_venda,
       lote_recente: prod.lote_recente,
-      preco_unitario_venda: prod.preco_unitario_venda,
-      lote_recente: prod.lote_recente,
       receita_id: prod.receita_id || '',
       receita_nome: prod.receita_nome || '',
       custo_materia_prima: prod.custo_materia_prima || 0,
@@ -271,9 +268,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
   const handleSalvar = (e: React.FormEvent) => {
     e.preventDefault();
     const pesoTotal = formData.estoque_atual_sacos * formData.peso_unitario_kg;
-    const status: ProdutoEstoque['status'] = 
-      pesoTotal <= formData.estoque_minimo_kg * 0.5 ? 'CRITICO' :
-      pesoTotal <= formData.estoque_minimo_kg ? 'ESTOQUE_BAIXO' : 'EM_ESTOQUE';
+    const status: ProdutoEstoque['status'] = calcularStatusProduto(pesoTotal, formData.estoque_minimo_kg);
 
     const dadosCusto = {
       receita_id: formData.receita_id || undefined,
@@ -443,7 +438,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                 </tr>
               ) : (
                 produtosFiltrados.map((item) => {
-                  const custoTotalUnit = item.custo_total || (item.custo_materia_prima ? item.custo_materia_prima * 1.15 : item.preco_unitario_venda * 0.7);
+                  const custoTotalUnit = item.custo_total || item.custo_materia_prima || 0;
                   const margem = item.preco_unitario_venda > 0 ? ((item.preco_unitario_venda - custoTotalUnit) / item.preco_unitario_venda) * 100 : 0;
                   const acondQtd = item.unidades_por_acondicionamento || 1;
                   const acondTipo = item.tipo_acondicionamento || (item.tipo_embalagem.includes('Fardo') ? 'Fardo' : item.tipo_embalagem.includes('Caixa') ? 'Caixa' : 'Saco');

@@ -23,13 +23,27 @@ import {
   NotaFiscalDespesa
 } from '../../data/sitioControleData';
 import { integrarDespesaSitioAoFinanceiro } from '../../data/pipelineIntegrado';
+import { hojeISO, mesAtualKey as chaveMesAtual, parseData, paraISO, formatarDataBR, compararDatas } from '../../lib/datas';
+
+// Proteção contra NaN/undefined nos totais
+const num = (v: unknown): number => {
+  const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
+  return Number.isFinite(n) ? n : 0;
+};
+const moeda = (v: unknown): string =>
+  num(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const litros = (v: unknown): string =>
+  num(v).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+
+const CAPACIDADE_PADRAO_TANQUE_L = 5000;
 
 interface PortalControleSitioProps {
   onVoltar: () => void;
 }
 
 export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
-  const [dados, setDados] = useState<ControleSitioState>(carregarControleSitio());
+  const [dados, setDados] = useState<ControleSitioState>(() => carregarControleSitio());
+  const [erroFormulario, setErroFormulario] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
   const [filtroTipoAcao, setFiltroTipoAcao] = useState<string>('TODOS');
   
@@ -42,27 +56,27 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
   // 1. Modal Entrada de Litros (Compra de Combustível para o Tanque)
   const [modalEntradaLitros, setModalEntradaLitros] = useState(false);
   const [formEntradaTanque, setFormEntradaTanque] = useState({
-    data: new Date().toISOString().split('T')[0],
+    data: hojeISO(),
     produto: 'Diesel S10',
-    quantidadeLitros: 1000,
-    precoLitro: 5.75,
-    valorTotal: 5750.00,
-    fornecedor: 'Distribuidora Rota do Petróleo & Agronegócio Ltda',
-    cnpjFornecedor: '11.892.301/0001-92',
+    quantidadeLitros: 0,
+    precoLitro: 0,
+    valorTotal: 0,
+    fornecedor: '',
+    cnpjFornecedor: '',
     numeroNF: '',
-    observacoes: 'Descarga de combustível no reservatório da fazenda.'
+    observacoes: ''
   });
 
   // 2. Modal Lançar Litros no Trator (Abastecimento)
   const [modalAbastecerTrator, setModalAbastecerTrator] = useState(false);
   const [formTrator, setFormTrator] = useState({
-    data: new Date().toISOString().split('T')[0],
-    maquinaTrator: 'Trator Valtra A950',
-    responsavel: 'Valdecir (Mestre de Campo)',
+    data: hojeISO(),
+    maquinaTrator: 'Trator',
+    responsavel: '',
     produto: 'Diesel S10',
-    quantidadeLitros: 120,
-    custoLitro: 5.89,
-    operacao: 'Aração e Preparo do Solo',
+    quantidadeLitros: 0,
+    custoLitro: 0,
+    operacao: '',
     numeroNF: '',
     horasTrabalhadas: 0
   });
@@ -70,35 +84,55 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
   // 3. Modal Lançar Despesa Situacional (Peças / Manutenção / Insumos)
   const [modalDespesaSituacional, setModalDespesaSituacional] = useState(false);
   const [formSituacional, setFormSituacional] = useState({
-    data: new Date().toISOString().split('T')[0],
+    data: hojeISO(),
     nomeDespesa: '',
     tipo: 'PECA' as DespesaSitio['tipo'],
     produto: '',
     quantidade: 1,
     unidade: 'UN',
-    valorUnitario: 150.00,
-    valorTotal: 150.00,
+    valorUnitario: 0,
+    valorTotal: 0,
     maquinaTrator: 'Geral',
-    responsavel: 'Marcos Mecânico',
+    responsavel: '',
     numeroNF: '',
-    fornecedor: 'TratorSul Peças e Implementos Agrícolas',
-    cnpjFornecedor: '22.341.988/0001-12'
+    fornecedor: '',
+    cnpjFornecedor: ''
   });
 
   useEffect(() => {
     const handleUpdate = () => setDados(carregarControleSitio());
     window.addEventListener('sitio_controle_despesas_updated', handleUpdate);
-    return () => window.removeEventListener('sitio_controle_despesas_updated', handleUpdate);
+    window.addEventListener('sistema_reset_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('sitio_controle_despesas_updated', handleUpdate);
+      window.removeEventListener('sistema_reset_updated', handleUpdate);
+    };
   }, []);
+
+  // Limpa a mensagem de erro sempre que um modal é aberto/fechado
+  useEffect(() => {
+    setErroFormulario(null);
+  }, [modalEntradaLitros, modalAbastecerTrator, modalDespesaSituacional]);
+
+  const capacidadeTanque = num(dados.capacidadeTanqueLitros) || CAPACIDADE_PADRAO_TANQUE_L;
+  const despesasLista: DespesaSitio[] = Array.isArray(dados.despesas) ? dados.despesas : [];
 
   // Classificador do Tipo de Ação: Compra de Gasolina/Diesel, Abastecimento ou Despesas
   const getTipoAcao = (despesa: DespesaSitio): { label: string; badgeClass: string; key: 'COMPRA' | 'ABASTECIMENTO' | 'DESPESA' } => {
-    const nomeLower = despesa.nomeDespesa.toLowerCase();
-    const prodLower = despesa.produto.toLowerCase();
-    const tratorLower = despesa.maquinaTrator.toLowerCase();
+    const id = String(despesa.id || '');
+    const nomeLower = (despesa.nomeDespesa || '').toLowerCase();
+    const prodLower = (despesa.produto || '').toLowerCase();
+    const tratorLower = (despesa.maquinaTrator || '').toLowerCase();
+    // O prefixo do id define o tipo de forma inequívoca; o texto é só fallback para registros antigos
+    const ehCompra = id.startsWith('mov_compra_') ||
+      (!id.startsWith('mov_abast_') && !id.startsWith('mov_desp_') &&
+        (nomeLower.includes('compra') || tratorLower.includes('tanque')));
+    const ehAbastecimento = id.startsWith('mov_abast_') ||
+      (!ehCompra && !id.startsWith('mov_desp_') &&
+        (nomeLower.includes('abastecimento') || (despesa.unidade === 'L' && despesa.tipo === 'COMBUSTIVEL')));
 
     // 1. Compra de Combustível / Gasolina
-    if (nomeLower.includes('compra') || tratorLower.includes('tanque')) {
+    if (ehCompra) {
       if (prodLower.includes('gasolina')) {
         return {
           label: 'Compra Gasolina',
@@ -114,7 +148,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
     }
 
     // 2. Abastecimento (quando abastece trator / máquina)
-    if (nomeLower.includes('abastecimento') || (despesa.unidade === 'L' && despesa.tipo === 'COMBUSTIVEL')) {
+    if (ehAbastecimento) {
       return {
         label: 'Abastecimento',
         badgeClass: 'bg-blue-100 text-blue-900 border border-blue-300/80',
@@ -132,66 +166,79 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
 
   // Cálculos Dinâmicos dos Cards:
   // 1. Total de litros disponível no tanque do sítio
-  const totalLitrosDisponivel = dados.totalLitrosDisponivel;
+  const totalLitrosDisponivel = num(dados.totalLitrosDisponivel);
 
-  // Total em valor de combustível comprado
+  // Total em valor de combustível COMPRADO (somente entradas no tanque).
+  // Abastecimento de trator é consumo do combustível já comprado: não entra aqui.
   const totalCombustivelCompradoValor = useMemo(() => {
-    return dados.despesas
-      .filter(d => {
-        const info = getTipoAcao(d);
-        return info.key === 'COMPRA' || d.tipo === 'COMBUSTIVEL' || d.unidade === 'L';
-      })
-      .reduce((acc, d) => acc + (Number(d.valorTotal) || 0), 0);
-  }, [dados.despesas]);
+    return despesasLista
+      .filter(d => getTipoAcao(d).key === 'COMPRA')
+      .reduce((acc, d) => acc + num(d.valorTotal), 0);
+  }, [despesasLista]);
 
-  // 2. Total de litros usados nesse mês de combustível no trator
-  const mesAtualKey = new Date().toISOString().slice(0, 7); // YYYY-MM
+  // 2. Total de litros usados nesse mês de combustível no trator (consumo)
+  const mesAtualKey = chaveMesAtual(); // AAAA-MM no fuso local
   const litrosUsadosNoMes = useMemo(() => {
-    return dados.despesas
+    return despesasLista
       .filter(d => {
-        const ehMesAtual = d.data.startsWith(mesAtualKey);
-        const info = getTipoAcao(d);
-        return ehMesAtual && info.key === 'ABASTECIMENTO';
+        const dt = parseData(d.data);
+        const ehMesAtual = !!dt && chaveMesAtual(dt) === mesAtualKey;
+        return ehMesAtual && getTipoAcao(d).key === 'ABASTECIMENTO';
       })
-      .reduce((acc, d) => acc + (Number(d.quantidade) || 0), 0);
-  }, [dados.despesas, mesAtualKey]);
+      .reduce((acc, d) => acc + num(d.quantidade), 0);
+  }, [despesasLista, mesAtualKey]);
 
-  // 3. Despesas situacionais (Total em R$ de todas as despesas situacionais cadastradas)
+  // 3. Despesas situacionais (peças, manutenção, lubrificantes, outros) — sem compra nem consumo de combustível
   const totalDespesasSituacionais = useMemo(() => {
-    return dados.despesas.reduce((acc, d) => acc + (Number(d.valorTotal) || 0), 0);
-  }, [dados.despesas]);
+    return despesasLista
+      .filter(d => getTipoAcao(d).key === 'DESPESA')
+      .reduce((acc, d) => acc + num(d.valorTotal), 0);
+  }, [despesasLista]);
 
   // Filtro do Histórico de Movimentação
   const movimentacoesFiltradas = useMemo(() => {
-    return dados.despesas.filter(d => {
+    return despesasLista.filter(d => {
       const infoAcao = getTipoAcao(d);
 
       const matchBusca = 
         infoAcao.label.toLowerCase().includes(busca.toLowerCase()) ||
-        d.produto.toLowerCase().includes(busca.toLowerCase()) ||
-        d.nomeDespesa.toLowerCase().includes(busca.toLowerCase()) ||
-        d.notaFiscal.numero.toLowerCase().includes(busca.toLowerCase());
+        (d.produto || '').toLowerCase().includes(busca.toLowerCase()) ||
+        (d.nomeDespesa || '').toLowerCase().includes(busca.toLowerCase()) ||
+        (d.notaFiscal?.numero || '').toLowerCase().includes(busca.toLowerCase());
 
       const matchFiltro = 
         filtroTipoAcao === 'TODOS' ||
         infoAcao.key === filtroTipoAcao;
 
       return matchBusca && matchFiltro;
-    });
-  }, [dados.despesas, busca, filtroTipoAcao]);
+    }).sort((a, b) => compararDatas(b.data, a.data));
+  }, [despesasLista, busca, filtroTipoAcao]);
 
   // AÇÃO 1: Entrada de Litros (Compra de Combustível)
   const handleConfirmarEntradaLitros = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const qtdLitros = Number(formEntradaTanque.quantidadeLitros);
-    const precoLitro = Number(formEntradaTanque.precoLitro);
+    const qtdLitros = num(formEntradaTanque.quantidadeLitros);
+    const precoLitro = num(formEntradaTanque.precoLitro);
+    if (qtdLitros <= 0 || precoLitro <= 0) {
+      setErroFormulario('Informe a quantidade de litros e o preço por litro (maiores que zero).');
+      return;
+    }
+    const espacoLivre = Math.max(0, capacidadeTanque - totalLitrosDisponivel);
+    if (qtdLitros > espacoLivre) {
+      setErroFormulario(
+        `Compra acima da capacidade do tanque (${litros(capacidadeTanque)} L). ` +
+        `Saldo atual: ${litros(totalLitrosDisponivel)} L; cabem no máximo ${litros(espacoLivre)} L.`
+      );
+      return;
+    }
     const totalCalculado = Number((qtdLitros * precoLitro).toFixed(2));
     const numeroNF = formEntradaTanque.numeroNF.trim() || `NF-${Math.floor(10000 + Math.random() * 90000)}`;
+    const dataMov = paraISO(formEntradaTanque.data) || hojeISO();
 
     const novaEntrada: DespesaSitio = {
       id: `mov_compra_${Date.now()}`,
-      data: formEntradaTanque.data,
+      data: dataMov,
       nomeDespesa: `Compra de Combustível (${qtdLitros} L)`,
       tipo: 'COMBUSTIVEL',
       produto: formEntradaTanque.produto,
@@ -199,13 +246,13 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
       unidade: 'L',
       valorUnitario: precoLitro,
       valorTotal: totalCalculado,
-      maquinaTrator: 'Estoque Central',
-      responsavel: 'Valdecir (Mestre de Campo)',
+      maquinaTrator: 'Tanque Central do Sítio',
+      responsavel: '',
       notaFiscal: {
         numero: numeroNF,
         serie: '1',
         chaveAcesso: `4126 ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)} 0001 8855 0010 ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)} 9014`,
-        dataEmissao: `${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`,
+        dataEmissao: formatarDataBR(dataMov),
         emitente: formEntradaTanque.fornecedor,
         cnpjEmitente: formEntradaTanque.cnpjFornecedor,
         destinatario: 'Sítio Santana - Grupo ENO Agroindústria',
@@ -226,8 +273,9 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
 
     const novosDados: ControleSitioState = {
       ...dados,
-      totalLitrosDisponivel: dados.totalLitrosDisponivel + qtdLitros,
-      despesas: [novaEntrada, ...dados.despesas]
+      capacidadeTanqueLitros: capacidadeTanque,
+      totalLitrosDisponivel: totalLitrosDisponivel + qtdLitros,
+      despesas: [novaEntrada, ...despesasLista]
     };
 
     salvarControleSitio(novosDados);
@@ -240,14 +288,26 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
   const handleConfirmarAbastecerTrator = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const qtdLitros = Number(formTrator.quantidadeLitros);
-    const custoLitro = Number(formTrator.custoLitro);
+    const qtdLitros = num(formTrator.quantidadeLitros);
+    const custoLitro = num(formTrator.custoLitro);
+    if (qtdLitros <= 0) {
+      setErroFormulario('Informe a quantidade de litros abastecida (maior que zero).');
+      return;
+    }
+    if (qtdLitros > totalLitrosDisponivel) {
+      setErroFormulario(
+        `Abastecimento de ${litros(qtdLitros)} L maior que o saldo do tanque (${litros(totalLitrosDisponivel)} L). ` +
+        'Registre antes a compra de combustível.'
+      );
+      return;
+    }
     const totalCalculado = Number((qtdLitros * custoLitro).toFixed(2));
     const numeroNF = formTrator.numeroNF.trim() || `ABAST-${Math.floor(1000 + Math.random() * 9000)}`;
+    const dataMov = paraISO(formTrator.data) || hojeISO();
 
     const novoAbastecimento: DespesaSitio = {
       id: `mov_abast_${Date.now()}`,
-      data: formTrator.data,
+      data: dataMov,
       nomeDespesa: `Abastecimento de Trator (${qtdLitros} L)`,
       tipo: 'COMBUSTIVEL',
       produto: formTrator.produto,
@@ -262,9 +322,9 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
         numero: numeroNF,
         serie: '1',
         chaveAcesso: `4126 ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)} 0001 9255 0010 ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)} 8172`,
-        dataEmissao: `${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`,
-        emitente: 'Posto Rota do Agronegócio / Reserva do Sítio',
-        cnpjEmitente: '14.892.102/0001-44',
+        dataEmissao: formatarDataBR(dataMov),
+        emitente: 'Tanque Central do Sítio (consumo interno)',
+        cnpjEmitente: '',
         destinatario: 'Sítio Santana - Grupo ENO Agroindústria',
         cnpjDestinatario: '08.721.432/0001-90',
         formaPagamento: 'Retirada Direta Tanque do Sítio',
@@ -277,14 +337,15 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
             total: totalCalculado
           }
         ],
-        observacoes: `Operação agrícola no sítio. Operador: ${formTrator.responsavel}`
+        observacoes: formTrator.responsavel ? `Operação agrícola no sítio. Operador: ${formTrator.responsavel}` : 'Operação agrícola no sítio.'
       }
     };
 
     const novosDados: ControleSitioState = {
       ...dados,
-      totalLitrosDisponivel: Math.max(0, dados.totalLitrosDisponivel - qtdLitros),
-      despesas: [novoAbastecimento, ...dados.despesas]
+      capacidadeTanqueLitros: capacidadeTanque,
+      totalLitrosDisponivel: Number((totalLitrosDisponivel - qtdLitros).toFixed(2)),
+      despesas: [novoAbastecimento, ...despesasLista]
     };
 
     salvarControleSitio(novosDados);
@@ -296,14 +357,19 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
   const handleConfirmarDespesaSituacional = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const qtd = Number(formSituacional.quantidade);
-    const vlrUnit = Number(formSituacional.valorUnitario);
+    const qtd = num(formSituacional.quantidade);
+    const vlrUnit = num(formSituacional.valorUnitario);
+    if (qtd <= 0 || vlrUnit <= 0) {
+      setErroFormulario('Informe quantidade e valor unitário maiores que zero.');
+      return;
+    }
     const totalCalculado = Number((qtd * vlrUnit).toFixed(2));
     const numeroNF = formSituacional.numeroNF.trim() || `NF-${Math.floor(10000 + Math.random() * 90000)}`;
+    const dataMov = paraISO(formSituacional.data) || hojeISO();
 
     const novaDespesa: DespesaSitio = {
       id: `mov_desp_${Date.now()}`,
-      data: formSituacional.data,
+      data: dataMov,
       nomeDespesa: formSituacional.nomeDespesa || formSituacional.produto,
       tipo: formSituacional.tipo,
       produto: formSituacional.produto,
@@ -317,7 +383,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
         numero: numeroNF,
         serie: '1',
         chaveAcesso: `4126 ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)} 0001 8855 0020 ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)} 2011`,
-        dataEmissao: `${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`,
+        dataEmissao: formatarDataBR(dataMov),
         emitente: formSituacional.fornecedor,
         cnpjEmitente: formSituacional.cnpjFornecedor,
         destinatario: 'Sítio Santana - Grupo ENO Agroindústria',
@@ -338,22 +404,13 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
 
     const novosDados: ControleSitioState = {
       ...dados,
-      despesas: [novaDespesa, ...dados.despesas]
+      despesas: [novaDespesa, ...despesasLista]
     };
 
     salvarControleSitio(novosDados);
     setDados(novosDados);
     integrarDespesaSitioAoFinanceiro(novaDespesa);
     setModalDespesaSituacional(false);
-  };
-
-  const formatarDataBR = (dataIso: string) => {
-    if (!dataIso) return '-';
-    const partes = dataIso.split('-');
-    if (partes.length === 3) {
-      return `${partes[2]}/${partes[1]}/${partes[0]}`;
-    }
-    return dataIso;
   };
 
   return (
@@ -410,7 +467,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                   Total de Litros Disponível
                 </h3>
                 <div className="mt-1 text-xs text-slate-500 font-semibold">
-                  Total comprado: <strong className="text-emerald-800">R$ {totalCombustivelCompradoValor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                  Total comprado: <strong className="text-emerald-800">{moeda(totalCombustivelCompradoValor)}</strong>
                 </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
@@ -421,7 +478,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
             <div className="my-4">
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-                  {totalLitrosDisponivel.toLocaleString('pt-BR')}
+                  {litros(totalLitrosDisponivel)}
                 </span>
                 <span className="text-lg font-bold text-emerald-700">Litros</span>
               </div>
@@ -465,7 +522,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
             <div className="my-4">
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-                  {litrosUsadosNoMes.toLocaleString('pt-BR')}
+                  {litros(litrosUsadosNoMes)}
                 </span>
                 <span className="text-lg font-bold text-blue-600">Litros</span>
               </div>
@@ -509,7 +566,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
             <div className="my-4">
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-                  R$ {totalDespesasSituacionais.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {moeda(totalDespesasSituacionais)}
                 </span>
               </div>
             </div>
@@ -661,7 +718,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                         {/* 6. Valor Total */}
                         <td className="py-3.5 px-4 text-right whitespace-nowrap">
                           <span className="font-black text-slate-900 text-sm">
-                            R$ {mov.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {moeda(mov.valorTotal)}
                           </span>
                         </td>
 
@@ -698,7 +755,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
             </span>
             <div className="flex items-center gap-3">
               <span className="font-medium text-slate-700">
-                Total do Período: <strong>R$ {movimentacoesFiltradas.reduce((a, b) => a + b.valorTotal, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                Total do Período: <strong>{moeda(movimentacoesFiltradas.reduce((a, b) => a + num(b.valorTotal), 0))}</strong>
               </span>
             </div>
           </div>
@@ -774,7 +831,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                       step="any"
                       min="1"
                       required
-                      value={formEntradaTanque.quantidadeLitros}
+                      value={formEntradaTanque.quantidadeLitros || ''}
                       onChange={e => {
                         const qtd = Number(e.target.value);
                         setFormEntradaTanque(prev => ({
@@ -796,7 +853,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                     step="0.01"
                     min="0.01"
                     required
-                    value={formEntradaTanque.precoLitro}
+                    value={formEntradaTanque.precoLitro || ''}
                     onChange={e => {
                       const preco = Number(e.target.value);
                       setFormEntradaTanque(prev => ({
@@ -817,13 +874,16 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                     Valor Total da Compra (R$)
                   </span>
                   <div className="text-xl font-black text-emerald-950">
-                    R$ {(formEntradaTanque.quantidadeLitros * formEntradaTanque.precoLitro).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {moeda(num(formEntradaTanque.quantidadeLitros) * num(formEntradaTanque.precoLitro))}
                   </div>
                 </div>
                 <div className="text-right">
                   <span className="text-[11px] text-emerald-700 font-bold">Novo Saldo Disponível:</span>
                   <div className="text-sm font-black text-emerald-900">
-                    + {formEntradaTanque.quantidadeLitros} L = {(dados.totalLitrosDisponivel + Number(formEntradaTanque.quantidadeLitros)).toLocaleString('pt-BR')} L
+                    + {litros(formEntradaTanque.quantidadeLitros)} L = {litros(totalLitrosDisponivel + num(formEntradaTanque.quantidadeLitros))} L
+                    <span className="block text-[10px] font-semibold text-emerald-700">
+                      Capacidade: {litros(capacidadeTanque)} L · cabem {litros(Math.max(0, capacidadeTanque - totalLitrosDisponivel))} L
+                    </span>
                   </div>
                 </div>
               </div>
@@ -857,6 +917,13 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                   </div>
                 </div>
               </div>
+
+              {erroFormulario && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 font-bold flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{erroFormulario}</span>
+                </div>
+              )}
 
               <div className="pt-2 flex justify-end gap-2">
                 <button
@@ -946,7 +1013,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                       step="any"
                       min="1"
                       required
-                      value={formTrator.quantidadeLitros}
+                      value={formTrator.quantidadeLitros || ''}
                       onChange={e => setFormTrator({ ...formTrator, quantidadeLitros: Number(e.target.value) })}
                       className="w-full pl-3 pr-8 py-2 border rounded-xl border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600 text-sm"
                     />
@@ -961,7 +1028,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                     step="0.01"
                     min="0.01"
                     required
-                    value={formTrator.custoLitro}
+                    value={formTrator.custoLitro || ''}
                     onChange={e => setFormTrator({ ...formTrator, custoLitro: Number(e.target.value) })}
                     className="w-full px-3 py-2 border rounded-xl border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
                   />
@@ -985,15 +1052,24 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
               <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-blue-950 flex items-center justify-between">
                 <div>
                   <span className="text-[11px] font-bold text-blue-800">Saldo Atual Tanque:</span>
-                  <div className="font-bold">{totalLitrosDisponivel} L</div>
+                  <div className="font-bold">{litros(totalLitrosDisponivel)} L</div>
                 </div>
                 <div className="text-right">
                   <span className="text-[11px] font-bold text-blue-800">Após Abastecer:</span>
                   <div className="text-sm font-black text-blue-900">
-                    {Math.max(0, totalLitrosDisponivel - Number(formTrator.quantidadeLitros))} L restantes
+                    {totalLitrosDisponivel - num(formTrator.quantidadeLitros) < 0
+                      ? <span className="text-red-700">Saldo insuficiente</span>
+                      : <>{litros(totalLitrosDisponivel - num(formTrator.quantidadeLitros))} L restantes</>}
                   </div>
                 </div>
               </div>
+
+              {erroFormulario && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 font-bold flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{erroFormulario}</span>
+                </div>
+              )}
 
               <div className="pt-2 flex justify-end gap-2">
                 <button
@@ -1114,7 +1190,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                     type="number"
                     step="0.01"
                     required
-                    value={formSituacional.valorUnitario}
+                    value={formSituacional.valorUnitario || ''}
                     onChange={e => {
                       const vu = Number(e.target.value);
                       setFormSituacional(prev => ({
@@ -1159,6 +1235,13 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                   />
                 </div>
               </div>
+
+              {erroFormulario && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 font-bold flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{erroFormulario}</span>
+                </div>
+              )}
 
               <div className="pt-2 flex justify-end gap-2">
                 <button
@@ -1304,7 +1387,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                             R$ {item.precoUnitario.toFixed(2)}
                           </td>
                           <td className="py-3 px-3 text-right font-black text-slate-900">
-                            R$ {item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {moeda(item.total)}
                           </td>
                         </tr>
                       ))}
@@ -1326,7 +1409,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
                 <div className="border border-emerald-300 rounded-xl p-3.5 bg-emerald-50 flex flex-col justify-between">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">VALOR TOTAL DA NOTA</span>
                   <div className="text-2xl font-black text-emerald-950 mt-1">
-                    R$ {notaSelecionada.despesa.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {moeda(notaSelecionada.despesa.valorTotal)}
                   </div>
                   <span className="text-[10px] text-emerald-700 mt-0.5">Comprovante válido e auditado</span>
                 </div>

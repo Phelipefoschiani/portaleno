@@ -16,8 +16,14 @@ import {
 import {
   TituloPagar,
   carregarTitulosPagar,
-  salvarTitulosPagar
+  salvarTitulosPagar,
+  statusEfetivoPagar,
+  dataNoMesAtual,
+  somarValores,
+  formatarMoeda,
+  registrarBaixaNoCaixa
 } from '../../data/financeiroData';
+import { hojeISO, somarDias, paraISO, formatarDataBR, compararDatas } from '../../lib/datas';
 import { FinanceiroNavTabs } from './FinanceiroNavTabs';
 
 interface Props {
@@ -37,16 +43,20 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
     favorecido_nome: '',
     tipo_favorecido: 'Agricultor' as TituloPagar['tipo_favorecido'],
     categoria: 'Mandioca / Matéria-Prima' as TituloPagar['categoria'],
-    valor: 15000,
-    data_emissao: new Date().toLocaleDateString('pt-BR'),
+    valor: 0,
+    data_emissao: hojeISO(),
     data_vencimento: '',
     forma_pagamento: 'PIX',
     chave_pix: '',
     observacoes: ''
   });
 
+  // Status VENCIDO é calculado na exibição (não pago + vencimento anterior a hoje)
   const recarregar = () => {
-    setTitulos(carregarTitulosPagar());
+    const lista = carregarTitulosPagar()
+      .map(t => ({ ...t, status: statusEfetivoPagar(t) }))
+      .sort((a, b) => compararDatas(a.data_vencimento, b.data_vencimento));
+    setTitulos(lista);
   };
 
   useEffect(() => {
@@ -57,19 +67,24 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
   }, []);
 
   const metricas = useMemo(() => {
-    const aPagar = titulos.filter(t => t.status === 'A_PAGAR').reduce((acc, t) => acc + t.valor, 0);
-    const pagoMes = titulos.filter(t => t.status === 'PAGO').reduce((acc, t) => acc + t.valor, 0);
-    const qtdAPagar = titulos.filter(t => t.status === 'A_PAGAR').length;
+    const pendentes = titulos.filter(t => t.status !== 'PAGO');
+    const aPagar = somarValores(pendentes, t => t.valor);
+    const pagoMes = somarValores(
+      titulos.filter(t => t.status === 'PAGO' && dataNoMesAtual(t.data_pagamento)),
+      t => t.valor
+    );
+    const qtdAPagar = pendentes.length;
+    const qtdVencidos = titulos.filter(t => t.status === 'VENCIDO').length;
 
-    return { aPagar, pagoMes, qtdAPagar };
+    return { aPagar, pagoMes, qtdAPagar, qtdVencidos };
   }, [titulos]);
 
   const titulosFiltrados = useMemo(() => {
     return titulos.filter(t => {
       const match =
-        t.favorecido_nome.toLowerCase().includes(busca.toLowerCase()) ||
-        t.numero_documento.toLowerCase().includes(busca.toLowerCase()) ||
-        t.categoria.toLowerCase().includes(busca.toLowerCase());
+        (t.favorecido_nome || '').toLowerCase().includes(busca.toLowerCase()) ||
+        (t.numero_documento || '').toLowerCase().includes(busca.toLowerCase()) ||
+        (t.categoria || '').toLowerCase().includes(busca.toLowerCase());
 
       if (!match) return false;
       if (filtroStatus !== 'TODOS' && t.status !== filtroStatus) return false;
@@ -79,17 +94,16 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
 
   const handlePagarTitulo = (id: string, doc: string) => {
     if (confirm(`Confirmar liquidação do pagamento ${doc}?`)) {
-      const atualizados: TituloPagar[] = titulos.map(t => {
-        if (t.id === id) {
-          return {
-            ...t,
-            status: 'PAGO' as const,
-            data_pagamento: new Date().toLocaleDateString('pt-BR')
-          };
-        }
-        return t;
-      });
+      // Atualiza a partir do armazenamento (sem gravar o status calculado de exibição)
+      const armazenados = carregarTitulosPagar();
+      const alvo = armazenados.find(t => t.id === id);
+      if (!alvo || alvo.status === 'PAGO') return;
+      const atualizados: TituloPagar[] = armazenados.map(t =>
+        t.id === id ? { ...t, status: 'PAGO' as const, data_pagamento: hojeISO() } : t
+      );
       salvarTitulosPagar(atualizados);
+      // Saída do caixa (uma única vez por título)
+      registrarBaixaNoCaixa(`pagar:${id}`, -alvo.valor);
     }
   };
 
@@ -101,12 +115,18 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
 
   const handleSalvarNovo = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!(formData.valor > 0)) {
+      alert('Informe um valor maior que zero.');
+      return;
+    }
     const novo: TituloPagar = {
       id: `pag_${Date.now()}`,
       ...formData,
+      data_emissao: paraISO(formData.data_emissao) || hojeISO(),
+      data_vencimento: paraISO(formData.data_vencimento),
       status: 'A_PAGAR'
     };
-    salvarTitulosPagar([novo, ...titulos]);
+    salvarTitulosPagar([novo, ...carregarTitulosPagar()]);
     setModalNovo(false);
   };
 
@@ -125,21 +145,24 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
               <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
                 {metricas.qtdAPagar} pendentes
               </span>
+              {metricas.qtdVencidos > 0 && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-red-50 text-red-700 font-mono">
+                  {metricas.qtdVencidos} vencidos
+                </span>
+              )}
             </h1>
           </div>
 
           <button
             onClick={() => {
-              const d = new Date();
-              d.setDate(d.getDate() + 7);
               setFormData({
                 numero_documento: `PAG-${Math.floor(1000 + Math.random() * 9000)}`,
                 favorecido_nome: '',
                 tipo_favorecido: 'Agricultor',
                 categoria: 'Mandioca / Matéria-Prima',
-                valor: 12000,
-                data_emissao: new Date().toLocaleDateString('pt-BR'),
-                data_vencimento: d.toLocaleDateString('pt-BR'),
+                valor: 0,
+                data_emissao: hojeISO(),
+                data_vencimento: somarDias(hojeISO(), 7),
                 forma_pagamento: 'PIX',
                 chave_pix: '',
                 observacoes: ''
@@ -162,14 +185,14 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
           <div className="flex items-center gap-2">
             <span className="text-slate-400 font-medium">Total a Liquidar:</span>
             <span className="font-mono font-bold text-slate-900 text-sm">
-              {metricas.aPagar.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              {formatarMoeda(metricas.aPagar)}
             </span>
           </div>
           <div className="w-px h-4 bg-slate-200 hidden sm:block" />
           <div className="flex items-center gap-2">
             <span className="text-slate-400 font-medium">Pago no Mês:</span>
             <span className="font-mono font-bold text-emerald-700">
-              {metricas.pagoMes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              {formatarMoeda(metricas.pagoMes)}
             </span>
           </div>
         </div>
@@ -195,6 +218,7 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
         >
           <option value="TODOS">Todos os Status</option>
           <option value="A_PAGAR">A Pagar</option>
+          <option value="VENCIDO">Vencidos</option>
           <option value="PAGO">Pagos / Liquidados</option>
         </select>
       </div>
@@ -250,12 +274,12 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
                       </td>
 
                       <td className="py-3.5 px-4 font-mono">
-                        <div className="font-bold text-slate-800">{item.data_vencimento}</div>
-                        <div className="text-[10px] text-slate-400 font-sans">Emitido em {item.data_emissao}</div>
+                        <div className="font-bold text-slate-800">{formatarDataBR(item.data_vencimento)}</div>
+                        <div className="text-[10px] text-slate-400 font-sans">Emitido em {formatarDataBR(item.data_emissao)}</div>
                       </td>
 
                       <td className="py-3.5 px-4 font-mono font-bold text-slate-900 text-sm">
-                        {item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {formatarMoeda(item.valor)}
                       </td>
 
                       <td className="py-3.5 px-4">
@@ -263,6 +287,11 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
                           <div className="flex items-center gap-1.5 text-emerald-700">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
                             <span className="font-medium">Pago</span>
+                          </div>
+                        ) : item.status === 'VENCIDO' ? (
+                          <div className="flex items-center gap-1.5 text-red-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
+                            <span className="font-medium">Vencido</span>
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5 text-amber-700">
@@ -273,7 +302,7 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
                       </td>
 
                       <td className="py-3.5 px-5 text-right">
-                        {item.status === 'A_PAGAR' ? (
+                        {item.status !== 'PAGO' ? (
                           <button
                             onClick={() => handlePagarTitulo(item.id, item.numero_documento)}
                             className="
@@ -288,7 +317,7 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
                           </button>
                         ) : (
                           <span className="text-[11px] text-slate-400 font-mono">
-                            Pago em {item.data_pagamento}
+                            Pago em {formatarDataBR(item.data_pagamento)}
                           </span>
                         )}
                       </td>
@@ -339,9 +368,9 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
                   <input
                     type="number"
                     step="0.01"
-                    min="1"
+                    min="0.01"
                     required
-                    value={formData.valor}
+                    value={formData.valor || ''}
                     onChange={(e) => setFormData({ ...formData, valor: parseFloat(e.target.value) || 0 })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
                   />
@@ -378,11 +407,10 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Data de Vencimento</label>
                   <input
-                    type="text"
+                    type="date"
                     required
-                    value={formData.data_vencimento}
+                    value={paraISO(formData.data_vencimento)}
                     onChange={(e) => setFormData({ ...formData, data_vencimento: e.target.value })}
-                    placeholder="DD/MM/AAAA"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
                   />
                 </div>

@@ -5,6 +5,7 @@
 import { carregarEstoqueProdutos, ProdutoEstoque } from './produtosData';
 import { integrarConclusaoProducao, integrarFaturamentoPedidoVenda } from './pipelineIntegrado';
 import { obterClientesParaVenda, ClienteLookup } from './clientesData';
+import { hojeISO, paraISO } from '../lib/datas';
 
 export type EtapaPedidoVenda = 
   | 'ORCAMENTO' 
@@ -115,9 +116,67 @@ export interface PedidoVenda {
   origem: 'Venda Direta' | 'RCA' | 'Portal Portfólio VIP' | 'Sugestão Reposição';
   subtipo_venda?: 'Orçamento' | 'Pedido Sugestivo' | 'Pedido';
   modo_exibicao_padrao?: 'FARDO' | 'UNITARIO';
+  tabela_id?: string;
+  tabela_nome?: string;
+  // Controles de integração (evitam lançar estoque/financeiro duas vezes)
+  producao_integrada?: boolean;
+  faturamento_integrado?: boolean;
 }
 
-export const PRODUTOS_VENDA_DISPONIVEIS: any[] = [];
+// ============================================================
+// CONVERSÃO FARDO/CAIXA <-> PACOTE
+// item.quantidade está na embalagem de venda (fardo/caixa/saco); estoque_atual_sacos conta PACOTES.
+// ============================================================
+
+// Quantos pacotes vão em cada embalagem de venda do item (1 para saco/avulso)
+export function unidadesPorEmbalagemItem(item: Pick<ItemPedidoVenda, 'unidades_por_fardo'>): number {
+  const f = Number(item.unidades_por_fardo);
+  return f > 0 ? f : 1;
+}
+
+// Pacotes correspondentes a uma quantidade de embalagens do item
+export function pacotesDoItem(item: Pick<ItemPedidoVenda, 'quantidade' | 'unidades_por_fardo'>, quantidadeEmbalagens: number = item.quantidade): number {
+  return (Number(quantidadeEmbalagens) || 0) * unidadesPorEmbalagemItem(item);
+}
+
+// Peso (kg) correspondente a uma quantidade de embalagens do item
+export function pesoDoItemKg(
+  item: Pick<ItemPedidoVenda, 'quantidade' | 'unidades_por_fardo' | 'peso_unitario_kg'>,
+  quantidadeEmbalagens: number = item.quantidade
+): number {
+  return pacotesDoItem(item, quantidadeEmbalagens) * (Number(item.peso_unitario_kg) || 0);
+}
+
+// Limpa todo o estado de produção, faturamento e entrega (usado ao repetir pedido / voltar para orçamento)
+export function limparEstadoProducaoFaturamento(pedido: PedidoVenda): PedidoVenda {
+  return {
+    ...pedido,
+    data_inicio_producao: undefined,
+    data_conclusao_producao: undefined,
+    data_faturamento: undefined,
+    data_entrega_realizada: undefined,
+    lote_producao: undefined,
+    data_fabricacao: undefined,
+    data_vencimento: undefined,
+    apontamentos_producao: [],
+    quantidade_produzida_acumulada_kg: 0,
+    valor_faturado: undefined,
+    saldo_a_faturar: undefined,
+    transportadora: undefined,
+    placa_veiculo: undefined,
+    motorista_nome: undefined,
+    programacao_entrega: undefined,
+    nota_fiscal: undefined,
+    producao_integrada: undefined,
+    faturamento_integrado: undefined,
+    itens: pedido.itens.map(it => ({
+      ...it,
+      quantidade_produzida: undefined,
+      lote_producao: undefined
+    }))
+  };
+}
+
 
 // Carrega os produtos de venda dinamicamente a partir do estoque e custos configurados
 export function obterProdutosVendaDisponiveis() {
@@ -156,28 +215,15 @@ export function obterProdutosVendaDisponiveis() {
       // Fallback
     }
   }
-  return PRODUTOS_VENDA_DISPONIVEIS;
+  return [];
 }
 
-// Carrega os clientes dinamicamente a partir do store compartilhado
+// Carrega os clientes dinamicamente a partir do store compartilhado (Cadastro de Clientes)
 export function obterClientesDisponiveis(): ClienteLookup[] {
-  if (typeof window !== 'undefined') {
-    const clientes = obterClientesParaVenda();
-    if (clientes.length > 0) return clientes;
-    const modoLimpo = localStorage.getItem('grupo_eno_modo_limpo_v1') === 'true';
-    if (modoLimpo) return [];
-  }
-  return CLIENTES_LOOKUP;
+  if (typeof window === 'undefined') return [];
+  return obterClientesParaVenda();
 }
 
-export const CLIENTES_LOOKUP: any[] = [];
-
-export const RCAS_LOOKUP = [
-  { id: 'rca_001', nome: 'Marcos Vinicius Silveira', regiao: 'SP Interior / Campinas' },
-  { id: 'rca_002', nome: 'Aline de Cássia Nogueira', regiao: 'Grande SP e Litoral' },
-  { id: 'rca_003', nome: 'Ricardo Antunes Fagundes', regiao: 'Norte do Paraná / MG' },
-  { id: 'rca_004', nome: 'Diretoria Comercial Grupo ENO', regiao: 'Contas Nacionais / Grandes Indústrias' }
-];
 
 export const PEDIDOS_VENDA_INICIAIS: PedidoVenda[] = [];
 
@@ -220,15 +266,22 @@ export function moverPedidoEtapa(
   dadosExtras?: Partial<PedidoVenda>
 ): PedidoVenda[] {
   const atuais = carregarPedidosVenda();
-  const dataHoje = new Date().toISOString().split('T')[0];
+  const dataHoje = hojeISO();
 
   const atualizados = atuais.map(p => {
     if (p.id === pedidoId) {
+      // Saindo de orçamento para produção: nenhum resquício de produção/faturamento anterior
+      const base = p.etapa === 'ORCAMENTO' && novaEtapa === 'EM_PRODUCAO' ? limparEstadoProducaoFaturamento(p) : p;
       const updated: PedidoVenda = {
-        ...p,
+        ...base,
         etapa: novaEtapa,
         ...dadosExtras
       };
+      // Datas sempre gravadas como AAAA-MM-DD
+      if (updated.data_faturamento) updated.data_faturamento = paraISO(updated.data_faturamento) || dataHoje;
+      if (updated.nota_fiscal?.data_emissao) {
+        updated.nota_fiscal = { ...updated.nota_fiscal, data_emissao: paraISO(updated.nota_fiscal.data_emissao) || dataHoje };
+      }
 
       if (novaEtapa === 'EM_PRODUCAO') {
         updated.tipo = 'PEDIDO_VENDA';
@@ -245,30 +298,35 @@ export function moverPedidoEtapa(
         if (!updated.data_conclusao_producao) updated.data_conclusao_producao = dataHoje;
         // Integração: baixa matérias-primas e alimenta estoque de produto acabado
         try {
-          integrarConclusaoProducao(updated);
+          if (!updated.producao_integrada) {
+            integrarConclusaoProducao(updated);
+            updated.producao_integrada = true;
+          }
         } catch (e) {
           console.error('Erro na integração de produção:', e);
         }
       } else if (novaEtapa === 'FATURADO') {
         if (!updated.data_faturamento) updated.data_faturamento = dataHoje;
         if (!updated.nota_fiscal) {
-          const numNf = Math.floor(4890 + Math.random() * 50);
           updated.nota_fiscal = {
-            numero: `00${numNf}`,
+            numero: updated.numero_pedido.replace(/\D/g, ''),
             serie: '1',
-            chave_acesso: `412603${p.cliente_cnpj_cpf.replace(/\D/g, '').padEnd(14, '0')}5500100000${numNf}10${numNf}9944`,
-            data_emissao: `${dataHoje.split('-').reverse().join('/')} 10:30`
+            chave_acesso: '',
+            data_emissao: updated.data_faturamento
           };
         }
         // Integração: baixa estoque de produto vendido, gera Título a Receber e NF-e de Saída
         try {
-          integrarFaturamentoPedidoVenda(updated);
+          if (!updated.faturamento_integrado) {
+            integrarFaturamentoPedidoVenda(updated);
+            updated.faturamento_integrado = true;
+          }
         } catch (e) {
           console.error('Erro na integração de faturamento:', e);
         }
       } else if (novaEtapa === 'ENTREGUE') {
         if (!updated.data_entrega_realizada) {
-          updated.data_entrega_realizada = `${dataHoje.split('-').reverse().join('/')} ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+          updated.data_entrega_realizada = `${dataHoje} ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
         }
       }
 

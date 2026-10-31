@@ -2,6 +2,7 @@
 // Unifica o armazenamento e persistência dos clientes entre o Cadastro de Clientes e as Vendas/Pedidos
 
 import { isModoLimpoAtivo } from './sistemaReset';
+import { carregarRcas } from './cadastrosData';
 
 export interface Cliente {
   id: string;
@@ -77,16 +78,23 @@ export function salvarClientes(clientes: Cliente[]): void {
 
 export function obterClientesParaVenda(): ClienteLookup[] {
   const lista = carregarClientes();
-  return lista.map(c => ({
-    id: c.id,
-    nome: c.razao_nome || c.fantasia || 'Cliente Sem Nome',
-    cnpj: c.cpf_cnpj || 'Não informado',
-    cidade_uf: c.endereco ? `${c.endereco.municipio}/${c.endereco.uf}` : 'Local não informado',
-    limite_credito: 100000,
-    status_credito: 'Liberado' as const,
-    rca_id: c.vendedor_id || 'rca_001',
-    rca_nome: c.vendedor_nome || 'Diretoria Comercial',
-    comissao: 2.5,
-    prazo: c.prazo_pagamento_nome || 'À Vista'
-  }));
+  const rcas = carregarRcas();
+  return lista.map(c => {
+    // Vínculo com o id real do RCA cadastrado (Cadastro de RCA); sem RCA fica vazio
+    const rca = c.vendedor_id ? rcas.find(r => r.id === c.vendedor_id) : undefined;
+    const regraCliente = rca?.comissoes_por_cliente?.find(r => r.cliente_id === c.id);
+    return {
+      id: c.id,
+      nome: c.razao_nome || c.fantasia || 'Cliente Sem Nome',
+      cnpj: c.cpf_cnpj || 'Não informado',
+      cidade_uf: c.endereco ? `${c.endereco.municipio}/${c.endereco.uf}` : 'Local não informado',
+      // Sem limite de crédito cadastrado: não inventar valor
+      limite_credito: undefined,
+      status_credito: 'Liberado' as const,
+      rca_id: rca?.id || '',
+      rca_nome: rca ? (rca.nome_fantasia || rca.nome_completo) : '',
+      comissao: rca ? Number(regraCliente?.percentual ?? rca.comissao_padrao_percentual) || 0 : undefined,
+      prazo: c.prazo_pagamento_nome || 'À Vista'
+    };
+  });
 }

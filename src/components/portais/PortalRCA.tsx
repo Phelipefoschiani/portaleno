@@ -24,138 +24,86 @@ import {
 } from 'lucide-react';
 import {
   RCA,
-  ClienteVinculado,
-  CLIENTES_DISPONIVEIS,
-  VendaComissaoRCA
-} from '../cadastros/CadastroRCA';
-
-// Mock de vendas e comissões do RCA
-const VENDAS_RCA_MOCK: VendaComissaoRCA[] = [
-  {
-    id: 'vc_01',
-    rca_id: 'rca_001',
-    numero_pedido: 'PED-2026-0089',
-    cliente_id: 'cli_001',
-    cliente_nome: 'Supermercados Alvorada Ltda',
-    cliente_cidade: 'Mogi Guaçu/SP',
-    grupo_produto_nome: 'Goma de Tapioca Hidratada',
-    tipo_regra_aplicada: 'Por Grupo',
-    data: '08/03/2026',
-    mes_referencia: 'Mar/26',
-    valor_faturado: 24800.00,
-    percentual_comissao: 4.5,
-    valor_comissao: 1116.00,
-    status_comissao: 'Pago (PIX)',
-    data_pagamento_pix: '15/03/2026'
-  },
-  {
-    id: 'vc_02',
-    rca_id: 'rca_001',
-    numero_pedido: 'PED-2026-0074',
-    cliente_id: 'cli_002',
-    cliente_nome: 'Distribuidora de Alimentos Vale Verde S.A.',
-    cliente_cidade: 'Cotia/SP',
-    grupo_produto_nome: 'Fécula de Mandioca Nativa Industrial',
-    tipo_regra_aplicada: 'Por Cliente',
-    data: '01/03/2026',
-    mes_referencia: 'Mar/26',
-    valor_faturado: 42000.00,
-    percentual_comissao: 3.0,
-    valor_comissao: 1260.00,
-    status_comissao: 'Pago (PIX)',
-    data_pagamento_pix: '15/03/2026'
-  },
-  {
-    id: 'vc_03',
-    rca_id: 'rca_001',
-    numero_pedido: 'PED-1048',
-    cliente_id: 'cli_004',
-    cliente_nome: 'Atacadão de Alimentos Jacarezinho Ltda',
-    cliente_cidade: 'Jacarezinho/PR',
-    grupo_produto_nome: 'Fécula Modificada Catiônica',
-    tipo_regra_aplicada: 'Por Cliente',
-    data: '10/03/2026',
-    mes_referencia: 'Mar/26',
-    valor_faturado: 48500.00,
-    percentual_comissao: 2.5,
-    valor_comissao: 1212.50,
-    status_comissao: 'Liberado'
-  },
-  {
-    id: 'vc_04',
-    rca_id: 'rca_001',
-    numero_pedido: 'PED-1052',
-    cliente_id: 'cli_006',
-    cliente_nome: 'Rede Muffato & Cia Londrina',
-    cliente_cidade: 'Londrina/PR',
-    grupo_produto_nome: 'Polvilho Azedo Especial',
-    tipo_regra_aplicada: 'Taxa Geral',
-    data: '08/03/2026',
-    mes_referencia: 'Mar/26',
-    valor_faturado: 92000.00,
-    percentual_comissao: 3.5,
-    valor_comissao: 3220.00,
-    status_comissao: 'Liberado'
-  },
-  {
-    id: 'vc_05',
-    rca_id: 'rca_001',
-    numero_pedido: 'PED-1039',
-    cliente_id: 'cli_005',
-    cliente_nome: 'Supermercado Central de Cambará Eireli',
-    cliente_cidade: 'Cambará/PR',
-    grupo_produto_nome: 'Farinha de Mandioca Torrada Biju',
-    tipo_regra_aplicada: 'Taxa Geral',
-    data: '05/03/2026',
-    mes_referencia: 'Mar/26',
-    valor_faturado: 32000.00,
-    percentual_comissao: 3.5,
-    valor_comissao: 1120.00,
-    status_comissao: 'Pendente'
-  }
-];
+  carregarRcas,
+  carregarVendasRca,
+  montarClientesVinculados,
+  montarVendasComissaoRca,
+  EVENTO_CADASTROS_ATUALIZADOS,
+} from '../../data/cadastrosData';
+import { carregarClientes } from '../../data/clientesData';
+import { carregarPedidosVenda } from '../../data/pedidosVendaData';
+import { formatarDataBR } from '../../lib/datas';
 
 interface PortalRCAProps {
   onVoltar: () => void;
-  rcaIdInicial?: string;
+  /** id do RCA vinculado ao usuário logado (sessão) */
+  rcaId?: string | null;
+  /** ADMIN pode escolher qual RCA visualizar */
+  permitirSelecaoAdmin?: boolean;
 }
 
-export function PortalRCA({ onVoltar, rcaIdInicial }: PortalRCAProps) {
+export function PortalRCA({ onVoltar, rcaId, permitirSelecaoAdmin = false }: PortalRCAProps) {
   const [abaAtiva, setAbaAtiva] = useState<'carteira' | 'comissoes' | 'tabela_precos'>('carteira');
   const [buscaCliente, setBuscaCliente] = useState('');
   const [filtroMes, setFiltroMes] = useState('TODOS');
 
-  // Representante logado (Marcos Silva)
-  const rcaLogado = {
-    nome: 'Marcos Silva Representações Comerciais Ltda',
-    codigo: 'RCA-001',
-    regiao: 'Norte Pioneiro / PR e Vale do Paranapanema / SP',
-    chave_pix: '38.452.910/0001-82 (CNPJ)',
-    tabela_padrao: 'Tabela Padrão (Distribuição)',
-    comissao_base: '3.5%'
-  };
+  // Recarrega quando cadastros, clientes ou pedidos mudarem
+  const [versao, setVersao] = useState(0);
+  React.useEffect(() => {
+    const h = () => setVersao(v => v + 1);
+    const eventos = [EVENTO_CADASTROS_ATUALIZADOS, 'clientes_updated', 'pedidos_venda_updated', 'sistema_reset_updated'];
+    eventos.forEach(ev => window.addEventListener(ev, h));
+    return () => eventos.forEach(ev => window.removeEventListener(ev, h));
+  }, []);
 
-  // Clientes da carteira deste RCA
+  const rcas = useMemo(() => carregarRcas(), [versao]);
+  const [rcaSelecionadoAdmin, setRcaSelecionadoAdmin] = useState<string>(rcaId || '');
+  const rcaIdEfetivo = permitirSelecaoAdmin ? (rcaSelecionadoAdmin || rcaId || '') : (rcaId || '');
+
+  // Representante logado: SEMPRE o RCA vinculado ao usuário da sessão
+  const rca: RCA | undefined = useMemo(() => rcas.find(r => r.id === rcaIdEfetivo), [rcas, rcaIdEfetivo]);
+
+  const rcaLogado = rca ? {
+    nome: rca.nome_fantasia || rca.nome_completo,
+    codigo: rca.codigo_rca,
+    regiao: rca.regiao_atuacao || '-',
+    chave_pix: rca.chave_pix ? `${rca.chave_pix} (${rca.tipo_chave_pix})` : 'Não cadastrada',
+    tabela_padrao: rca.tabela_preco_padrao_nome || '-',
+    comissao_base: `${Number(rca.comissao_padrao_percentual) || 0}%`
+  } : null;
+
+  const pedidosVenda = useMemo(() => carregarPedidosVenda(), [versao]);
+
+  // Somente os clientes cujo vendedor_id é o id deste RCA
+  const clientesDoRca = useMemo(() => {
+    if (!rca) return [];
+    return montarClientesVinculados(carregarClientes().filter(c => c.vendedor_id === rca.id), pedidosVenda);
+  }, [rca, pedidosVenda, versao]);
+
   const clientesCarteira = useMemo(() => {
-    return CLIENTES_DISPONIVEIS.filter(c => {
-      const matchBusca =
-        !buscaCliente ||
-        c.razao_social.toLowerCase().includes(buscaCliente.toLowerCase()) ||
-        (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(buscaCliente.toLowerCase())) ||
-        c.municipio.toLowerCase().includes(buscaCliente.toLowerCase());
-      return matchBusca;
-    });
-  }, [buscaCliente]);
+    const termo = buscaCliente.toLowerCase();
+    return clientesDoRca.filter(c =>
+      !buscaCliente ||
+      c.razao_social.toLowerCase().includes(termo) ||
+      (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(termo)) ||
+      c.municipio.toLowerCase().includes(termo)
+    );
+  }, [clientesDoRca, buscaCliente]);
 
-  // Vendas filtradas
+  // Somente vendas/comissões deste RCA
+  const vendasDoRca = useMemo(() => {
+    if (!rca) return [];
+    return montarVendasComissaoRca(pedidosVenda, carregarVendasRca()).filter(v => v.rca_id === rca.id);
+  }, [rca, pedidosVenda, versao]);
+
+  const mesesDisponiveis = useMemo(
+    () => Array.from(new Set(vendasDoRca.map(v => v.mes_referencia).filter(Boolean))),
+    [vendasDoRca]
+  );
+
   const vendasFiltradas = useMemo(() => {
-    const modoLimpo = typeof window !== 'undefined' && localStorage.getItem('grupo_eno_modo_limpo_v1') === 'true';
-    if (modoLimpo) return [];
-    return VENDAS_RCA_MOCK.filter(v => {
-      if (filtroMes === 'TODOS') return true;
-      return v.mes_referencia.toLowerCase().includes(filtroMes.toLowerCase());
-    });
-  }, [filtroMes]);
+    return vendasDoRca.filter(v => filtroMes === 'TODOS' || v.mes_referencia === filtroMes);
+  }, [vendasDoRca, filtroMes]);
 
   // Métricas de Comissões e Carteira
   const metricas = useMemo(() => {
@@ -169,21 +117,70 @@ export function PortalRCA({ onVoltar, rcaIdInicial }: PortalRCAProps) {
       .reduce((acc, v) => acc + v.valor_comissao, 0);
 
     return {
-      totalClientes: CLIENTES_DISPONIVEIS.length,
+      totalClientes: clientesDoRca.length,
       totalFaturado,
       totalComissoes,
       comissoesPagas,
       comissoesLiberadas
     };
-  }, [vendasFiltradas]);
+  }, [vendasFiltradas, clientesDoRca]);
+
+  const seletorAdmin = permitirSelecaoAdmin ? (
+    <select
+      value={rcaIdEfetivo}
+      onChange={e => setRcaSelecionadoAdmin(e.target.value)}
+      className="bg-emerald-950 border border-emerald-600/60 text-emerald-100 text-xs font-bold rounded-xl px-3 py-1.5 outline-none cursor-pointer"
+      title="Visualizar como (somente administrador)"
+    >
+      <option value="">Administrador: escolha um RCA</option>
+      {rcas.map(r => (
+        <option key={r.id} value={r.id}>{r.codigo_rca} · {r.nome_fantasia || r.nome_completo}</option>
+      ))}
+    </select>
+  ) : null;
+
+  if (!rca || !rcaLogado) {
+    return (
+      <div className="min-h-screen bg-[#f8faf9] text-slate-800 flex flex-col font-sans">
+        <header className="bg-[#022013] text-white border-b border-emerald-800 shadow-md">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onVoltar}
+                className="p-2 sm:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                title="Sair"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <h1 className="text-base sm:text-xl font-black text-white tracking-tight leading-none">
+                Portal do RCA & Representante Comercial
+              </h1>
+            </div>
+            {seletorAdmin}
+          </div>
+        </header>
+        <main className="flex-1 flex items-center justify-center p-6">
+          <div className="bg-white rounded-2xl border border-amber-200 p-8 max-w-md text-center shadow-xs">
+            <Briefcase className="w-10 h-10 mx-auto text-amber-500 mb-3" />
+            <h2 className="text-lg font-black text-slate-900">Usuário sem RCA vinculado</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              {permitirSelecaoAdmin
+                ? 'Selecione um RCA cadastrado acima para visualizar o portal.'
+                : 'Peça ao administrador para vincular seu usuário a um RCA cadastrado em "Usuários e Acessos".'}
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8faf9] text-slate-800 flex flex-col font-sans select-none">
-      
+
       {/* 1. CABEÇALHO DO PORTAL DO RCA */}
       <header className="sticky top-0 z-30 bg-[#022013] text-white border-b border-emerald-800 shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
-          
+
           <div className="flex items-center gap-3">
             <button
               onClick={onVoltar}
@@ -207,6 +204,7 @@ export function PortalRCA({ onVoltar, rcaIdInicial }: PortalRCAProps) {
 
           {/* Identificação do RCA */}
           <div className="flex items-center gap-3">
+            {seletorAdmin}
             <div className="hidden sm:flex flex-col text-right">
               <span className="text-[11px] text-emerald-300 font-semibold">{rcaLogado.codigo}</span>
               <span className="text-xs font-black text-white truncate max-w-[240px]">
@@ -223,7 +221,7 @@ export function PortalRCA({ onVoltar, rcaIdInicial }: PortalRCAProps) {
 
       {/* 2. CONTEÚDO PRINCIPAL */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        
+
         {/* Painel de Identificação e Chave PIX */}
         <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
@@ -342,6 +340,9 @@ export function PortalRCA({ onVoltar, rcaIdInicial }: PortalRCAProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
+                  {clientesCarteira.length === 0 && (
+                    <tr><td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">Nenhum cliente vinculado a este RCA.</td></tr>
+                  )}
                   {clientesCarteira.map(cli => (
                     <tr key={cli.id} className="hover:bg-slate-50 transition-colors">
                       <td className="py-3.5 px-5">
@@ -367,7 +368,7 @@ export function PortalRCA({ onVoltar, rcaIdInicial }: PortalRCAProps) {
                       </td>
                       <td className="py-3.5 px-5 text-right font-mono text-[11px]">
                         <div className="font-bold text-emerald-800">{cli.ultima_compra_pedido}</div>
-                        <div className="text-slate-400">{cli.ultima_compra_data}</div>
+                        <div className="text-slate-400">{cli.ultima_compra_data ? formatarDataBR(cli.ultima_compra_data) : '-'}</div>
                       </td>
                     </tr>
                   ))}
@@ -398,8 +399,9 @@ export function PortalRCA({ onVoltar, rcaIdInicial }: PortalRCAProps) {
                   className="bg-white border border-slate-200 text-xs font-bold rounded-xl px-3 py-1.5 outline-none cursor-pointer"
                 >
                   <option value="TODOS">Todos os Períodos</option>
-                  <option value="Mar/26">Março / 2026</option>
-                  <option value="Fev/26">Fevereiro / 2026</option>
+                  {mesesDisponiveis.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -418,18 +420,21 @@ export function PortalRCA({ onVoltar, rcaIdInicial }: PortalRCAProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
+                  {vendasFiltradas.length === 0 && (
+                    <tr><td colSpan={7} className="py-8 text-center text-slate-400 font-semibold">Nenhum pedido faturado para este RCA.</td></tr>
+                  )}
                   {vendasFiltradas.map(venda => (
                     <tr key={venda.id} className="hover:bg-slate-50 transition-colors">
                       <td className="py-3.5 px-5">
                         <div className="font-mono font-bold text-slate-900">{venda.numero_pedido}</div>
-                        <div className="text-[11px] text-slate-400">{venda.data}</div>
+                        <div className="text-[11px] text-slate-400">{formatarDataBR(venda.data)}</div>
                       </td>
                       <td className="py-3.5 px-4 font-bold text-slate-800">
                         <div>{venda.cliente_nome}</div>
                         <div className="text-[11px] text-slate-400 font-normal">{venda.cliente_cidade}</div>
                       </td>
                       <td className="py-3.5 px-4 text-slate-700 font-medium">
-                        {venda.grupo_produto_nome || 'Fécula Industrial'}
+                        {venda.grupo_produto_nome || '-'}
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900">
                         R$ {venda.valor_faturado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}

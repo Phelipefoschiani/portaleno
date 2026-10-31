@@ -38,16 +38,30 @@ import {
   carregarPedidosVenda,
   salvarPedidosVenda,
   moverPedidoEtapa,
-  CLIENTES_LOOKUP,
-  RCAS_LOOKUP,
-  PRODUTOS_VENDA_DISPONIVEIS,
   obterProdutosVendaDisponiveis,
-  obterClientesDisponiveis
+  obterClientesDisponiveis,
+  pesoDoItemKg
 } from '../../data/pedidosVendaData';
 import {
-  carregarTabelasPreco
+  carregarTabelasPreco,
+  TabelaPreco
 } from '../../data/produtosData';
-import { criarCenarioTesteNovoUsuario } from '../../data/sistemaReset';
+import { obterRcasLookup, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
+import { hojeISO, somarDias, parseData, formatarDataBR } from '../../lib/datas';
+
+// Tabela utilizável na venda: não arquivada e dentro da vigência
+function tabelaPrecoUtilizavel(t: TabelaPreco): boolean {
+  if (t.status === 'ARQUIVADA') return false;
+  const hoje = parseData(hojeISO())!.getTime();
+  const fim = parseData(t.vigencia_fim);
+  if (fim && fim.getTime() < hoje) return false;
+  const ini = parseData(t.vigencia_inicio);
+  if (ini && ini.getTime() > hoje) return false;
+  return true;
+}
+
+// Fator de conversão fardo/caixa -> pacotes (1 quando vendido avulso/saco)
+const fatorItem = (n?: number) => (Number(n) > 0 ? Number(n) : 1);
 import { PedidosNavTabs } from './PedidosNavTabs';
 
 interface Props {
@@ -67,14 +81,15 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
   // Clientes e Produtos de venda carregados dinamicamente dos cadastros
   const [clientesDisponiveis, setClientesDisponiveis] = useState(() => obterClientesDisponiveis());
   const [produtosDisponiveis, setProdutosDisponiveis] = useState(() => obterProdutosVendaDisponiveis());
-  const [tabelasDisponiveis, setTabelasDisponiveis] = useState(() => carregarTabelasPreco());
+  const [tabelasDisponiveis, setTabelasDisponiveis] = useState(() => carregarTabelasPreco().filter(tabelaPrecoUtilizavel));
+  const [rcasDisponiveis, setRcasDisponiveis] = useState(() => obterRcasLookup().filter(r => r.ativo));
 
   // Form State
   const [subtipoForm, setSubtipoForm] = useState<'Orçamento' | 'Pedido Sugestivo' | 'Pedido'>('Orçamento');
   const [modoLancamentoForm, setModoLancamentoForm] = useState<'FARDO' | 'UNITARIO'>('FARDO');
   const [clienteIdForm, setClienteIdForm] = useState(() => obterClientesDisponiveis()[0]?.id || '');
   const [tabelaIdForm, setTabelaIdForm] = useState('');
-  const [rcaIdForm, setRcaIdForm] = useState(RCAS_LOOKUP[0].id);
+  const [rcaIdForm, setRcaIdForm] = useState('');
   const [tipoFreteForm, setTipoFreteForm] = useState<'FOB (Retira na Fábrica)' | 'CIF (Entrega Grupo ENO)'>('CIF (Entrega Grupo ENO)');
   const [prazoPagamentoForm, setPrazoPagamentoForm] = useState('Boleto Bancário 28 Dias');
   const [diasValidadeForm, setDiasValidadeForm] = useState('7');
@@ -96,22 +111,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     quantidade: number;
     precoUnitario: number;
     unidadesPorFardo?: number;
-  }>>(() => {
-    const list = obterProdutosVendaDisponiveis();
-    const prod0 = list[0];
-    if (!prod0) {
-      return [];
-    }
-    return [
-      {
-        produtoId: prod0.id,
-        tipoEmbalagem: prod0.tipo_embalagem,
-        quantidade: 100,
-        precoUnitario: prod0.preco_unitario,
-        unidadesPorFardo: prod0.unidades_por_fardo || 10
-      }
-    ];
-  });
+  }>>([]); // itens só entram depois de escolher a tabela de preço
 
   // Carregar pedidos, produtos e clientes
   const recarregar = () => {
@@ -119,10 +119,11 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     setPedidos(todos.filter(p => p.etapa === 'ORCAMENTO'));
     const prods = obterProdutosVendaDisponiveis();
     const clis = obterClientesDisponiveis();
-    const tabs = carregarTabelasPreco();
+    const tabs = carregarTabelasPreco().filter(tabelaPrecoUtilizavel);
     setProdutosDisponiveis(prods);
     setClientesDisponiveis(clis);
     setTabelasDisponiveis(tabs);
+    setRcasDisponiveis(obterRcasLookup().filter(r => r.ativo));
     if (clis.length > 0 && !clienteIdForm) {
       setClienteIdForm(clis[0].id);
     }
@@ -136,7 +137,9 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     window.addEventListener('clientes_updated', handleUpdate);
     window.addEventListener('tabelas_preco_updated', handleUpdate);
     window.addEventListener('sistema_reset_updated', handleUpdate);
+    window.addEventListener(EVENTO_CADASTROS_ATUALIZADOS, handleUpdate);
     return () => {
+      window.removeEventListener(EVENTO_CADASTROS_ATUALIZADOS, handleUpdate);
       window.removeEventListener('pedidos_venda_updated', handleUpdate);
       window.removeEventListener('produtos_updated', handleUpdate);
       window.removeEventListener('clientes_updated', handleUpdate);
@@ -161,6 +164,86 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     });
   }, [tabelaIdForm, tabelasDisponiveis, produtosDisponiveis]);
 
+  // Preço de um produto da tabela conforme o modo de lançamento
+  const precoNoModo = (prod: any, modo: 'FARDO' | 'UNITARIO') =>
+    modo === 'FARDO'
+      ? prod.preco_unitario
+      : (prod.preco_unitario_avulso || prod.preco_unitario / fatorItem(prod.unidades_por_fardo));
+
+  // Abrir formulário de nova venda sempre limpo
+  const abrirNovaVenda = () => {
+    setSubtipoForm('Orçamento');
+    setModoLancamentoForm('FARDO');
+    setTabelaIdForm('');
+    setItensForm([]);
+    setObservacoesForm('');
+    const cli = clientesDisponiveis.find(c => c.id === clienteIdForm) || clientesDisponiveis[0];
+    setClienteIdForm(cli?.id || '');
+    setRcaIdForm(cli?.rca_id || '');
+    if (cli?.prazo) setPrazoPagamentoForm(cli.prazo);
+    setModalNovo(true);
+  };
+
+  // Ao trocar o cliente, sugere o RCA e o prazo cadastrados para ele
+  const handleTrocarCliente = (id: string) => {
+    setClienteIdForm(id);
+    const cli = clientesDisponiveis.find(c => c.id === id);
+    if (cli) {
+      setRcaIdForm(cli.rca_id || '');
+      if (cli.prazo) setPrazoPagamentoForm(cli.prazo);
+    }
+  };
+
+  // Ao trocar a tabela: refaz os preços dos itens lançados e remove os que não pertencem à nova tabela
+  const handleTrocarTabela = (id: string) => {
+    setTabelaIdForm(id);
+    const tab = tabelasDisponiveis.find(t => t.id === id);
+    if (!tab) {
+      setItensForm([]);
+      return;
+    }
+    const desconto = tab.desconto_padrao_percentual || 0;
+    const removidos: string[] = [];
+    const novos = itensForm
+      .map(it => {
+        const prod = produtosDisponiveis.find(p => p.id === it.produtoId);
+        if (!prod || !(tab.produtos_ids || []).includes(prod.id)) {
+          if (prod) removidos.push(prod.nome);
+          return null;
+        }
+        const comDesconto = {
+          ...prod,
+          preco_unitario: prod.preco_unitario * (1 - desconto / 100),
+          preco_unitario_avulso: (prod.preco_unitario_avulso || 0) * (1 - desconto / 100)
+        };
+        return { ...it, precoUnitario: parseFloat(precoNoModo(comDesconto, modoLancamentoForm).toFixed(4)) };
+      })
+      .filter(Boolean) as typeof itensForm;
+    setItensForm(novos);
+    if (removidos.length > 0) {
+      alert(`Itens removidos por não fazerem parte da tabela "${tab.nome}": ${removidos.join(', ')}`);
+    }
+  };
+
+  // Trocar Fardo <-> Unitário convertendo quantidade e preço dos itens já lançados
+  const handleTrocarModo = (novoModo: 'FARDO' | 'UNITARIO') => {
+    if (novoModo === modoLancamentoForm) return;
+    if (novoModo === 'FARDO') {
+      const naoFecha = itensForm.filter(it => it.quantidade % fatorItem(it.unidadesPorFardo) !== 0);
+      if (naoFecha.length > 0) {
+        alert('Algumas quantidades em unidades não fecham fardos/caixas inteiros. Ajuste para múltiplos da embalagem antes de trocar para "Por Fardo".');
+        return;
+      }
+    }
+    setItensForm(itensForm.map(it => {
+      const fator = fatorItem(it.unidadesPorFardo);
+      return novoModo === 'UNITARIO'
+        ? { ...it, quantidade: it.quantidade * fator, precoUnitario: parseFloat((it.precoUnitario / fator).toFixed(4)) }
+        : { ...it, quantidade: it.quantidade / fator, precoUnitario: parseFloat((it.precoUnitario * fator).toFixed(4)) };
+    }));
+    setModoLancamentoForm(novoModo);
+  };
+
   // Quando abrir o modal de detalhes (Visualizador de Documento)
   const abrirVisualizacao = (pedido: PedidoVenda) => {
     setModalDetalhes(pedido);
@@ -179,8 +262,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
 
   // Helper para obter valores calculados por Fardo vs Unitário
   const calcularValoresItem = (it: any, modo: 'FARDO' | 'UNITARIO') => {
-    const prod = produtosDisponiveis.find(p => p.id === it.produto_id) || PRODUTOS_VENDA_DISPONIVEIS.find(p => p.id === it.produto_id);
-    const fator = it.unidades_por_fardo || prod?.unidades_por_fardo || (it.tipo_embalagem === 'Fardo 10x1kg' ? 10 : it.tipo_embalagem === 'Caixa' ? 10 : 25);
+    const prod = produtosDisponiveis.find(p => p.id === it.produto_id);
+    const fator = fatorItem(it.unidades_por_fardo || prod?.unidades_por_fardo);
 
     if (modo === 'UNITARIO') {
       const qtdUnit = it.quantidade * fator;
@@ -393,9 +476,9 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
       {
         produtoId: defaultProd.id,
         tipoEmbalagem: defaultProd.tipo_embalagem,
-        quantidade: 100,
-        precoUnitario: modoLancamentoForm === 'FARDO' ? defaultProd.preco_unitario : (defaultProd.preco_unitario_avulso || defaultProd.preco_unitario / (defaultProd.unidades_por_fardo || 1)),
-        unidadesPorFardo: defaultProd.unidades_por_fardo || 10
+        quantidade: modoLancamentoForm === 'FARDO' ? 1 : fatorItem(defaultProd.unidades_por_fardo),
+        precoUnitario: precoNoModo(defaultProd, modoLancamentoForm),
+        unidadesPorFardo: fatorItem(defaultProd.unidades_por_fardo)
       }
     ]);
   };
@@ -423,48 +506,60 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
       alert('Adicione pelo menos um produto à proposta para salvar.');
       return;
     }
-    const clienteSel = CLIENTES_LOOKUP.find(c => c.id === clienteIdForm) || CLIENTES_LOOKUP[0];
-    const rcaSel = RCAS_LOOKUP.find(r => r.id === rcaIdForm) || RCAS_LOOKUP[0];
+    if (itensForm.some(it => !it.quantidade || it.quantidade <= 0)) {
+      alert('Informe uma quantidade maior que zero em todos os itens.');
+      return;
+    }
+    const clienteSel = clientesDisponiveis.find(c => c.id === clienteIdForm);
+    if (!clienteSel) {
+      alert('Cliente selecionado não encontrado no cadastro. Selecione um cliente válido.');
+      return;
+    }
+    const rcaSel = rcasDisponiveis.find(r => r.id === rcaIdForm);
 
-    const dataHoje = new Date();
-    const dataHojeStr = dataHoje.toISOString().split('T')[0];
-    const dataValidade = new Date();
-    dataValidade.setDate(dataValidade.getDate() + (parseInt(diasValidadeForm) || 7));
-    const dataValidadeStr = dataValidade.toISOString().split('T')[0];
+    const dataHojeStr = hojeISO();
+    const dataValidadeStr = somarDias(dataHojeStr, parseInt(diasValidadeForm) || 7);
 
     const itensMapeados = itensForm.map(it => {
       const prod = produtosFiltradosPorTabela.find(p => p.id === it.produtoId) || produtosDisponiveis.find(p => p.id === it.produtoId);
       if (!prod) return null;
-      const fator = it.unidadesPorFardo || prod.unidades_por_fardo || (it.tipoEmbalagem === 'Fardo 10x1kg' ? 10 : it.tipoEmbalagem === 'Caixa' ? 10 : 25);
-      
+      let fator = fatorItem(it.unidadesPorFardo || prod.unidades_por_fardo);
+      let tipoEmbalagem = it.tipoEmbalagem || prod.tipo_embalagem;
       let qtdReal = it.quantidade;
       let precoReal = it.precoUnitario;
+      const subtotal = it.quantidade * it.precoUnitario;
 
-      // Se lançado em unitário, normaliza quantidade para base de fardo
-      if (modoLancamentoForm === 'UNITARIO') {
-        qtdReal = Math.max(1, Math.round(it.quantidade / fator));
-        precoReal = it.precoUnitario * fator;
+      // Lançado em unitário: vira fardos quando fecha embalagens inteiras; senão fica avulso (sem arredondar)
+      if (modoLancamentoForm === 'UNITARIO' && fator > 1) {
+        if (it.quantidade % fator === 0) {
+          qtdReal = it.quantidade / fator;
+          precoReal = it.precoUnitario * fator;
+        } else {
+          fator = 1;
+          tipoEmbalagem = 'Unitário (avulso)';
+        }
       }
 
-      const pesoTotal = qtdReal * prod.peso_unitario_kg;
-      const subtotal = qtdReal * precoReal;
-
-      return {
+      const item = {
         produto_id: prod.id,
         produto_nome: prod.nome,
-        tipo_embalagem: it.tipoEmbalagem || prod.tipo_embalagem,
+        tipo_embalagem: tipoEmbalagem,
         quantidade: qtdReal,
         peso_unitario_kg: prod.peso_unitario_kg,
-        peso_total_kg: pesoTotal,
+        peso_total_kg: 0,
         preco_unitario: precoReal,
         subtotal,
         unidades_por_fardo: fator
       };
+      // Peso considera os pacotes de cada fardo/caixa
+      item.peso_total_kg = pesoDoItemKg(item);
+      return item;
     }).filter(Boolean) as any[];
 
     const valorTotal = itensMapeados.reduce((acc, i) => acc + i.subtotal, 0);
     const pesoTotal = itensMapeados.reduce((acc, i) => acc + i.peso_total_kg, 0);
-    const comissaoValor = (valorTotal * 2.5) / 100;
+    const comissaoPercentual = Number(clienteSel.comissao ?? rcaSel?.comissao ?? 0) || 0;
+    const comissaoValor = (valorTotal * comissaoPercentual) / 100;
 
     const prefixo = subtipoForm === 'Orçamento' ? 'ORC' : subtipoForm === 'Pedido Sugestivo' ? 'SUG' : 'PED';
     const novoNum = `${prefixo}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -486,9 +581,9 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
       cliente_cidade_uf: clienteSel.cidade_uf,
       cliente_limite_credito: clienteSel.limite_credito,
       cliente_status_credito: clienteSel.status_credito,
-      rca_id: rcaSel.id,
-      rca_nome: rcaSel.nome,
-      comissao_percentual: 2.5,
+      rca_id: rcaSel?.id || '',
+      rca_nome: rcaSel?.nome || 'Venda Direta',
+      comissao_percentual: comissaoPercentual,
       comissao_valor: comissaoValor,
       data_emissao: dataHojeStr,
       data_validade_orcamento: dataValidadeStr,
@@ -547,9 +642,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
-                setSubtipoForm('Orçamento');
-                setModoLancamentoForm('FARDO');
-                setModalNovo(true);
+                abrirNovaVenda();
               }}
               className="
                 flex items-center gap-2 px-4 py-2 rounded-xl
@@ -702,16 +795,14 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                       <div>
                         <h3 className="font-bold text-slate-900 text-base">Modo Novo Usuário - Sistema Limpo para Teste</h3>
                         <p className="text-slate-500 text-xs mt-1">
-                          Nenhuma proposta ou venda cadastrada ainda. Você pode formular um novo orçamento do zero ou criar um cenário de teste com 1 clique!
+                          Nenhuma proposta ou venda cadastrada ainda. Clique em "Nova Venda / Proposta" para formular o primeiro orçamento.
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
                         <button
                           type="button"
                           onClick={() => {
-                            setSubtipoForm('Orçamento');
-                            setModoLancamentoForm('FARDO');
-                            setModalNovo(true);
+                            abrirNovaVenda();
                           }}
                           className="px-4 py-2 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                         >
@@ -905,7 +996,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                   <div className="inline-flex rounded-lg bg-white p-1 border border-slate-200">
                     <button
                       type="button"
-                      onClick={() => setModoLancamentoForm('FARDO')}
+                      onClick={() => handleTrocarModo('FARDO')}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold text-xs transition-all cursor-pointer ${
                         modoLancamentoForm === 'FARDO'
                           ? 'bg-emerald-700 text-white shadow-2xs'
@@ -918,7 +1009,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setModoLancamentoForm('UNITARIO')}
+                      onClick={() => handleTrocarModo('UNITARIO')}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold text-xs transition-all cursor-pointer ${
                         modoLancamentoForm === 'UNITARIO'
                           ? 'bg-emerald-700 text-white shadow-2xs'
@@ -957,16 +1048,6 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                       <Package className="w-3.5 h-3.5" />
                       <span>+ Cadastrar Produto no Estoque</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        criarCenarioTesteNovoUsuario();
-                        recarregar();
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-white border border-orange-300 hover:bg-orange-100 text-orange-900 font-bold text-xs transition-colors cursor-pointer"
-                    >
-                      ⚡ Inserir Produto de Teste (Sem Custo e Sem Receita)
-                    </button>
                   </div>
                 </div>
               )}
@@ -991,22 +1072,12 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                         >
                           + Cadastrar Cliente
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            criarCenarioTesteNovoUsuario();
-                            recarregar();
-                          }}
-                          className="px-2 py-1 rounded bg-white border border-amber-300 text-amber-900 font-bold text-[10px] cursor-pointer"
-                        >
-                          ⚡ Teste Rápido
-                        </button>
                       </div>
                     </div>
                   ) : (
                     <select
                       value={clienteIdForm}
-                      onChange={(e) => setClienteIdForm(e.target.value)}
+                      onChange={(e) => handleTrocarCliente(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
                     >
                       {clientesDisponiveis.map(c => (
@@ -1028,7 +1099,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                   ) : (
                     <select
                       value={tabelaIdForm}
-                      onChange={(e) => setTabelaIdForm(e.target.value)}
+                      onChange={(e) => handleTrocarTabela(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-bold text-slate-800 focus:outline-none focus:border-emerald-700 cursor-pointer"
                     >
                       <option value="">-- Selecione a Tabela --</option>
@@ -1042,14 +1113,15 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">RCA Responsável *</label>
+                  <label className="block font-bold text-slate-700 mb-1">RCA Responsável</label>
                   <select
                     value={rcaIdForm}
                     onChange={(e) => setRcaIdForm(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
                   >
-                    {RCAS_LOOKUP.map(r => (
-                      <option key={r.id} value={r.id}>{r.nome} - {r.regiao}</option>
+                    <option value="">Venda Direta (sem RCA)</option>
+                    {rcasDisponiveis.map(r => (
+                      <option key={r.id} value={r.id}>{r.nome}{r.regiao ? ` - ${r.regiao}` : ''}</option>
                     ))}
                   </select>
                 </div>
@@ -1101,7 +1173,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                     </div>
                   ) : (
                     itensForm.map((item, idx) => {
-                      const prod = produtosDisponiveis.find(p => p.id === item.produtoId) || PRODUTOS_VENDA_DISPONIVEIS.find(p => p.id === item.produtoId);
+                      const prod = produtosDisponiveis.find(p => p.id === item.produtoId);
                       const faltaReceita = prod && !prod.receita_id;
                       const faltaCusto = prod && (!prod.custo_total || prod.custo_total <= 0);
 
@@ -1117,12 +1189,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                                   updated[idx].produtoId = e.target.value;
                                   if (newProd) {
                                     updated[idx].tipoEmbalagem = newProd.tipo_embalagem;
-                                    updated[idx].unidadesPorFardo = newProd.unidades_por_fardo || 10;
-                                    if (modoLancamentoForm === 'FARDO') {
-                                      updated[idx].precoUnitario = newProd.preco_unitario;
-                                    } else {
-                                      updated[idx].precoUnitario = newProd.preco_unitario_avulso || (newProd.preco_unitario / (newProd.unidades_por_fardo || 1));
-                                    }
+                                    updated[idx].unidadesPorFardo = fatorItem(newProd.unidades_por_fardo);
+                                    updated[idx].precoUnitario = precoNoModo(newProd, modoLancamentoForm);
                                   }
                                   setItensForm(updated);
                                 }}
@@ -1166,7 +1234,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                                 value={item.quantidade}
                                 onChange={(e) => {
                                   const updated = [...itensForm];
-                                  updated[idx].quantidade = parseInt(e.target.value) || 1;
+                                  updated[idx].quantidade = Math.max(0, parseInt(e.target.value) || 0);
                                   setItensForm(updated);
                                 }}
                                 className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-center font-bold"
@@ -1232,18 +1300,18 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                               <div className="flex items-center gap-1.5 font-medium">
                                 <AlertCircle className="w-3.5 h-3.5 text-orange-700 shrink-0" />
                                 <span>
-                                  <strong>⚠️ Sem Custo de Produção:</strong> Custo industrial não apurado. O produto pode ser orçado pelo preço informado, mas o CMV e a margem bruta ficarão zerados.
+                                  <strong>⚠️ Sem Custo de Produção:</strong> Custo industrial não apurado (vincule uma receita com matérias-primas e informe o custo operacional no cadastro do produto). O produto pode ser orçado pelo preço informado, mas o CMV e a margem bruta ficarão zerados.
                                 </span>
                               </div>
                               <button
                                 type="button"
                                 onClick={() => {
                                   setModalNovo(false);
-                                  onNavigate?.('produtos_configurar_custo');
+                                  onNavigate?.('produtos_estoque_cadastro');
                                 }}
                                 className="px-2 py-0.5 rounded bg-orange-700 hover:bg-orange-800 text-white font-bold text-[10px] cursor-pointer transition-colors shadow-2xs"
                               >
-                                Configurar Custo
+                                Ver Custo no Produto
                               </button>
                             </div>
                           )}

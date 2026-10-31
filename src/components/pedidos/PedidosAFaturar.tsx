@@ -31,6 +31,7 @@ import {
   moverPedidoEtapa
 } from '../../data/pedidosVendaData';
 import { PedidosNavTabs } from './PedidosNavTabs';
+import { hojeISO, paraISO } from '../../lib/datas';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -195,14 +196,15 @@ export function PedidosAFaturar({ onNavigate }: Props) {
     }
 
     const valorFinal = parseFloat(valorNfImport) || modalImportarNf.valor_total;
-    const dataFaturamento = dataEmissaoImport || new Date().toLocaleDateString('pt-BR');
+    // Data de faturamento sempre AAAA-MM-DD (aceita a data digitada em DD/MM/AAAA)
+    const dataFaturamento = paraISO(dataEmissaoImport) || hojeISO();
 
     moverPedidoEtapa(modalImportarNf.id, 'FATURADO', {
       nota_fiscal: {
         numero: numeroNfImport.trim(),
         serie: serieNfImport.trim() || '1',
         chave_acesso: chaveAcessoImport.trim(),
-        data_emissao: dataEmissaoImport,
+        data_emissao: dataFaturamento,
         xml_importado: true,
         nome_arquivo_xml: nomeArquivoAnexado || undefined,
         arquivo_anexado: nomeArquivoAnexado || `NF_${numeroNfImport}.xml`,

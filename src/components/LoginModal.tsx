@@ -1,98 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  User, 
-  Lock, 
-  ArrowRight, 
-  ShieldCheck, 
-  AlertCircle, 
-  Sparkles, 
+import {
+  User,
+  Lock,
+  ArrowRight,
+  ShieldCheck,
+  AlertCircle,
   Building2,
-  Tractor,
-  Briefcase,
-  Clock,
-  Factory,
-  Sprout
 } from 'lucide-react';
+import {
+  autenticar,
+  criarPrimeiroAdministrador,
+  existemUsuarios,
+  PerfilUsuario,
+  SENHA_MINIMA,
+} from '../lib/auth';
 
-export type DestinoAcesso = 
-  | 'ADMIN' 
-  | 'AGRICULTOR' 
-  | 'RCA' 
-  | 'PROVISORIO' 
-  | 'PRODUCAO' 
-  | 'SITIO';
+export type DestinoAcesso = PerfilUsuario;
 
 type LoginModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onLoginSuccess: (destino?: DestinoAcesso) => void;
+  /** Chamado após autenticação real; o destino é o perfil do usuário logado */
+  onLoginSuccess: (destino: DestinoAcesso) => void;
 };
 
-/**
- * Perfis de usuário com redirecionamento automático:
- * - adm / admin -> Painel Geral Administrativo
- * - agricultor -> Portal dos Agricultores (Fornecedores de Mandioca)
- * - rca -> Portal do RCA (Representante Comercial)
- * - provisorio -> Portal do Cadastro Provisório (Portfólio / VIP)
- * - producao -> Cadastro Produção (Chão de Fábrica)
- * - sitio -> Cadastro Controle do Sítio (Talhões & Plantio)
- */
-const USUARIOS_DEMO = [
-  { 
-    usuario: 'adm', 
-    senha: 'adm', 
-    destino: 'ADMIN' as DestinoAcesso, 
-    rotulo: 'Painel Geral', 
-    icon: ShieldCheck, 
-    cargo: 'Administrador Geral' 
-  },
-  { 
-    usuario: 'agricultor', 
-    senha: '123', 
-    destino: 'AGRICULTOR' as DestinoAcesso, 
-    rotulo: 'Agricultores', 
-    icon: Tractor, 
-    cargo: 'Fornecedor de Mandioca' 
-  },
-  { 
-    usuario: 'rca', 
-    senha: '123', 
-    destino: 'RCA' as DestinoAcesso, 
-    rotulo: 'Portal RCA', 
-    icon: Briefcase, 
-    cargo: 'Representante Comercial' 
-  },
-  { 
-    usuario: 'provisorio', 
-    senha: '123', 
-    destino: 'PROVISORIO' as DestinoAcesso, 
-    rotulo: 'Provisório VIP', 
-    icon: Clock, 
-    cargo: 'Acesso Temporário / Portfólio' 
-  },
-  { 
-    usuario: 'producao', 
-    senha: '123', 
-    destino: 'PRODUCAO' as DestinoAcesso, 
-    rotulo: 'Produção', 
-    icon: Factory, 
-    cargo: 'Operação de Fábrica' 
-  },
-  { 
-    usuario: 'sitio', 
-    senha: '123', 
-    destino: 'SITIO' as DestinoAcesso, 
-    rotulo: 'Controle Sítio', 
-    icon: Sprout, 
-    cargo: 'Manejo Agrícola & Talhões' 
-  },
-];
-
 export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps) {
-  const [username, setUsername] = useState('adm');
-  const [password, setPassword] = useState('adm');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmacao, setConfirmacao] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  // Primeiro acesso: nenhum usuário cadastrado -> criar administrador
+  const [primeiroAcesso, setPrimeiroAcesso] = useState<boolean>(() => !existemUsuarios());
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -102,6 +41,9 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
       setError('');
+      setPassword('');
+      setConfirmacao('');
+      setPrimeiroAcesso(!existemUsuarios());
     }
 
     return () => {
@@ -111,31 +53,9 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
 
   if (!isOpen) return null;
 
-  // Lógica inteligente que identifica o painel pelo usuário informado
-  const identificarDestinoPorUsuario = (userStr: string): DestinoAcesso => {
-    const u = userStr.trim().toLowerCase();
-
-    if (u === 'agricultor' || u === 'produtor' || u.includes('agri') || u.includes('sebastiao') || u.includes('mandioca') || u.includes('fornecedor')) {
-      return 'AGRICULTOR';
-    }
-    if (u === 'rca' || u === 'representante' || u.includes('rca') || u.includes('vendedor') || u.includes('comercial')) {
-      return 'RCA';
-    }
-    if (u === 'provisorio' || u === 'convidado' || u === 'vip' || u.includes('provis') || u.includes('portfol')) {
-      return 'PROVISORIO';
-    }
-    if (u === 'producao' || u === 'fabrica' || u.includes('prod') || u.includes('operador') || u.includes('moagem')) {
-      return 'PRODUCAO';
-    }
-    if (u === 'sitio' || u === 'sítio' || u === 'fazenda' || u.includes('siti') || u.includes('talhao') || u.includes('campo') || u.includes('agronomo')) {
-      return 'SITIO';
-    }
-    // Padrão: Painel Geral Administrativo
-    return 'ADMIN';
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
     setError('');
 
     if (!username.trim()) {
@@ -143,25 +63,47 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
       return;
     }
 
-    if (!password.trim()) {
+    if (!password) {
       setError('Por favor, digite a sua senha.');
       return;
     }
 
+    if (primeiroAcesso) {
+      if (password.length < SENHA_MINIMA) {
+        setError(`A senha deve ter no mínimo ${SENHA_MINIMA} caracteres.`);
+        return;
+      }
+      if (password !== confirmacao) {
+        setError('A confirmação não confere com a senha.');
+        return;
+      }
+    }
+
     setIsLoading(true);
+    try {
+      if (primeiroAcesso) {
+        const sessao = await criarPrimeiroAdministrador(username, password);
+        setPassword('');
+        setConfirmacao('');
+        onLoginSuccess(sessao.perfil);
+        onClose();
+        return;
+      }
 
-    setTimeout(() => {
-      const destino = identificarDestinoPorUsuario(username);
-      setIsLoading(false);
-      onLoginSuccess(destino);
+      const resultado = await autenticar(username, password);
+      if (resultado.ok === false) {
+        setError(resultado.erro);
+        setPassword('');
+        return;
+      }
+      setPassword('');
+      onLoginSuccess(resultado.sessao.perfil);
       onClose();
-    }, 200);
-  };
-
-  const handlePreencherUsuario = (userDemo: typeof USUARIOS_DEMO[0]) => {
-    setUsername(userDemo.usuario);
-    setPassword(userDemo.senha);
-    setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível concluir o acesso.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -255,19 +197,21 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
                 Grupo ENO
               </div>
               <h2 className="text-xl font-black tracking-tight text-slate-900">
-                Acessar o Sistema
+                {primeiroAcesso ? 'Criar administrador' : 'Acessar o Sistema'}
               </h2>
             </div>
           </div>
 
           <p className="mt-2 text-xs text-slate-500">
-            Digite suas credenciais. O sistema identificará seu usuário e o direcionará automaticamente ao seu painel.
+            {primeiroAcesso
+              ? 'Primeiro acesso: nenhum usuário cadastrado. Defina o usuário e a senha do administrador do sistema.'
+              : 'Digite seu usuário e senha. Você será direcionado ao painel do seu perfil.'}
           </p>
         </div>
 
         {/* Formulário de Login */}
         <form onSubmit={handleSubmit} className="p-6 sm:p-7 space-y-4">
-          
+
           {error && (
             <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700 animate-in fade-in">
               <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
@@ -278,7 +222,7 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
           {/* Campo Usuário */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Usuário ou Identificação
+              Usuário
             </label>
             <div className="relative flex items-center">
               <div className="absolute left-3.5 pointer-events-none text-slate-400">
@@ -288,7 +232,8 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Ex: adm, agricultor, rca, producao..."
+                placeholder={primeiroAcesso ? 'Defina o usuário do administrador' : 'Seu usuário de acesso'}
+                autoComplete="username"
                 autoFocus
                 className="
                   w-full h-11 pl-10 pr-3.5
@@ -317,7 +262,8 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Digite sua senha"
+                placeholder={primeiroAcesso ? `Mínimo de ${SENHA_MINIMA} caracteres` : 'Digite sua senha'}
+                autoComplete={primeiroAcesso ? 'new-password' : 'current-password'}
                 className="
                   w-full h-11 pl-10 pr-3.5
                   rounded-xl
@@ -331,6 +277,36 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
               />
             </div>
           </div>
+
+          {primeiroAcesso && (
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Confirmar senha
+              </label>
+              <div className="relative flex items-center">
+                <div className="absolute left-3.5 pointer-events-none text-slate-400">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <input
+                  type="password"
+                  value={confirmacao}
+                  onChange={(e) => setConfirmacao(e.target.value)}
+                  placeholder="Repita a senha"
+                  autoComplete="new-password"
+                  className="
+                    w-full h-11 pl-10 pr-3.5
+                    rounded-xl
+                    border border-slate-200
+                    bg-slate-50/70
+                    text-sm font-semibold text-slate-800
+                    outline-none
+                    transition-all
+                    focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/10
+                  "
+                />
+              </div>
+            </div>
+          )}
 
           {/* Botão Entrar */}
           <button
@@ -351,48 +327,13 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
               cursor-pointer
             "
           >
-            <span>{isLoading ? 'Entrando...' : 'Entrar no Sistema'}</span>
+            <span>
+              {isLoading
+                ? (primeiroAcesso ? 'Criando...' : 'Entrando...')
+                : (primeiroAcesso ? 'Criar administrador e entrar' : 'Entrar no Sistema')}
+            </span>
             <ArrowRight className="w-4 h-4" />
           </button>
-
-          {/* Atalhos rápidos de teste para demonstrar os redirecionamentos */}
-          <div className="pt-3 border-t border-slate-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                Logins de Demonstração:
-              </span>
-              <span className="text-[10px] text-slate-400">
-                Clique para preencher
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-1.5">
-              {USUARIOS_DEMO.map((item) => {
-                const IconComponent = item.icon;
-                const isCurrent = username.toLowerCase() === item.usuario;
-                return (
-                  <button
-                    key={item.usuario}
-                    type="button"
-                    onClick={() => handlePreencherUsuario(item)}
-                    className={`
-                      flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-xs font-medium transition-colors cursor-pointer border
-                      ${isCurrent
-                        ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold'
-                        : 'bg-slate-50/90 border-slate-200/80 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      }
-                    `}
-                  >
-                    <IconComponent className={`w-3.5 h-3.5 shrink-0 ${isCurrent ? 'text-emerald-700' : 'text-slate-400'}`} />
-                    <div className="truncate">
-                      <span className="font-bold">{item.usuario}</span>
-                      <span className="text-[10px] text-slate-400 ml-1">({item.rotulo})</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
 
         </form>
 

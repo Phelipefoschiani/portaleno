@@ -40,6 +40,16 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts';
+import {
+  carregarFornecedores,
+  salvarFornecedores,
+  EVENTO_CADASTROS_ATUALIZADOS,
+} from '../../data/cadastrosData';
+import { carregarPedidosCompra } from '../../data/mockStore';
+import { carregarMateriaPrima, salvarMateriaPrima, MateriaPrimaEstoque } from '../../data/produtosData';
+import { useListaPersistida } from '../../lib/useListaPersistida';
+import { formatarDataBR } from '../../lib/datas';
+import { mesReferenciaDe, ultimosMesesReferencia } from '../../lib/mesesReferencia';
 
 export interface ProdutoFornecidoItem {
   id: string;
@@ -110,20 +120,32 @@ export interface CompraFornecedor {
 }
 
 // Catálogo Global de Matérias-Primas do Grupo ENO (public.materias_primas)
-export const CATALOGO_MATERIAS_PRIMAS_BASE = [
-  { id: 1, codigo: 'MP-001', nome: 'Milho Verde em Espiga 1ª Linha', unidade: 'CX', categoria: 'Matéria-Prima' as const, estoque: 340, custo_medio: 45.00 },
-  { id: 2, codigo: 'MP-002', nome: 'Feijão Carioca Extra a Granel', unidade: 'KG', categoria: 'Matéria-Prima' as const, estoque: 12000, custo_medio: 6.80 },
-  { id: 3, codigo: 'EMB-001', nome: 'Embalagem Stand-Up Pouch 500g', unidade: 'UN', categoria: 'Embalagens' as const, estoque: 85000, custo_medio: 0.61 },
-  { id: 4, codigo: 'EMB-002', nome: 'Bobina Plástica Termoencolhível', unidade: 'BOB', categoria: 'Embalagens' as const, estoque: 28, custo_medio: 1450.00 },
-  { id: 5, codigo: 'EMB-003', nome: 'Caixa de Papelão Ondulado 20kg', unidade: 'UN', categoria: 'Embalagens' as const, estoque: 4200, custo_medio: 4.82 },
-  { id: 6, codigo: 'EMB-004', nome: 'Fita Gomada Personalizada', unidade: 'RL', categoria: 'Embalagens' as const, estoque: 150, custo_medio: 20.00 },
-  { id: 7, codigo: 'INS-001', nome: 'Adubo Organomineral 50kg', unidade: 'SC', categoria: 'Insumos Agrícolas' as const, estoque: 650, custo_medio: 95.50 },
-  { id: 8, codigo: 'INS-002', nome: 'Sementes Certificadas de Soja', unidade: 'SC', categoria: 'Insumos Agrícolas' as const, estoque: 120, custo_medio: 240.00 },
-  { id: 9, codigo: 'INS-003', nome: 'Defensivo Biológico Bac-Protec', unidade: 'L', categoria: 'Insumos Agrícolas' as const, estoque: 95, custo_medio: 400.00 },
-  { id: 10, codigo: 'QUI-001', nome: 'Ácido Cítrico Grau Alimentício', unidade: 'SC', categoria: 'Químicos' as const, estoque: 80, custo_medio: 320.00 },
-  { id: 11, codigo: 'QUI-002', nome: 'Conservante Sorbato de Potássio', unidade: 'KG', categoria: 'Químicos' as const, estoque: 210, custo_medio: 48.00 },
-  { id: 12, codigo: 'LOG-001', nome: 'Paletes de Madeira Padrão PBR', unidade: 'UN', categoria: 'Embalagens' as const, estoque: 310, custo_medio: 50.00 },
-];
+type CategoriaProdutoFornecido = ProdutoFornecidoItem['categoria'];
+export interface ItemCatalogoMateriaPrima {
+  id: number | string;
+  codigo: string;
+  nome: string;
+  unidade: string;
+  categoria: CategoriaProdutoFornecido;
+  estoque: number;
+  custo_medio: number;
+}
+
+// Catálogo de matérias-primas lido do cadastro real (Produtos > Matéria Prima)
+function carregarCatalogoMateriasPrimas(): ItemCatalogoMateriaPrima[] {
+  return carregarMateriaPrima().map((mp: MateriaPrimaEstoque) => ({
+    id: mp.id,
+    codigo: mp.codigo,
+    nome: mp.nome,
+    unidade: mp.unidade_medida,
+    categoria: (mp.categoria === 'Embalagens' ? 'Embalagens' : mp.categoria === 'Insumos Industriais' ? 'Químicos' : 'Matéria-Prima') as CategoriaProdutoFornecido,
+    estoque: Number(mp.estoque_atual) || 0,
+    custo_medio: Number(mp.custo_medio_unitario) || 0,
+  }));
+}
+
+/** @deprecated catálogo fixo removido; use o cadastro de Matéria Prima */
+export const CATALOGO_MATERIAS_PRIMAS_BASE: ItemCatalogoMateriaPrima[] = [];
 
 // Formas e Prazos de Pagamento
 const FORMAS_PAGAMENTO_OPTIONS = [
@@ -144,268 +166,44 @@ const PRAZOS_PAGAMENTO_OPTIONS = [
   { id: 'pp_7', nome: '30 / 60 / 90 Dias (3x)' },
 ];
 
-// Dados Iniciais de Fornecedores do Grupo ENO
-const FORNECEDORES_INICIAIS: Fornecedor[] = [
-  {
-    id: 'forn_001',
-    empresa_id: 'emp_grupo_eno',
-    tipo_pessoa: 'PJ',
-    razao_nome: 'Embalagens e Plásticos Paulínia Ltda',
-    fantasia: 'Paulínia Embalagens',
-    cpf_cnpj: '03.882.110/0001-92',
-    ie_rg: '524.119.340.118',
-    email: 'vendas@pauliniaembalagens.com.br',
-    telefone: '(19) 3874-5000',
-    endereco: {
-      cep: '13140-000',
-      logradouro: 'Av. José Paulino',
-      numero: '2400',
-      bairro: 'Distrito Industrial',
-      municipio: 'Paulínia',
-      uf: 'SP',
-      complemento: 'Bloco A'
-    },
-    produtos_fornecidos: [
-      { id: 'p_1', materia_prima_id: 3, codigo_materia_prima: 'EMB-001', nome: 'Embalagem Stand-Up Pouch 500g', unidade: 'UN', categoria: 'Embalagens', codigo_fornecedor: 'SUP-500-TRANS', integrado_materia_prima: true },
-      { id: 'p_2', materia_prima_id: 4, codigo_materia_prima: 'EMB-002', nome: 'Bobina Plástica Termoencolhível', unidade: 'BOB', categoria: 'Embalagens', codigo_fornecedor: 'BOB-TERM-50', integrado_materia_prima: true },
-      { id: 'p_3', materia_prima_id: 5, codigo_materia_prima: 'EMB-003', nome: 'Caixa de Papelão Ondulado 20kg', unidade: 'UN', categoria: 'Embalagens', codigo_fornecedor: 'CX-P20-DUP', integrado_materia_prima: true },
-      { id: 'p_4', materia_prima_id: 6, codigo_materia_prima: 'EMB-004', nome: 'Fita Gomada Personalizada', unidade: 'RL', categoria: 'Embalagens', codigo_fornecedor: 'FIT-GOM-80', integrado_materia_prima: true }
-    ],
-    forma_pagamento_id: 'fp_1',
-    forma_pagamento_nome: 'Boleto Bancário',
-    prazo_pagamento_id: 'pp_5',
-    prazo_pagamento_nome: '28 Dias',
-    chave_pix: 'contato@pauliniaembalagens.com.br',
-    ativo: true,
-    criado_em: '2026-01-10T08:00:00Z',
-  },
-  {
-    id: 'forn_002',
-    empresa_id: 'emp_grupo_eno',
-    tipo_pessoa: 'PJ',
-    razao_nome: 'Agro Indústria e Insumos Mogiana S.A.',
-    fantasia: 'Mogiana Insumos Agrícolas',
-    cpf_cnpj: '61.442.980/0001-35',
-    ie_rg: '458.772.091.220',
-    email: 'atendimento@mogianainsumos.com.br',
-    telefone: '(19) 3862-7700',
-    endereco: {
-      cep: '13800-000',
-      logradouro: 'Rodovia SP-340',
-      numero: 'Km 172',
-      bairro: 'Zona Rural',
-      municipio: 'Mogi Mirim',
-      uf: 'SP',
-      complemento: 'Silo 04'
-    },
-    produtos_fornecidos: [
-      { id: 'p_5', materia_prima_id: 7, codigo_materia_prima: 'INS-001', nome: 'Adubo Organomineral 50kg', unidade: 'SC', categoria: 'Insumos Agrícolas', codigo_fornecedor: 'ADB-ORG-50', integrado_materia_prima: true },
-      { id: 'p_6', materia_prima_id: 8, codigo_materia_prima: 'INS-002', nome: 'Sementes Certificadas de Soja', unidade: 'SC', categoria: 'Insumos Agrícolas', codigo_fornecedor: 'SEM-SOJ-CERT', integrado_materia_prima: true },
-      { id: 'p_7', materia_prima_id: 9, codigo_materia_prima: 'INS-003', nome: 'Defensivo Biológico Bac-Protec', unidade: 'L', categoria: 'Insumos Agrícolas', codigo_fornecedor: 'BAC-PROT-1L', integrado_materia_prima: true },
-    ],
-    forma_pagamento_id: 'fp_1',
-    forma_pagamento_nome: 'Boleto Bancário',
-    prazo_pagamento_id: 'pp_6',
-    prazo_pagamento_nome: '30 / 60 Dias (2x)',
-    chave_pix: '61442980000135',
-    ativo: true,
-    criado_em: '2026-01-18T10:30:00Z',
-  },
-  {
-    id: 'forn_003',
-    empresa_id: 'emp_grupo_eno',
-    tipo_pessoa: 'PJ',
-    razao_nome: 'Química Industrial Bandeirantes Ltda',
-    fantasia: 'Bandeirantes Insumos',
-    cpf_cnpj: '45.190.432/0001-18',
-    ie_rg: '634.881.002.341',
-    email: 'pedidos@bandeirantesquimica.com.br',
-    telefone: '(11) 4022-9911',
-    endereco: {
-      cep: '13300-000',
-      logradouro: 'Rua Floriano Peixoto',
-      numero: '890',
-      bairro: 'Industrial',
-      municipio: 'Itu',
-      uf: 'SP',
-    },
-    produtos_fornecidos: [
-      { id: 'p_8', materia_prima_id: 10, codigo_materia_prima: 'QUI-001', nome: 'Ácido Cítrico Grau Alimentício', unidade: 'SC', categoria: 'Químicos', codigo_fornecedor: 'ACID-CIT-ALIM', integrado_materia_prima: true },
-      { id: 'p_9', materia_prima_id: 11, codigo_materia_prima: 'QUI-002', nome: 'Conservante Sorbato de Potássio', unidade: 'KG', categoria: 'Químicos', codigo_fornecedor: 'SORB-POT-01', integrado_materia_prima: true }
-    ],
-    forma_pagamento_id: 'fp_2',
-    forma_pagamento_nome: 'Pix',
-    prazo_pagamento_id: 'pp_1',
-    prazo_pagamento_nome: 'À Vista (0 dias)',
-    chave_pix: 'financeiro@bandeirantesquimica.com.br',
-    ativo: true,
-    criado_em: '2026-02-05T14:15:00Z',
-  },
-  {
-    id: 'forn_004',
-    empresa_id: 'emp_grupo_eno',
-    tipo_pessoa: 'PF',
-    razao_nome: 'José Augusto Ferreira da Silva',
-    fantasia: 'Sítio Recanto das Palmeiras',
-    cpf_cnpj: '189.442.876-04',
-    ie_rg: 'PR-884.221',
-    email: 'jose.ferreira.sitio@gmail.com',
-    telefone: '(43) 99122-3344',
-    endereco: {
-      cep: '86400-000',
-      logradouro: 'Estrada da Olaria',
-      numero: 'S/N',
-      bairro: 'Água Doce',
-      municipio: 'Jacarezinho',
-      uf: 'PR',
-      complemento: 'Lote 14B'
-    },
-    produtos_fornecidos: [
-      { id: 'p_10', materia_prima_id: 1, codigo_materia_prima: 'MP-001', nome: 'Milho Verde em Espiga 1ª Linha', unidade: 'CX', categoria: 'Matéria-Prima', codigo_fornecedor: 'MLH-VER-01', integrado_materia_prima: true },
-      { id: 'p_11', materia_prima_id: 2, codigo_materia_prima: 'MP-002', nome: 'Feijão Carioca Extra a Granel', unidade: 'KG', categoria: 'Matéria-Prima', codigo_fornecedor: 'FEIJ-CAR-GRANEL', integrado_materia_prima: true },
-      { id: 'p_12', materia_prima_id: 12, codigo_materia_prima: 'LOG-001', nome: 'Paletes de Madeira Padrão PBR', unidade: 'UN', categoria: 'Embalagens', codigo_fornecedor: 'PAL-PBR-70', integrado_materia_prima: true }
-    ],
-    forma_pagamento_id: 'fp_2',
-    forma_pagamento_nome: 'Pix',
-    prazo_pagamento_id: 'pp_1',
-    prazo_pagamento_nome: 'À Vista (0 dias)',
-    chave_pix: '18944287604',
-    ativo: true,
-    criado_em: '2026-02-12T11:00:00Z',
-  },
-];
+// Converte os pedidos de compra reais (Pedidos > Pedido de Compra) deste fornecedor para o histórico
+function montarComprasFornecedor(fornecedorId: string): CompraFornecedor[] {
+  return carregarPedidosCompra()
+    .filter(pc => pc.tipo_parceiro === 'FORNECEDOR' && pc.fornecedor_id === fornecedorId)
+    .map(pc => ({
+      id: pc.id,
+      fornecedor_id: fornecedorId,
+      numero_compra: pc.id,
+      data_emissao: formatarDataBR(pc.data),
+      numero_nota_fiscal: '',
+      valor_total: Number(pc.valor_total) || 0,
+      mes_referencia: mesReferenciaDe(pc.data),
+      status: (pc.status_pedido === 'Entregue (A Pagar)' || pc.status_pedido === 'Pago')
+        ? 'ENTREGUE'
+        : (pc.status_pedido === 'Programado' || pc.status_pedido === 'Confirmado') ? 'A_CAMINHO' : 'EM_PROCESSAMENTO',
+      itens: [{
+        id: `${pc.id}_item`,
+        nome_produto: pc.item_descricao,
+        codigo: '',
+        quantidade: Number(pc.quantidade) || 0,
+        unidade: pc.unidade_medida,
+        valor_unitario: Number(pc.valor_unitario) || 0,
+        valor_total: Number(pc.valor_total) || 0,
+      }],
+      tem_danfe: false,
+    }));
+}
 
-// Compras e Notas Fiscais de Entrada dos Fornecedores
-const HISTORICO_COMPRAS_FORNECEDOR_MOCK: CompraFornecedor[] = [
-  {
-    id: 'comp_001',
-    fornecedor_id: 'forn_001',
-    numero_compra: 'PC-2026/0104',
-    data_emissao: '12/03/2026',
-    data_entrega: '16/03/2026',
-    numero_nota_fiscal: '000.084.219',
-    serie_nf: '1',
-    chave_acesso_nfe: '35260303882110000192550010000842191002341908',
-    valor_total: 38400.00,
-    mes_referencia: 'Mar/26',
-    status: 'ENTREGUE',
-    tem_danfe: true,
-    itens: [
-      { id: 'it_1', nome_produto: 'Embalagem Stand-Up Pouch 500g', codigo: 'EMB-SUP-500', quantidade: 40000, unidade: 'UN', valor_unitario: 0.62, valor_total: 24800.00 },
-      { id: 'it_2', nome_produto: 'Caixa de Papelão Ondulado 20kg', codigo: 'EMB-CX-20', quantidade: 2500, unidade: 'UN', valor_unitario: 4.80, valor_total: 12000.00 },
-      { id: 'it_3', nome_produto: 'Fita Gomada Personalizada', codigo: 'EMB-FIT-01', quantidade: 80, unidade: 'RL', valor_unitario: 20.00, valor_total: 1600.00 },
-    ]
-  },
-  {
-    id: 'comp_002',
-    fornecedor_id: 'forn_001',
-    numero_compra: 'PC-2026/0078',
-    data_emissao: '14/02/2026',
-    data_entrega: '18/02/2026',
-    numero_nota_fiscal: '000.083.510',
-    serie_nf: '1',
-    chave_acesso_nfe: '35260203882110000192550010000835101008745211',
-    valor_total: 29500.00,
-    mes_referencia: 'Fev/26',
-    status: 'ENTREGUE',
-    tem_danfe: true,
-    itens: [
-      { id: 'it_4', nome_produto: 'Bobina Plástica Termoencolhível', codigo: 'EMB-BOB-02', quantidade: 10, unidade: 'BOB', valor_unitario: 1450.00, valor_total: 14500.00 },
-      { id: 'it_5', nome_produto: 'Embalagem Stand-Up Pouch 500g', codigo: 'EMB-SUP-500', quantidade: 25000, unidade: 'UN', valor_unitario: 0.60, valor_total: 15000.00 },
-    ]
-  },
-  {
-    id: 'comp_003',
-    fornecedor_id: 'forn_001',
-    numero_compra: 'PC-2026/0033',
-    data_emissao: '20/01/2026',
-    data_entrega: '24/01/2026',
-    numero_nota_fiscal: '000.082.904',
-    serie_nf: '1',
-    chave_acesso_nfe: '35260103882110000192550010000829041005541990',
-    valor_total: 42100.00,
-    mes_referencia: 'Jan/26',
-    status: 'ENTREGUE',
-    tem_danfe: true,
-    itens: [
-      { id: 'it_6', nome_produto: 'Embalagem Stand-Up Pouch 500g', codigo: 'EMB-SUP-500', quantidade: 50000, unidade: 'UN', valor_unitario: 0.61, valor_total: 30500.00 },
-      { id: 'it_7', nome_produto: 'Caixa de Papelão Ondulado 20kg', codigo: 'EMB-CX-20', quantidade: 2400, unidade: 'UN', valor_unitario: 4.83, valor_total: 11600.00 },
-    ]
-  },
-  {
-    id: 'comp_004',
-    fornecedor_id: 'forn_001',
-    numero_compra: 'PC-2025/0890',
-    data_emissao: '10/12/2025',
-    data_entrega: '15/12/2025',
-    numero_nota_fiscal: '000.081.200',
-    serie_nf: '1',
-    chave_acesso_nfe: '35251203882110000192550010000812001003189912',
-    valor_total: 35000.00,
-    mes_referencia: 'Dez/25',
-    status: 'ENTREGUE',
-    tem_danfe: true,
-    itens: [
-      { id: 'it_8', nome_produto: 'Embalagem Stand-Up Pouch 500g', codigo: 'EMB-SUP-500', quantidade: 50000, unidade: 'UN', valor_unitario: 0.70, valor_total: 35000.00 }
-    ]
-  },
-  {
-    id: 'comp_005',
-    fornecedor_id: 'forn_002',
-    numero_compra: 'PC-2026/0112',
-    data_emissao: '05/03/2026',
-    data_entrega: '10/03/2026',
-    numero_nota_fiscal: '000.033.411',
-    serie_nf: '2',
-    chave_acesso_nfe: '35260361442980000135550020000334111004452109',
-    valor_total: 58200.00,
-    mes_referencia: 'Mar/26',
-    status: 'ENTREGUE',
-    tem_danfe: true,
-    itens: [
-      { id: 'it_9', nome_produto: 'Adubo Organomineral 50kg', codigo: 'INS-ADB-50', quantidade: 400, unidade: 'SC', valor_unitario: 95.50, valor_total: 38200.00 },
-      { id: 'it_10', nome_produto: 'Defensivo Biológico Bac-Protec', codigo: 'INS-BIO-01', quantidade: 50, unidade: 'L', valor_unitario: 400.00, valor_total: 20000.00 },
-    ]
-  },
-  {
-    id: 'comp_006',
-    fornecedor_id: 'forn_003',
-    numero_compra: 'PC-2026/0091',
-    data_emissao: '22/02/2026',
-    data_entrega: '25/02/2026',
-    numero_nota_fiscal: '000.012.980',
-    serie_nf: '1',
-    chave_acesso_nfe: '35260245190432000118550010000129801009941235',
-    valor_total: 18400.00,
-    mes_referencia: 'Fev/26',
-    status: 'ENTREGUE',
-    tem_danfe: true,
-    itens: [
-      { id: 'it_11', nome_produto: 'Ácido Cítrico Grau Alimentício', codigo: 'QUI-ACI-25', quantidade: 40, unidade: 'SC', valor_unitario: 320.00, valor_total: 12800.00 },
-      { id: 'it_12', nome_produto: 'Detergente Enzimático Industrial 50L', codigo: 'QUI-DET-50', quantidade: 8, unidade: 'GL', valor_unitario: 700.00, valor_total: 5600.00 },
-    ]
-  },
-  {
-    id: 'comp_007',
-    fornecedor_id: 'forn_004',
-    numero_compra: 'PC-2026/0052',
-    data_emissao: '08/02/2026',
-    data_entrega: '11/02/2026',
-    numero_nota_fiscal: '000.002.190',
-    serie_nf: '1',
-    chave_acesso_nfe: '41260218944287600400550010000021901007781290',
-    valor_total: 14750.00,
-    mes_referencia: 'Fev/26',
-    status: 'ENTREGUE',
-    tem_danfe: true,
-    itens: [
-      { id: 'it_13', nome_produto: 'Milho Verde em Espiga 1ª Linha', codigo: 'AGR-MLH-01', quantidade: 250, unidade: 'CX', valor_unitario: 45.00, valor_total: 11250.00 },
-      { id: 'it_14', nome_produto: 'Paletes de Madeira Padrão PBR', codigo: 'LOG-PAL-PBR', quantidade: 70, unidade: 'UN', valor_unitario: 50.00, valor_total: 3500.00 },
-    ]
-  }
-];
+// Normaliza registros lidos (podem ter sido gravados por outros módulos com o tipo base de mockStore)
+function carregarFornecedoresCompletos(): Fornecedor[] {
+  return carregarFornecedores().map(f => ({
+    forma_pagamento_id: '',
+    prazo_pagamento_id: '',
+    ...f,
+    produtos_fornecidos: Array.isArray((f as Partial<Fornecedor>).produtos_fornecidos) ? (f as Fornecedor).produtos_fornecidos : [],
+  } as Fornecedor));
+}
 
-// Tooltip para o Gráfico de Compras
 const CustomTooltipCompras = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) => {
   if (active && payload && payload.length) {
     return (
@@ -421,8 +219,20 @@ const CustomTooltipCompras = ({ active, payload, label }: { active?: boolean; pa
 };
 
 export function CadastroFornecedores() {
-  const [fornecedores, setFornecedores] = useState<Fornecedor[]>(FORNECEDORES_INICIAIS);
-  const [catalogoMateriasPrimas, setCatalogoMateriasPrimas] = useState(CATALOGO_MATERIAS_PRIMAS_BASE);
+  // Persistidos no armazenamento local (cadastrosData) e sincronizados entre telas
+  const [fornecedores, setFornecedores] = useListaPersistida<Fornecedor>(carregarFornecedoresCompletos, salvarFornecedores, EVENTO_CADASTROS_ATUALIZADOS);
+  const [catalogoMateriasPrimas, setCatalogoMateriasPrimas] = useState<ItemCatalogoMateriaPrima[]>(() => carregarCatalogoMateriasPrimas());
+  const [versaoCompras, setVersaoCompras] = useState(0);
+  React.useEffect(() => {
+    const recarregarCatalogo = () => setCatalogoMateriasPrimas(carregarCatalogoMateriasPrimas());
+    const recarregarCompras = () => setVersaoCompras(v => v + 1);
+    window.addEventListener('produtos_updated', recarregarCatalogo);
+    window.addEventListener('pedidos_compra_updated', recarregarCompras);
+    return () => {
+      window.removeEventListener('produtos_updated', recarregarCatalogo);
+      window.removeEventListener('pedidos_compra_updated', recarregarCompras);
+    };
+  }, []);
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'PJ' | 'PF'>('TODOS');
   const [filtroStatus, setFiltroStatus] = useState<'TODOS' | 'ATIVOS' | 'INATIVOS'>('TODOS');
@@ -532,21 +342,30 @@ export function CadastroFornecedores() {
     if (!nomeLimpo) return;
 
     // Se estiver marcado para cadastrar no catálogo geral de matérias-primas
-    let novoMpId: number | undefined = undefined;
+    let novoMpId: string | undefined = undefined;
     let novoCodigoMp = `MP-${100 + catalogoMateriasPrimas.length + 1}`;
 
     if (cadastrarNoEstoqueMateriaPrima) {
-      novoMpId = Date.now();
-      const novaMP = {
+      novoMpId = `mp_${Date.now()}`;
+      const unidadesValidas: MateriaPrimaEstoque['unidade_medida'][] = ['KG', 'TON', 'ESTÉREO (m³)', 'UN', 'LITRO'];
+      const unidade = (unidadesValidas as string[]).includes(novoItemUnidade.toUpperCase())
+        ? (novoItemUnidade.toUpperCase() as MateriaPrimaEstoque['unidade_medida'])
+        : 'UN';
+      const novaMP: MateriaPrimaEstoque = {
         id: novoMpId,
         codigo: novoCodigoMp,
         nome: nomeLimpo,
-        unidade: novoItemUnidade,
-        categoria: novoItemCategoria,
-        estoque: 0,
-        custo_medio: 0.00
+        categoria: novoItemCategoria === 'Embalagens' ? 'Embalagens' : 'Insumos Industriais',
+        unidade_medida: unidade,
+        estoque_atual: 0,
+        estoque_minimo: 0,
+        custo_medio_unitario: 0,
+        fornecedor_principal: formData.razao_nome || '',
+        localizacao_patio: '',
+        status: 'NORMAL',
       };
-      setCatalogoMateriasPrimas(prev => [...prev, novaMP]);
+      // Grava no cadastro real de Matéria Prima (evento 'produtos_updated' recarrega o catálogo)
+      salvarMateriaPrima([...carregarMateriaPrima(), novaMP]);
     }
 
     const novoItem: ProdutoFornecidoItem = {
@@ -743,8 +562,8 @@ export function CadastroFornecedores() {
   // Compras do fornecedor selecionado no histórico
   const comprasDoFornecedor = useMemo(() => {
     if (!fornecedorSelecionado) return [];
-    return HISTORICO_COMPRAS_FORNECEDOR_MOCK.filter(c => c.fornecedor_id === fornecedorSelecionado.id);
-  }, [fornecedorSelecionado]);
+    return montarComprasFornecedor(fornecedorSelecionado.id);
+  }, [fornecedorSelecionado, versaoCompras]);
 
   const totalCompradoFornecedor = useMemo(() => {
     return comprasDoFornecedor.reduce((acc, curr) => acc + curr.valor_total, 0);
@@ -752,15 +571,8 @@ export function CadastroFornecedores() {
 
   // Gráfico mensal de compras feitas no fornecedor
   const dadosGraficoMensal = useMemo(() => {
-    const ordemMeses = ['Out/25', 'Nov/25', 'Dez/25', 'Jan/26', 'Fev/26', 'Mar/26'];
-    const mapaMeses: Record<string, number> = {
-      'Out/25': 0,
-      'Nov/25': 0,
-      'Dez/25': 0,
-      'Jan/26': 0,
-      'Fev/26': 0,
-      'Mar/26': 0,
-    };
+    const ordemMeses = ultimosMesesReferencia(6);
+    const mapaMeses: Record<string, number> = Object.fromEntries(ordemMeses.map(m => [m, 0]));
 
     comprasDoFornecedor.forEach(c => {
       if (c.mes_referencia in mapaMeses) {

@@ -22,109 +22,19 @@ import {
   Check,
   AlertCircle
 } from 'lucide-react';
+import {
+  carregarColaboradoresProducao,
+  salvarColaboradoresProducao,
+  EVENTO_CADASTROS_ATUALIZADOS,
+  ColaboradorProducao,
+} from '../../data/cadastrosData';
+import { useListaPersistida } from '../../lib/useListaPersistida';
 
-export interface ColaboradorProducao {
-  id: string;
-  matricula: string;
-  nome_completo: string;
-  cargo: string;
-  setor: string;
-  cpf: string;
-  telefone: string;
-  status: 'ATIVO' | 'INATIVO' | 'FERIAS';
-  observacoes?: string;
-}
+// Tipo e persistência centralizados em cadastrosData
+export type { ColaboradorProducao } from '../../data/cadastrosData';
 
-export const COLABORADORES_PRODUCAO_INICIAIS: ColaboradorProducao[] = [
-  {
-    id: 'prd_001',
-    matricula: 'PRD-101',
-    nome_completo: 'José Aparecido da Silva',
-    cargo: 'Encarregado de Turno',
-    setor: 'Ralação e Moagem',
-    cpf: '284.119.502-33',
-    telefone: '(43) 99841-2211',
-    status: 'ATIVO',
-    observacoes: 'Responsável pelo comando dos operadores e início de safra matutina.'
-  },
-  {
-    id: 'prd_002',
-    matricula: 'PRD-102',
-    nome_completo: 'Marcos Roberto Ferreira',
-    cargo: 'Operador de Secador Flash Dryer',
-    setor: 'Secagem e Amido',
-    cpf: '341.882.909-15',
-    telefone: '(43) 99654-7788',
-    status: 'ATIVO',
-    observacoes: 'Controle de temperatura e umidade da fécula fina.'
-  },
-  {
-    id: 'prd_003',
-    matricula: 'PRD-103',
-    nome_completo: 'Cláudio Manoel dos Santos',
-    cargo: 'Operador de Caldeira e Vapor',
-    setor: 'Caldeira e Utilidades',
-    cpf: '190.442.818-44',
-    telefone: '(43) 99120-4455',
-    status: 'ATIVO',
-    observacoes: 'Certificação NR-13 de caldeiras vigente até 2027.'
-  },
-  {
-    id: 'prd_004',
-    matricula: 'PRD-104',
-    nome_completo: 'Valdir Oliveira de Souza',
-    cargo: 'Auxiliar de Lavagem e Descasque',
-    setor: 'Lavagem e Recepção',
-    cpf: '415.772.338-90',
-    telefone: '(43) 99877-1122',
-    status: 'ATIVO',
-    observacoes: 'Operação da mesa lavadora e remoção de impurezas da raiz in natura.'
-  },
-  {
-    id: 'prd_005',
-    matricula: 'PRD-105',
-    nome_completo: 'Franciele Cristina Alves',
-    cargo: 'Auxiliar de Controle de Qualidade',
-    setor: 'Laboratório e Qualidade',
-    cpf: '502.119.840-77',
-    telefone: '(43) 99933-6677',
-    status: 'ATIVO',
-    observacoes: 'Coleta horária de amostras de amido, pH e viscosidade.'
-  },
-  {
-    id: 'prd_006',
-    matricula: 'PRD-106',
-    nome_completo: 'Emerson Dias Ribeiro',
-    cargo: 'Operador de Empilhadeira',
-    setor: 'Ensaque e Expedição',
-    cpf: '188.441.902-12',
-    telefone: '(43) 99611-8899',
-    status: 'ATIVO',
-    observacoes: 'Movimentação de Big Bags e paletização de sacarias de 25kg.'
-  },
-  {
-    id: 'prd_007',
-    matricula: 'PRD-107',
-    nome_completo: 'Tiago Antunes de Lima',
-    cargo: 'Auxiliar de Ensaque e Costura',
-    setor: 'Ensaque e Expedição',
-    cpf: '390.881.204-65',
-    telefone: '(43) 99744-3322',
-    status: 'ATIVO',
-    observacoes: 'Operador da máquina costuradora de sacos de ráfia valvulados.'
-  },
-  {
-    id: 'prd_008',
-    matricula: 'PRD-108',
-    nome_completo: 'Sebastião Donizete Ramos',
-    cargo: 'Mecânico de Manutenção Industrial',
-    setor: 'Manutenção Mecânica',
-    cpf: '109.845.228-40',
-    telefone: '(43) 99188-7744',
-    status: 'FERIAS',
-    observacoes: 'Em período de férias regulamentares até o final do mês.'
-  }
-];
+/** @deprecated dados de exemplo removidos; os colaboradores ficam no armazenamento local */
+export const COLABORADORES_PRODUCAO_INICIAIS: ColaboradorProducao[] = [];
 
 export const SETORES_PRODUCAO = [
   'Lavagem e Recepção',
@@ -137,7 +47,7 @@ export const SETORES_PRODUCAO = [
 ];
 
 export function CadastroProducao() {
-  const [colaboradores, setColaboradores] = useState<ColaboradorProducao[]>(COLABORADORES_PRODUCAO_INICIAIS);
+  const [colaboradores, setColaboradores] = useListaPersistida<ColaboradorProducao>(carregarColaboradoresProducao, salvarColaboradoresProducao, EVENTO_CADASTROS_ATUALIZADOS);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TODOS' | 'ATIVO' | 'INATIVO' | 'FERIAS'>('TODOS');
   const [setorFilter, setSetorFilter] = useState<string>('TODOS');

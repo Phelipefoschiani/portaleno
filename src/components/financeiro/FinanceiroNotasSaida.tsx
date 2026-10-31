@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileCheck2,
   Search,
@@ -11,8 +11,11 @@ import {
 } from 'lucide-react';
 import {
   NotaFiscalSaida,
-  NOTAS_SAIDA_INICIAIS
+  carregarNotasSaida,
+  formatarMoeda,
+  numeroSeguro
 } from '../../data/financeiroData';
+import { formatarDataBR, compararDatas } from '../../lib/datas';
 import { FinanceiroNavTabs } from './FinanceiroNavTabs';
 
 interface Props {
@@ -20,16 +23,29 @@ interface Props {
 }
 
 export function FinanceiroNotasSaida({ onNavigate }: Props) {
-  const [notas] = useState<NotaFiscalSaida[]>(NOTAS_SAIDA_INICIAIS);
+  const [notas, setNotas] = useState<NotaFiscalSaida[]>([]);
   const [busca, setBusca] = useState('');
   const [copiadoId, setCopiadoId] = useState<string | null>(null);
   const [modalVisualizar, setModalVisualizar] = useState<NotaFiscalSaida | null>(null);
 
+  // Lê do armazenamento e acompanha atualizações feitas em outras telas
+  useEffect(() => {
+    const recarregar = () =>
+      setNotas([...carregarNotasSaida()].sort((a, b) => compararDatas(b.data_emissao, a.data_emissao)));
+    recarregar();
+    window.addEventListener('financeiro_updated', recarregar);
+    window.addEventListener('sistema_reset_updated', recarregar);
+    return () => {
+      window.removeEventListener('financeiro_updated', recarregar);
+      window.removeEventListener('sistema_reset_updated', recarregar);
+    };
+  }, []);
+
   const notasFiltradas = notas.filter(n =>
-    n.numero.includes(busca) ||
-    n.cliente_nome.toLowerCase().includes(busca.toLowerCase()) ||
-    n.chave_acesso.includes(busca) ||
-    n.cnpj_cpf.includes(busca)
+    String(n.numero || '').includes(busca) ||
+    (n.cliente_nome || '').toLowerCase().includes(busca.toLowerCase()) ||
+    (n.chave_acesso || '').includes(busca) ||
+    (n.cnpj_cpf || '').includes(busca)
   );
 
   const handleCopiarChave = (chave: string, id: string) => {
@@ -88,6 +104,13 @@ export function FinanceiroNotasSaida({ onNavigate }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
+              {notasFiltradas.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
+                    Nenhuma nota fiscal de saída encontrada.
+                  </td>
+                </tr>
+              )}
               {notasFiltradas.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                   <td className="py-3.5 px-5 font-mono font-bold text-slate-900">
@@ -114,21 +137,28 @@ export function FinanceiroNotasSaida({ onNavigate }: Props) {
                   </td>
 
                   <td className="py-3.5 px-4 font-mono text-slate-700">
-                    {item.data_emissao}
+                    {formatarDataBR(item.data_emissao)}
                   </td>
 
                   <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                    {item.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {formatarMoeda(item.valor_total)}
                     <div className="text-[10px] text-slate-400 font-normal font-sans">
-                      {(item.peso_liquido_kg / 1000).toLocaleString('pt-BR')} Ton
+                      {(numeroSeguro(item.peso_liquido_kg) / 1000).toLocaleString('pt-BR')} Ton
                     </div>
                   </td>
 
                   <td className="py-3.5 px-4">
-                    <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                      <span>Autorizada</span>
-                    </span>
+                    {item.status_sefaz && item.status_sefaz !== 'AUTORIZADA' ? (
+                      <span className="inline-flex items-center gap-1 text-red-700 font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
+                        <span>{item.status_sefaz === 'CANCELADA' ? 'Cancelada' : 'Inutilizada'}</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                        <span>Autorizada</span>
+                      </span>
+                    )}
                   </td>
 
                   <td className="py-3.5 px-5 text-right">
@@ -178,7 +208,7 @@ export function FinanceiroNotasSaida({ onNavigate }: Props) {
                     </div>
                     <div>
                       <span className="text-slate-400 block font-medium">Data de Emissão:</span>
-                      <strong className="text-slate-800 font-mono text-sm">{modalVisualizar.data_emissao}</strong>
+                      <strong className="text-slate-800 font-mono text-sm">{formatarDataBR(modalVisualizar.data_emissao)}</strong>
                     </div>
                   </div>
                 </div>
@@ -199,7 +229,7 @@ export function FinanceiroNotasSaida({ onNavigate }: Props) {
                   <div className="flex justify-between items-center p-3 bg-emerald-950 text-white rounded-xl shadow-xs">
                     <span className="font-bold text-emerald-200 text-xs">Valor Total da Nota:</span>
                     <span className="font-mono font-black text-lg text-white">
-                      {modalVisualizar.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {formatarMoeda(modalVisualizar.valor_total)}
                     </span>
                   </div>
                 </div>

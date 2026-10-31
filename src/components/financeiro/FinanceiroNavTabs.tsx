@@ -32,8 +32,8 @@ export function FinanceiroNavTabs({ activeTab, onNavigate }: FinanceiroNavTabsPr
     const rec = carregarTitulosReceber();
     const pag = carregarTitulosPagar();
     setCounts({
-      aReceber: rec.filter(r => r.status === 'EM_ABERTO').length,
-      aPagar: pag.filter(p => p.status === 'A_PAGAR').length
+      aReceber: rec.filter(r => r.status !== 'PAGO').length,
+      aPagar: pag.filter(p => p.status !== 'PAGO').length
     });
   };
 

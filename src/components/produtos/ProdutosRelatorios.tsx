@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BarChart3,
   TrendingUp,
@@ -20,9 +20,14 @@ import {
   Legend
 } from 'recharts';
 import {
-  ESTOQUE_PRODUTOS_INICIAIS,
-  MATERIAS_PRIMAS_INICIAIS
+  carregarEstoqueProdutos,
+  carregarMateriaPrima,
+  carregarReceitas,
+  converterQuantidade,
+  ProdutoEstoque,
+  MateriaPrimaEstoque
 } from '../../data/produtosData';
+import { hojeISO } from '../../lib/datas';
 import { ProdutosNavTabs } from './ProdutosNavTabs';
 
 interface Props {
@@ -30,11 +35,23 @@ interface Props {
 }
 
 export function ProdutosRelatorios({ onNavigate }: Props) {
-  const produtos = ESTOQUE_PRODUTOS_INICIAIS;
-  const materias = MATERIAS_PRIMAS_INICIAIS;
+  // Dados reais do estoque (atualiza quando produtos/matérias-primas mudam)
+  const [produtos, setProdutos] = useState<ProdutoEstoque[]>(() => carregarEstoqueProdutos());
+  const [materias, setMaterias] = useState<MateriaPrimaEstoque[]>(() => carregarMateriaPrima());
+  useEffect(() => {
+    const atualizar = () => {
+      setProdutos(carregarEstoqueProdutos());
+      setMaterias(carregarMateriaPrima());
+    };
+    window.addEventListener('produtos_updated', atualizar);
+    return () => window.removeEventListener('produtos_updated', atualizar);
+  }, []);
 
-  const totalEstoqueKg = produtos.reduce((acc, p) => acc + p.estoque_atual_kg, 0);
-  const totalRaizTon = materias.find(m => m.categoria === 'Raiz In Natura')?.estoque_atual || 0;
+  const totalEstoqueKg = produtos.reduce((acc, p) => acc + (p.estoque_atual_kg || 0), 0);
+  // Raiz in natura convertida para toneladas conforme a unidade cadastrada
+  const totalRaizTon = materias
+    .filter(m => m.categoria === 'Raiz In Natura')
+    .reduce((acc, m) => acc + (converterQuantidade(m.estoque_atual || 0, m.unidade_medida, 'TON') || 0), 0);
 
   const dadosGrafico = produtos.map(p => ({
     nome: p.nome.split(' ')[0] + ' ' + (p.nome.split(' ')[1] || ''),
@@ -45,14 +62,14 @@ export function ProdutosRelatorios({ onNavigate }: Props) {
   const handleExportarCsv = () => {
     const cabecalho = 'Codigo,Nome,Categoria,Embalagem,Estoque_Sacos,Estoque_Ton,Preco_Unitario\n';
     const linhas = produtos.map(p =>
-      `"${p.codigo}","${p.nome}","${p.categoria}","${p.tipo_embalagem}",${p.estoque_atual_sacos},${(p.estoque_atual_kg / 1000).toFixed(2)},${p.preco_unitario_venda.toFixed(2)}`
+      `"${p.codigo}","${p.nome}","${p.categoria}","${p.tipo_embalagem}",${p.estoque_atual_sacos},${(p.estoque_atual_kg / 1000).toFixed(2)},${(p.preco_unitario_venda || 0).toFixed(2)}`
     ).join('\n');
 
     const blob = new Blob([cabecalho + linhas], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `relatorio_estoque_produtos_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `relatorio_estoque_produtos_${hojeISO()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -110,14 +127,20 @@ export function ProdutosRelatorios({ onNavigate }: Props) {
           <div className="flex items-center gap-2">
             <span className="text-slate-400 font-medium">Raiz no Pátio (Autonomia):</span>
             <span className="font-mono font-bold text-slate-900">
-              {totalRaizTon.toLocaleString('pt-BR')} Ton (~4 dias de moagem)
+              {totalRaizTon.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} Ton
             </span>
           </div>
           <div className="w-px h-4 bg-slate-200 hidden sm:block" />
           <div className="flex items-center gap-2">
             <span className="text-slate-400 font-medium">Taxa de Extração Média:</span>
             <span className="font-mono font-bold text-emerald-700">
-              26.5% de rendimento de amido
+              {(() => {
+                // Rendimento real das receitas: kg de produto por kg de mandioca
+                const fatores = carregarReceitas().map(r => r.kg_mandioca_por_kg_produto || 0).filter(f => f > 0);
+                if (fatores.length === 0) return 'Sem receitas com mandioca';
+                const media = fatores.reduce((a, b) => a + b, 0) / fatores.length;
+                return `${(100 / media).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% de rendimento (média das receitas)`;
+              })()}
             </span>
           </div>
         </div>

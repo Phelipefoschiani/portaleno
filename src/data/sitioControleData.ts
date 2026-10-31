@@ -51,33 +51,46 @@ export const CONTROLE_SITIO_INICIAL: ControleSitioState = {
   despesas: []
 };
 
-const STORAGE_KEY_SITIO_DESPESAS = 'grupo_eno_sitio_controle_despesas_v3';
+export const STORAGE_KEY_SITIO_DESPESAS = 'grupo_eno_sitio_controle_despesas_v3';
+export const EVENTO_SITIO_ATUALIZADO = 'sitio_controle_despesas_updated';
+
+function estadoVazio(): ControleSitioState {
+  return { totalLitrosDisponivel: 0, capacidadeTanqueLitros: 5000, despesas: [] };
+}
+
+// Valida o formato gravado; qualquer coisa fora do formato vira estado zerado
+function normalizarEstado(dados: unknown): ControleSitioState {
+  if (!dados || typeof dados !== 'object' || Array.isArray(dados)) return estadoVazio();
+  const d = dados as Partial<ControleSitioState>;
+  const litros = Number(d.totalLitrosDisponivel);
+  const capacidade = Number(d.capacidadeTanqueLitros);
+  return {
+    totalLitrosDisponivel: Number.isFinite(litros) && litros > 0 ? litros : 0,
+    capacidadeTanqueLitros: Number.isFinite(capacidade) && capacidade > 0 ? capacidade : 5000,
+    despesas: Array.isArray(d.despesas) ? d.despesas.filter(x => x && typeof x === 'object') : []
+  };
+}
 
 export function carregarControleSitio(): ControleSitioState {
-  const modoLimpo = typeof window !== 'undefined' && localStorage.getItem('grupo_eno_modo_limpo_v1') === 'true';
-  const vazioState: ControleSitioState = { totalLitrosDisponivel: 0, capacidadeTanqueLitros: 5000, despesas: [] };
-  if (typeof window === 'undefined') return modoLimpo ? vazioState : CONTROLE_SITIO_INICIAL;
+  if (typeof window === 'undefined') return estadoVazio();
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SITIO_DESPESAS);
     if (raw === null) {
-      if (modoLimpo) {
-        localStorage.setItem(STORAGE_KEY_SITIO_DESPESAS, JSON.stringify(vazioState));
-        return vazioState;
-      }
-      localStorage.setItem(STORAGE_KEY_SITIO_DESPESAS, JSON.stringify(CONTROLE_SITIO_INICIAL));
-      return CONTROLE_SITIO_INICIAL;
+      const vazio = estadoVazio();
+      localStorage.setItem(STORAGE_KEY_SITIO_DESPESAS, JSON.stringify(vazio));
+      return vazio;
     }
-    return JSON.parse(raw);
+    return normalizarEstado(JSON.parse(raw));
   } catch (e) {
     console.error('Erro ao ler controle do sítio:', e);
   }
-  return modoLimpo ? vazioState : CONTROLE_SITIO_INICIAL;
+  return estadoVazio();
 }
 
 export function salvarControleSitio(dados: ControleSitioState): void {
   try {
     localStorage.setItem(STORAGE_KEY_SITIO_DESPESAS, JSON.stringify(dados));
-    window.dispatchEvent(new Event('sitio_controle_despesas_updated'));
+    window.dispatchEvent(new Event(EVENTO_SITIO_ATUALIZADO));
   } catch (e) {
     console.error('Erro ao salvar controle do sítio:', e);
   }

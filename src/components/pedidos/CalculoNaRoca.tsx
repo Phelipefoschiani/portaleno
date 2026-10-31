@@ -31,12 +31,13 @@ import {
   carregarCalculosNaRoca,
   salvarCalculosNaRoca,
   criarCalculoNaRocaELancarPedidoCompra,
-  definirPagamentoCalculoRoca
+  definirPagamentoCalculoRoca,
+  excluirCalculoNaRoca,
+  proximoNumeroTicketRoca
 } from '../../data/calculoRocaData';
-import {
-  Agricultor,
-  AGRICULTORES_CADASTRADOS
-} from '../../data/mockStore';
+import { Agricultor } from '../../data/mockStore';
+import { carregarAgricultores, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
+import { hojeISO, paraISO, formatarDataBR } from '../../lib/datas';
 
 interface Props {
   onNavigate?: (pageId: string) => void;
@@ -44,7 +45,14 @@ interface Props {
 
 export function CalculoNaRocaComponent({ onNavigate }: Props) {
   const [calculos, setCalculos] = useState<CalculoNaRoca[]>(carregarCalculosNaRoca());
-  const [agricultores] = useState<Agricultor[]>(AGRICULTORES_CADASTRADOS);
+  const [agricultores, setAgricultores] = useState<Agricultor[]>(() => carregarAgricultores());
+
+  // Lista de agricultores sempre vinda do cadastro
+  useEffect(() => {
+    const atualizar = () => setAgricultores(carregarAgricultores());
+    window.addEventListener(EVENTO_CADASTROS_ATUALIZADOS, atualizar);
+    return () => window.removeEventListener(EVENTO_CADASTROS_ATUALIZADOS, atualizar);
+  }, []);
 
   // Filtros
   const [busca, setBusca] = useState('');
@@ -94,10 +102,10 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
 
   // Modal Novo Cálculo na Roça (Apenas Agricultor, Data apenas, Local automático, Sem variedade)
   const [modalNovo, setModalNovo] = useState(false);
-  const [parceiroId, setParceiroId] = useState(AGRICULTORES_CADASTRADOS[0]?.id || '');
+  const [parceiroId, setParceiroId] = useState(() => carregarAgricultores()[0]?.id || '');
   const [dataPesagem, setDataPesagem] = useState(new Date().toLocaleDateString('pt-BR'));
-  const [pesadorResponsavel, setPesadorResponsavel] = useState('Phelipe - Gerência de Suprimentos');
-  const [precoPorKg, setPrecoPorKg] = useState('0.62');
+  const [pesadorResponsavel, setPesadorResponsavel] = useState('');
+  const [precoPorKg, setPrecoPorKg] = useState('');
   const [observacoes, setObservacoes] = useState('');
 
   // Lista de sacos na nova pesagem (sem arredondamento - até 3 casas após a vírgula)
@@ -243,7 +251,8 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
     setPesoSacoInput('');
     setEditandoSacoNumero(null);
     setDataPesagem(new Date().toLocaleDateString('pt-BR'));
-    setPrecoPorKg('0.62');
+    setPrecoPorKg('');
+    if (!agricultores.some(a => a.id === parceiroId)) setParceiroId(agricultores[0]?.id || '');
     setObservacoes('');
     setModalNovo(true);
     setTimeout(() => {
@@ -259,8 +268,16 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       return;
     }
 
-    const precoKg = parseFloat(precoPorKg.replace(',', '.')) || 0.60;
-    const ticketId = `ROCA-${String(calculos.length + 43).padStart(3, '0')}/26`;
+    if (!agricultorSelecionado) {
+      alert('Selecione um agricultor cadastrado antes de salvar a pesagem.');
+      return;
+    }
+    const precoKg = parseFloat(precoPorKg.replace(',', '.')) || 0;
+    if (precoKg <= 0) {
+      alert('Informe o preço por kg da mandioca.');
+      return;
+    }
+    const ticketId = proximoNumeroTicketRoca(carregarCalculosNaRoca());
     const calculoId = `roca_${Date.now()}`;
     const pedidoId = `ped_roca_${Date.now()}`;
 
@@ -268,15 +285,15 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
     const propriedade = agricultorSelecionado ? agricultorSelecionado.nome_propriedade : '';
     const cidadeUf = agricultorSelecionado && agricultorSelecionado.endereco
       ? `${agricultorSelecionado.endereco.municipio}/${agricultorSelecionado.endereco.uf}`
-      : 'Paranavaí/PR';
+      : '';
     const cpfCnpj = agricultorSelecionado ? agricultorSelecionado.cpf_cnpj : '';
     const chavePix = agricultorSelecionado ? agricultorSelecionado.chave_pix : '';
 
     const novoCalculo: CalculoNaRoca = {
       id: calculoId,
       numero_ticket: ticketId,
-      data: dataPesagem,
-      fornecedor_id: parceiroId,
+      data: paraISO(dataPesagem) || hojeISO(),
+      fornecedor_id: agricultorSelecionado.id,
       fornecedor_nome: nomeAgricultor,
       fornecedor_propriedade: propriedade,
       fornecedor_cidade_uf: cidadeUf,
@@ -346,10 +363,12 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
   // Excluir pesagem
   const handleExcluirCalculo = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (window.confirm('Deseja realmente excluir este registro de pesagem na roça?')) {
-      const atualizados = calculos.filter(c => c.id !== id);
-      setCalculos(atualizados);
-      salvarCalculosNaRoca(atualizados);
+    if (window.confirm('Deseja realmente excluir este registro de pesagem na roça? O pedido de compra gerado (se ainda não pago) também será removido.')) {
+      const res = excluirCalculoNaRoca(id);
+      setCalculos(carregarCalculosNaRoca());
+      if (!res.sucesso) alert(res.mensagem);
+      setMensagemAviso(res.mensagem);
+      setTimeout(() => setMensagemAviso(null), 6000);
     }
   };
 
@@ -430,7 +449,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
       doc.setTextColor(pretoTexto[0], pretoTexto[1], pretoTexto[2]);
-      doc.text(`Data: ${ticketModal.data}`, 196, 29, { align: 'right' });
+      doc.text(`Data: ${formatarDataBR(ticketModal.data)}`, 196, 29, { align: 'right' });
 
       // Linha divisória
       doc.setDrawColor(226, 232, 240);
@@ -882,7 +901,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
 
                     {/* Data */}
                     <td className="py-3 px-4 font-bold text-slate-800">
-                      {item.data}
+                      {formatarDataBR(item.data)}
                     </td>
 
                     {/* Agricultor */}
@@ -1436,7 +1455,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                       {ticketModal.numero_ticket}
                     </strong>
                     <div style={{ color: '#334155', fontSize: '12px', fontWeight: 700, marginTop: '4px' }}>
-                      Data: {ticketModal.data}
+                      Data: {formatarDataBR(ticketModal.data)}
                     </div>
                   </div>
                 </div>

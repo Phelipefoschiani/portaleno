@@ -25,21 +25,28 @@ import {
   CalculoNaRoca,
   carregarCalculosNaRoca
 } from '../../data/calculoRocaData';
-import {
-  Agricultor,
-  AGRICULTORES_CADASTRADOS
-} from '../../data/mockStore';
+import type { Agricultor } from '../../data/mockStore';
+import { carregarAgricultores, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
+import { parseData } from '../../lib/datas';
 
 interface PortalAgricultorProps {
   onVoltar: () => void;
-  agricultorIdInicial?: string;
+  /** id do agricultor vinculado ao usuário logado (sessão) */
+  agricultorId?: string | null;
+  /** ADMIN pode escolher qual produtor visualizar */
+  permitirSelecaoAdmin?: boolean;
 }
 
-export function PortalAgricultor({ onVoltar, agricultorIdInicial }: PortalAgricultorProps) {
-  const [agricultores] = useState<Agricultor[]>(AGRICULTORES_CADASTRADOS);
-  const [agricultorSelecionadoId, setAgricultorSelecionadoId] = useState<string>(
-    agricultorIdInicial || AGRICULTORES_CADASTRADOS[0]?.id || ''
-  );
+export function PortalAgricultor({ onVoltar, agricultorId, permitirSelecaoAdmin = false }: PortalAgricultorProps) {
+  const [agricultores, setAgricultores] = useState<Agricultor[]>(() => carregarAgricultores());
+  useEffect(() => {
+    const h = () => setAgricultores(carregarAgricultores());
+    window.addEventListener(EVENTO_CADASTROS_ATUALIZADOS, h);
+    return () => window.removeEventListener(EVENTO_CADASTROS_ATUALIZADOS, h);
+  }, []);
+  // Para não-administradores o produtor é sempre o vínculo da sessão (sem troca)
+  const [agricultorAdminId, setAgricultorAdminId] = useState<string>(agricultorId || '');
+  const agricultorSelecionadoId = permitirSelecaoAdmin ? (agricultorAdminId || agricultorId || '') : (agricultorId || '');
   const [calculos, setCalculos] = useState<CalculoNaRoca[]>([]);
   const [filtroMes, setFiltroMes] = useState<string>('TODOS');
   const [ticketModal, setTicketModal] = useState<CalculoNaRoca | null>(null);
@@ -56,28 +63,23 @@ export function PortalAgricultor({ onVoltar, agricultorIdInicial }: PortalAgricu
 
   // Produtor selecionado
   const agricultorAtivo = useMemo(() => {
-    return agricultores.find(a => a.id === agricultorSelecionadoId) || agricultores[0];
+    // Sem fallback para outro produtor: só o vinculado
+    return agricultores.find(a => a.id === agricultorSelecionadoId);
   }, [agricultores, agricultorSelecionadoId]);
 
   // Pesagens pertencentes a este agricultor
   const pesagensDoAgricultor = useMemo(() => {
     if (!agricultorAtivo) return [];
-    return calculos.filter(c => {
-      const matchId = c.fornecedor_id === agricultorAtivo.id;
-      const matchNome = c.fornecedor_nome.toLowerCase().includes(agricultorAtivo.nome_completo.toLowerCase());
-      return matchId || matchNome;
-    });
+    // Filtro por id exato (nunca por nome)
+    return calculos.filter(c => c.fornecedor_tipo === 'AGRICULTOR' && c.fornecedor_id === agricultorAtivo.id);
   }, [calculos, agricultorAtivo]);
 
   // Filtradas por mês
   const pesagensFiltradas = useMemo(() => {
     return pesagensDoAgricultor.filter(p => {
       if (filtroMes === 'TODOS') return true;
-      const partes = p.data.split('/');
-      if (partes.length === 3) {
-        return partes[1] === filtroMes;
-      }
-      return true;
+      const d = parseData(p.data);
+      return d ? String(d.getMonth() + 1).padStart(2, '0') === filtroMes : false;
     });
   }, [pesagensDoAgricultor, filtroMes]);
 
@@ -104,11 +106,11 @@ export function PortalAgricultor({ onVoltar, agricultorIdInicial }: PortalAgricu
 
   return (
     <div className="min-h-screen bg-[#f8faf9] text-slate-800 flex flex-col font-sans select-none">
-      
+
       {/* 1. TOPO DO PORTAL DEDICADO DO AGRICULTOR */}
       <header className="sticky top-0 z-30 bg-[#022013] text-white border-b border-emerald-800 shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
-          
+
           <div className="flex items-center gap-3">
             <button
               onClick={onVoltar}
@@ -138,17 +140,21 @@ export function PortalAgricultor({ onVoltar, agricultorIdInicial }: PortalAgricu
                 {agricultorAtivo?.nome_completo || 'Produtor Rural'}
               </span>
             </div>
+            {permitirSelecaoAdmin && (
             <select
               value={agricultorSelecionadoId}
-              onChange={(e) => setAgricultorSelecionadoId(e.target.value)}
+              onChange={(e) => setAgricultorAdminId(e.target.value)}
               className="bg-emerald-950/80 border border-emerald-600/50 text-white text-xs font-bold rounded-xl px-3 py-2 outline-none cursor-pointer hover:border-emerald-400"
+              title="Visualizar como (somente administrador)"
             >
+              <option value="" className="bg-slate-900 text-white">Administrador: escolha um produtor</option>
               {agricultores.map(a => (
                 <option key={a.id} value={a.id} className="bg-slate-900 text-white">
                   {a.nome_completo} ({a.nome_propriedade || 'Propriedade'})
                 </option>
               ))}
             </select>
+            )}
           </div>
 
         </div>
@@ -156,7 +162,19 @@ export function PortalAgricultor({ onVoltar, agricultorIdInicial }: PortalAgricu
 
       {/* 2. CONTEÚDO PRINCIPAL */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        
+
+        {!agricultorAtivo && (
+          <div className="bg-white rounded-2xl border border-amber-200 p-8 max-w-md mx-auto text-center shadow-xs">
+            <Tractor className="w-10 h-10 mx-auto text-amber-500 mb-3" />
+            <h2 className="text-lg font-black text-slate-900">Usuário sem agricultor vinculado</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              {permitirSelecaoAdmin
+                ? 'Selecione um produtor cadastrado acima para visualizar o portal.'
+                : 'Peça ao administrador para vincular seu usuário a um agricultor cadastrado em "Usuários e Acessos".'}
+            </p>
+          </div>
+        )}
+
         {/* Identificação do Agricultor e Propriedade */}
         {agricultorAtivo && (
           <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -207,7 +225,7 @@ export function PortalAgricultor({ onVoltar, agricultorIdInicial }: PortalAgricu
 
         {/* 4 Cards de Métricas e Extrato de Pesagem */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          
+
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
             <div className="text-xs font-bold text-slate-500">Cargas Entregues</div>
             <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">
@@ -254,7 +272,7 @@ export function PortalAgricultor({ onVoltar, agricultorIdInicial }: PortalAgricu
 
         {/* Tabela de Pesagens e Romaneios da Roça */}
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-          
+
           <div className="px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-50/50">
             <div>
               <h3 className="font-extrabold text-slate-900 text-base">

@@ -38,28 +38,42 @@ import {
   Loader2,
   ArrowRightCircle
 } from 'lucide-react';
-import { 
-  PedidoCompraGeral, 
-  PEDIDOS_COMPRA_INICIAIS, 
-  Agricultor, 
-  AGRICULTORES_CADASTRADOS,
+import {
+  PedidoCompraGeral,
+  Agricultor,
   Fornecedor,
-  FORNECEDORES_CADASTRADOS,
   StatusPedidoCompra,
   CategoriaCompra,
   carregarPedidosCompra,
   salvarPedidosCompra,
-  confirmarPedidoCompraELancarDespesa
+  efetivarPedidoCompra,
+  excluirPedidoCompra
 } from '../../data/mockStore';
 import {
   carregarCalculosNaRoca,
   definirPagamentoCalculoRoca
 } from '../../data/calculoRocaData';
+import {
+  carregarAgricultores,
+  carregarFornecedores,
+  EVENTO_CADASTROS_ATUALIZADOS
+} from '../../data/cadastrosData';
+import { hojeISO, paraISO, formatarDataBR } from '../../lib/datas';
 
 export function PedidoCompra() {
   const [pedidos, setPedidos] = useState<PedidoCompraGeral[]>(carregarPedidosCompra());
-  const [agricultores] = useState<Agricultor[]>(AGRICULTORES_CADASTRADOS);
-  const [fornecedores] = useState<Fornecedor[]>(FORNECEDORES_CADASTRADOS);
+  const [agricultores, setAgricultores] = useState<Agricultor[]>(() => carregarAgricultores());
+  const [fornecedores, setFornecedores] = useState<Fornecedor[]>(() => carregarFornecedores());
+
+  // Atualiza listas de parceiros quando o cadastro mudar
+  React.useEffect(() => {
+    const atualizarCadastros = () => {
+      setAgricultores(carregarAgricultores());
+      setFornecedores(carregarFornecedores());
+    };
+    window.addEventListener(EVENTO_CADASTROS_ATUALIZADOS, atualizarCadastros);
+    return () => window.removeEventListener(EVENTO_CADASTROS_ATUALIZADOS, atualizarCadastros);
+  }, []);
   
   // Filtros e busca
   const [busca, setBusca] = useState('');
@@ -114,8 +128,16 @@ export function PedidoCompra() {
   const [tipoParceiroForm, setTipoParceiroForm] = useState<'AGRICULTOR' | 'FORNECEDOR'>('FORNECEDOR');
   
   // IDs selecionados no formulário
-  const [agricultorIdForm, setAgricultorIdForm] = useState(AGRICULTORES_CADASTRADOS[0]?.id || '');
-  const [fornecedorIdForm, setFornecedorIdForm] = useState(FORNECEDORES_CADASTRADOS[0]?.id || '');
+  const [agricultorIdForm, setAgricultorIdForm] = useState(() => carregarAgricultores()[0]?.id || '');
+  const [fornecedorIdForm, setFornecedorIdForm] = useState(() => carregarFornecedores()[0]?.id || '');
+
+  // Mantém a seleção válida quando a lista de parceiros mudar
+  React.useEffect(() => {
+    if (!agricultores.some(a => a.id === agricultorIdForm)) setAgricultorIdForm(agricultores[0]?.id || '');
+  }, [agricultores]);
+  React.useEffect(() => {
+    if (!fornecedores.some(f => f.id === fornecedorIdForm)) setFornecedorIdForm(fornecedores[0]?.id || '');
+  }, [fornecedores]);
 
   // Dados do formulário simples: Fornecedor, Data, Valor e Descrição
   const [dataForm, setDataForm] = useState(new Date().toLocaleDateString('pt-BR'));
@@ -210,15 +232,11 @@ export function PedidoCompra() {
     if (!pedidoEdicaoDestopo) return;
 
     const novoDestopo = Number(destopoInputKg) || 0;
-    setPedidos(prev => prev.map(p => {
-      if (p.id === pedidoEdicaoDestopo.id) {
-        return {
-          ...p,
-          residuo_destopo_casca_kg: novoDestopo
-        };
-      }
-      return p;
-    }));
+    const atualizados = carregarPedidosCompra().map(p =>
+      p.id === pedidoEdicaoDestopo.id ? { ...p, residuo_destopo_casca_kg: novoDestopo } : p
+    );
+    salvarPedidosCompra(atualizados);
+    setPedidos(atualizados);
 
     setPedidoEdicaoDestopo(null);
   };
@@ -233,11 +251,14 @@ export function PedidoCompra() {
 
     if (tipoParceiroForm === 'AGRICULTOR') {
       const agr = agricultores.find(a => a.id === agricultorIdForm) || agricultores[0];
-      if (!agr) return;
+      if (!agr) {
+        alert('Nenhum agricultor cadastrado. Cadastre o agricultor antes de programar a compra.');
+        return;
+      }
 
       novoPedido = {
         id: `ped_${Date.now()}`,
-        data: dataForm,
+        data: paraISO(dataForm) || hojeISO(),
         tipo_parceiro: 'AGRICULTOR',
         agricultor_id: agr.id,
         agricultor_nome: agr.nome_completo,
@@ -260,11 +281,14 @@ export function PedidoCompra() {
       };
     } else {
       const forn = fornecedores.find(f => f.id === fornecedorIdForm) || fornecedores[0];
-      if (!forn) return;
+      if (!forn) {
+        alert('Nenhum fornecedor cadastrado. Cadastre o fornecedor antes de programar a compra.');
+        return;
+      }
 
       novoPedido = {
         id: `ped_${Date.now()}`,
-        data: dataForm,
+        data: paraISO(dataForm) || hojeISO(),
         tipo_parceiro: 'FORNECEDOR',
         fornecedor_id: forn.id,
         fornecedor_nome: forn.razao_nome,
@@ -292,31 +316,7 @@ export function PedidoCompra() {
     setPedidos(atualizados);
     salvarPedidosCompra(atualizados);
 
-    // Registra como despesa programada vinculada no financeiro
-    try {
-      const rawDespesas = localStorage.getItem('grupo_eno_financeiro_despesas_v1');
-      const despesas = rawDespesas ? JSON.parse(rawDespesas) : [];
-      const parceiroNome = novoPedido.tipo_parceiro === 'AGRICULTOR' 
-        ? novoPedido.agricultor_nome 
-        : (novoPedido.fornecedor_fantasia || novoPedido.fornecedor_nome);
-      despesas.unshift({
-        id: `desp_prog_${novoPedido.id}`,
-        pedido_compra_id: novoPedido.id,
-        tipo_despesa: 'PROGRAMADA',
-        status_despesa: 'A_PAGAR',
-        data: novoPedido.data,
-        categoria: novoPedido.categoria,
-        descricao: `[Programado] ${novoPedido.item_descricao} - ${parceiroNome}`,
-        valor: novoPedido.valor_total,
-        setor: 'Fábrica & Moagem',
-        responsavel: 'Equipe de Compras',
-        forma_pagamento: 'PIX',
-        comprovante_anexo: false
-      });
-      localStorage.setItem('grupo_eno_financeiro_despesas_v1', JSON.stringify(despesas));
-    } catch (err) {
-      console.error(err);
-    }
+    // Pedido programado não gera despesa: ele aparece como programado a partir do próprio pedido de compra
 
     // Notifica financeiro para refletir nas despesas programadas
     window.dispatchEvent(new Event('financeiro_updated'));
@@ -326,7 +326,7 @@ export function PedidoCompra() {
     setDataForm(new Date().toLocaleDateString('pt-BR'));
     setItemDescricaoForm('');
     setValorTotalForm('');
-    setMensagemSucesso('Pedido de compra programado com sucesso! Já disponível como despesa programada no Financeiro.');
+    setMensagemSucesso('Pedido de compra programado com sucesso!');
     setTimeout(() => setMensagemSucesso(null), 5000);
   };
 
@@ -373,7 +373,7 @@ export function PedidoCompra() {
       const agr = agricultores.find(a => a.id === editParceiroId) || agricultores[0];
       atualizado = {
         ...pedidoEditando,
-        data: editData,
+        data: paraISO(editData) || editData,
         tipo_parceiro: 'AGRICULTOR',
         agricultor_id: agr?.id,
         agricultor_nome: agr?.nome_completo,
@@ -398,7 +398,7 @@ export function PedidoCompra() {
       const forn = fornecedores.find(f => f.id === editParceiroId) || fornecedores[0];
       atualizado = {
         ...pedidoEditando,
-        data: editData,
+        data: paraISO(editData) || editData,
         tipo_parceiro: 'FORNECEDOR',
         fornecedor_id: forn?.id,
         fornecedor_nome: forn?.razao_nome,
@@ -472,112 +472,57 @@ export function PedidoCompra() {
     e.preventDefault();
     if (!pedidoDefinirPagamento) return;
 
-    const pedidosAtuais = carregarPedidosCompra();
-    const index = pedidosAtuais.findIndex(p => p.id === pedidoDefinirPagamento.id);
-    if (index === -1) return;
+    const ped = carregarPedidosCompra().find(p => p.id === pedidoDefinirPagamento.id);
+    if (!ped) return;
 
-    const ped = pedidosAtuais[index];
-
-    // Atualiza a descrição que vira o produto exato comprado, valor, categoria e forma de pagamento
+    // Edições do modal (produto, valor, categoria) são gravadas no pedido
     const itemEfetivado = produtoCompradoDef.trim() || ped.item_descricao;
-    const valTotal = parseFloat(valorTotalDef.replace(',', '.')) || ped.valor_total;
-
-    ped.item_descricao = itemEfetivado;
-    ped.valor_total = valTotal;
-    ped.categoria = categoriaDef;
-    ped.forma_pagamento = (formaPagamentoDef as any) || 'PIX';
+    const textoValor = valorTotalDef.trim();
+    const valorLido = parseFloat(textoValor.includes(',') ? textoValor.replace(/\./g, '').replace(',', '.') : textoValor);
+    const valTotal = !isNaN(valorLido) ? valorLido : ped.valor_total;
+    if (!paraISO(dataPagamentoOuVencDef)) {
+      alert('Informe uma data válida (DD/MM/AAAA).');
+      return;
+    }
+    const valorAdiantado = parseFloat(valorAdiantadoDef.replace(',', '.')) || 0;
+    if (tipoPagamentoDef === 'ADIANTAMENTO_PARCIAL' && (valorAdiantado <= 0 || valorAdiantado > valTotal)) {
+      alert('Informe um valor de adiantamento maior que zero e menor ou igual ao valor da compra.');
+      return;
+    }
 
     // Verifica se este pedido é de um cálculo na roça
     const calculos = carregarCalculosNaRoca();
     const calculoCorrespondente = calculos.find(c => c.pedido_compra_id === ped.id || c.id === ped.id);
 
     if (calculoCorrespondente) {
-      const res = definirPagamentoCalculoRoca(calculoCorrespondente.id, {
+      const res = definirPagamentoCalculoRoca(
+        calculoCorrespondente.id,
+        {
+          tipo: tipoPagamentoDef,
+          forma_pagamento: formaPagamentoDef,
+          data_pagamento_ou_vencimento: dataPagamentoOuVencDef,
+          valor_pago: tipoPagamentoDef === 'ADIANTAMENTO_PARCIAL' ? valorAdiantado : valTotal,
+          saldo_restante: tipoPagamentoDef === 'ADIANTAMENTO_PARCIAL' ? Math.max(0, valTotal - valorAdiantado) : 0,
+          conta_bancaria: contaBancariaDef,
+          observacao: obsPagamentoDef
+        },
+        { item_descricao: itemEfetivado, valor_total: valTotal, categoria: categoriaDef }
+      );
+      setMensagemSucesso(res.mensagem);
+    } else {
+      // Pedido comum (não-roça): mesmo núcleo idempotente (sem duplicar título/despesa/estoque)
+      const res = efetivarPedidoCompra(ped.id, {
         tipo: tipoPagamentoDef,
+        data: dataPagamentoOuVencDef,
         forma_pagamento: formaPagamentoDef,
-        data_pagamento_ou_vencimento: dataPagamentoOuVencDef,
-        valor_pago: tipoPagamentoDef === 'ADIANTAMENTO_PARCIAL' ? parseFloat(valorAdiantadoDef) || 0 : ped.valor_total,
-        saldo_restante: tipoPagamentoDef === 'ADIANTAMENTO_PARCIAL' 
-          ? Math.max(0, ped.valor_total - (parseFloat(valorAdiantadoDef) || 0)) 
-          : 0,
+        item_descricao: itemEfetivado,
+        valor_total: valTotal,
+        categoria: categoriaDef,
+        valor_pago: valorAdiantado,
         conta_bancaria: contaBancariaDef,
         observacao: obsPagamentoDef
       });
       setMensagemSucesso(res.mensagem);
-    } else {
-      // Pedido comum (não-roça)
-      if (tipoPagamentoDef === 'JA_PAGO') {
-        ped.status_pedido = 'Pago';
-        ped.data_pagamento = dataPagamentoOuVencDef;
-        ped.forma_pagamento = (formaPagamentoDef as any) || 'PIX';
-        ped.observacoes = `${ped.observacoes || ''} | Efetivado como ${itemEfetivado} e pago em ${dataPagamentoOuVencDef} via ${formaPagamentoDef}.`;
-        
-        // Lança no financeiro como despesa realizada/paga
-        try {
-          const rawDespesas = localStorage.getItem('grupo_eno_financeiro_despesas_v1');
-          const despesas = rawDespesas ? JSON.parse(rawDespesas) : [];
-          const parceiroNome = ped.tipo_parceiro === 'AGRICULTOR' ? ped.agricultor_nome : (ped.fornecedor_fantasia || ped.fornecedor_nome);
-
-          // Remove despesa programada prévia vinculada
-          const despesasFiltradas = despesas.filter((d: any) => d.pedido_compra_id !== ped.id && !d.id.includes(ped.id));
-
-          despesasFiltradas.unshift({
-            id: `desp_pc_${ped.id}_${Date.now()}`,
-            pedido_compra_id: ped.id,
-            tipo_despesa: 'REALIZADA',
-            status_despesa: 'PAGO',
-            data: dataPagamentoOuVencDef,
-            categoria: categoriaDef,
-            descricao: `[Compra Efetivada] ${itemEfetivado} - ${parceiroNome}`,
-            valor: valTotal,
-            setor: 'Fábrica & Moagem',
-            responsavel: ped.comprador_nome || 'Gestão de Suprimentos',
-            forma_pagamento: formaPagamentoDef,
-            comprovante_anexo: true
-          });
-          localStorage.setItem('grupo_eno_financeiro_despesas_v1', JSON.stringify(despesasFiltradas));
-          window.dispatchEvent(new Event('financeiro_updated'));
-        } catch (err) {
-          console.error(err);
-        }
-      } else {
-        ped.status_pedido = 'Entregue (A Pagar)';
-        ped.forma_pagamento = (formaPagamentoDef as any) || 'PIX';
-        ped.observacoes = `${ped.observacoes || ''} | A pagar com vencimento em ${dataPagamentoOuVencDef}.`;
-
-        // Lança no Contas a Pagar
-        try {
-          const rawPagar = localStorage.getItem('grupo_eno_financeiro_pagar_v1');
-          const titulosPagar = rawPagar ? JSON.parse(rawPagar) : [];
-          const parceiroNome = ped.tipo_parceiro === 'AGRICULTOR' ? ped.agricultor_nome : (ped.fornecedor_fantasia || ped.fornecedor_nome);
-          
-          const titulosFiltrados = titulosPagar.filter((t: any) => t.pedido_compra_id !== ped.id);
-
-          titulosFiltrados.unshift({
-            id: `pag_pc_${ped.id}_${Date.now()}`,
-            pedido_compra_id: ped.id,
-            numero_documento: `PC-${ped.id.toUpperCase()}`,
-            favorecido_nome: parceiroNome || 'Fornecedor',
-            tipo_favorecido: ped.tipo_parceiro === 'AGRICULTOR' ? 'Agricultor' : 'Fornecedor',
-            categoria: categoriaDef,
-            valor: valTotal,
-            data_emissao: ped.data,
-            data_vencimento: dataPagamentoOuVencDef,
-            status: 'A_PAGAR',
-            forma_pagamento: formaPagamentoDef,
-            chave_pix: ped.agricultor_chave_pix || ped.fornecedor_chave_pix,
-            observacoes: itemEfetivado
-          });
-          localStorage.setItem('grupo_eno_financeiro_pagar_v1', JSON.stringify(titulosFiltrados));
-          window.dispatchEvent(new Event('financeiro_updated'));
-        } catch (err) {
-          console.error(err);
-        }
-      }
-
-      pedidosAtuais[index] = ped;
-      salvarPedidosCompra(pedidosAtuais);
-      setMensagemSucesso(`Pedido transformado em despesa com sucesso! Produto: "${itemEfetivado}" | Categoria: "${categoriaDef}" | Pagamento: ${formaPagamentoDef}`);
     }
 
     setPedidos(carregarPedidosCompra());
@@ -587,30 +532,13 @@ export function PedidoCompra() {
 
   const excluirPedido = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (window.confirm('Deseja realmente excluir este pedido de compra? Ele também será removido das despesas programadas no Financeiro.')) {
-      const atualizados = pedidos.filter(p => p.id !== id);
-      setPedidos(atualizados);
-      salvarPedidosCompra(atualizados);
-
-      // Exclui a despesa correspondente (se deletar, ele some!)
-      try {
-        const rawDespesas = localStorage.getItem('grupo_eno_financeiro_despesas_v1');
-        if (rawDespesas) {
-          const despesas = JSON.parse(rawDespesas);
-          const despesasFiltradas = despesas.filter((d: any) => !d.id.includes(id) && d.pedido_compra_id !== id);
-          localStorage.setItem('grupo_eno_financeiro_despesas_v1', JSON.stringify(despesasFiltradas));
-        }
-        const rawPagar = localStorage.getItem('grupo_eno_financeiro_pagar_v1');
-        if (rawPagar) {
-          const titulos = JSON.parse(rawPagar);
-          const titulosFiltrados = titulos.filter((t: any) => t.pedido_compra_id !== id && !t.id.includes(id));
-          localStorage.setItem('grupo_eno_financeiro_pagar_v1', JSON.stringify(titulosFiltrados));
-        }
-        window.dispatchEvent(new Event('financeiro_updated'));
-      } catch (err) {
-        console.error(err);
-      }
-      setMensagemSucesso('Pedido de compra e despesa programada vinculada excluídos com sucesso!');
+    const ped = pedidos.find(p => p.id === id);
+    const avisoEstoque = ped?.entrada_estoque ? ' A entrada no estoque de matéria-prima também será estornada.' : '';
+    if (window.confirm(`Deseja realmente excluir este pedido de compra? Os lançamentos vinculados no Financeiro serão removidos.${avisoEstoque}`)) {
+      const calculo = carregarCalculosNaRoca().find(c => c.pedido_compra_id === id);
+      excluirPedidoCompra(id, calculo ? [calculo.id] : []);
+      setPedidos(carregarPedidosCompra());
+      setMensagemSucesso('Pedido de compra e lançamentos vinculados excluídos com sucesso!');
       setTimeout(() => setMensagemSucesso(null), 5000);
     }
   };
@@ -731,7 +659,7 @@ export function PedidoCompra() {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
       pdf.setTextColor(30, 41, 59);
-      pdf.text(`Data: ${pedido.data}`, 195, 27, { align: 'right' });
+      pdf.text(`Data: ${formatarDataBR(pedido.data)}`, 195, 27, { align: 'right' });
       
       // Linha divisória
       pdf.setDrawColor(6, 78, 59);
@@ -1166,7 +1094,7 @@ export function PedidoCompra() {
                   >
                     {/* Data */}
                     <td className="py-3.5 px-4 text-slate-700 font-bold whitespace-nowrap">
-                      {pedido.data}
+                      {formatarDataBR(pedido.data)}
                     </td>
 
                     {/* Fornecedor / Produtor Rural */}
@@ -1985,7 +1913,7 @@ export function PedidoCompra() {
                       Pedido de Compra
                     </div>
                     <div className="text-xs font-bold text-slate-800">
-                      Data: <span className="font-mono">{pedidoVisualizarA4.data}</span>
+                      Data: <span className="font-mono">{formatarDataBR(pedidoVisualizarA4.data)}</span>
                     </div>
                   </div>
                 </div>
@@ -2224,7 +2152,7 @@ export function PedidoCompra() {
                       : (pedidoDefinirPagamento.fornecedor_fantasia || pedidoDefinirPagamento.fornecedor_nome)}
                   </strong>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Data Programada: <strong>{pedidoDefinirPagamento.data}</strong> • Qtd: <strong>{pedidoDefinirPagamento.quantidade.toLocaleString('pt-BR')} {pedidoDefinirPagamento.unidade_medida}</strong>
+                    Data Programada: <strong>{formatarDataBR(pedidoDefinirPagamento.data)}</strong> • Qtd: <strong>{pedidoDefinirPagamento.quantidade.toLocaleString('pt-BR')} {pedidoDefinirPagamento.unidade_medida}</strong>
                   </p>
                 </div>
 

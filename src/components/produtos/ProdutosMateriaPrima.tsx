@@ -18,6 +18,7 @@ import {
 import {
   MateriaPrimaEstoque,
   carregarMateriaPrima,
+  calcularStatusMateriaPrima,
   salvarMateriaPrima
 } from '../../data/produtosData';
 import { ProdutosNavTabs } from './ProdutosNavTabs';
@@ -40,11 +41,11 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
     nome: '',
     categoria: 'Raiz In Natura' as MateriaPrimaEstoque['categoria'],
     unidade_medida: 'TON' as MateriaPrimaEstoque['unidade_medida'],
-    estoque_atual: 100,
-    estoque_minimo: 50,
-    custo_medio_unitario: 600,
+    estoque_atual: 0,
+    estoque_minimo: 0,
+    custo_medio_unitario: 0,
     fornecedor_principal: '',
-    localizacao_patio: 'Pátio de Descarga'
+    localizacao_patio: ''
   });
 
   const recarregar = () => {
@@ -88,11 +89,11 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
       nome: '',
       categoria: 'Raiz In Natura',
       unidade_medida: 'TON',
-      estoque_atual: 50,
-      estoque_minimo: 20,
-      custo_medio_unitario: 600,
+      estoque_atual: 0,
+      estoque_minimo: 0,
+      custo_medio_unitario: 0,
       fornecedor_principal: '',
-      localizacao_patio: 'Pátio Central'
+      localizacao_patio: ''
     });
     setModalAberto(true);
   };
@@ -115,9 +116,7 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
 
   const handleSalvar = (e: React.FormEvent) => {
     e.preventDefault();
-    const status: MateriaPrimaEstoque['status'] = 
-      formData.estoque_atual <= formData.estoque_minimo * 0.5 ? 'CRITICO' :
-      formData.estoque_atual <= formData.estoque_minimo ? 'REPOSICAO_NECESSARIA' : 'NORMAL';
+    const status: MateriaPrimaEstoque['status'] = calcularStatusMateriaPrima(formData.estoque_atual, formData.estoque_minimo);
 
     if (modoEdicao) {
       const atualizados = materias.map(m => {

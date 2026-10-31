@@ -36,6 +36,46 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { carregarClientes, salvarClientes, Cliente } from '../../data/clientesData';
+import { carregarRcas, EVENTO_CADASTROS_ATUALIZADOS, RCA } from '../../data/cadastrosData';
+import { carregarPedidosVenda, PedidoVenda } from '../../data/pedidosVendaData';
+import { carregarTitulosReceber } from '../../data/financeiroData';
+import { mesReferenciaDe, ultimosMesesReferencia } from '../../lib/mesesReferencia';
+import { formatarDataBR } from '../../lib/datas';
+
+// Converte os pedidos de venda reais do cliente para a estrutura do histórico
+function montarHistoricoCompras(clienteId: string): CompraCliente[] {
+  const titulos = carregarTitulosReceber();
+  return carregarPedidosVenda()
+    .filter((p: PedidoVenda) => p.cliente_id === clienteId && p.tipo === 'PEDIDO_VENDA' && p.etapa !== 'ORCAMENTO')
+    .map((p: PedidoVenda): CompraCliente => {
+      const titulosPedido = titulos.filter(t => t.pedido_venda_id === p.id);
+      const statusFin: CompraCliente['status_financeiro'] =
+        titulosPedido.length > 0 && titulosPedido.every(t => t.status === 'PAGO')
+          ? 'Liquidado'
+          : titulosPedido.some(t => t.status === 'VENCIDO') ? 'Vencido' : 'A Vencer';
+      return {
+        id: p.id,
+        empresa_id: 'emp_grupo_eno',
+        cliente_id: p.cliente_id,
+        numero_pedido: p.numero_pedido,
+        emitido_em: formatarDataBR(p.data_emissao),
+        data_entrega: p.data_entrega_realizada ? formatarDataBR(p.data_entrega_realizada) : undefined,
+        status_nome: p.etapa === 'ENTREGUE' ? 'Entregue' : p.etapa === 'EM_PRODUCAO' ? 'Em Produção' : 'Faturado',
+        nota_fiscal: p.nota_fiscal ? { numero: p.nota_fiscal.numero, serie: p.nota_fiscal.serie, chave_acesso: p.nota_fiscal.chave_acesso } : undefined,
+        itens: (p.itens || []).map(i => ({
+          produto_nome: i.produto_nome,
+          tipo_embalagem: String(i.tipo_embalagem || ''),
+          quantidade: Number(i.quantidade) || 0,
+          preco_unitario: Number(i.preco_unitario) || 0,
+          total: Number(i.subtotal) || 0,
+          lote_produto: i.lote_producao,
+        })),
+        valor_total: Number(p.valor_total) || 0,
+        status_financeiro: statusFin,
+        mes_referencia: mesReferenciaDe(p.data_emissao),
+      };
+    });
+}
 
 // Estrutura de Itens do Pedido
 export interface CompraItem {
@@ -94,502 +134,6 @@ const TABELAS_PRECO_OPTIONS = [
   { id: 'tab_04', nome: 'Tabela Especial / Contratos' },
 ];
 
-// Vendedores / Representantes Comerciais do Grupo ENO (public.usuarios)
-const VENDEDORES_OPTIONS = [
-  { id: 'usr_vend_01', nome: 'Rodrigo Eno', email: 'rodrigo.eno@grupoeno.com.br' },
-  { id: 'usr_vend_02', nome: 'Marcos Silva', email: 'marcos.silva@grupoeno.com.br' },
-  { id: 'usr_vend_03', nome: 'Juliana Santos', email: 'juliana.santos@grupoeno.com.br' },
-  { id: 'usr_vend_04', nome: 'André Oliveira', email: 'andre.oliveira@grupoeno.com.br' },
-];
-
-// Clientes Iniciais
-const CLIENTES_INICIAIS: Cliente[] = [
-  {
-    id: 'cli_001',
-    empresa_id: 'emp_grupo_eno',
-    tipo_pessoa: 'PJ',
-    razao_nome: 'Supermercados Alvorada Ltda',
-    fantasia: 'Alvorada Supermercados',
-    cpf_cnpj: '14.285.901/0001-44',
-    ie_rg: '254.991.002-1',
-    email: 'compras@alvorada.com.br',
-    telefone: '(19) 3844-2200',
-    endereco: {
-      cep: '13840-000',
-      logradouro: 'Av. Brasil',
-      numero: '1540',
-      bairro: 'Centro',
-      municipio: 'Mogi Guaçu',
-      uf: 'SP',
-      complemento: 'Galpão 02'
-    },
-    forma_pagamento_id: 'fp_1',
-    forma_pagamento_nome: 'Boleto Bancário',
-    prazo_pagamento_id: 'pp_5',
-    prazo_pagamento_nome: '28 Dias',
-    vendedor_id: 'usr_vend_01',
-    vendedor_nome: 'Rodrigo Eno',
-    tabela_preco_id: 'tab_02',
-    tabela_preco_nome: 'Tabela Varejo / Supermercados',
-    ativo: true,
-    criado_em: '2026-01-15T10:00:00Z',
-  },
-  {
-    id: 'cli_002',
-    empresa_id: 'emp_grupo_eno',
-    tipo_pessoa: 'PJ',
-    razao_nome: 'Distribuidora de Alimentos Vale Verde S.A.',
-    fantasia: 'Vale Verde Distribuição',
-    cpf_cnpj: '08.774.321/0001-89',
-    ie_rg: '109.432.880-3',
-    email: 'pedidos@valeverdealimentos.com.br',
-    telefone: '(11) 4590-1122',
-    endereco: {
-      cep: '06700-000',
-      logradouro: 'Rodovia Raposo Tavares',
-      numero: 'Km 28',
-      bairro: 'Granja Viana',
-      municipio: 'Cotia',
-      uf: 'SP',
-    },
-    forma_pagamento_id: 'fp_1',
-    forma_pagamento_nome: 'Boleto Bancário',
-    prazo_pagamento_id: 'pp_6',
-    prazo_pagamento_nome: '30 / 60 Dias (2x)',
-    vendedor_id: 'usr_vend_02',
-    vendedor_nome: 'Marcos Silva',
-    tabela_preco_id: 'tab_01',
-    tabela_preco_nome: 'Tabela Padrão (Distribuição)',
-    ativo: true,
-    criado_em: '2026-02-01T14:30:00Z',
-  },
-  {
-    id: 'cli_003',
-    empresa_id: 'emp_grupo_eno',
-    tipo_pessoa: 'PF',
-    razao_nome: 'Carlos Eduardo Nogueira',
-    fantasia: 'Padaria e Confeitaria Nogueira',
-    cpf_cnpj: '284.119.558-90',
-    ie_rg: '34.889.012-X',
-    email: 'carloseduardo.pan@gmail.com',
-    telefone: '(19) 99812-4433',
-    endereco: {
-      cep: '13870-000',
-      logradouro: 'Rua Saldanha Marinho',
-      numero: '220',
-      bairro: 'Vila Nova',
-      municipio: 'São João da Boa Vista',
-      uf: 'SP',
-    },
-    forma_pagamento_id: 'fp_2',
-    forma_pagamento_nome: 'Pix',
-    prazo_pagamento_id: 'pp_1',
-    prazo_pagamento_nome: 'À Vista (0 dias)',
-    vendedor_id: 'usr_vend_03',
-    vendedor_nome: 'Juliana Santos',
-    tabela_preco_id: 'tab_03',
-    tabela_preco_nome: 'Tabela Atacado / Grande Porte',
-    ativo: true,
-    criado_em: '2026-02-18T09:15:00Z',
-  },
-];
-
-// Dados históricos com múltiplos meses para alimentar o gráfico de faturamento e a lista em linhas
-const HISTORICO_COMPRAS_MOCK: CompraCliente[] = [
-  // Supermercados Alvorada (cli_001)
-  {
-    id: 'ped_102',
-    empresa_id: 'emp_grupo_eno',
-    cliente_id: 'cli_001',
-    numero_pedido: 'PED-2026-0058',
-    emitido_em: '05/03/2026',
-    data_entrega: '08/03/2026',
-    status_nome: 'Faturado',
-    mes_referencia: 'Mar/26',
-    nota_fiscal: {
-      numero: '004.912',
-      serie: '1',
-      chave_acesso: '35260314285901000144550010000049121004912088'
-    },
-    itens: [
-      {
-        produto_nome: 'Mandioca Descascada Congelada 1kg',
-        tipo_embalagem: 'Caixa c/ 10 un (10kg)',
-        quantidade: 200,
-        preco_unitario: 78.50,
-        total: 15700.00,
-        lote_produto: 'LOTE-MC-2603-01'
-      }
-    ],
-    valor_total: 15700.00,
-    status_financeiro: 'A Vencer'
-  },
-  {
-    id: 'ped_101',
-    empresa_id: 'emp_grupo_eno',
-    cliente_id: 'cli_001',
-    numero_pedido: 'PED-2026-0042',
-    emitido_em: '28/02/2026',
-    data_entrega: '02/03/2026',
-    status_nome: 'Entregue',
-    mes_referencia: 'Fev/26',
-    nota_fiscal: {
-      numero: '004.821',
-      serie: '1',
-      chave_acesso: '35260214285901000144550010000048211004821019'
-    },
-    itens: [
-      {
-        produto_nome: 'Farinha de Mandioca Torrada Especial 1kg',
-        tipo_embalagem: 'Fardo c/ 20 un (20kg)',
-        quantidade: 150,
-        preco_unitario: 110.00,
-        total: 16500.00,
-        lote_produto: 'LOTE-FM-2602-01'
-      },
-      {
-        produto_nome: 'Goma de Tapioca Hidratada 500g',
-        tipo_embalagem: 'Caixa c/ 24 un (12kg)',
-        quantidade: 100,
-        preco_unitario: 84.00,
-        total: 8400.00,
-        lote_produto: 'LOTE-TP-2602-03'
-      }
-    ],
-    valor_total: 24900.00,
-    status_financeiro: 'Liquidado'
-  },
-  {
-    id: 'ped_103',
-    empresa_id: 'emp_grupo_eno',
-    cliente_id: 'cli_001',
-    numero_pedido: 'PED-2026-0018',
-    emitido_em: '15/01/2026',
-    data_entrega: '18/01/2026',
-    status_nome: 'Entregue',
-    mes_referencia: 'Jan/26',
-    nota_fiscal: {
-      numero: '004.590',
-      serie: '1',
-      chave_acesso: '35260114285901000144550010000045901004590123'
-    },
-    itens: [
-      {
-        produto_nome: 'Polvilho Doce 1kg',
-        tipo_embalagem: 'Fardo c/ 10 un (10kg)',
-        quantidade: 180,
-        preco_unitario: 65.00,
-        total: 11700.00,
-        lote_produto: 'LOTE-PD-2601-02'
-      },
-      {
-        produto_nome: 'Goma de Tapioca Hidratada 500g',
-        tipo_embalagem: 'Caixa c/ 24 un (12kg)',
-        quantidade: 96,
-        preco_unitario: 84.375,
-        total: 8100.00,
-        lote_produto: 'LOTE-TP-2601-01'
-      }
-    ],
-    valor_total: 19800.00,
-    status_financeiro: 'Liquidado'
-  },
-  {
-    id: 'ped_104',
-    empresa_id: 'emp_grupo_eno',
-    cliente_id: 'cli_001',
-    numero_pedido: 'PED-2025-0894',
-    emitido_em: '12/12/2025',
-    data_entrega: '15/12/2025',
-    status_nome: 'Entregue',
-    mes_referencia: 'Dez/25',
-    nota_fiscal: {
-      numero: '004.310',
-      serie: '1',
-      chave_acesso: '35251214285901000144550010000043101004310999'
-    },
-    itens: [
-      {
-        produto_nome: 'Farinha de Mandioca Torrada Especial 1kg',
-        tipo_embalagem: 'Fardo c/ 20 un (20kg)',
-        quantidade: 220,
-        preco_unitario: 108.00,
-        total: 23760.00,
-        lote_produto: 'LOTE-FM-2512-04'
-      },
-      {
-        produto_nome: 'Mandioca Descascada Congelada 1kg',
-        tipo_embalagem: 'Caixa c/ 10 un (10kg)',
-        quantidade: 100,
-        preco_unitario: 76.40,
-        total: 7640.00,
-        lote_produto: 'LOTE-MC-2512-01'
-      }
-    ],
-    valor_total: 31400.00,
-    status_financeiro: 'Liquidado'
-  },
-  {
-    id: 'ped_105',
-    empresa_id: 'emp_grupo_eno',
-    cliente_id: 'cli_001',
-    numero_pedido: 'PED-2025-0780',
-    emitido_em: '10/11/2025',
-    data_entrega: '14/11/2025',
-    status_nome: 'Entregue',
-    mes_referencia: 'Nov/25',
-    nota_fiscal: {
-      numero: '004.095',
-      serie: '1',
-      chave_acesso: '35251114285901000144550010000040951004095882'
-    },
-    itens: [
-      {
-        produto_nome: 'Goma de Tapioca Hidratada 500g',
-        tipo_embalagem: 'Caixa c/ 24 un (12kg)',
-        quantidade: 270,
-        preco_unitario: 83.33,
-        total: 22500.00,
-        lote_produto: 'LOTE-TP-2511-03'
-      }
-    ],
-    valor_total: 22500.00,
-    status_financeiro: 'Liquidado'
-  },
-  {
-    id: 'ped_106',
-    empresa_id: 'emp_grupo_eno',
-    cliente_id: 'cli_001',
-    numero_pedido: 'PED-2025-0652',
-    emitido_em: '18/10/2025',
-    data_entrega: '21/10/2025',
-    status_nome: 'Entregue',
-    mes_referencia: 'Out/25',
-    nota_fiscal: {
-      numero: '003.882',
-      serie: '1',
-      chave_acesso: '35251014285901000144550010000038821003882771'
-    },
-    itens: [
-      {
-        produto_nome: 'Farinha de Mandioca Torrada Especial 1kg',
-        tipo_embalagem: 'Fardo c/ 20 un (20kg)',
-        quantidade: 170,
-        preco_unitario: 107.05,
-        total: 18200.00,
-        lote_produto: 'LOTE-FM-2510-02'
-      }
-    ],
-    valor_total: 18200.00,
-    status_financeiro: 'Liquidado'
-  },
-
-  // Distribuidora Vale Verde (cli_002)
-  {
-    id: 'ped_201',
-    empresa_id: 'emp_grupo_eno',
-    cliente_id: 'cli_002',
-    numero_pedido: 'PED-2026-0035',
-    emitido_em: '20/02/2026',
-    data_entrega: '23/02/2026',
-    status_nome: 'Entregue',
-    mes_referencia: 'Fev/26',
-    nota_fiscal: {
-      numero: '004.760',
-      serie: '1',
-      chave_acesso: '35260208774321000189550010000047601004760032'
-    },
-    itens: [
-      {
-        produto_nome: 'Fécula de Mandioca Industrial (Saco 25kg)',
-        tipo_embalagem: 'Palete c/ 40 sacos (1.000kg)',
-        quantidade: 10,
-        preco_unitario: 4200.00,
-        total: 42000.00,
-        lote_produto: 'LOTE-FC-2602-02'
-      },
-      {
-        produto_nome: 'Polvilho Doce 1kg',
-        tipo_embalagem: 'Fardo c/ 10 un (10kg)',
-        quantidade: 100,
-        preco_unitario: 65.00,
-        total: 6500.00,
-        lote_produto: 'LOTE-PD-2602-01'
-      }
-    ],
-    valor_total: 48500.00,
-    status_financeiro: 'Liquidado'
-  },
-  {
-    id: 'ped_202',
-    empresa_id: 'emp_grupo_eno',
-    cliente_id: 'cli_002',
-    numero_pedido: 'PED-2026-0012',
-    emitido_em: '12/01/2026',
-    data_entrega: '16/01/2026',
-    status_nome: 'Entregue',
-    mes_referencia: 'Jan/26',
-    nota_fiscal: {
-      numero: '004.510',
-      serie: '1',
-      chave_acesso: '35260108774321000189550010000045101004510444'
-    },
-    itens: [
-      {
-        produto_nome: 'Fécula de Mandioca Industrial (Saco 25kg)',
-        tipo_embalagem: 'Palete c/ 40 sacos (1.000kg)',
-        quantidade: 12,
-        preco_unitario: 4200.00,
-        total: 50400.00,
-        lote_produto: 'LOTE-FC-2601-01'
-      },
-      {
-        produto_nome: 'Polvilho Azedo 1kg',
-        tipo_embalagem: 'Fardo c/ 10 un (10kg)',
-        quantidade: 25,
-        preco_unitario: 64.00,
-        total: 1600.00,
-        lote_produto: 'LOTE-PA-2601-01'
-      }
-    ],
-    valor_total: 52000.00,
-    status_financeiro: 'Liquidado'
-  },
-  {
-    id: 'ped_203',
-    empresa_id: 'emp_grupo_eno',
-    cliente_id: 'cli_002',
-    numero_pedido: 'PED-2025-0870',
-    emitido_em: '08/12/2025',
-    data_entrega: '11/12/2025',
-    status_nome: 'Entregue',
-    mes_referencia: 'Dez/25',
-    nota_fiscal: {
-      numero: '004.280',
-      serie: '1',
-      chave_acesso: '35251208774321000189550010000042801004280221'
-    },
-    itens: [
-      {
-        produto_nome: 'Fécula de Mandioca Industrial (Saco 25kg)',
-        tipo_embalagem: 'Palete c/ 40 sacos (1.000kg)',
-        quantidade: 15,
-        preco_unitario: 4150.00,
-        total: 62250.00,
-        lote_produto: 'LOTE-FC-2512-03'
-      },
-      {
-        produto_nome: 'Polvilho Doce 1kg',
-        tipo_embalagem: 'Fardo c/ 10 un (10kg)',
-        quantidade: 27,
-        preco_unitario: 64.81,
-        total: 1750.00,
-        lote_produto: 'LOTE-PD-2512-02'
-      }
-    ],
-    valor_total: 64000.00,
-    status_financeiro: 'Liquidado'
-  },
-
-  // Carlos Eduardo Nogueira (cli_003)
-  {
-    id: 'ped_301',
-    empresa_id: 'emp_grupo_eno',
-    cliente_id: 'cli_003',
-    numero_pedido: 'PED-2026-0062',
-    emitido_em: '06/03/2026',
-    data_entrega: '07/03/2026',
-    status_nome: 'Entregue',
-    mes_referencia: 'Mar/26',
-    nota_fiscal: {
-      numero: '004.930',
-      serie: '1',
-      chave_acesso: '35260328411955800019550010000049301004930015'
-    },
-    itens: [
-      {
-        produto_nome: 'Polvilho Azedo Especial 1kg',
-        tipo_embalagem: 'Fardo c/ 10 un (10kg)',
-        quantidade: 15,
-        preco_unitario: 68.00,
-        total: 1020.00,
-        lote_produto: 'LOTE-PA-2603-01'
-      },
-      {
-        produto_nome: 'Goma de Tapioca Hidratada 500g',
-        tipo_embalagem: 'Caixa c/ 24 un (12kg)',
-        quantidade: 10,
-        preco_unitario: 84.00,
-        total: 840.00,
-        lote_produto: 'LOTE-TP-2603-02'
-      }
-    ],
-    valor_total: 1860.00,
-    status_financeiro: 'Liquidado'
-  },
-  {
-    id: 'ped_302',
-    empresa_id: 'emp_grupo_eno',
-    cliente_id: 'cli_003',
-    numero_pedido: 'PED-2026-0028',
-    emitido_em: '14/02/2026',
-    data_entrega: '15/02/2026',
-    status_nome: 'Entregue',
-    mes_referencia: 'Fev/26',
-    nota_fiscal: {
-      numero: '004.710',
-      serie: '1',
-      chave_acesso: '35260228411955800019550010000047101004710123'
-    },
-    itens: [
-      {
-        produto_nome: 'Polvilho Doce 1kg',
-        tipo_embalagem: 'Fardo c/ 10 un (10kg)',
-        quantidade: 20,
-        preco_unitario: 65.00,
-        total: 1300.00,
-        lote_produto: 'LOTE-PD-2602-01'
-      },
-      {
-        produto_nome: 'Polvilho Azedo Especial 1kg',
-        tipo_embalagem: 'Fardo c/ 10 un (10kg)',
-        quantidade: 17,
-        preco_unitario: 67.65,
-        total: 1150.00,
-        lote_produto: 'LOTE-PA-2602-01'
-      }
-    ],
-    valor_total: 2450.00,
-    status_financeiro: 'Liquidado'
-  },
-  {
-    id: 'ped_303',
-    empresa_id: 'emp_grupo_eno',
-    cliente_id: 'cli_003',
-    numero_pedido: 'PED-2026-0005',
-    emitido_em: '10/01/2026',
-    data_entrega: '11/01/2026',
-    status_nome: 'Entregue',
-    mes_referencia: 'Jan/26',
-    nota_fiscal: {
-      numero: '004.490',
-      serie: '1',
-      chave_acesso: '35260128411955800019550010000044901004490772'
-    },
-    itens: [
-      {
-        produto_nome: 'Goma de Tapioca Hidratada 500g',
-        tipo_embalagem: 'Caixa c/ 24 un (12kg)',
-        quantidade: 23,
-        preco_unitario: 86.08,
-        total: 1980.00,
-        lote_produto: 'LOTE-TP-2601-03'
-      }
-    ],
-    valor_total: 1980.00,
-    status_financeiro: 'Liquidado'
-  }
-];
 
 // Tooltip customizado para o gráfico
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) => {
@@ -619,6 +163,14 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
   // Controle de Navegação: 'lista', 'formulario' ou 'historico'
   const [modo, setModo] = useState<'lista' | 'formulario' | 'historico'>('lista');
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
+
+  // RCAs cadastrados (Cadastro de RCA) para o vínculo vendedor_id do cliente
+  const [rcasCadastrados, setRcasCadastrados] = useState<RCA[]>(() => carregarRcas());
+  React.useEffect(() => {
+    const handleRcas = () => setRcasCadastrados(carregarRcas());
+    window.addEventListener(EVENTO_CADASTROS_ATUALIZADOS, handleRcas);
+    return () => window.removeEventListener(EVENTO_CADASTROS_ATUALIZADOS, handleRcas);
+  }, []);
 
   React.useEffect(() => {
     const handleUpdate = () => {
@@ -687,7 +239,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
     complemento: '',
     forma_pagamento_id: 'fp_1',
     prazo_pagamento_id: 'pp_1',
-    vendedor_id: 'usr_vend_01',
+    vendedor_id: '',
     tabela_preco_id: 'tab_01',
     ativo: true,
   });
@@ -711,7 +263,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
       complemento: '',
       forma_pagamento_id: 'fp_1',
       prazo_pagamento_id: 'pp_1',
-      vendedor_id: 'usr_vend_01',
+      vendedor_id: '',
       tabela_preco_id: 'tab_01',
       ativo: true,
     });
@@ -737,7 +289,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
       complemento: cliente.endereco.complemento || '',
       forma_pagamento_id: cliente.forma_pagamento_id,
       prazo_pagamento_id: cliente.prazo_pagamento_id,
-      vendedor_id: cliente.vendedor_id || 'usr_vend_01',
+      vendedor_id: cliente.vendedor_id || '',
       tabela_preco_id: cliente.tabela_preco_id || 'tab_01',
       ativo: cliente.ativo,
     });
@@ -767,7 +319,8 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
 
     const fp = FORMAS_PAGAMENTO_OPTIONS.find(f => f.id === formData.forma_pagamento_id);
     const pp = PRAZOS_PAGAMENTO_OPTIONS.find(p => p.id === formData.prazo_pagamento_id);
-    const vend = VENDEDORES_OPTIONS.find(v => v.id === formData.vendedor_id);
+    const rcaSel = rcasCadastrados.find(r => r.id === formData.vendedor_id);
+    const vend = rcaSel ? { nome: rcaSel.nome_fantasia || rcaSel.nome_completo } : undefined;
     const tab = TABELAS_PRECO_OPTIONS.find(t => t.id === formData.tabela_preco_id);
 
     if (clienteSelecionado) {
@@ -794,7 +347,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
         forma_pagamento_nome: fp?.nome,
         prazo_pagamento_id: formData.prazo_pagamento_id,
         prazo_pagamento_nome: pp?.nome,
-        vendedor_id: formData.vendedor_id,
+        vendedor_id: rcaSel ? rcaSel.id : undefined,
         vendedor_nome: vend?.nome,
         tabela_preco_id: formData.tabela_preco_id,
         tabela_preco_nome: tab?.nome,
@@ -827,7 +380,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
         forma_pagamento_nome: fp?.nome,
         prazo_pagamento_id: formData.prazo_pagamento_id,
         prazo_pagamento_nome: pp?.nome,
-        vendedor_id: formData.vendedor_id,
+        vendedor_id: rcaSel ? rcaSel.id : undefined,
         vendedor_nome: vend?.nome,
         tabela_preco_id: formData.tabela_preco_id,
         tabela_preco_nome: tab?.nome,
@@ -862,11 +415,23 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
     return matchBusca && matchTipo && matchStatus;
   });
 
+  // Recarrega o histórico quando pedidos/financeiro mudarem
+  const [versaoPedidos, setVersaoPedidos] = useState(0);
+  React.useEffect(() => {
+    const h = () => setVersaoPedidos(v => v + 1);
+    window.addEventListener('pedidos_venda_updated', h);
+    window.addEventListener('financeiro_updated', h);
+    return () => {
+      window.removeEventListener('pedidos_venda_updated', h);
+      window.removeEventListener('financeiro_updated', h);
+    };
+  }, []);
+
   // Compras do cliente selecionado
   const comprasDoCliente = useMemo(() => {
     if (!clienteSelecionado) return [];
-    return HISTORICO_COMPRAS_MOCK.filter(p => p.cliente_id === clienteSelecionado.id);
-  }, [clienteSelecionado]);
+    return montarHistoricoCompras(clienteSelecionado.id);
+  }, [clienteSelecionado, versaoPedidos]);
 
   const totalComprado = useMemo(() => {
     return comprasDoCliente.reduce((acc, curr) => acc + curr.valor_total, 0);
@@ -874,15 +439,8 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
 
   // Dados estruturados para o Gráfico de Linhas Mensal do Faturamento
   const dadosGraficoMensal = useMemo(() => {
-    const ordemMeses = ['Out/25', 'Nov/25', 'Dez/25', 'Jan/26', 'Fev/26', 'Mar/26'];
-    const mapaMeses: Record<string, number> = {
-      'Out/25': 0,
-      'Nov/25': 0,
-      'Dez/25': 0,
-      'Jan/26': 0,
-      'Fev/26': 0,
-      'Mar/26': 0,
-    };
+    const ordemMeses = ultimosMesesReferencia(6);
+    const mapaMeses: Record<string, number> = Object.fromEntries(ordemMeses.map(m => [m, 0]));
 
     comprasDoCliente.forEach(compra => {
       if (compra.mes_referencia in mapaMeses) {
@@ -1514,7 +1072,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
                 <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-sm flex flex-col justify-between">
                   <div>
                     <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                      Representante Responsável <span className="text-red-500">*</span>
+                      Representante Responsável (RCA)
                       <span className="text-[10px] text-slate-400 font-mono ml-1.5">(vendedor_id)</span>
                     </label>
                     <select
@@ -1522,9 +1080,10 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
                       onChange={(e) => setFormData({ ...formData, vendedor_id: e.target.value })}
                       className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
                     >
-                      {VENDEDORES_OPTIONS.map(vend => (
-                        <option key={vend.id} value={vend.id}>
-                          {vend.nome}
+                      <option value="">Sem representante (venda direta)</option>
+                      {rcasCadastrados.map(rca => (
+                        <option key={rca.id} value={rca.id}>
+                          {rca.codigo_rca} · {rca.nome_fantasia || rca.nome_completo}{rca.status !== 'Ativo' ? ` (${rca.status})` : ''}
                         </option>
                       ))}
                     </select>

@@ -1,4 +1,5 @@
 // Base de Dados e Store dos Cadastros Provisórios de Portfólio (Acesso VIP Temporário)
+import { hojeISO, parseData } from '../lib/datas';
 
 export interface PermissoesPortifolio {
   ver_fotos: boolean;
@@ -354,198 +355,31 @@ export const PARCEIROS_PORTFOLIO: PortfolioParceiro[] = [
 // ==========================================
 // 4. CADASTROS PROVISÓRIOS INICIAIS
 // ==========================================
-export const CADASTROS_PROVISORIOS_INICIAIS: CadastroProvisorio[] = [
-  {
-    id: 'port_001',
-    codigo_acesso: 'ENO-VIP-9182',
-    nome_convidado: 'Carlos Eduardo Drummond',
-    empresa_solicitante: 'Laticínios & Alimentos Vale Verde S/A',
-    cargo: 'Diretor de Suprimentos & P&D',
-    cpf_cnpj: '19.824.512/0001-30',
-    email: 'carlos.drummond@valeverdealimentos.com.br',
-    telefone_whatsapp: '(44) 99872-3311',
-    cidade: 'Maringá',
-    uf: 'PR',
-    rca_responsavel_id: 'rca_01',
-    rca_responsavel_nome: 'Marcos Vinicius Silveira',
-    data_criacao: '2026-03-20',
-    data_vencimento: '2026-04-20',
-    status: 'ATIVO',
-    permissoes: {
-      ver_fotos: true,
-      ver_precos: true,
-      tabela_preco_nome: 'Tabela Atacado / Grande Porte',
-      ver_eventos: true,
-      ver_parceiros: true,
-      liberar_pedidos: true, // Pedido liberado!
-      limite_valor_pedido: 80000,
-      forma_pagamento_autorizada: 'Boleto Bancário 28 Dias'
-    },
-    observacoes: 'Prospect qualificado vindo de indicação da Agrishow. Interessado em substituir amido de milho por fécula nativa em linha de queijos e requeijões cremosos.',
-    visualizacoes_count: 7,
-    ultimo_acesso_em: '28/03/2026 10:45',
-    pedidos_realizados: [
-      {
-        id: 'ped_port_001',
-        numero_pedido: 'PED-VIP-2026-001',
-        cadastro_provisorio_id: 'port_001',
-        nome_convidado: 'Carlos Eduardo Drummond',
-        empresa_solicitante: 'Laticínios & Alimentos Vale Verde S/A',
-        rca_nome: 'Marcos Vinicius Silveira',
-        data_hora: '25/03/2026 14:20',
-        status: 'Aprovado pelo RCA',
-        itens: [
-          {
-            produto_id: 'prod_fecula_nativa',
-            produto_nome: 'Fécula de Mandioca Nativa Industrial',
-            tipo_embalagem: 'Big Bag 1000kg',
-            quantidade: 4,
-            preco_unitario: 4850.00,
-            subtotal: 19400.00
-          },
-          {
-            produto_id: 'prod_polvilho_azedo',
-            produto_nome: 'Polvilho Azedo Artesanal Fermentado',
-            tipo_embalagem: 'Saco 25kg',
-            quantidade: 40,
-            preco_unitario: 135.00,
-            subtotal: 5400.00
-          }
-        ],
-        valor_total: 24800.00,
-        forma_pagamento: 'Boleto Bancário 28 Dias',
-        endereco_entrega: 'Av. Colombo, 4820 - Parque Industrial, Maringá/PR',
-        observacoes_pedido: 'Entrega com caminhão plataforma para descarregamento de Big Bags.'
-      }
-    ]
-  },
-  {
-    id: 'port_002',
-    codigo_acesso: 'ENO-VIP-4430',
-    nome_convidado: 'Renata Albuquerque Silva',
-    empresa_solicitante: 'Biscoitos & Snacks Santa Cecília Ltda',
-    cargo: 'Gerente Geral de Compras',
-    cpf_cnpj: '08.314.992/0001-05',
-    email: 'renata.compras@biscoitossantacecilia.com.br',
-    telefone_whatsapp: '(19) 99123-7744',
-    cidade: 'Campinas',
-    uf: 'SP',
-    rca_responsavel_id: 'rca_02',
-    rca_responsavel_nome: 'Aline de Cássia Nogueira',
-    data_criacao: '2026-03-24',
-    data_vencimento: '2026-04-10',
-    status: 'ATIVO',
-    permissoes: {
-      ver_fotos: true,
-      ver_precos: true,
-      tabela_preco_nome: 'Tabela Padrão (Distribuição)',
-      ver_eventos: true,
-      ver_parceiros: true,
-      liberar_pedidos: false, // Pedido NÃO liberado no momento (apenas visualização de fotos, eventos, preços e parceiros)
-      limite_valor_pedido: 0,
-      forma_pagamento_autorizada: 'A Definir'
-    },
-    observacoes: 'Recebeu catálogo provisório para avaliação de laudos técnicos e visitas aos estandes na FIMAN. Emissão de pedidos aguardando validação cadastral do financeiro.',
-    visualizacoes_count: 4,
-    ultimo_acesso_em: '27/03/2026 16:12',
-    pedidos_realizados: []
-  },
-  {
-    id: 'port_003',
-    codigo_acesso: 'ENO-VIP-8819',
-    nome_convidado: 'Gustavo Henrique Vasconcelos',
-    empresa_solicitante: 'Indústria de Papel & Embalagens KraftSul',
-    cargo: 'Coordenador Químico de Produção',
-    cpf_cnpj: '03.771.884/0002-91',
-    email: 'gustavo.quimica@kraftsul.ind.br',
-    telefone_whatsapp: '(41) 98834-0099',
-    cidade: 'Curitiba',
-    uf: 'PR',
-    rca_responsavel_id: 'rca_01',
-    rca_responsavel_nome: 'Marcos Vinicius Silveira',
-    data_criacao: '2026-03-26',
-    data_vencimento: '2026-04-26',
-    status: 'ATIVO',
-    permissoes: {
-      ver_fotos: true,
-      ver_precos: true,
-      tabela_preco_nome: 'Tabela Especial / Contratos',
-      ver_eventos: true,
-      ver_parceiros: true,
-      liberar_pedidos: true, // Pedidos liberados!
-      limite_valor_pedido: 150000,
-      forma_pagamento_autorizada: 'Faturamento 30/60 Dias'
-    },
-    observacoes: 'Necessidade contínua de fécula modificada catiônica para linha de papelão ondulado de alta resistência.',
-    visualizacoes_count: 12,
-    ultimo_acesso_em: '28/03/2026 09:10',
-    pedidos_realizados: []
-  },
-  {
-    id: 'port_004',
-    codigo_acesso: 'ENO-VIP-1102',
-    nome_convidado: 'Mariana Fontes Bastos',
-    empresa_solicitante: 'Rede de Padarias & Delicatessen Pão Real',
-    cargo: 'Proprietária & Mestre Padeira',
-    cpf_cnpj: '32.190.412/0001-77',
-    email: 'mariana@padariapaoreal.com.br',
-    telefone_whatsapp: '(11) 98455-2200',
-    cidade: 'São Paulo',
-    uf: 'SP',
-    rca_responsavel_id: 'rca_03',
-    rca_responsavel_nome: 'Ricardo Antunes Fagundes',
-    data_criacao: '2026-02-15',
-    data_vencimento: '2026-03-15', // VENCIDO para demonstrar o tratamento de expiração!
-    status: 'EXPIRADO',
-    permissoes: {
-      ver_fotos: true,
-      ver_precos: true,
-      tabela_preco_nome: 'Tabela Varejo / Supermercados',
-      ver_eventos: true,
-      ver_parceiros: true,
-      liberar_pedidos: false,
-      limite_valor_pedido: 0,
-      forma_pagamento_autorizada: 'PIX Antecipado'
-    },
-    observacoes: 'Cadastro provisório venceu no dia 15/03/2026. Necessita renovação pelo RCA Ricardo.',
-    visualizacoes_count: 5,
-    ultimo_acesso_em: '14/03/2026 18:20',
-    pedidos_realizados: []
-  }
-];
+// Sem dados de exemplo: os cadastros provisórios ficam no armazenamento local (cadastrosData)
+export const CADASTROS_PROVISORIOS_INICIAIS: CadastroProvisorio[] = [];
 
 /**
  * Função utilitária para checar se a data de vencimento está expirada
+ * (o acesso vale até o fim do dia do vencimento). Data inválida/ausente = expirado.
  */
 export function isCadastroExpirado(dataVencimentoStr: string): boolean {
-  if (!dataVencimentoStr) return false;
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  
-  // Converte YYYY-MM-DD
-  const partes = dataVencimentoStr.split('-');
-  if (partes.length === 3) {
-    const dataVenc = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
-    dataVenc.setHours(23, 59, 59, 999);
-    return dataVenc < hoje;
-  }
-  return false;
+  const dataVenc = parseData(dataVencimentoStr);
+  if (!dataVenc) return true;
+  const hoje = parseData(hojeISO())!;
+  return dataVenc.getTime() < hoje.getTime();
 }
 
 /**
  * Retorna os dias restantes para o vencimento (ou negativo se já expirou)
  */
 export function getDiasRestantes(dataVencimentoStr: string): number {
-  if (!dataVencimentoStr) return 0;
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
+  const dataVenc = parseData(dataVencimentoStr);
+  if (!dataVenc) return 0;
+  const hoje = parseData(hojeISO())!;
+  return Math.round((dataVenc.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+}
 
-  const partes = dataVencimentoStr.split('-');
-  if (partes.length === 3) {
-    const dataVenc = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
-    dataVenc.setHours(0, 0, 0, 0);
-    const diffMs = dataVenc.getTime() - hoje.getTime();
-    return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  }
-  return 0;
+/** Acesso do convidado bloqueado: vencido pela data ou bloqueado manualmente (status BLOQUEADO). */
+export function isAcessoPortfolioBloqueado(c: Pick<CadastroProvisorio, 'data_vencimento' | 'status'>): boolean {
+  return c.status === 'BLOQUEADO' || isCadastroExpirado(c.data_vencimento);
 }

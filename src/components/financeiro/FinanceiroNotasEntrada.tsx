@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText,
   Search,
@@ -17,8 +17,11 @@ import {
 import {
   NotaFiscalEntrada,
   carregarNotasEntrada,
-  salvarNotasEntrada
+  salvarNotasEntrada,
+  numeroSeguro,
+  somarValores
 } from '../../data/financeiroData';
+import { hojeISO, formatarDataBR, compararDatas } from '../../lib/datas';
 import { FinanceiroNavTabs } from './FinanceiroNavTabs';
 
 interface Props {
@@ -26,7 +29,20 @@ interface Props {
 }
 
 export function FinanceiroNotasEntrada({ onNavigate }: Props) {
-  const [notas, setNotas] = useState<NotaFiscalEntrada[]>(carregarNotasEntrada());
+  const [notas, setNotas] = useState<NotaFiscalEntrada[]>([]);
+
+  // Lê do armazenamento e acompanha atualizações feitas em outras telas (ex.: compras integradas)
+  useEffect(() => {
+    const recarregar = () =>
+      setNotas([...carregarNotasEntrada()].sort((a, b) => compararDatas(b.data_emissao, a.data_emissao)));
+    recarregar();
+    window.addEventListener('financeiro_updated', recarregar);
+    window.addEventListener('sistema_reset_updated', recarregar);
+    return () => {
+      window.removeEventListener('financeiro_updated', recarregar);
+      window.removeEventListener('sistema_reset_updated', recarregar);
+    };
+  }, []);
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'Agricultor' | 'Fornecedor'>('TODOS');
   const [copiadoId, setCopiadoId] = useState<string | null>(null);
@@ -41,27 +57,27 @@ export function FinanceiroNotasEntrada({ onNavigate }: Props) {
     parceiro_nome: '',
     tipo_parceiro: 'Agricultor' as 'Agricultor' | 'Fornecedor',
     cnpj_cpf: '',
-    produto_descricao: 'Mandioca Raiz In Natura para Industrialização',
-    peso_liquido_kg: 28000,
-    valor_total: 16800.00,
-    data_emissao: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    produto_descricao: '',
+    peso_liquido_kg: 0,
+    valor_total: 0,
+    data_emissao: hojeISO()
   });
 
   const notasFiltradas = notas.filter(n => {
     const matchBusca = 
-      n.numero.includes(busca) ||
-      n.parceiro_nome.toLowerCase().includes(busca.toLowerCase()) ||
-      n.chave_acesso.includes(busca) ||
-      n.cnpj_cpf.includes(busca) ||
-      n.produto_descricao.toLowerCase().includes(busca.toLowerCase());
+      String(n.numero || '').includes(busca) ||
+      (n.parceiro_nome || '').toLowerCase().includes(busca.toLowerCase()) ||
+      (n.chave_acesso || '').includes(busca) ||
+      (n.cnpj_cpf || '').includes(busca) ||
+      (n.produto_descricao || '').toLowerCase().includes(busca.toLowerCase());
     const matchTipo = filtroTipo === 'TODOS' || n.tipo_parceiro === filtroTipo;
     return matchBusca && matchTipo;
   });
 
   // Métricas
   const totalNotas = notas.length;
-  const totalValor = notas.reduce((acc, curr) => acc + curr.valor_total, 0);
-  const totalPesoTon = (notas.reduce((acc, curr) => acc + curr.peso_liquido_kg, 0) / 1000).toFixed(1);
+  const totalValor = somarValores(notas, n => n.valor_total);
+  const totalPesoTon = (somarValores(notas, n => n.peso_liquido_kg) / 1000).toFixed(1);
 
   const handleCopiarChave = (chave: string, id: string) => {
     navigator.clipboard.writeText(chave);
@@ -84,11 +100,11 @@ export function FinanceiroNotasEntrada({ onNavigate }: Props) {
       produto_descricao: formData.produto_descricao,
       peso_liquido_kg: Number(formData.peso_liquido_kg) || 0,
       valor_total: Number(formData.valor_total) || 0,
-      data_emissao: formData.data_emissao,
+      data_emissao: hojeISO(),
       status_sefaz: 'AUTORIZADA'
     };
 
-    const atualizadas = [novaNota, ...notas];
+    const atualizadas = [novaNota, ...carregarNotasEntrada()];
     setNotas(atualizadas);
     salvarNotasEntrada(atualizadas);
     setModalNovo(false);
@@ -99,10 +115,10 @@ export function FinanceiroNotasEntrada({ onNavigate }: Props) {
       parceiro_nome: '',
       tipo_parceiro: 'Agricultor',
       cnpj_cpf: '',
-      produto_descricao: 'Mandioca Raiz In Natura para Industrialização',
-      peso_liquido_kg: 28000,
-      valor_total: 16800.00,
-      data_emissao: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      produto_descricao: '',
+      peso_liquido_kg: 0,
+      valor_total: 0,
+      data_emissao: hojeISO()
     });
   };
 
@@ -162,7 +178,7 @@ export function FinanceiroNotasEntrada({ onNavigate }: Props) {
             <div>
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Volume Financeiro</div>
               <div className="text-sm font-black text-emerald-900 font-mono">
-                R$ {totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                {totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
               </div>
             </div>
           </div>
@@ -250,18 +266,18 @@ export function FinanceiroNotasEntrada({ onNavigate }: Props) {
                     </td>
 
                     <td className="py-3.5 px-4 font-mono font-semibold text-slate-900">
-                      {(item.peso_liquido_kg / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} Ton
+                      {(numeroSeguro(item.peso_liquido_kg) / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} Ton
                       <div className="text-[10px] text-slate-400 font-normal">
-                        {item.peso_liquido_kg.toLocaleString('pt-BR')} kg
+                        {numeroSeguro(item.peso_liquido_kg).toLocaleString('pt-BR')} kg
                       </div>
                     </td>
 
                     <td className="py-3.5 px-4 font-mono font-black text-emerald-950">
-                      R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      {numeroSeguro(item.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-500 font-medium whitespace-nowrap">
-                      {item.data_emissao}
+                      {formatarDataBR(item.data_emissao)}
                     </td>
 
                     <td className="py-3.5 px-4">
@@ -360,17 +376,17 @@ export function FinanceiroNotasEntrada({ onNavigate }: Props) {
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500 font-medium">Peso Líquido:</span>
                     <span className="font-bold font-mono text-slate-800">
-                      {modalVisualizar.peso_liquido_kg.toLocaleString('pt-BR')} kg
+                      {numeroSeguro(modalVisualizar.peso_liquido_kg).toLocaleString('pt-BR')} kg
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500 font-medium">Data Emissão:</span>
-                    <span className="font-bold font-mono text-slate-800">{modalVisualizar.data_emissao}</span>
+                    <span className="font-bold font-mono text-slate-800">{formatarDataBR(modalVisualizar.data_emissao)}</span>
                   </div>
                   <div className="flex justify-between items-center pt-1.5 border-t border-slate-200">
                     <span className="text-xs font-bold text-slate-900">Total Escriturado:</span>
                     <span className="text-sm font-black font-mono text-emerald-900">
-                      R$ {modalVisualizar.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      {numeroSeguro(modalVisualizar.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </span>
                   </div>
                 </div>
@@ -509,7 +525,7 @@ export function FinanceiroNotasEntrada({ onNavigate }: Props) {
                   </label>
                   <input
                     type="number"
-                    value={formData.peso_liquido_kg}
+                    value={formData.peso_liquido_kg || ''}
                     onChange={(e) => setFormData({ ...formData, peso_liquido_kg: Number(e.target.value) })}
                     placeholder="28000"
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono text-slate-900 focus:outline-none focus:border-emerald-700 bg-slate-50"
@@ -524,7 +540,7 @@ export function FinanceiroNotasEntrada({ onNavigate }: Props) {
                     type="number"
                     step="0.01"
                     required
-                    value={formData.valor_total}
+                    value={formData.valor_total || ''}
                     onChange={(e) => setFormData({ ...formData, valor_total: Number(e.target.value) })}
                     placeholder="16800.00"
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono font-bold text-emerald-950 focus:outline-none focus:border-emerald-700 bg-slate-50"

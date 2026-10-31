@@ -1,33 +1,43 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Search, 
-  Plus, 
-  Edit2, 
-  CheckCircle2, 
-  XCircle, 
-  Building2, 
-  User, 
-  Phone, 
-  Mail, 
-  Save, 
-  Clock, 
-  Trash2, 
-  Users, 
-  Lock, 
-  Unlock, 
-  AlertCircle, 
-  RefreshCw, 
-  X, 
+import {
+  Search,
+  Plus,
+  Edit2,
+  CheckCircle2,
+  XCircle,
+  Building2,
+  User,
+  Phone,
+  Mail,
+  Save,
+  Clock,
+  Trash2,
+  Users,
+  Lock,
+  Unlock,
+  AlertCircle,
+  RefreshCw,
+  X,
   Calendar,
   Sparkles
 } from 'lucide-react';
-import { 
-  CadastroProvisorio, 
-  CADASTROS_PROVISORIOS_INICIAIS, 
-  isCadastroExpirado, 
+import {
+  CadastroProvisorio,
+  isCadastroExpirado,
   getDiasRestantes,
-  PermissoesPortifolio
+  PermissoesPortifolio,
+  PedidoPortifolio
 } from '../../data/portfolioData';
+import {
+  carregarCadastrosProvisorios,
+  salvarCadastrosProvisorios,
+  carregarPedidosPortfolio,
+  salvarPedidosPortfolio,
+  carregarRcas,
+  EVENTO_CADASTROS_ATUALIZADOS,
+} from '../../data/cadastrosData';
+import { useListaPersistida } from '../../lib/useListaPersistida';
+import { hojeISO, somarDias, formatarDataBR } from '../../lib/datas';
 
 interface CadastroProvisorioPortifolioProps {
   onNavigateToCliente?: (clienteId: string) => void;
@@ -37,7 +47,12 @@ export function CadastroProvisorioPortifolio({
   onNavigateToCliente
 }: CadastroProvisorioPortifolioProps) {
   // Lista de Cadastros Provisórios de Portfólio
-  const [cadastros, setCadastros] = useState<CadastroProvisorio[]>(CADASTROS_PROVISORIOS_INICIAIS);
+  // Persistidos no armazenamento local (cadastrosData)
+  const [cadastros, setCadastros] = useListaPersistida<CadastroProvisorio>(carregarCadastrosProvisorios, salvarCadastrosProvisorios, EVENTO_CADASTROS_ATUALIZADOS);
+  // Pedidos transmitidos pelos convidados no Portal VIP
+  const [pedidosPortfolio, setPedidosPortfolio] = useListaPersistida<PedidoPortifolio>(carregarPedidosPortfolio, salvarPedidosPortfolio, EVENTO_CADASTROS_ATUALIZADOS);
+  // RCAs cadastrados para o responsável pelo convidado
+  const [rcasCadastrados] = useListaPersistida(carregarRcas, () => {}, EVENTO_CADASTROS_ATUALIZADOS);
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,7 +72,7 @@ export function CadastroProvisorioPortifolio({
     telefone_whatsapp: string;
     cidade: string;
     uf: string;
-    rca_responsavel_nome: string;
+    rca_responsavel_id: string;
     data_vencimento: string;
     permissoes: PermissoesPortifolio;
     observacoes: string;
@@ -70,7 +85,7 @@ export function CadastroProvisorioPortifolio({
     telefone_whatsapp: '',
     cidade: '',
     uf: 'PR',
-    rca_responsavel_nome: 'Marcos Vinicius Silveira',
+    rca_responsavel_id: '',
     data_vencimento: '',
     permissoes: {
       ver_fotos: true,
@@ -101,7 +116,7 @@ export function CadastroProvisorioPortifolio({
   // Lista filtrada
   const cadastrosFiltrados = useMemo(() => {
     return cadastros.filter(c => {
-      const matchText = 
+      const matchText =
         c.nome_convidado.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.empresa_solicitante.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -120,9 +135,7 @@ export function CadastroProvisorioPortifolio({
 
   // Abrir modal para novo cadastro
   const handleAbrirNovo = () => {
-    const d = new Date();
-    d.setDate(d.getDate() + 30);
-    const dataVencDefault = d.toISOString().split('T')[0];
+    const dataVencDefault = somarDias(hojeISO(), 30);
 
     setFormData({
       nome_convidado: '',
@@ -133,7 +146,7 @@ export function CadastroProvisorioPortifolio({
       telefone_whatsapp: '',
       cidade: '',
       uf: 'PR',
-      rca_responsavel_nome: 'Marcos Vinicius Silveira',
+      rca_responsavel_id: '',
       data_vencimento: dataVencDefault,
       permissoes: {
         ver_fotos: true,
@@ -163,7 +176,7 @@ export function CadastroProvisorioPortifolio({
       telefone_whatsapp: c.telefone_whatsapp,
       cidade: c.cidade,
       uf: c.uf,
-      rca_responsavel_nome: c.rca_responsavel_nome || 'Marcos Vinicius Silveira',
+      rca_responsavel_id: c.rca_responsavel_id || '',
       data_vencimento: c.data_vencimento,
       permissoes: { ...c.permissoes },
       observacoes: c.observacoes || ''
@@ -173,11 +186,9 @@ export function CadastroProvisorioPortifolio({
 
   // Atalhos rápidos de prorrogação no formulário
   const handleSetDiasVencimento = (dias: number) => {
-    const d = new Date();
-    d.setDate(d.getDate() + dias);
     setFormData(prev => ({
       ...prev,
-      data_vencimento: d.toISOString().split('T')[0]
+      data_vencimento: somarDias(hojeISO(), dias)
     }));
   };
 
@@ -190,6 +201,12 @@ export function CadastroProvisorioPortifolio({
       return;
     }
 
+    const rcaSel = rcasCadastrados.find(r => r.id === formData.rca_responsavel_id);
+    const rcaCampos = {
+      rca_responsavel_id: rcaSel?.id,
+      rca_responsavel_nome: rcaSel ? (rcaSel.nome_fantasia || rcaSel.nome_completo) : undefined,
+    };
+
     if (modoEdicao) {
       setCadastros(prev => prev.map(c => {
         if (c.id === modoEdicao.id) {
@@ -197,7 +214,8 @@ export function CadastroProvisorioPortifolio({
           return {
             ...c,
             ...formData,
-            status: exp ? 'EXPIRADO' : 'ATIVO'
+            ...rcaCampos,
+            status: c.status === 'BLOQUEADO' ? 'BLOQUEADO' : (exp ? 'EXPIRADO' : 'ATIVO')
           };
         }
         return c;
@@ -218,8 +236,8 @@ export function CadastroProvisorioPortifolio({
         telefone_whatsapp: formData.telefone_whatsapp,
         cidade: formData.cidade,
         uf: formData.uf,
-        rca_responsavel_nome: formData.rca_responsavel_nome,
-        data_criacao: new Date().toISOString().split('T')[0],
+        ...rcaCampos,
+        data_criacao: hojeISO(),
         data_vencimento: formData.data_vencimento,
         status: exp ? 'EXPIRADO' : 'ATIVO',
         permissoes: formData.permissoes,
@@ -254,9 +272,7 @@ export function CadastroProvisorioPortifolio({
   const handleProrrogarRapido = (id: string, diasMais: number) => {
     setCadastros(prev => prev.map(c => {
       if (c.id === id) {
-        const d = new Date();
-        d.setDate(d.getDate() + diasMais);
-        const novaDataStr = d.toISOString().split('T')[0];
+        const novaDataStr = somarDias(hojeISO(), diasMais);
         return {
           ...c,
           data_vencimento: novaDataStr,
@@ -276,13 +292,13 @@ export function CadastroProvisorioPortifolio({
 
   return (
     <div className="relative h-full w-full flex flex-col bg-[#f4f8f5] text-slate-800 overflow-hidden">
-      
+
       {/* ========================================================= */}
       {/* 1. CABEÇALHO & CARDS DE INDICADORES (MÉTRICAS)            */}
       {/* ========================================================= */}
       <div className="bg-white border-b border-emerald-900/10 px-6 py-4 shadow-xs shrink-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          
+
           <div>
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-emerald-800 text-white shadow-sm">
@@ -354,7 +370,7 @@ export function CadastroProvisorioPortifolio({
       {/* 2. BARRA DE BUSCA E FILTROS                               */}
       {/* ========================================================= */}
       <div className="bg-[#eef4f0] px-6 py-3 border-b border-emerald-900/10 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        
+
         {/* Campo de Busca */}
         <div className="flex-1 min-w-[280px] max-w-md relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -428,11 +444,11 @@ export function CadastroProvisorioPortifolio({
                 cadastrosFiltrados.map((item) => {
                   const expirado = isCadastroExpirado(item.data_vencimento);
                   const diasRestantes = getDiasRestantes(item.data_vencimento);
-                  const dataVencFormatada = item.data_vencimento.split('-').reverse().join('/');
+                  const dataVencFormatada = formatarDataBR(item.data_vencimento);
 
                   return (
                     <tr key={item.id} className="hover:bg-emerald-50/40 transition-colors">
-                      
+
                       {/* Convidado & Empresa */}
                       <td className="py-4 px-6">
                         <div className="font-extrabold text-slate-900 text-sm">{item.nome_convidado}</div>
@@ -502,7 +518,7 @@ export function CadastroProvisorioPortifolio({
                       {/* Ações */}
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          
+
                           {/* Prorrogar Vencimento Rápido (+15 dias) */}
                           <button
                             onClick={() => handleProrrogarRapido(item.id, 15)}
@@ -541,6 +557,72 @@ export function CadastroProvisorioPortifolio({
             </tbody>
           </table>
         </div>
+
+        {/* PEDIDOS TRANSMITIDOS PELOS CONVIDADOS (PORTAL VIP) */}
+        <div className="mt-6 bg-white rounded-2xl border border-emerald-900/10 shadow-xs overflow-hidden">
+          <div className="px-6 py-3.5 border-b border-emerald-900/10 flex items-center justify-between">
+            <h3 className="text-sm font-black text-slate-900">Pedidos recebidos pelo Portfólio VIP</h3>
+            <span className="text-xs font-bold text-slate-500">{pedidosPortfolio.length} pedido(s)</span>
+          </div>
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#022013] text-emerald-200 text-[11px] font-extrabold uppercase tracking-wider">
+                <th className="py-3 px-6">Pedido / Data</th>
+                <th className="py-3 px-4">Convidado / Empresa</th>
+                <th className="py-3 px-4">RCA</th>
+                <th className="py-3 px-4">Itens</th>
+                <th className="py-3 px-4 text-right">Total</th>
+                <th className="py-3 px-6">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-emerald-900/5 text-xs sm:text-sm">
+              {pedidosPortfolio.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
+                    Nenhum pedido transmitido pelos convidados ainda.
+                  </td>
+                </tr>
+              ) : (
+                pedidosPortfolio.map(ped => (
+                  <tr key={ped.id} className="hover:bg-emerald-50/40 align-top">
+                    <td className="py-3 px-6">
+                      <div className="font-mono font-bold text-slate-900">{ped.numero_pedido}</div>
+                      <div className="text-[11px] text-slate-500">{ped.data_hora}</div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-slate-900">{ped.nome_convidado}</div>
+                      <div className="text-[11px] text-emerald-800 font-semibold">{ped.empresa_solicitante}</div>
+                    </td>
+                    <td className="py-3 px-4 text-slate-700">{ped.rca_nome || '-'}</td>
+                    <td className="py-3 px-4 text-[11px] text-slate-600">
+                      {ped.itens.map((it, idx) => (
+                        <div key={idx}>{it.quantidade}x {it.produto_nome} ({it.tipo_embalagem})</div>
+                      ))}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-black text-slate-900">
+                      R$ {Number(ped.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-3 px-6">
+                      <select
+                        value={ped.status}
+                        onChange={(e) => {
+                          const status = e.target.value as PedidoPortifolio['status'];
+                          setPedidosPortfolio(prev => prev.map(p => p.id === ped.id ? { ...p, status } : p));
+                        }}
+                        className="bg-white border border-emerald-900/20 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
+                      >
+                        <option value="Aguardando Aprovação">Aguardando Aprovação</option>
+                        <option value="Aprovado pelo RCA">Aprovado pelo RCA</option>
+                        <option value="Em Faturamento">Em Faturamento</option>
+                        <option value="Entregue">Entregue</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* ========================================================= */}
@@ -550,7 +632,7 @@ export function CadastroProvisorioPortifolio({
       {modalAberto && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
           <div className="relative w-full max-w-5xl lg:max-w-6xl xl:max-w-7xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-emerald-900/20 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
-            
+
             {/* Topo do Modal */}
             <div className="bg-[#022013] text-white px-7 py-4 flex items-center justify-between border-b border-emerald-800 shrink-0">
               <div className="flex items-center gap-2.5">
@@ -569,9 +651,9 @@ export function CadastroProvisorioPortifolio({
 
             {/* Conteúdo do Formulário em Layout Amplo (2 Colunas Lado a Lado) */}
             <form onSubmit={handleSalvar} className="p-6 sm:p-8 overflow-y-auto space-y-6 flex-1">
-              
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 items-start">
-                
+
                 {/* COLUNA ESQUERDA: DADOS PESSOAIS & EMPRESA */}
                 <div className="space-y-4">
                   <h4 className="text-xs font-black uppercase tracking-wider text-emerald-900 border-b border-emerald-900/10 pb-1.5 flex items-center gap-2">
@@ -669,12 +751,30 @@ export function CadastroProvisorioPortifolio({
                         />
                       </div>
                     </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        RCA Responsável
+                      </label>
+                      <select
+                        value={formData.rca_responsavel_id}
+                        onChange={(e) => setFormData({ ...formData, rca_responsavel_id: e.target.value })}
+                        className="w-full bg-[#f8fbf9] border border-emerald-900/20 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-600 font-medium"
+                      >
+                        <option value="">Sem RCA (botão "Fale com seu RCA" fica oculto)</option>
+                        {rcasCadastrados.map(r => (
+                          <option key={r.id} value={r.id}>
+                            {r.codigo_rca} · {r.nome_fantasia || r.nome_completo}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
                 {/* COLUNA DIREITA: VENCIMENTO & LIBERAÇÃO DE PEDIDOS */}
                 <div className="space-y-4">
-                  
+
                   {/* Bloco de Vencimento */}
                   <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-900/10 space-y-2.5">
                     <h4 className="text-xs font-black uppercase tracking-wider text-emerald-900 flex items-center gap-2">

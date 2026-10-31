@@ -1,50 +1,53 @@
 import React, { useState } from 'react';
-import { 
-  Building2, 
-  Calendar, 
-  Clock, 
+import {
+  Building2,
+  Calendar,
+  Clock,
   CreditCard,
-  Lock, 
-  Unlock, 
-  CheckCircle2, 
-  AlertCircle, 
-  ShoppingBag, 
-  Package, 
-  Image as ImageIcon, 
-  Users, 
-  DollarSign, 
-  ArrowLeft, 
-  ExternalLink, 
-  ShieldCheck, 
-  Check, 
-  Copy, 
-  FileText, 
-  Plus, 
-  Minus, 
-  Trash2, 
-  ChevronRight, 
-  MapPin, 
-  Phone, 
-  Mail, 
+  Lock,
+  Unlock,
+  CheckCircle2,
+  AlertCircle,
+  ShoppingBag,
+  Package,
+  Image as ImageIcon,
+  Users,
+  DollarSign,
+  ArrowLeft,
+  ExternalLink,
+  ShieldCheck,
+  Check,
+  Copy,
+  FileText,
+  Plus,
+  Minus,
+  Trash2,
+  ChevronRight,
+  MapPin,
+  Phone,
+  Mail,
   Sparkles,
   Info,
   Maximize2,
   X,
   Send
 } from 'lucide-react';
-import { 
-  CadastroProvisorio, 
-  PortfolioProduto, 
-  PortfolioEvento, 
-  PortfolioParceiro, 
-  PedidoPortifolio, 
+import {
+  CadastroProvisorio,
+  PortfolioProduto,
+  PortfolioEvento,
+  PortfolioParceiro,
+  PedidoPortifolio,
   ItemPedidoPortifolio,
-  PRODUTOS_PORTFOLIO, 
-  EVENTOS_PORTFOLIO, 
+  PRODUTOS_PORTFOLIO,
+  EVENTOS_PORTFOLIO,
   PARCEIROS_PORTFOLIO,
   isCadastroExpirado,
-  getDiasRestantes 
+  isAcessoPortfolioBloqueado,
+  getDiasRestantes
 } from '../../data/portfolioData';
+import { obterRcaPorId, registrarPedidoPortfolio } from '../../data/cadastrosData';
+import { formatarDataBR } from '../../lib/datas';
 
 interface PortalConvidadoExclusivoProps {
   cadastro: CadastroProvisorio;
@@ -57,8 +60,18 @@ export function PortalConvidadoExclusivo({
   onVoltar,
   onNovoPedidoRealizado
 }: PortalConvidadoExclusivoProps) {
-  const [activeTab, setActiveTab] = useState<'fotos' | 'precos' | 'eventos' | 'parceiros' | 'pedido'>('fotos');
-  
+  // Permissões de exibição definidas no Cadastro Provisório
+  const perm = cadastro.permissoes || ({} as CadastroProvisorio['permissoes']);
+  const abaInicial: 'fotos' | 'precos' | 'eventos' | 'parceiros' | 'pedido' =
+    perm.ver_fotos ? 'fotos' : perm.ver_precos ? 'precos' : perm.ver_eventos ? 'eventos' : perm.ver_parceiros ? 'parceiros' : 'pedido';
+  const [activeTab, setActiveTab] = useState<'fotos' | 'precos' | 'eventos' | 'parceiros' | 'pedido'>(abaInicial);
+
+  // RCA responsável (telefone do cadastro de RCA, nunca o do convidado)
+  const rcaResponsavel = obterRcaPorId(cadastro.rca_responsavel_id);
+  const telefoneRca = (rcaResponsavel?.whatsapp || rcaResponsavel?.telefone || '').replace(/\D/g, '');
+  const nomeRca = rcaResponsavel ? (rcaResponsavel.nome_fantasia || rcaResponsavel.nome_completo) : '';
+  const [erroPedido, setErroPedido] = useState<string>('');
+
   // Imagem em destaque ampliada no modal
   const [fotoModal, setFotoModal] = useState<{ url: string; titulo: string; specs?: { rotulo: string; valor: string }[] } | null>(null);
 
@@ -71,37 +84,25 @@ export function PortalConvidadoExclusivo({
     produto: PortfolioProduto;
     embalagem: 'Saco 25kg' | 'Big Bag 1000kg';
     quantidade: number;
-  }[]>([
-    {
-      produto: PRODUTOS_PORTFOLIO[0],
-      embalagem: 'Big Bag 1000kg',
-      quantidade: 2
-    },
-    {
-      produto: PRODUTOS_PORTFOLIO[2],
-      embalagem: 'Saco 25kg',
-      quantidade: 20
-    }
-  ]);
+  }[]>([]);
 
   const [formaPagamento, setFormaPagamento] = useState<string>(
     cadastro.permissoes.forma_pagamento_autorizada || 'Boleto Bancário 28 Dias'
   );
   const [enderecoEntrega, setEnderecoEntrega] = useState<string>(
-    `${cadastro.cidade}/${cadastro.uf} - Endereço Matriz da Empresa`
+    cadastro.cidade ? `${cadastro.cidade}/${cadastro.uf}` : ''
   );
   const [observacoesPedido, setObservacoesPedido] = useState<string>('');
   const [pedidoSucesso, setPedidoSucesso] = useState<PedidoPortifolio | null>(null);
 
   const expirado = isCadastroExpirado(cadastro.data_vencimento);
+  const acessoBloqueado = isAcessoPortfolioBloqueado(cadastro);
   const diasRestantes = getDiasRestantes(cadastro.data_vencimento);
 
   // Formatação de data
   const dataVencFormatada = () => {
     if (!cadastro.data_vencimento) return 'Não definida';
-    const p = cadastro.data_vencimento.split('-');
-    if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
-    return cadastro.data_vencimento;
+    return formatarDataBR(cadastro.data_vencimento);
   };
 
   // Cálculos do Carrinho
@@ -155,7 +156,23 @@ export function PortalConvidadoExclusivo({
 
   // Finalizar envio do pedido
   const handleFinalizarPedido = () => {
+    setErroPedido('');
     if (carrinho.length === 0) return;
+    // Revalida no momento do envio (o cadastro pode ter vencido com a tela aberta)
+    if (isAcessoPortfolioBloqueado(cadastro)) {
+      setErroPedido('Seu acesso ao portfólio está expirado ou bloqueado. Solicite a renovação ao seu RCA.');
+      return;
+    }
+    if (!perm.liberar_pedidos) {
+      setErroPedido('A emissão de pedidos não está liberada para este cadastro.');
+      return;
+    }
+    const totalPedido = calcularTotalGeral();
+    const limite = Number(perm.limite_valor_pedido) || 0;
+    if (limite > 0 && totalPedido > limite) {
+      setErroPedido(`O pedido (R$ ${totalPedido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) ultrapassa o limite autorizado de R$ ${limite.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`);
+      return;
+    }
 
     const novoPedido: PedidoPortifolio = {
       id: `ped_port_${Date.now()}`,
@@ -163,7 +180,7 @@ export function PortalConvidadoExclusivo({
       cadastro_provisorio_id: cadastro.id,
       nome_convidado: cadastro.nome_convidado,
       empresa_solicitante: cadastro.empresa_solicitante,
-      rca_nome: cadastro.rca_responsavel_nome || 'Central de Vendas Grupo ENO',
+      rca_nome: nomeRca || cadastro.rca_responsavel_nome || 'Central de Vendas Grupo ENO',
       data_hora: new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }),
       status: 'Aguardando Aprovação',
       itens: carrinho.map(item => ({
@@ -180,6 +197,8 @@ export function PortalConvidadoExclusivo({
       observacoes_pedido: observacoesPedido || 'Pedido gerado pelo Portfólio Reservado'
     };
 
+    // Grava de verdade (lista 'grupo_eno_pedidos_portfolio_v1' + histórico do cadastro)
+    registrarPedidoPortfolio(novoPedido);
     setPedidoSucesso(novoPedido);
     if (onNovoPedidoRealizado) {
       onNovoPedidoRealizado(novoPedido);
@@ -188,13 +207,13 @@ export function PortalConvidadoExclusivo({
 
   return (
     <div className="relative min-h-screen w-full bg-[#0a1510] text-slate-100 flex flex-col overflow-y-auto select-none">
-      
+
       {/* ========================================================= */}
       {/* 1. TOPO EXCLUSIVO DO PORTAL RESERVADO (SHOWROOM VIP)       */}
       {/* ========================================================= */}
       <header className="sticky top-0 z-40 w-full bg-[#041d13]/95 backdrop-blur-md border-b border-emerald-800/50 shadow-2xl">
         <div className="mx-auto flex h-[72px] w-full max-w-[1700px] items-center justify-between px-4 sm:px-8">
-          
+
           {/* Logo e Identificação */}
           <div className="flex items-center gap-3.5">
             <button
@@ -278,22 +297,25 @@ export function PortalConvidadoExclusivo({
       {/* ========================================================= */}
       {/* 2. ALERTA CASO EXPIRADO                                   */}
       {/* ========================================================= */}
-      {expirado && (
+      {acessoBloqueado && (
         <div className="w-full bg-gradient-to-r from-red-900/90 via-rose-900/90 to-red-900/90 border-b border-red-500/60 p-4 text-white text-center shadow-lg">
           <div className="mx-auto max-w-4xl flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3 text-left">
               <AlertCircle className="w-7 h-7 text-red-300 shrink-0" />
               <div>
                 <h4 className="font-extrabold text-sm sm:text-base text-white">
-                  Atenção: Seu cadastro provisório de portfólio venceu em {dataVencFormatada()}.
+                  {expirado
+                    ? <>Atenção: Seu cadastro provisório de portfólio venceu em {dataVencFormatada()}.</>
+                    : <>Atenção: Seu acesso ao portfólio está bloqueado.</>}
                 </h4>
                 <p className="text-xs text-red-100">
                   Para prorrogar o prazo de acesso ou formalizar orçamentos, entre em contato diretamente com o seu Representante Comercial (RCA).
                 </p>
               </div>
             </div>
+            {telefoneRca && (
             <a
-              href={`https://wa.me/55${cadastro.telefone_whatsapp.replace(/\D/g, '')}?text=Ol%C3%A1%2C%20gostaria%20de%20solicitar%20a%20renova%C3%A7%C3%A3o%20do%20meu%20acesso%20ao%20Portf%C3%B3lio%20VIP%20Grupo%20ENO`}
+              href={`https://wa.me/55${telefoneRca}?text=Ol%C3%A1%2C%20gostaria%20de%20solicitar%20a%20renova%C3%A7%C3%A3o%20do%20meu%20acesso%20ao%20Portf%C3%B3lio%20VIP%20Grupo%20ENO`}
               target="_blank"
               rel="noreferrer"
               className="
@@ -302,8 +324,9 @@ export function PortalConvidadoExclusivo({
               "
             >
               <Phone className="w-4 h-4" />
-              <span>Falar com RCA ({cadastro.rca_responsavel_nome || 'Comercial'})</span>
+              <span>Falar com RCA ({nomeRca})</span>
             </a>
+            )}
           </div>
         </div>
       )}
@@ -333,8 +356,8 @@ export function PortalConvidadoExclusivo({
               </div>
               <div className="border-r border-emerald-800/40 pr-3">
                 <span className="text-[11px] uppercase tracking-wider text-emerald-400/80 font-bold block">Status do Passe</span>
-                <span className={`text-xs sm:text-sm font-extrabold ${expirado ? 'text-red-400' : 'text-emerald-300'}`}>
-                  {expirado ? 'Expirado' : 'Ativo e Válido'}
+                <span className={`text-xs sm:text-sm font-extrabold ${acessoBloqueado ? 'text-red-400' : 'text-emerald-300'}`}>
+                  {acessoBloqueado ? (expirado ? 'Expirado' : 'Bloqueado') : 'Ativo e Válido'}
                 </span>
               </div>
               <div className="col-span-2 sm:col-span-1">
@@ -348,6 +371,7 @@ export function PortalConvidadoExclusivo({
 
           {/* Abas de Navegação do Portfólio */}
           <div className="mt-8 flex flex-wrap items-center gap-2 sm:gap-3 border-t border-emerald-800/40 pt-6">
+            {perm.ver_fotos && (
             <button
               onClick={() => setActiveTab('fotos')}
               className={`
@@ -361,7 +385,9 @@ export function PortalConvidadoExclusivo({
               <ImageIcon className="w-4.5 h-4.5" />
               <span>Fotos & Lotes da Indústria</span>
             </button>
+            )}
 
+            {perm.ver_precos && (
             <button
               onClick={() => setActiveTab('precos')}
               className={`
@@ -375,7 +401,9 @@ export function PortalConvidadoExclusivo({
               <DollarSign className="w-4.5 h-4.5" />
               <span>Tabela de Preços & Condições</span>
             </button>
+            )}
 
+            {perm.ver_eventos && (
             <button
               onClick={() => setActiveTab('eventos')}
               className={`
@@ -392,7 +420,9 @@ export function PortalConvidadoExclusivo({
                 {EVENTOS_PORTFOLIO.length}
               </span>
             </button>
+            )}
 
+            {perm.ver_parceiros && (
             <button
               onClick={() => setActiveTab('parceiros')}
               className={`
@@ -406,6 +436,7 @@ export function PortalConvidadoExclusivo({
               <Users className="w-4.5 h-4.5" />
               <span>Parceiros & Produtores Certificados</span>
             </button>
+            )}
 
             <button
               onClick={() => setActiveTab('pedido')}
@@ -437,11 +468,23 @@ export function PortalConvidadoExclusivo({
       {/* 4. CONTEÚDO PRINCIPAL DAS ABAS                            */}
       {/* ========================================================= */}
       <main className="flex-1 w-full max-w-[1700px] mx-auto px-4 sm:px-8 py-8">
-        
+        {acessoBloqueado ? (
+          <div className="bg-[#041c12] rounded-3xl border border-red-500/40 p-8 sm:p-12 text-center max-w-3xl mx-auto shadow-2xl space-y-4">
+            <div className="mx-auto w-20 h-20 rounded-3xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-300">
+              <Lock className="w-10 h-10 stroke-[2.2]" />
+            </div>
+            <h2 className="text-2xl font-black text-white">Acesso ao portfólio indisponível</h2>
+            <p className="text-sm text-slate-300 max-w-xl mx-auto">
+              {expirado ? `Seu cadastro provisório venceu em ${dataVencFormatada()}.` : 'Seu cadastro provisório está bloqueado.'} Solicite a renovação ao seu Representante Comercial.
+            </p>
+          </div>
+        ) : (
+        <>
+
         {/* ======================================================= */}
         {/* ABA 1: FOTOS & LOTES DA INDÚSTRIA                       */}
         {/* ======================================================= */}
-        {activeTab === 'fotos' && (
+        {activeTab === 'fotos' && perm.ver_fotos && (
           <div className="space-y-8 animate-fadeIn">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-emerald-900/60 pb-5">
               <div>
@@ -463,7 +506,7 @@ export function PortalConvidadoExclusivo({
             {/* Grid de Produtos com Fotos e Especificações */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {PRODUTOS_PORTFOLIO.map((prod) => (
-                <div 
+                <div
                   key={prod.id}
                   className="
                     bg-[#031e13] rounded-2xl border border-emerald-700/40 overflow-hidden shadow-xl
@@ -472,13 +515,13 @@ export function PortalConvidadoExclusivo({
                 >
                   {/* Foto Principal com Zoom */}
                   <div className="relative h-60 w-full overflow-hidden bg-emerald-950">
-                    <img 
-                      src={prod.foto_url} 
+                    <img
+                      src={prod.foto_url}
                       alt={prod.nome}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#031e13] via-transparent to-black/30" />
-                    
+
                     {/* Badge da Categoria */}
                     <div className="absolute top-3 left-3">
                       <span className="px-2.5 py-1 rounded-lg text-[11px] font-extrabold tracking-wide uppercase bg-emerald-950/90 text-emerald-300 border border-emerald-700/60 shadow">
@@ -526,6 +569,7 @@ export function PortalConvidadoExclusivo({
 
                     {/* Preços e Ações */}
                     <div className="pt-3 border-t border-emerald-800/40 flex items-center justify-between">
+                      {perm.ver_precos ? (
                       <div>
                         <span className="text-[10px] uppercase text-emerald-400/80 font-bold block">A partir de</span>
                         <div className="flex items-baseline gap-1">
@@ -535,6 +579,9 @@ export function PortalConvidadoExclusivo({
                           <span className="text-[11px] text-slate-400">/ kg</span>
                         </div>
                       </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 font-bold">Preço sob consulta</span>
+                      )}
 
                       {cadastro.permissoes.liberar_pedidos ? (
                         <button
@@ -547,7 +594,7 @@ export function PortalConvidadoExclusivo({
                           <ShoppingBag className="w-3.5 h-3.5" />
                           <span>Adicionar Pedido</span>
                         </button>
-                      ) : (
+                      ) : perm.ver_precos && (
                         <button
                           onClick={() => setActiveTab('precos')}
                           className="
@@ -570,7 +617,7 @@ export function PortalConvidadoExclusivo({
         {/* ======================================================= */}
         {/* ABA 2: TABELA DE PREÇOS & CONDIÇÕES                     */}
         {/* ======================================================= */}
-        {activeTab === 'precos' && (
+        {activeTab === 'precos' && perm.ver_precos && (
           <div className="space-y-8 animate-fadeIn">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-emerald-900/60 pb-5">
               <div>
@@ -702,7 +749,7 @@ export function PortalConvidadoExclusivo({
         {/* ======================================================= */}
         {/* ABA 3: EVENTOS, FEIRAS & ENCONTROS                      */}
         {/* ======================================================= */}
-        {activeTab === 'eventos' && (
+        {activeTab === 'eventos' && perm.ver_eventos && (
           <div className="space-y-8 animate-fadeIn">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-emerald-900/60 pb-5">
               <div>
@@ -724,7 +771,7 @@ export function PortalConvidadoExclusivo({
             {/* Grid de Eventos */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {EVENTOS_PORTFOLIO.map((ev) => (
-                <div 
+                <div
                   key={ev.id}
                   className="
                     bg-[#031e13] rounded-2xl border border-emerald-700/40 overflow-hidden shadow-xl
@@ -733,8 +780,8 @@ export function PortalConvidadoExclusivo({
                 >
                   {/* Foto do Evento */}
                   <div className="sm:w-2/5 h-52 sm:h-auto relative overflow-hidden bg-emerald-950">
-                    <img 
-                      src={ev.imagem_url} 
+                    <img
+                      src={ev.imagem_url}
                       alt={ev.titulo}
                       className="w-full h-full object-cover"
                     />
@@ -802,7 +849,7 @@ export function PortalConvidadoExclusivo({
         {/* ======================================================= */}
         {/* ABA 4: PARCEIROS & PRODUTORES CERTIFICADOS              */}
         {/* ======================================================= */}
-        {activeTab === 'parceiros' && (
+        {activeTab === 'parceiros' && perm.ver_parceiros && (
           <div className="space-y-8 animate-fadeIn">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-emerald-900/60 pb-5">
               <div>
@@ -824,7 +871,7 @@ export function PortalConvidadoExclusivo({
             {/* Grid de Parceiros */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {PARCEIROS_PORTFOLIO.map((parc) => (
-                <div 
+                <div
                   key={parc.id}
                   className="
                     bg-[#031e13] rounded-2xl border border-emerald-700/40 p-6 shadow-xl
@@ -832,8 +879,8 @@ export function PortalConvidadoExclusivo({
                   "
                 >
                   <div className="flex items-start gap-4">
-                    <img 
-                      src={parc.foto_url} 
+                    <img
+                      src={parc.foto_url}
                       alt={parc.nome}
                       className="w-20 h-20 rounded-2xl object-cover border border-emerald-600/50 shadow-md shrink-0"
                     />
@@ -857,7 +904,7 @@ export function PortalConvidadoExclusivo({
 
                   <div className="pt-4 border-t border-emerald-800/40 flex flex-wrap items-center gap-2">
                     {parc.selos.map((selo, sIdx) => (
-                      <span 
+                      <span
                         key={sIdx}
                         className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-[#02140d] text-emerald-300 border border-emerald-700/50 flex items-center gap-1"
                       >
@@ -877,7 +924,7 @@ export function PortalConvidadoExclusivo({
         {/* ======================================================= */}
         {activeTab === 'pedido' && (
           <div className="space-y-8 animate-fadeIn">
-            
+
             {/* SE O PEDIDO NÃO ESTIVER LIBERADO PARA ESSE CONVIDADO */}
             {!cadastro.permissoes.liberar_pedidos ? (
               <div className="bg-[#041c12] rounded-3xl border border-amber-500/40 p-8 sm:p-12 text-center max-w-3xl mx-auto shadow-2xl space-y-6">
@@ -904,21 +951,24 @@ export function PortalConvidadoExclusivo({
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-base font-extrabold text-white">
-                        {cadastro.rca_responsavel_nome || 'Equipe Comercial Grupo ENO'}
+                        {nomeRca || 'Equipe Comercial Grupo ENO'}
                       </div>
                       <div className="text-xs text-slate-400">
                         Atendimento ao Cliente & Cadastros Provisórios
                       </div>
                     </div>
-                    <div className="text-xs text-emerald-300 font-mono font-bold">
-                      {cadastro.telefone_whatsapp}
-                    </div>
+                    {telefoneRca && (
+                      <div className="text-xs text-emerald-300 font-mono font-bold">
+                        {rcaResponsavel?.whatsapp || rcaResponsavel?.telefone}
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-4">
+                  {telefoneRca && (
                   <a
-                    href={`https://wa.me/55${cadastro.telefone_whatsapp.replace(/\D/g, '')}?text=Ol%C3%A1%20${encodeURIComponent(cadastro.rca_responsavel_nome || 'Comercial')}%2C%20sou%20${encodeURIComponent(cadastro.nome_convidado)}%20da%20${encodeURIComponent(cadastro.empresa_solicitante)}.%20Estou%20no%20Portf%C3%B3lio%20Reservado%20VIP%20e%20gostaria%20de%20solicitar%20a%20libera%C3%A7%C3%A3o%20para%20fazer%20pedidos.`}
+                    href={`https://wa.me/55${telefoneRca}?text=Ol%C3%A1%20${encodeURIComponent(nomeRca || 'Comercial')}%2C%20sou%20${encodeURIComponent(cadastro.nome_convidado)}%20da%20${encodeURIComponent(cadastro.empresa_solicitante)}.%20Estou%20no%20Portf%C3%B3lio%20Reservado%20VIP%20e%20gostaria%20de%20solicitar%20a%20libera%C3%A7%C3%A3o%20para%20fazer%20pedidos.`}
                     target="_blank"
                     rel="noreferrer"
                     className="
@@ -930,6 +980,7 @@ export function PortalConvidadoExclusivo({
                     <Phone className="w-4.5 h-4.5" />
                     <span>Solicitar Liberação de Pedido no WhatsApp</span>
                   </a>
+                  )}
 
                   <button
                     onClick={() => setActiveTab('fotos')}
@@ -961,7 +1012,7 @@ export function PortalConvidadoExclusivo({
                   <div className="text-right">
                     <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold block">Limite Autorizado</span>
                     <span className="text-base font-mono font-black text-lime-400">
-                      {cadastro.permissoes.limite_valor_pedido 
+                      {cadastro.permissoes.limite_valor_pedido
                         ? `Até R$ ${cadastro.permissoes.limite_valor_pedido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                         : 'Sem limite restritivo'
                       }
@@ -1010,10 +1061,10 @@ export function PortalConvidadoExclusivo({
                 {/* Se não enviou o pedido ainda, exibe o fluxo do carrinho */}
                 {!pedidoSucesso && (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    
+
                     {/* COLUNA ESQUERDA: ITENS DO PEDIDO (8 cols) */}
                     <div className="lg:col-span-8 space-y-6">
-                      
+
                       {/* Tabela de Itens no Carrinho */}
                       <div className="bg-[#031d12] rounded-2xl border border-emerald-700/40 p-5 shadow-xl space-y-4">
                         <div className="flex items-center justify-between border-b border-emerald-800/40 pb-3">
@@ -1040,7 +1091,7 @@ export function PortalConvidadoExclusivo({
                         ) : (
                           <div className="space-y-3">
                             {carrinho.map((item, index) => (
-                              <div 
+                              <div
                                 key={index}
                                 className="
                                   bg-[#02140d] rounded-xl p-4 border border-emerald-800/50 flex flex-col sm:flex-row
@@ -1048,8 +1099,8 @@ export function PortalConvidadoExclusivo({
                                 "
                               >
                                 <div className="flex items-center gap-3">
-                                  <img 
-                                    src={item.produto.foto_url} 
+                                  <img
+                                    src={item.produto.foto_url}
                                     alt={item.produto.nome}
                                     className="w-14 h-14 rounded-xl object-cover border border-emerald-700/40 shrink-0"
                                   />
@@ -1221,10 +1272,17 @@ export function PortalConvidadoExclusivo({
                           </div>
                         </div>
 
+                        {erroPedido && (
+                          <div className="flex items-start gap-2 rounded-xl border border-red-400/60 bg-red-900/40 p-3 text-xs font-semibold text-red-100">
+                            <AlertCircle className="w-4 h-4 shrink-0 text-red-300" />
+                            <span>{erroPedido}</span>
+                          </div>
+                        )}
+
                         {/* Botão de Transmitir Pedido */}
                         <button
                           onClick={handleFinalizarPedido}
-                          disabled={carrinho.length === 0}
+                          disabled={carrinho.length === 0 || acessoBloqueado}
                           className="
                             w-full py-4 px-6 rounded-xl bg-gradient-to-r from-lime-500 to-emerald-600
                             hover:from-lime-400 hover:to-emerald-500 text-slate-950 font-black text-sm
@@ -1254,6 +1312,8 @@ export function PortalConvidadoExclusivo({
           </div>
         )}
 
+        </>
+        )}
       </main>
 
       {/* ========================================================= */}
@@ -1267,7 +1327,7 @@ export function PortalConvidadoExclusivo({
                 <ImageIcon className="w-5 h-5 text-emerald-400" />
                 <span>{fotoModal.titulo}</span>
               </div>
-              <button 
+              <button
                 onClick={() => setFotoModal(null)}
                 className="p-1.5 rounded-xl hover:bg-emerald-900 text-slate-300 hover:text-white transition-colors cursor-pointer"
               >
@@ -1277,8 +1337,8 @@ export function PortalConvidadoExclusivo({
 
             <div className="p-6 overflow-y-auto space-y-6">
               <div className="rounded-2xl overflow-hidden max-h-[460px] bg-black">
-                <img 
-                  src={fotoModal.url} 
+                <img
+                  src={fotoModal.url}
                   alt={fotoModal.titulo}
                   className="w-full h-full object-contain mx-auto"
                 />
@@ -1315,7 +1375,7 @@ export function PortalConvidadoExclusivo({
                 <Calendar className="w-5 h-5 text-amber-400" />
                 <span>Credenciamento VIP para Evento</span>
               </div>
-              <button 
+              <button
                 onClick={() => setEventoModal(null)}
                 className="p-1 rounded-lg hover:bg-emerald-900 text-slate-300 hover:text-white cursor-pointer"
               >
