@@ -13,6 +13,7 @@ export interface ReceitaIndustrial {
   id: string;
   codigo: string;
   nome: string; // Nome da receita (ex: "Mandioca Gourmet")
+  produto_id?: string; // Produto acabado vinculado (gravado também em ProdutoEstoque.receita_id)
   produto_nome?: string;
   tipo_embalagem?: 'Saco 25kg' | 'Big Bag 1000kg' | 'Fardo 10x1kg' | 'Pacote 1kg' | 'Caixa' | 'Granel' | string;
   rendimento_pacotes: number; // Quantos pacotes rende a receita
@@ -88,6 +89,8 @@ export interface ItemFichaTecnica {
   id?: string;
   item_nome: string; // O que o usuário quer colocar (livre)
   quantidade: string; // A quantidade que o usuário quer colocar (livre)
+  origem?: 'RECEITA' | 'LIVRE'; // RECEITA = gerado da composição da receita do produto
+  materia_prima_id?: string;
 }
 
 export interface FichaTecnica {
@@ -95,6 +98,8 @@ export interface FichaTecnica {
   produto_id?: string;
   produto_nome: string;
   codigo?: string;
+  receita_id?: string; // Receita usada para preencher os itens de composição
+  receita_assinatura?: string; // Assinatura da composição no momento da importação (detecta mudança na receita)
   descricao_padrao?: string;
   itens_especificacao?: ItemFichaTecnica[]; // Lista dinâmica onde o usuário coloca o que quer e a quantidade
   umidade_maxima_percentual?: number;
@@ -114,7 +119,18 @@ export interface TabelaPreco {
   codigo: string;
   nome: string;
   tipo: 'Atacado / Distribuidor' | 'Grandes Indústrias (Carga Fechada)' | 'Varejo / Padarias' | 'Pagamento à Vista (FOB)';
-  desconto_padrao_percentual: number;
+  /** Como a tabela forma o preço (regra em src/data/precosData.ts → calcularPrecoNaTabela) */
+  modo_preco?: 'ACRESCIMO_DESCONTO' | 'MARGEM_CUSTO' | 'PRECO_FIXO';
+  /** ACRESCIMO_DESCONTO: % sobre o preço base (positivo = acréscimo, negativo = desconto) */
+  ajuste_percentual?: number;
+  /** MARGEM_CUSTO: % de margem aplicada sobre o custo atual do produto */
+  margem_percentual?: number;
+  /** PRECO_FIXO: preço do pacote digitado por produto (produto_id → preço) */
+  precos_fixos?: Record<string, number>;
+  /** Exceção por produto em qualquer modo (produto_id → preço do pacote) */
+  excecoes_preco?: Record<string, number>;
+  /** Legado: tabelas antigas (migradas para ACRESCIMO_DESCONTO com −desconto) */
+  desconto_padrao_percentual?: number;
   prazo_padrao: string;
   frete_tipo: 'FOB (Retira Fábrica)' | 'CIF (Entrega Grupo ENO)';
   vigencia_inicio: string;
@@ -254,6 +270,70 @@ export function recalcularCustoProduto(
     custo_total: arred(custoTotal, 2),
     margem_lucro_percentual: preco > 0 ? arred(((preco - custoTotal) / preco) * 100, 1) : 0
   };
+}
+
+// ============================================================
+// AMARRAÇÃO PRODUTO <-> RECEITA <-> MATÉRIA-PRIMA
+// ============================================================
+
+export interface ConsumoPorPacote {
+  materia_prima_id: string;
+  materia_prima_nome: string;
+  unidade_medida: string;
+  quantidade_receita: number; // quantidade na batelada da receita
+  quantidade_por_pacote: number; // quantidade por pacote produzido
+}
+
+// Quanto cada matéria-prima da receita consome por pacote (receita ÷ rendimento)
+export function consumoPorPacoteDaReceita(receita?: ReceitaIndustrial | null): ConsumoPorPacote[] {
+  if (!receita) return [];
+  const rend = Number(receita.rendimento_pacotes) || 0;
+  return (receita.materias_primas || []).map(mi => ({
+    materia_prima_id: mi.materia_prima_id,
+    materia_prima_nome: mi.materia_prima_nome,
+    unidade_medida: mi.unidade_medida,
+    quantidade_receita: Number(mi.quantidade) || 0,
+    quantidade_por_pacote: rend > 0 ? arred((Number(mi.quantidade) || 0) / rend, 6) : 0
+  }));
+}
+
+// Assinatura simples da composição da receita (para saber se a ficha técnica ficou desatualizada)
+export function assinaturaComposicaoReceita(receita?: ReceitaIndustrial | null): string {
+  if (!receita) return '';
+  return [
+    receita.rendimento_pacotes || 0,
+    ...(receita.materias_primas || []).map(m => `${m.materia_prima_id}:${Number(m.quantidade) || 0}:${m.unidade_medida}`)
+  ].join('|');
+}
+
+// Grava o vínculo produto -> receita também do lado da receita (produto_id/produto_nome).
+// Remove o produto_id da receita anterior quando o produto troca de receita.
+export function vincularReceitaAoProduto(produtoId: string, produtoNome: string, receitaId?: string): void {
+  const brutas = lerReceitasBruto();
+  let alterou = false;
+  const atualizadas = brutas.map(r => {
+    if (receitaId && r.id === receitaId) {
+      if (r.produto_id !== produtoId || r.produto_nome !== produtoNome) {
+        alterou = true;
+        return { ...r, produto_id: produtoId, produto_nome: produtoNome };
+      }
+      return r;
+    }
+    if (r.produto_id === produtoId) {
+      alterou = true;
+      return { ...r, produto_id: undefined };
+    }
+    return r;
+  });
+  if (alterou) salvarReceitas(atualizadas);
+}
+
+// Disponibilidade de produto acabado em PACOTES (estoque_atual_sacos conta pacotes)
+export function verificarDisponibilidadeProduto(produtoId: string, pacotes: number): { disponivel: number; falta: number } {
+  const prod = lerEstoqueProdutosBruto().find(p => p.id === produtoId);
+  const disponivel = Math.max(0, Number(prod?.estoque_atual_sacos) || 0);
+  const necessario = Math.max(0, Number(pacotes) || 0);
+  return { disponivel, falta: Math.max(0, parseFloat((necessario - disponivel).toFixed(3))) };
 }
 
 // DADOS INICIAIS DE RECEITAS INDUSTRIAIS
@@ -406,7 +486,18 @@ export function salvarFichasTecnicas(dados: FichaTecnica[]): void {
 // STORAGE HELPERS PARA TABELAS DE PREÇO
 const STORAGE_KEY_TABELAS_PRECO = 'grupo_eno_tabelas_preco_v1';
 
+// Migração: tabela antiga (só desconto_padrao_percentual) vira ACRESCIMO_DESCONTO com −desconto
+function migrarTabelaPreco(t: TabelaPreco): TabelaPreco {
+  if (!t || t.modo_preco) return t;
+  const desconto = Number(t.desconto_padrao_percentual) || 0;
+  return { ...t, modo_preco: 'ACRESCIMO_DESCONTO', ajuste_percentual: desconto ? -desconto : 0 };
+}
+
 export function carregarTabelasPreco(): TabelaPreco[] {
+  return lerTabelasPrecoBruto().map(migrarTabelaPreco);
+}
+
+function lerTabelasPrecoBruto(): TabelaPreco[] {
   if (typeof window === 'undefined') return verificarModoLimpo() ? [] : TABELAS_PRECO_INICIAIS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_TABELAS_PRECO);

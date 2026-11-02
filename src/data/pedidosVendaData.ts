@@ -3,7 +3,8 @@
 // Orçamentos -> Em Produção -> A Faturar -> Faturados -> Entregues -> Relatórios
 
 import { carregarEstoqueProdutos, ProdutoEstoque } from './produtosData';
-import { integrarConclusaoProducao, integrarFaturamentoPedidoVenda } from './pipelineIntegrado';
+import { integrarFaturamentoPedidoVenda } from './pipelineIntegrado';
+import { gerarOrdensDoPedido, integrarProducaoDoPedido, encerrarOrdensDoPedido } from './ordensProducaoData';
 import { obterClientesParaVenda, ClienteLookup } from './clientesData';
 import { hojeISO, paraISO } from '../lib/datas';
 
@@ -26,6 +27,9 @@ export interface ItemPedidoVenda {
   subtotal: number;
   lote_producao?: string;
   unidades_por_fardo?: number; // Para conversão Fardo <-> Unitário
+  comissao_percentual?: number;
+  comissao_valor?: number;
+  comissao_regra?: string;
 }
 
 export interface ApontamentoProducao {
@@ -58,6 +62,8 @@ export interface PedidoVenda {
   rca_nome: string;
   comissao_percentual: number;
   comissao_valor: number;
+  comissao_regra?: string; // regra aplicada (ver comissoesData.CamposComissaoPedido)
+  comissao_itens?: any[]; // comissão calculada por item
   // Datas
   data_emissao: string; // YYYY-MM-DD
   data_validade_orcamento?: string; // YYYY-MM-DD
@@ -296,10 +302,11 @@ export function moverPedidoEtapa(
         }));
       } else if (novaEtapa === 'A_FATURAR') {
         if (!updated.data_conclusao_producao) updated.data_conclusao_producao = dataHoje;
-        // Integração: baixa matérias-primas e alimenta estoque de produto acabado
+        // Integração: conclui as Ordens de Produção do pedido (entrada de produto + baixa de MP, uma vez por OP)
+        // e integra pelo modo legado apenas itens sem OP
         try {
           if (!updated.producao_integrada) {
-            integrarConclusaoProducao(updated);
+            integrarProducaoDoPedido(updated);
             updated.producao_integrada = true;
           }
         } catch (e) {
@@ -336,5 +343,18 @@ export function moverPedidoEtapa(
   });
 
   salvarPedidosVenda(atualizados);
+
+  // Ordens de Produção acompanham a etapa do pedido
+  try {
+    const anterior = atuais.find(p => p.id === pedidoId);
+    const pedidoAtualizado = atualizados.find(p => p.id === pedidoId);
+    if (pedidoAtualizado && novaEtapa === 'EM_PRODUCAO') {
+      gerarOrdensDoPedido(pedidoAtualizado, { novoCiclo: anterior?.etapa === 'ORCAMENTO' });
+    } else if (novaEtapa === 'ORCAMENTO') {
+      encerrarOrdensDoPedido(pedidoId);
+    }
+  } catch (e) {
+    console.error('Erro ao gerar ordens de produção do pedido:', e);
+  }
   return atualizados;
 }

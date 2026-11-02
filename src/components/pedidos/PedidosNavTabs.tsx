@@ -5,12 +5,14 @@ import {
   Receipt,
   Truck,
   CheckCheck,
-  BarChart3
+  BarChart3,
+  ClipboardList
 } from 'lucide-react';
 import { carregarPedidosVenda } from '../../data/pedidosVendaData';
+import { carregarOrdensProducao, EVENTO_OPS } from '../../data/ordensProducaoData';
 
 export interface PedidosNavTabsProps {
-  activeTab: 'pedidos_orcamentos_sugestivo' | 'pedidos_em_producao' | 'pedidos_a_faturar' | 'pedidos_faturados' | 'pedidos_entregues' | 'pedidos_relatorios';
+  activeTab: 'pedidos_orcamentos_sugestivo' | 'pedidos_em_producao' | 'pedidos_ordens_producao' | 'pedidos_a_faturar' | 'pedidos_faturados' | 'pedidos_entregues' | 'pedidos_relatorios';
   onNavigate?: (tabId: string) => void;
 }
 
@@ -21,6 +23,7 @@ export function PedidosNavTabs({ activeTab, onNavigate }: PedidosNavTabsProps) {
     afaturar: 0,
     faturados: 0,
     entregues: 0,
+    ops: 0,
   });
 
   const atualizarContadores = () => {
@@ -31,6 +34,7 @@ export function PedidosNavTabs({ activeTab, onNavigate }: PedidosNavTabsProps) {
       afaturar: todos.filter(p => p.etapa === 'A_FATURAR').length,
       faturados: todos.filter(p => p.etapa === 'FATURADO').length,
       entregues: todos.filter(p => p.etapa === 'ENTREGUE').length,
+      ops: carregarOrdensProducao().filter(o => o.status === 'PLANEJADA' || o.status === 'EM_PRODUCAO').length,
     });
   };
 
@@ -38,7 +42,11 @@ export function PedidosNavTabs({ activeTab, onNavigate }: PedidosNavTabsProps) {
     atualizarContadores();
     const handleUpdate = () => atualizarContadores();
     window.addEventListener('pedidos_venda_updated', handleUpdate);
-    return () => window.removeEventListener('pedidos_venda_updated', handleUpdate);
+    window.addEventListener(EVENTO_OPS, handleUpdate);
+    return () => {
+      window.removeEventListener('pedidos_venda_updated', handleUpdate);
+      window.removeEventListener(EVENTO_OPS, handleUpdate);
+    };
   }, []);
 
   const tabs = [
@@ -53,6 +61,12 @@ export function PedidosNavTabs({ activeTab, onNavigate }: PedidosNavTabsProps) {
       label: 'Em Produção',
       count: counts.producao,
       icon: <Factory className="w-3.5 h-3.5" />
+    },
+    {
+      id: 'pedidos_ordens_producao',
+      label: 'Ordens de Produção',
+      count: counts.ops,
+      icon: <ClipboardList className="w-3.5 h-3.5" />
     },
     {
       id: 'pedidos_a_faturar',

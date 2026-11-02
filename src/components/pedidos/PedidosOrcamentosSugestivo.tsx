@@ -44,20 +44,31 @@ import {
 } from '../../data/pedidosVendaData';
 import {
   carregarTabelasPreco,
-  TabelaPreco
+  TabelaPreco,
+  verificarDisponibilidadeProduto
 } from '../../data/produtosData';
-import { obterRcasLookup, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
-import { hojeISO, somarDias, parseData, formatarDataBR } from '../../lib/datas';
+import { obterRcasLookup, obterRcaPorId, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
+import { calcularPrecoNaTabela, tabelaPrecoAtiva } from '../../data/precosData';
+import { calcularComissaoPedido, CamposComissaoPedido, removerTituloComissaoDoPedido } from '../../data/comissoesData';
+import { formatarMoeda } from '../../data/financeiroData';
+import { hojeISO, somarDias, formatarDataBR } from '../../lib/datas';
 
 // Tabela utilizável na venda: não arquivada e dentro da vigência
-function tabelaPrecoUtilizavel(t: TabelaPreco): boolean {
-  if (t.status === 'ARQUIVADA') return false;
-  const hoje = parseData(hojeISO())!.getTime();
-  const fim = parseData(t.vigencia_fim);
-  if (fim && fim.getTime() < hoje) return false;
-  const ini = parseData(t.vigencia_inicio);
-  if (ini && ini.getTime() > hoje) return false;
-  return true;
+const tabelaPrecoUtilizavel = (t: TabelaPreco): boolean => tabelaPrecoAtiva(t);
+
+// Produto de venda (obterProdutosVendaDisponiveis) com o preço da tabela pela regra única (precosData)
+function aplicarPrecoDaTabela<P extends { id: string; preco_unitario: number; preco_unitario_avulso?: number; custo_total?: number; tipo_acondicionamento?: string; unidades_por_fardo?: number }>(
+  p: P,
+  tab: TabelaPreco
+): P {
+  const calc = calcularPrecoNaTabela({
+    id: p.id,
+    preco_unitario_venda: Number(p.preco_unitario_avulso) || 0,
+    custo_total: p.custo_total,
+    tipo_acondicionamento: p.tipo_acondicionamento,
+    unidades_por_acondicionamento: p.unidades_por_fardo
+  }, tab);
+  return { ...p, preco_unitario: calc.preco_acondicionamento, preco_unitario_avulso: calc.preco };
 }
 
 // Fator de conversão fardo/caixa -> pacotes (1 quando vendido avulso/saco)
@@ -152,16 +163,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     if (!tabelaIdForm) return [];
     const tab = tabelasDisponiveis.find(t => t.id === tabelaIdForm);
     if (!tab || !tab.produtos_ids) return [];
-    return produtosDisponiveis.filter(p => tab.produtos_ids?.includes(p.id)).map(p => {
-      const desconto = tab.desconto_padrao_percentual || 0;
-      const precoUnit = p.preco_unitario * (1 - desconto / 100);
-      const precoAvulso = (p.preco_unitario_avulso || 0) * (1 - desconto / 100);
-      return {
-        ...p,
-        preco_unitario: precoUnit,
-        preco_unitario_avulso: precoAvulso
-      };
-    });
+    return produtosDisponiveis.filter(p => tab.produtos_ids?.includes(p.id)).map(p => aplicarPrecoDaTabela(p, tab));
   }, [tabelaIdForm, tabelasDisponiveis, produtosDisponiveis]);
 
   // Preço de um produto da tabela conforme o modo de lançamento
@@ -169,6 +171,36 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     modo === 'FARDO'
       ? prod.preco_unitario
       : (prod.preco_unitario_avulso || prod.preco_unitario / fatorItem(prod.unidades_por_fardo));
+
+  // Comissão estimada (modelo do RCA: geral / por grupo = categoria do produto / por cliente / misto)
+  const comissaoForm = useMemo(() => {
+    const rca = rcaIdForm ? obterRcaPorId(rcaIdForm) : undefined;
+    return calcularComissaoPedido(
+      rca,
+      clienteIdForm,
+      itensForm.map(it => ({
+        produto_id: it.produtoId,
+        subtotal: (Number(it.quantidade) || 0) * (Number(it.precoUnitario) || 0),
+        categoria: produtosDisponiveis.find(p => p.id === it.produtoId)?.categoria
+      }))
+    );
+  }, [itensForm, rcaIdForm, clienteIdForm, produtosDisponiveis]);
+
+  // Estoque x quantidade pedida (em pacotes, somando linhas do mesmo produto). Só avisa, não bloqueia.
+  const faltaEstoquePorProduto = useMemo(() => {
+    const pacotes = new Map<string, number>();
+    itensForm.forEach(it => {
+      if (!it.produtoId) return;
+      const qtdPacotes = modoLancamentoForm === 'FARDO' ? (Number(it.quantidade) || 0) * fatorItem(it.unidadesPorFardo) : Number(it.quantidade) || 0;
+      pacotes.set(it.produtoId, (pacotes.get(it.produtoId) || 0) + qtdPacotes);
+    });
+    const res = new Map<string, { pedido: number; disponivel: number; falta: number }>();
+    pacotes.forEach((qtd, id) => {
+      const v = verificarDisponibilidadeProduto(id, qtd);
+      res.set(id, { pedido: qtd, disponivel: v.disponivel, falta: v.falta });
+    });
+    return res;
+  }, [itensForm, modoLancamentoForm, produtosDisponiveis]);
 
   // Abrir formulário de nova venda sempre limpo
   const abrirNovaVenda = () => {
@@ -181,6 +213,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     setClienteIdForm(cli?.id || '');
     setRcaIdForm(cli?.rca_id || '');
     if (cli?.prazo) setPrazoPagamentoForm(cli.prazo);
+    if (cli?.tabela_preco_id && tabelasDisponiveis.some(t => t.id === cli.tabela_preco_id)) setTabelaIdForm(cli.tabela_preco_id);
     setModalNovo(true);
   };
 
@@ -191,6 +224,10 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     if (cli) {
       setRcaIdForm(cli.rca_id || '');
       if (cli.prazo) setPrazoPagamentoForm(cli.prazo);
+      // Tabela de preço do cadastro do cliente (se ativa e nenhum item lançado ainda)
+      if (cli.tabela_preco_id && itensForm.length === 0 && tabelasDisponiveis.some(t => t.id === cli.tabela_preco_id)) {
+        setTabelaIdForm(cli.tabela_preco_id);
+      }
     }
   };
 
@@ -202,7 +239,6 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
       setItensForm([]);
       return;
     }
-    const desconto = tab.desconto_padrao_percentual || 0;
     const removidos: string[] = [];
     const novos = itensForm
       .map(it => {
@@ -211,12 +247,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
           if (prod) removidos.push(prod.nome);
           return null;
         }
-        const comDesconto = {
-          ...prod,
-          preco_unitario: prod.preco_unitario * (1 - desconto / 100),
-          preco_unitario_avulso: (prod.preco_unitario_avulso || 0) * (1 - desconto / 100)
-        };
-        return { ...it, precoUnitario: parseFloat(precoNoModo(comDesconto, modoLancamentoForm).toFixed(4)) };
+        const comPrecoTabela = aplicarPrecoDaTabela(prod, tab);
+        return { ...it, precoUnitario: parseFloat(precoNoModo(comPrecoTabela, modoLancamentoForm).toFixed(4)) };
       })
       .filter(Boolean) as typeof itensForm;
     setItensForm(novos);
@@ -558,15 +590,31 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
 
     const valorTotal = itensMapeados.reduce((acc, i) => acc + i.subtotal, 0);
     const pesoTotal = itensMapeados.reduce((acc, i) => acc + i.peso_total_kg, 0);
-    const comissaoPercentual = Number(clienteSel.comissao ?? rcaSel?.comissao ?? 0) || 0;
-    const comissaoValor = (valorTotal * comissaoPercentual) / 100;
+    // Comissão pelo modelo do RCA, item a item (grava regra e valores no pedido e em cada item)
+    const comissaoCalc = calcularComissaoPedido(
+      rcaSel ? obterRcaPorId(rcaSel.id) : undefined,
+      clienteSel.id,
+      itensMapeados.map(i => ({
+        produto_id: i.produto_id,
+        subtotal: i.subtotal,
+        categoria: produtosDisponiveis.find(p => p.id === i.produto_id)?.categoria
+      }))
+    );
+    itensMapeados.forEach((i, idx) => {
+      const c = comissaoCalc.itens[idx];
+      i.comissao_percentual = c?.percentual ?? 0;
+      i.comissao_valor = c?.valor ?? 0;
+      i.comissao_regra = c?.regra;
+    });
+    const comissaoPercentual = comissaoCalc.percentual_efetivo;
+    const comissaoValor = comissaoCalc.valor;
 
     const prefixo = subtipoForm === 'Orçamento' ? 'ORC' : subtipoForm === 'Pedido Sugestivo' ? 'SUG' : 'PED';
     const novoNum = `${prefixo}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const tabelaSel = tabelasDisponiveis.find(t => t.id === tabelaIdForm);
 
-    const novoRegistro: PedidoVenda & { tabela_id?: string; tabela_nome?: string } = {
+    const novoRegistro: PedidoVenda & CamposComissaoPedido = {
       id: `ped_venda_${Date.now()}`,
       numero_pedido: novoNum,
       tipo: subtipoForm === 'Pedido' ? 'PEDIDO_VENDA' : 'ORCAMENTO',
@@ -585,6 +633,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
       rca_nome: rcaSel?.nome || 'Venda Direta',
       comissao_percentual: comissaoPercentual,
       comissao_valor: comissaoValor,
+      comissao_regra: rcaSel ? comissaoCalc.regra : 'Sem RCA',
+      comissao_itens: comissaoCalc.itens,
       data_emissao: dataHojeStr,
       data_validade_orcamento: dataValidadeStr,
       data_previsao_entrega: dataValidadeStr,
@@ -618,6 +668,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
       const todos = carregarPedidosVenda();
       const filtrados = todos.filter(p => p.id !== pedidoId);
       salvarPedidosVenda(filtrados);
+      removerTituloComissaoDoPedido(pedidoId); // comissão não paga não fica órfã
     }
   };
 
@@ -1176,6 +1227,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                       const prod = produtosDisponiveis.find(p => p.id === item.produtoId);
                       const faltaReceita = prod && !prod.receita_id;
                       const faltaCusto = prod && (!prod.custo_total || prod.custo_total <= 0);
+                      const comissaoItem = comissaoForm.itens[idx];
+                      const estoqueItem = item.produtoId ? faltaEstoquePorProduto.get(item.produtoId) : undefined;
 
                       return (
                         <div key={idx} className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
@@ -1258,8 +1311,14 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                               />
                             </div>
 
-                            <div className="w-28 text-right font-mono font-bold text-slate-900">
+                            <div className="w-32 text-right font-mono font-bold text-slate-900">
                               {(item.quantidade * item.precoUnitario).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              {rcaIdForm && comissaoItem && (
+                                <div className="text-[10px] font-sans font-medium text-indigo-700" title={`Regra aplicada: ${comissaoItem.regra}${comissaoItem.grupo ? ` • Grupo: ${comissaoItem.grupo}` : ''}`}>
+                                  Comissão {comissaoItem.percentual}% • {formatarMoeda(comissaoItem.valor)}
+                                  <span className="block text-indigo-400">{comissaoItem.regra}</span>
+                                </div>
+                              )}
                             </div>
 
                             {itensForm.length > 1 && (
@@ -1272,6 +1331,16 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                               </button>
                             )}
                           </div>
+
+                          {/* ESTOQUE: avisa quanto falta (não bloqueia a venda) */}
+                          {estoqueItem && estoqueItem.falta > 0 && (
+                            <div className="p-2 bg-red-50 border border-red-300 rounded-md text-[11px] text-red-900 flex items-center gap-1.5 font-medium">
+                              <AlertCircle className="w-3.5 h-3.5 text-red-700 shrink-0" />
+                              <span>
+                                <strong>Estoque não cobre:</strong> pedido {estoqueItem.pedido.toLocaleString('pt-BR')} pacotes • em estoque {estoqueItem.disponivel.toLocaleString('pt-BR')} • <strong>faltam {estoqueItem.falta.toLocaleString('pt-BR')} pacotes</strong>. Você pode seguir; a diferença precisará ser produzida.
+                              </span>
+                            </div>
+                          )}
 
                           {/* AVISOS ESPECÍFICOS DE FALTA DE RECEITA E DE FALTA DE CUSTO */}
                           {faltaReceita && (
@@ -1333,7 +1402,23 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                   return p && (!p.custo_total || p.custo_total <= 0);
                 });
 
+                let temFaltaEstoque = false;
+                faltaEstoquePorProduto.forEach(v => { if (v.falta > 0) temFaltaEstoque = true; });
+
                 return (
+                  <>
+                  {rcaIdForm && itensForm.length > 0 && (
+                    <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="font-bold text-indigo-900">
+                        Comissão estimada do RCA ({comissaoForm.regra}):
+                      </span>
+                      <span className="font-mono font-black text-indigo-900">
+                        {formatarMoeda(comissaoForm.valor)}
+                        <span className="font-sans font-medium text-indigo-600 ml-1">({comissaoForm.percentual_efetivo}% efetivo sobre {formatarMoeda(comissaoForm.base)})</span>
+                      </span>
+                      <span className="w-full text-[10px] text-indigo-500">Vira conta a pagar ao RCA quando o pedido for faturado (base = valor faturado).</span>
+                    </div>
+                  )}
                   <div className="p-3 bg-slate-900 text-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs border border-slate-800">
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="font-bold text-white uppercase text-[10px] tracking-wider">Status do Pedido:</span>
@@ -1346,6 +1431,9 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                       <span className={temAlgumaFaltaCusto ? 'text-orange-400 font-bold' : 'text-emerald-400 font-bold'}>
                         {temAlgumaFaltaCusto ? '⚠️ Custo Pendente' : '✓ Custo OK'}
                       </span>
+                      <span className={temFaltaEstoque ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}>
+                        {temFaltaEstoque ? '⚠️ Estoque Insuficiente' : '✓ Estoque OK'}
+                      </span>
                     </div>
                     <p className="text-[10px] text-slate-400 italic">
                       {temAlgumaFaltaReceita || temAlgumaFaltaCusto
@@ -1353,6 +1441,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                         : 'Apuração comercial e técnica completa!'}
                     </p>
                   </div>
+                  </>
                 );
               })()}
 

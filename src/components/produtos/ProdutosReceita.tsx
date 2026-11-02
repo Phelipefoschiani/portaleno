@@ -164,6 +164,7 @@ export function ProdutosReceita({ onNavigate }: Props) {
     const nova: ReceitaIndustrial = {
       ...rec,
       id: `rec_${Date.now()}`,
+      produto_id: undefined, // cópia nasce sem produto vinculado
       codigo: `REC-CPY-${Math.floor(100 + Math.random() * 900)}`,
       nome: `${rec.nome || rec.produto_nome} (Cópia)`,
       data_criacao: new Date().toLocaleDateString('pt-BR')
@@ -176,7 +177,11 @@ export function ProdutosReceita({ onNavigate }: Props) {
 
   // Excluir Receita
   const handleExcluirReceita = (rec: ReceitaIndustrial) => {
-    if (confirm(`Deseja realmente excluir a receita "${rec.nome || rec.produto_nome}"?`)) {
+    const vinculados = carregarEstoqueProdutos().filter(p => p.receita_id === rec.id);
+    const aviso = vinculados.length > 0
+      ? `\n\nATENÇÃO: ${vinculados.length} produto(s) usam esta receita (${vinculados.map(p => p.nome).join(', ')}). Eles ficarão sem receita e precisarão de uma nova receita na próxima edição.`
+      : '';
+    if (confirm(`Deseja realmente excluir a receita "${rec.nome || rec.produto_nome}"?${aviso}`)) {
       const novas = receitas.filter(r => r.id !== rec.id);
       salvarReceitas(novas);
       // Produtos que usavam esta receita perdem o vínculo (sem receita_id órfão)
@@ -300,7 +305,9 @@ export function ProdutosReceita({ onNavigate }: Props) {
       id: receitaEmEdicao ? receitaEmEdicao.id : `rec_${Date.now()}`,
       codigo: formCodigo.trim() || `REC-${Date.now().toString().slice(-4)}`,
       nome: formNome.trim(),
-      produto_nome: formNome.trim(),
+      // Vínculo com o produto acabado é gravado pelo cadastro de produtos (mantém ao editar)
+      produto_id: receitaEmEdicao?.produto_id,
+      produto_nome: receitaEmEdicao?.produto_id ? (receitaEmEdicao.produto_nome || formNome.trim()) : formNome.trim(),
       tipo_embalagem: formTipoEmbalagem,
       rendimento_pacotes: pacotes,
       peso_por_pacote_kg: calculosFormulario.pesoPorPacote,
@@ -519,6 +526,11 @@ export function ProdutosReceita({ onNavigate }: Props) {
                           <div className="font-bold text-slate-900">{r.nome || r.produto_nome}</div>
                           <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
                             <span className="font-bold text-emerald-900">{r.codigo}</span>
+                            {r.produto_id && (
+                              <span className="px-1.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-sans font-semibold text-[10px]">
+                                Produto: {r.produto_nome}
+                              </span>
+                            )}
                             {r.data_criacao && (
                               <>
                                 <span>•</span>

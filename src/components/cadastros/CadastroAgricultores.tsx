@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
   Plus, 
@@ -18,11 +18,7 @@ import {
   Check, 
   Scale, 
   Tractor, 
-  Sprout, 
-  AlertCircle, 
-  X,
-  Clock,
-  Trash2
+  Sprout
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -38,23 +34,26 @@ import type { Agricultor } from '../../data/mockStore';
 import {
   carregarAgricultores,
   salvarAgricultores,
-  carregarRomaneiosMandioca,
-  salvarRomaneiosMandioca,
   EVENTO_CADASTROS_ATUALIZADOS,
-  EntregaRomaneioMandioca,
 } from '../../data/cadastrosData';
+import { CalculoNaRoca, carregarCalculosNaRoca, pesosDoCalculo } from '../../data/calculoRocaData';
+import { ExtratoAgricultor } from '../pedidos/ComprovantesRoca';
 import { useListaPersistida } from '../../lib/useListaPersistida';
-import { formatarDataBR, hojeISO } from '../../lib/datas';
 import { mesReferenciaDe, ultimosMesesReferencia } from '../../lib/mesesReferencia';
 
 // Tipos unificados: o cadastro grava exatamente o formato de mockStore (lido pelos outros módulos)
 export type { Agricultor } from '../../data/mockStore';
-export type { EntregaRomaneioMandioca } from '../../data/cadastrosData';
 
 export function CadastroAgricultores() {
   // Persistidos no armazenamento local (cadastrosData) e sincronizados entre telas
   const [agricultores, setAgricultores] = useListaPersistida<Agricultor>(carregarAgricultores, salvarAgricultores, EVENTO_CADASTROS_ATUALIZADOS);
-  const [romaneios, setRomaneios] = useListaPersistida<EntregaRomaneioMandioca>(carregarRomaneiosMandioca, salvarRomaneiosMandioca, EVENTO_CADASTROS_ATUALIZADOS);
+  // Compras de mandioca: única fonte é o Cálculo na Roça (sem lançamento manual de romaneio)
+  const [calculosRoca, setCalculosRoca] = useState<CalculoNaRoca[]>(() => carregarCalculosNaRoca());
+  useEffect(() => {
+    const h = () => setCalculosRoca(carregarCalculosNaRoca());
+    window.addEventListener('calculos_roca_updated', h);
+    return () => window.removeEventListener('calculos_roca_updated', h);
+  }, []);
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'PF' | 'PJ'>('TODOS');
   const [filtroStatus, setFiltroStatus] = useState<'TODOS' | 'ATIVOS' | 'INATIVOS'>('TODOS');
@@ -62,21 +61,6 @@ export function CadastroAgricultores() {
   // Modo de exibição: 'lista', 'formulario' ou 'historico'
   const [modo, setModo] = useState<'lista' | 'formulario' | 'historico'>('lista');
   const [agricultorSelecionado, setAgricultorSelecionado] = useState<Agricultor | null>(null);
-
-  // Modal para lançamento de novo Romaneio
-  const [modalNovoRomaneio, setModalNovoRomaneio] = useState(false);
-  const [novoRomaneioForm, setNovoRomaneioForm] = useState({
-    data: formatarDataBR(hojeISO()),
-    peso_mandioca_kg: '',
-    preco_kg: '',
-    residuo_destopo_casca_kg: '',
-    status_pagamento: 'Pago (PIX)' as 'Pago (PIX)' | 'Pendente',
-    observacoes: ''
-  });
-
-  // Modal / Edição rápida de Resíduo, Destopo e Casca pós-gravação
-  const [romaneioEdicaoDestopo, setRomaneioEdicaoDestopo] = useState<EntregaRomaneioMandioca | null>(null);
-  const [destopoInputKg, setDestopoInputKg] = useState<string>('');
 
   // Feedback de cópia da chave PIX
   const [copiadoId, setCopiadoId] = useState<string | null>(null);
@@ -279,102 +263,6 @@ export function CadastroAgricultores() {
     setModo('lista');
   };
 
-  // Alternar pagamento do Romaneio (Pago PIX ou Pendente)
-  const alternarPagamentoRomaneio = (romId: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setRomaneios(prev => prev.map(r => {
-      if (r.id === romId) {
-        const novoStatus = r.status_pagamento === 'Pago (PIX)' ? 'Pendente' : 'Pago (PIX)';
-        return {
-          ...r,
-          status_pagamento: novoStatus,
-          data_liquidacao_pix: novoStatus === 'Pago (PIX)' ? new Date().toLocaleString('pt-BR') : undefined
-        };
-      }
-      return r;
-    }));
-  };
-
-  // Abrir modal de edição de destopo/casca para um romaneio já gravado
-  const abrirEdicaoDestopo = (rom: EntregaRomaneioMandioca, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setRomaneioEdicaoDestopo(rom);
-    setDestopoInputKg(String(rom.residuo_destopo_casca_kg || ''));
-  };
-
-  // Salvar alteração de destopo
-  const salvarEdicaoDestopo = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!romaneioEdicaoDestopo) return;
-
-    const novoDestopo = Number(destopoInputKg) || 0;
-    setRomaneios(prev => prev.map(r => {
-      if (r.id === romaneioEdicaoDestopo.id) {
-        return {
-          ...r,
-          residuo_destopo_casca_kg: novoDestopo
-        };
-      }
-      return r;
-    }));
-
-    setRomaneioEdicaoDestopo(null);
-  };
-
-  // Salvar novo Romaneio lançado pelo Gerente
-  const salvarNovoRomaneio = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!agricultorSelecionado) return;
-
-    const pesoMandioca = Number(novoRomaneioForm.peso_mandioca_kg) || 0;
-    const preco = Number(String(novoRomaneioForm.preco_kg).replace(',', '.')) || 0;
-    if (pesoMandioca <= 0 || preco <= 0) {
-      alert('Informe o peso da mandioca e o preço por kg.');
-      return;
-    }
-    // O valor pago é calculado pelo peso total de mandioca entregue (não desconta destopo/casca do agricultor)
-    const valorTotal = pesoMandioca * preco;
-    const residuo = Number(novoRomaneioForm.residuo_destopo_casca_kg) || 0;
-
-    const mesRef = mesReferenciaDe(novoRomaneioForm.data) || mesReferenciaDe(new Date());
-
-    const novoRom: EntregaRomaneioMandioca = {
-      id: `rom_${Date.now()}`,
-      empresa_id: 'emp_grupo_eno',
-      agricultor_id: agricultorSelecionado.id,
-      numero_romaneio: `ROM-MAN-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      data: novoRomaneioForm.data,
-      safra_referencia: `Safra ${new Date().getFullYear()}`,
-      mes_referencia: mesRef,
-      peso_mandioca_kg: pesoMandioca,
-      preco_kg: preco,
-      valor_total: valorTotal,
-      residuo_destopo_casca_kg: residuo,
-      status_pagamento: novoRomaneioForm.status_pagamento,
-      data_liquidacao_pix: novoRomaneioForm.status_pagamento === 'Pago (PIX)' ? new Date().toLocaleString('pt-BR') : undefined,
-      observacoes: novoRomaneioForm.observacoes || undefined
-    };
-
-    setRomaneios(prev => [novoRom, ...prev]);
-    setModalNovoRomaneio(false);
-    setNovoRomaneioForm({
-      data: formatarDataBR(hojeISO()),
-      peso_mandioca_kg: '',
-      preco_kg: '',
-      residuo_destopo_casca_kg: '',
-      status_pagamento: 'Pago (PIX)',
-      observacoes: ''
-    });
-  };
-
-  // Excluir romaneio
-  const excluirRomaneio = (romId: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (window.confirm('Tem certeza que deseja remover este romaneio?')) {
-      setRomaneios(prev => prev.filter(r => r.id !== romId));
-    }
-  };
-
   // Filtragem dos agricultores
   const agricultoresFiltrados = agricultores.filter(agr => {
     const matchBusca = 
@@ -393,48 +281,27 @@ export function CadastroAgricultores() {
     return matchBusca && matchTipo && matchStatus;
   });
 
-  // Entregas do agricultor selecionado
-  const entregasDoAgricultor = useMemo(() => {
+  // Compras de mandioca do agricultor = pesagens do Cálculo na Roça (única fonte), por id do agricultor
+  const pesagensDoAgricultor = useMemo(() => {
     if (!agricultorSelecionado) return [];
-    return romaneios.filter(e => e.agricultor_id === agricultorSelecionado.id);
-  }, [agricultorSelecionado, romaneios]);
-
-  // Totais consolidados
-  const totalPagoProdutor = useMemo(() => {
-    return entregasDoAgricultor
-      .filter(e => e.status_pagamento === 'Pago (PIX)')
-      .reduce((acc, curr) => acc + curr.valor_total, 0);
-  }, [entregasDoAgricultor]);
-
-  const totalPendenteProdutor = useMemo(() => {
-    return entregasDoAgricultor
-      .filter(e => e.status_pagamento === 'Pendente')
-      .reduce((acc, curr) => acc + curr.valor_total, 0);
-  }, [entregasDoAgricultor]);
-
-  const totalKgMandioca = useMemo(() => {
-    return entregasDoAgricultor.reduce((acc, curr) => acc + curr.peso_mandioca_kg, 0);
-  }, [entregasDoAgricultor]);
-
-  const totalKgResiduoDestopoCasca = useMemo(() => {
-    return entregasDoAgricultor.reduce((acc, curr) => acc + curr.residuo_destopo_casca_kg, 0);
-  }, [entregasDoAgricultor]);
+    return calculosRoca.filter(c => c.fornecedor_tipo === 'AGRICULTOR' && c.fornecedor_id === agricultorSelecionado.id);
+  }, [agricultorSelecionado, calculosRoca]);
 
   // DADOS DO GRÁFICO COM AS 3 LINHAS:
-  // 1. Linha de Mandioca (KG entregue)
-  // 2. Linha de Valor Total (R$)
-  // 3. Linha de Resíduo, Destopo e Casca (KG de refugo apontado pelo gerente)
+  // 1. Mandioca líquida (KG) · 2. Valor total (R$) · 3. Desconto na pesagem (KG: casca/terra/tara)
   const dadosGrafico3Linhas = useMemo(() => {
     const ordemMeses = ultimosMesesReferencia(6);
     const mapa: Record<string, { kgMandioca: number; valorTotal: number; kgResiduo: number }> = Object.fromEntries(
       ordemMeses.map(m => [m, { kgMandioca: 0, valorTotal: 0, kgResiduo: 0 }])
     );
 
-    entregasDoAgricultor.forEach(e => {
-      if (e.mes_referencia in mapa) {
-        mapa[e.mes_referencia].kgMandioca += e.peso_mandioca_kg;
-        mapa[e.mes_referencia].valorTotal += e.valor_total;
-        mapa[e.mes_referencia].kgResiduo += e.residuo_destopo_casca_kg;
+    pesagensDoAgricultor.forEach(c => {
+      const mes = mesReferenciaDe(c.data);
+      if (mes in mapa) {
+        const pesos = pesosDoCalculo(c);
+        mapa[mes].kgMandioca += pesos.liquido;
+        mapa[mes].valorTotal += Number(c.valor_total_estimado) || 0;
+        mapa[mes].kgResiduo += pesos.desconto;
       }
     });
 
@@ -444,7 +311,7 @@ export function CadastroAgricultores() {
       valorTotal: mapa[mes].valorTotal,
       kgResiduo: mapa[mes].kgResiduo
     }));
-  }, [entregasDoAgricultor]);
+  }, [pesagensDoAgricultor]);
 
   return (
     <div className="flex-1 w-full h-full flex flex-col bg-white rounded-2xl border border-emerald-950/15 shadow-[0_10px_35px_rgba(0,0,0,0.06)] overflow-hidden">
@@ -564,7 +431,7 @@ export function CadastroAgricultores() {
                   <th className="py-3 px-6">Localização Rural</th>
                   <th className="py-3 px-6">Chave PIX (Pagamento Safra)</th>
                   <th className="py-3 px-6 text-center">Status</th>
-                  <th className="py-3 px-6 text-center">Romaneios de Mandioca</th>
+                  <th className="py-3 px-6 text-center">Compras de Mandioca</th>
                   <th className="py-3 px-6 text-right">Ações</th>
                 </tr>
               </thead>
@@ -693,7 +560,7 @@ export function CadastroAgricultores() {
                         </button>
                       </td>
 
-                      {/* Romaneios e Histórico */}
+                      {/* Compras (pesagens do Cálculo na Roça) e extrato */}
                       <td className="py-3.5 px-6 text-center">
                         <button
                           onClick={() => abrirHistorico(agr)}
@@ -703,7 +570,7 @@ export function CadastroAgricultores() {
                             text-white text-xs font-bold
                             transition-all cursor-pointer shadow-2xs hover:shadow-xs
                           "
-                          title="Ver Romaneios, KG e Resíduo/Destopo/Casca"
+                          title="Ver pesagens do Cálculo na Roça, pagamentos e comprovantes"
                         >
                           <Scale className="w-3.5 h-3.5 text-emerald-300" />
                           <span>Entregas & KG</span>
@@ -1184,7 +1051,7 @@ export function CadastroAgricultores() {
 
               {/* Tag informativa de compras em Pedidos de Compra */}
               <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100/80 border border-emerald-300 text-emerald-900 text-xs font-bold">
-                <span>📦 Lançamento de compras em <strong>Pedidos &gt; Pedido de Compra</strong></span>
+                <span>📦 Compras lançadas em <strong>Pedidos &gt; Cálculo na Roça</strong></span>
               </div>
             </div>
           </div>
@@ -1192,74 +1059,15 @@ export function CadastroAgricultores() {
           {/* CONTEÚDO DO HISTÓRICO */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/40">
             
-            {/* CARDS COM RESUMO ESPECÍFICO DE MANDIOCA */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              {/* Card 1: Volume de Mandioca (KG) */}
-              <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-                  <span>Mandioca (KG)</span>
-                  <Scale className="w-4 h-4 text-emerald-700" />
-                </div>
-                <div className="mt-2 text-2xl font-black text-emerald-900 font-mono">
-                  {totalKgMandioca.toLocaleString('pt-BR')} <span className="text-sm font-bold text-emerald-700">KG</span>
-                </div>
-                <div className="mt-1 text-[11px] text-slate-500">
-                  Total de mandioca recebida
-                </div>
-              </div>
-
-              {/* Card 2: Resíduo, Destopo e Casca (KG) */}
-              <div className="p-5 bg-white rounded-2xl border border-amber-200/80 shadow-sm bg-amber-50/30">
-                <div className="flex items-center justify-between text-amber-800 text-xs font-bold uppercase tracking-wider">
-                  <span>Resíduo, Destopo & Casca</span>
-                  <AlertCircle className="w-4 h-4 text-amber-600" />
-                </div>
-                <div className="mt-2 text-2xl font-black text-amber-900 font-mono">
-                  {totalKgResiduoDestopoCasca.toLocaleString('pt-BR')} <span className="text-sm font-bold text-amber-700">KG</span>
-                </div>
-                <div className="mt-1 text-[11px] text-amber-700 font-medium">
-                  {totalKgMandioca > 0 
-                    ? `${((totalKgResiduoDestopoCasca / totalKgMandioca) * 100).toFixed(1)}% refugo fábrica (não desconta do produtor)`
-                    : 'Apenas para cálculo de aproveitamento'}
-                </div>
-              </div>
-
-              {/* Card 3: Total Liquidado via PIX */}
-              <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-                  <span>Total Pago (PIX)</span>
-                  <CreditCard className="w-4 h-4 text-emerald-700" />
-                </div>
-                <div className="mt-2 text-2xl font-black text-slate-900 font-mono">
-                  R$ {totalPagoProdutor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </div>
-                <div className="mt-1 text-xs text-emerald-700 font-bold flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" />
-                  Liquidado via PIX
-                </div>
-              </div>
-
-              {/* Card 4: Pendente */}
-              <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-                  <span>Pendente</span>
-                  <Clock className="w-4 h-4 text-amber-600" />
-                </div>
-                <div className="mt-2 text-2xl font-black text-amber-950 font-mono">
-                  R$ {totalPendenteProdutor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </div>
-                <div className="mt-1 text-xs text-slate-500">
-                  Valores em aberto
-                </div>
-              </div>
-            </div>
+            {/* EXTRATO DAS COMPRAS (PESAGENS DO CÁLCULO NA ROÇA) */}
+            <ExtratoAgricultor calculos={pesagensDoAgricultor} permitirRemoverComprovante />
 
             {/* GRÁFICO COM AS 3 LINHAS */}
             <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2 font-black text-sm text-slate-900 uppercase tracking-wide">
                   <TrendingUp className="w-4 h-4 text-emerald-800" />
-                  <span>Acompanhamento: Mandioca (KG), Valor Total (R$) e Resíduo/Destopo/Casca (KG)</span>
+                  <span>Acompanhamento: Mandioca Líquida (KG), Valor Total (R$) e Desconto na Pesagem (KG)</span>
                 </div>
                 <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2.5 py-1 rounded-lg">
                   Últimos 6 Meses
@@ -1341,7 +1149,7 @@ export function CadastroAgricultores() {
                       yAxisId="kg"
                       type="monotone" 
                       dataKey="kgMandioca" 
-                      name="Mandioca (KG)"
+                      name="Mandioca Líquida (KG)"
                       stroke="#059669" 
                       strokeWidth={3} 
                       dot={{ r: 4, fill: '#059669', strokeWidth: 2, stroke: '#fff' }} 
@@ -1360,12 +1168,12 @@ export function CadastroAgricultores() {
                       activeDot={{ r: 6 }} 
                     />
 
-                    {/* LINHA 3: Resíduo, Destopo e Casca (KG) */}
+                    {/* LINHA 3: Desconto na pesagem (KG) */}
                     <Line 
                       yAxisId="kg"
                       type="monotone" 
                       dataKey="kgResiduo" 
-                      name="Resíduo, Destopo e Casca (KG)"
+                      name="Desconto na Pesagem (KG)"
                       stroke="#d97706" 
                       strokeWidth={2.5} 
                       strokeDasharray="4 4"
@@ -1380,267 +1188,24 @@ export function CadastroAgricultores() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs text-slate-600 border-t border-slate-100">
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-emerald-600 shrink-0"></span>
-                  <span><strong>Mandioca (KG):</strong> Volume total entregue pelo produtor.</span>
+                  <span><strong>Mandioca (KG):</strong> Peso líquido entregue (bruto − desconto).</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-indigo-600 shrink-0"></span>
-                  <span><strong>Valor Total (R$):</strong> Total pago (Mandioca KG × R$/KG).</span>
+                  <span><strong>Valor Total (R$):</strong> Peso líquido × R$/KG.</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-amber-600 shrink-0"></span>
-                  <span><strong>Resíduo, Destopo e Casca:</strong> Indicador para aproveitamento na fábrica.</span>
+                  <span><strong>Desconto:</strong> Casca, terra, impureza e tara descontadas na pesagem.</span>
                 </div>
               </div>
             </div>
 
-            {/* TABELA DE CARGAS E ROMANEIOS EM LINHAS (SEM SANFONA) */}
-            <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2 font-black text-sm text-slate-900 uppercase tracking-wide">
-                  <Scale className="w-4 h-4 text-emerald-800" />
-                  <span>Cargas e Romaneios de Mandioca ({entregasDoAgricultor.length})</span>
-                </div>
-                <span className="text-xs text-slate-500 font-medium">
-                  Clique no botão de destopo para lançar/ajustar a quebra técnica a qualquer momento
-                </span>
-              </div>
-
-              {entregasDoAgricultor.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 text-xs">
-                  Nenhum romaneio de mandioca registrado para este produtor ainda.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[950px]">
-                    <thead className="bg-slate-100/80 border-b border-slate-200 text-[11px] font-black uppercase tracking-wider text-slate-600">
-                      <tr>
-                        <th className="py-3 px-4">Romaneio</th>
-                        <th className="py-3 px-4">Data</th>
-                        <th className="py-3 px-4 text-right">Mandioca (KG)</th>
-                        <th className="py-3 px-4 text-right">Preço (R$/KG)</th>
-                        <th className="py-3 px-4 text-right">Valor Total (R$)</th>
-                        <th className="py-3 px-4 text-center">Destopo, Resíduo & Casca</th>
-                        <th className="py-3 px-4 text-center">Pagamento</th>
-                        <th className="py-3 px-4 text-right">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-                      {entregasDoAgricultor.map((rom) => {
-                        const isPago = rom.status_pagamento === 'Pago (PIX)';
-                        const percAproveitamento = rom.peso_mandioca_kg > 0 
-                          ? (((rom.peso_mandioca_kg - rom.residuo_destopo_casca_kg) / rom.peso_mandioca_kg) * 100).toFixed(1)
-                          : '100.0';
-
-                        return (
-                          <tr key={rom.id} className="hover:bg-emerald-50/40 transition-colors">
-                            {/* Romaneio */}
-                            <td className="py-3.5 px-4">
-                              <div className="font-bold text-slate-900 font-mono">
-                                {rom.numero_romaneio}
-                              </div>
-                              <div className="text-[10px] text-slate-400 font-normal">
-                                {rom.safra_referencia}
-                              </div>
-                            </td>
-
-                            {/* Data */}
-                            <td className="py-3.5 px-4 font-bold text-slate-800">
-                              {rom.data}
-                            </td>
-
-                            {/* Mandioca (KG) */}
-                            <td className="py-3.5 px-4 text-right font-mono font-black text-slate-900 text-sm">
-                              {rom.peso_mandioca_kg.toLocaleString('pt-BR')} <span className="text-[10px] font-bold text-slate-400">KG</span>
-                            </td>
-
-                            {/* Preço R$/KG */}
-                            <td className="py-3.5 px-4 text-right font-mono text-slate-700 font-semibold">
-                              R$ {rom.preco_kg.toFixed(2)}
-                            </td>
-
-                            {/* Valor Total R$ */}
-                            <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-950 text-sm">
-                              R$ {rom.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </td>
-
-                            {/* Resíduo, Destopo e Casca (com botão para alterar mesmo depois de gravado) */}
-                            <td className="py-3.5 px-4 text-center">
-                              <div className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-lg">
-                                <div className="text-left font-mono">
-                                  <span className="font-black text-amber-900 text-xs">
-                                    {rom.residuo_destopo_casca_kg.toLocaleString('pt-BR')} KG
-                                  </span>
-                                  <span className="text-[10px] text-amber-700 ml-1">
-                                    ({percAproveitamento}% aprov.)
-                                  </span>
-                                </div>
-                                <button
-                                  onClick={(e) => abrirEdicaoDestopo(rom, e)}
-                                  className="p-1 text-amber-700 hover:text-amber-950 hover:bg-amber-100 rounded transition-colors cursor-pointer"
-                                  title="Editar Destopo e Casca deste romaneio"
-                                >
-                                  <Edit2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </td>
-
-                            {/* Pagamento (Pago PIX / Pendente com toggle com 1 clique) */}
-                            <td className="py-3.5 px-4 text-center">
-                              <button
-                                onClick={(e) => alternarPagamentoRomaneio(rom.id, e)}
-                                className="cursor-pointer transition-transform active:scale-95"
-                                title="Clique para alternar o status do pagamento"
-                              >
-                                {isPago ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                    <Check className="w-3 h-3 stroke-[3]" />
-                                    Pago (PIX)
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                    <Clock className="w-3 h-3" />
-                                    Pendente
-                                  </span>
-                                )}
-                              </button>
-                            </td>
-
-                            {/* Ações */}
-                            <td className="py-3.5 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                <button
-                                  onClick={(e) => abrirEdicaoDestopo(rom, e)}
-                                  className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                                  title="Editar Destopo / Refugo"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={(e) => excluirRomaneio(rom.id, e)}
-                                  className="p-1.5 text-slate-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                  title="Excluir Romaneio"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
 
           </div>
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* 5. MODAL: EDITAR DESTOPO, RESÍDUO E CASCA PÓS-GRAVAÇÃO    */}
-      {/* (AMPLO E HORIZONTAL)                                      */}
-      {/* ========================================================= */}
-      {romaneioEdicaoDestopo && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="bg-white w-full max-w-2xl sm:max-w-3xl lg:max-w-4xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-amber-50/80 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <AlertCircle className="w-5 h-5 text-amber-700" />
-                <div>
-                  <h3 className="font-black text-base text-slate-900">
-                    Ajustar Destopo, Resíduo & Casca da Mandioca
-                  </h3>
-                  <p className="text-[11px] text-amber-800">Romaneio {romaneioEdicaoDestopo.numero_romaneio} • {romaneioEdicaoDestopo.produtor_nome}</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setRomaneioEdicaoDestopo(null)}
-                className="p-1.5 rounded-lg hover:bg-amber-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={salvarEdicaoDestopo} className="p-6 space-y-4 overflow-y-auto flex-1">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs space-y-2">
-                  <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px] block">Dados da Carga de Raiz</span>
-                  <div className="flex justify-between py-1 border-b border-slate-200">
-                    <span className="text-slate-500">Romaneio:</span>
-                    <span className="font-mono font-bold text-slate-800">{romaneioEdicaoDestopo.numero_romaneio}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-200">
-                    <span className="text-slate-500">Data de Entrada:</span>
-                    <span className="font-bold text-slate-800">{romaneioEdicaoDestopo.data}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-200">
-                    <span className="text-slate-500">Peso Bruto Mandioca:</span>
-                    <span className="font-mono font-bold text-emerald-900">{romaneioEdicaoDestopo.peso_mandioca_kg.toLocaleString('pt-BR')} KG</span>
-                  </div>
-                  <div className="flex justify-between py-1">
-                    <span className="text-slate-500">Teor de Amido:</span>
-                    <span className="font-mono font-bold text-slate-800">{romaneioEdicaoDestopo.teor_amido}%</span>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-amber-900 mb-1.5">
-                      Resíduo, Destopo e Casca (KG) *
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      value={destopoInputKg}
-                      onChange={(e) => setDestopoInputKg(e.target.value)}
-                      placeholder="Ex: 2100"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-amber-300 text-sm font-mono font-bold focus:outline-none focus:border-amber-600 focus:ring-2 focus:ring-amber-500/20 bg-amber-50/20"
-                    />
-                    <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                      Este valor atualiza imediatamente o gráfico de 3 linhas e o cálculo de aproveitamento da mandioca na fábrica (não altera o valor a pagar ao produtor).
-                    </p>
-                  </div>
-
-                  {destopoInputKg && (
-                    <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs flex justify-between items-center">
-                      <span className="text-emerald-900 font-bold">Aproveitamento Industrial Líquido:</span>
-                      <span className="font-mono font-black text-emerald-950 text-base">
-                        {(
-                          ((romaneioEdicaoDestopo.peso_mandioca_kg - Number(destopoInputKg)) / romaneioEdicaoDestopo.peso_mandioca_kg) * 100
-                        ).toFixed(1)}%
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setRomaneioEdicaoDestopo(null)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="
-                    flex items-center gap-2 px-5 py-2 rounded-xl
-                    bg-amber-700 hover:bg-amber-800 active:bg-amber-900
-                    text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow-md
-                    transition-all cursor-pointer
-                  "
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Salvar Destopo</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
     </div>
   );

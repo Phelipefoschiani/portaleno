@@ -5,7 +5,7 @@ import { PortalAgricultor } from './components/portais/PortalAgricultor';
 import { PortalRCA } from './components/portais/PortalRCA';
 import { PortalConvidadoExclusivo } from './components/portfolio/PortalConvidadoExclusivo';
 import { PortalControleSitio } from './components/portais/PortalControleSitio';
-import { CadastroProducao } from './components/cadastros/CadastroProducao';
+import { PortalProducao } from './components/producao/PortalProducao';
 import { LandingPage } from './components/home/LandingPage';
 import { PaginaPropósito } from './components/pages/PaginaPropósito';
 import { PaginaNegocios } from './components/pages/PaginaNegocios';
@@ -232,12 +232,12 @@ export default function App() {
               </button>
               <div>
                 <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">Grupo ENO · Chão de Fábrica</div>
-                <h1 className="text-base sm:text-lg font-black text-white">Cadastro e Gestão da Produção</h1>
+                <h1 className="text-base sm:text-lg font-black text-white">Produção: Ordens e Colaboradores</h1>
               </div>
             </div>
           </header>
           <div className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full">
-            <CadastroProducao />
+            <PortalProducao />
           </div>
         </div>
       )}

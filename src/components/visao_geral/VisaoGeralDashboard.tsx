@@ -44,6 +44,7 @@ import {
   numeroSeguro
 } from '../../data/financeiroData';
 import { parseData, somarDias, hojeISO, formatarDataBR, compararDatas } from '../../lib/datas';
+import { AlertasEstoqueProducao } from './AlertasEstoqueProducao';
 
 interface VisaoGeralProps {
   onNavigate: (pageId: string) => void;
@@ -272,6 +273,9 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
           </div>
         </div>
       </div>
+
+      {/* 2.1 Alertas de estoque mínimo e OPs com falta de matéria-prima */}
+      <AlertasEstoqueProducao onNavigate={onNavigate} />
 
       {/* 3. Ações Rápidas */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm">

@@ -33,8 +33,13 @@ import {
   criarCalculoNaRocaELancarPedidoCompra,
   definirPagamentoCalculoRoca,
   excluirCalculoNaRoca,
-  proximoNumeroTicketRoca
+  proximoNumeroTicketRoca,
+  calcularDescontoPesagem,
+  pesosDoCalculo,
+  descricaoDesconto,
+  adicionarComprovante
 } from '../../data/calculoRocaData';
+import { CampoAnexoComprovante, ArquivoComprovante, ModalComprovantes, useExtratoRoca } from './ComprovantesRoca';
 import { Agricultor } from '../../data/mockStore';
 import { carregarAgricultores, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
 import { hojeISO, paraISO, formatarDataBR } from '../../lib/datas';
@@ -107,6 +112,10 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
   const [pesadorResponsavel, setPesadorResponsavel] = useState('');
   const [precoPorKg, setPrecoPorKg] = useState('');
   const [observacoes, setObservacoes] = useState('');
+  // Desconto na pesagem (casca/terra/impureza e/ou tara em kg)
+  const [descontoPctInput, setDescontoPctInput] = useState('');
+  const [descontoTaraInput, setDescontoTaraInput] = useState('');
+  const [motivoDesconto, setMotivoDesconto] = useState('');
 
   // Lista de sacos na nova pesagem (sem arredondamento - até 3 casas após a vírgula)
   const [sacosForm, setSacosForm] = useState<SacoPesagem[]>([]);
@@ -130,6 +139,8 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
   const [valorAdiantado, setValorAdiantado] = useState('');
   const [contaBancaria, setContaBancaria] = useState('Banco do Brasil - Conta Movimento');
   const [obsPagamento, setObsPagamento] = useState('');
+  const [anexoPagamento, setAnexoPagamento] = useState<ArquivoComprovante | null>(null);
+  const [comprovantesDe, setComprovantesDe] = useState<CalculoNaRoca | null>(null);
 
   // Agricultor selecionado para preview e local automático
   const agricultorSelecionado = useMemo(() => {
@@ -147,17 +158,25 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
   // Totais da pesagem em tempo real no formulário com até 3 casas decimais
   const totaisForm = useMemo(() => {
     const totalSacos = sacosForm.length;
-    const pesoTotal = sacosForm.reduce((acc, s) => acc + s.peso_kg, 0);
-    const pesoMedio = totalSacos > 0 ? pesoTotal / totalSacos : 0;
+    const pesoBruto = parseFloat(sacosForm.reduce((acc, s) => acc + s.peso_kg, 0).toFixed(3));
+    const pesoMedio = totalSacos > 0 ? pesoBruto / totalSacos : 0;
     const precoKg = parseFloat(precoPorKg.replace(',', '.')) || 0;
-    const valorTotal = pesoTotal * precoKg;
+    const descontoPct = parseFloat(descontoPctInput.replace(',', '.')) || 0;
+    const descontoTara = parseFloat(descontoTaraInput.replace(',', '.')) || 0;
+    const { desconto, liquido } = calcularDescontoPesagem(pesoBruto, descontoPct, descontoTara);
+    // Valor = peso LÍQUIDO × preço/kg
+    const valorTotal = liquido * precoKg;
     return {
       totalSacos,
-      pesoTotal: parseFloat(pesoTotal.toFixed(3)),
+      pesoBruto,
+      descontoPct: Math.min(100, Math.max(0, descontoPct)),
+      descontoTara: Math.max(0, descontoTara),
+      desconto,
+      pesoTotal: liquido,
       pesoMedio: parseFloat(pesoMedio.toFixed(3)),
       valorTotal: parseFloat(valorTotal.toFixed(2))
     };
-  }, [sacosForm, precoPorKg]);
+  }, [sacosForm, precoPorKg, descontoPctInput, descontoTaraInput]);
 
   // Adicionar saco com precisão de até 3 casas decimais (sem arredondar)
   const handleAdicionarSaco = (e?: React.FormEvent) => {
@@ -254,6 +273,9 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
     setPrecoPorKg('');
     if (!agricultores.some(a => a.id === parceiroId)) setParceiroId(agricultores[0]?.id || '');
     setObservacoes('');
+    setDescontoPctInput('');
+    setDescontoTaraInput('');
+    setMotivoDesconto('');
     setModalNovo(true);
     setTimeout(() => {
       if (inputSacoRef.current) inputSacoRef.current.focus();
@@ -275,6 +297,10 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
     const precoKg = parseFloat(precoPorKg.replace(',', '.')) || 0;
     if (precoKg <= 0) {
       alert('Informe o preço por kg da mandioca.');
+      return;
+    }
+    if (totaisForm.pesoTotal <= 0) {
+      alert('O desconto não pode zerar o peso líquido da pesagem.');
       return;
     }
     const ticketId = proximoNumeroTicketRoca(carregarCalculosNaRoca());
@@ -309,6 +335,11 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       peso_total_kg: totaisForm.pesoTotal,
       peso_medio_saco_kg: totaisForm.pesoMedio,
       valor_total_estimado: totaisForm.valorTotal,
+      peso_bruto_kg: totaisForm.pesoBruto,
+      desconto_percentual: totaisForm.descontoPct || undefined,
+      desconto_tara_kg: totaisForm.descontoTara || undefined,
+      desconto_kg: totaisForm.desconto,
+      motivo_desconto: totaisForm.desconto > 0 ? (motivoDesconto.trim() || undefined) : undefined,
       observacoes: observacoes.trim() || undefined,
       pedido_compra_id: pedidoId,
       situacao_pagamento: 'PENDENTE_DEFINICAO',
@@ -328,6 +359,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       setModalPagamento(novoCalculo);
       setDataPagamentoOuVenc(new Date().toLocaleDateString('pt-BR'));
       setObsPagamento('');
+      setAnexoPagamento(null);
     }
   };
 
@@ -353,10 +385,19 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
     });
 
     if (res.sucesso) {
+      let mensagem = res.mensagem;
+      if (anexoPagamento) {
+        const anexo = adicionarComprovante(modalPagamento.id, anexoPagamento);
+        mensagem = anexo.sucesso ? `${mensagem} Comprovante anexado.` : `${mensagem} ATENÇÃO: ${anexo.mensagem}`;
+        if (!anexo.sucesso) alert(anexo.mensagem);
+      }
       setCalculos(carregarCalculosNaRoca());
       setModalPagamento(null);
-      setMensagemAviso(res.mensagem);
+      setAnexoPagamento(null);
+      setMensagemAviso(mensagem);
       setTimeout(() => setMensagemAviso(null), 7000);
+    } else {
+      alert(res.mensagem);
     }
   };
 
@@ -599,21 +640,23 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
       doc.setTextColor(167, 243, 208); // verde claro
-      doc.text('TOTAL DE SACOS:', 20, currentY + 5.5);
-      doc.text('PESO LÍQUIDO TOTAL:', 65, currentY + 5.5);
-      doc.text('MÉDIA POR SACO:', 120, currentY + 5.5);
+      const pesosPdf = pesosDoCalculo(ticketModal);
+      const fmtKgPdf = (v: number) => `${(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg`;
+      doc.text('SACOS:', 18, currentY + 5.5);
+      doc.text('PESO BRUTO:', 42, currentY + 5.5);
+      doc.text('DESCONTO:', 78, currentY + 5.5);
+      doc.text('PESO LÍQUIDO:', 112, currentY + 5.5);
       doc.text('VALOR TOTAL DA CARGA:', 190, currentY + 5.5, { align: 'right' });
 
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
+      doc.setFontSize(10);
       doc.setTextColor(255, 255, 255);
-      doc.text(`${ticketModal.total_sacos} sacos`, 20, currentY + 12);
-      doc.text(
-        `${(ticketModal.peso_total_kg || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg`,
-        65,
-        currentY + 12
-      );
-      doc.text(`${(ticketModal.peso_medio_saco_kg || 0).toFixed(3).replace('.', ',')} kg`, 120, currentY + 12);
+      doc.text(`${ticketModal.total_sacos}`, 18, currentY + 12);
+      doc.text(fmtKgPdf(pesosPdf.bruto), 42, currentY + 12);
+      doc.setTextColor(252, 211, 77);
+      doc.text(`- ${fmtKgPdf(pesosPdf.desconto)}`, 78, currentY + 12);
+      doc.setTextColor(255, 255, 255);
+      doc.text(fmtKgPdf(pesosPdf.liquido), 112, currentY + 12);
 
       doc.setFontSize(12);
       doc.setTextColor(190, 242, 100); // lime
@@ -624,8 +667,15 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
         { align: 'right' }
       );
 
+      if (pesosPdf.desconto > 0 && descricaoDesconto(ticketModal)) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(cinzaTexto[0], cinzaTexto[1], cinzaTexto[2]);
+        doc.text(`Desconto aplicado: ${descricaoDesconto(ticketModal)}. Valor calculado sobre o peso líquido.`, 14, currentY + 20);
+      }
+
       // Assinaturas
-      const assinaturasY = currentY + 26;
+      const assinaturasY = currentY + 28;
       doc.setDrawColor(148, 163, 184);
       doc.line(25, assinaturasY, 90, assinaturasY);
       doc.line(120, assinaturasY, 185, assinaturasY);
@@ -681,6 +731,10 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       return matchBusca && matchData;
     });
   }, [calculos, busca, filtroMes, filtroAno]);
+
+  // Status real (lê o financeiro: título baixado em Financeiro → A Pagar aparece como pago aqui)
+  const { linhas: linhasExtrato, comComprovante } = useExtratoRoca(calculosFiltrados);
+  const extratoPorId = useMemo(() => new Map(linhasExtrato.map(l => [l.calculo.id, l])), [linhasExtrato]);
 
   // Métricas gerais (Card 'Sacos Pesados' foi retirado conforme solicitação)
   const metricas = useMemo(() => {
@@ -875,6 +929,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                 <th className="py-3.5 px-4">Agricultor</th>
                 <th className="py-3.5 px-4 text-right">Preço Pago kg</th>
                 <th className="py-3.5 px-3 text-center">Sacos</th>
+                <th className="py-3.5 px-4 text-right">Peso Líquido</th>
                 <th className="py-3.5 px-4 text-right">Total</th>
                 <th className="py-3.5 px-4 text-center">Situação de Pagamento</th>
                 <th className="py-3.5 px-4 text-center">Ações</th>
@@ -883,7 +938,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
             <tbody className="divide-y divide-slate-100">
               {calculosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     <Tractor className="w-10 h-10 mx-auto text-slate-300 mb-2" />
                     <p className="font-bold text-slate-600 text-sm">Nenhuma pesagem na roça encontrada.</p>
                     <p className="text-xs text-slate-400 mt-0.5">Clique em "+ Nova Pesagem de Mandioca" para lançar a pesagem saco por saco.</p>
@@ -925,6 +980,18 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                       </span>
                     </td>
 
+                    {/* Peso líquido (bruto - desconto) */}
+                    <td className="py-3 px-4 text-right font-mono">
+                      <div className="font-bold text-slate-900">
+                        {item.peso_total_kg.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg
+                      </div>
+                      {pesosDoCalculo(item).desconto > 0 && (
+                        <div className="text-[10px] text-amber-700" title={descricaoDesconto(item)}>
+                          bruto {pesosDoCalculo(item).bruto.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} − {pesosDoCalculo(item).desconto.toLocaleString('pt-BR', { maximumFractionDigits: 3 })}
+                        </div>
+                      )}
+                    </td>
+
                     {/* Total */}
                     <td className="py-3 px-4 text-right font-mono font-black text-emerald-950 text-sm">
                       {item.valor_total_estimado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
@@ -932,7 +999,17 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
 
                     {/* Situação de Pagamento */}
                     <td className="py-3 px-4 text-center">
-                      {item.situacao_pagamento === 'JA_PAGO' ? (
+                      {item.situacao_pagamento !== 'PENDENTE_DEFINICAO' && extratoPorId.get(item.id)?.status === 'PAGO' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px] border border-emerald-300">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                          <span>{item.situacao_pagamento === 'JA_PAGO' ? 'Já Pago no Ato' : 'Pago'}</span>
+                        </span>
+                      ) : item.situacao_pagamento !== 'PENDENTE_DEFINICAO' && extratoPorId.get(item.id)?.status === 'VENCIDO' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-bold text-[11px] border border-red-300">
+                          <AlertCircle className="w-3 h-3" />
+                          <span>Vencido</span>
+                        </span>
+                      ) : item.situacao_pagamento === 'JA_PAGO' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px] border border-emerald-300">
                           <CheckCircle2 className="w-3 h-3 text-emerald-700" />
                           <span>Já Pago no Ato</span>
@@ -952,6 +1029,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                             setModalPagamento(item);
                             setDataPagamentoOuVenc(new Date().toLocaleDateString('pt-BR'));
                             setObsPagamento('');
+                            setAnexoPagamento(null);
                           }}
                           className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-xs cursor-pointer transition-colors"
                           title="Clique para definir se já pagou ou se é a pagar"
@@ -964,7 +1042,18 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
 
                     {/* Ações (Apenas o botão do olhinho para visualizar) */}
                     <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => setComprovantesDe(item)}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer shadow-xs border ${
+                            comComprovante.has(item.id)
+                              ? 'bg-slate-900 hover:bg-slate-800 text-white border-slate-900'
+                              : 'bg-white hover:bg-slate-100 text-slate-400 border-slate-200'
+                          }`}
+                          title={comComprovante.has(item.id) ? 'Ver / baixar comprovante de pagamento' : 'Anexar comprovante de pagamento'}
+                        >
+                          <FileCheck className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => setTicketModal(item)}
                           className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition-colors cursor-pointer border border-emerald-200 shadow-xs"
@@ -1294,6 +1383,59 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                   </div>
                 </div>
 
+                {/* DESCONTO NA PESAGEM (CASCA / TERRA / IMPUREZA / TARA) */}
+                <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                  <div className="sm:col-span-4 text-[11px] font-bold text-amber-900 uppercase tracking-wider">
+                    Desconto na pesagem (opcional) — o valor é calculado sobre o peso líquido
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-amber-900 mb-1">% de desconto</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={descontoPctInput}
+                        onChange={(e) => setDescontoPctInput(e.target.value)}
+                        placeholder="Ex: 3"
+                        className="w-full pl-3 pr-7 py-2 bg-white border border-amber-300 rounded-lg font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-600"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-700 font-bold">%</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-amber-900 mb-1">Tara / desconto em kg</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={descontoTaraInput}
+                        onChange={(e) => setDescontoTaraInput(e.target.value)}
+                        placeholder="Ex: 15"
+                        className="w-full pl-3 pr-8 py-2 bg-white border border-amber-300 rounded-lg font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-600"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-700 font-bold text-[10px]">KG</span>
+                    </div>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-bold text-amber-900 mb-1">Motivo</label>
+                    <input
+                      type="text"
+                      value={motivoDesconto}
+                      onChange={(e) => setMotivoDesconto(e.target.value)}
+                      placeholder="Ex: casca, terra, impureza, tara dos sacos"
+                      list="motivos-desconto-roca"
+                      className="w-full bg-white border border-amber-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-amber-600"
+                    />
+                    <datalist id="motivos-desconto-roca">
+                      <option value="Casca" />
+                      <option value="Terra" />
+                      <option value="Impureza" />
+                      <option value="Tara dos sacos" />
+                      <option value="Casca e terra" />
+                    </datalist>
+                  </div>
+                </div>
+
                 {/* PAINEL DE TOTAIS EM TEMPO REAL */}
                 <div className="p-4 rounded-2xl bg-emerald-950 text-white flex flex-wrap items-center justify-between gap-4 shadow-sm">
                   <div className="flex items-center gap-6">
@@ -1305,7 +1447,25 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                     <div className="h-8 w-px bg-emerald-800" />
 
                     <div>
-                      <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">Peso Total Bruto:</span>
+                      <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">Peso Bruto:</span>
+                      <strong className="text-lg font-black font-mono text-white">
+                        {totaisForm.pesoBruto.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg
+                      </strong>
+                    </div>
+
+                    <div className="h-8 w-px bg-emerald-800" />
+
+                    <div>
+                      <span className="text-[10px] text-amber-300 font-bold uppercase tracking-wider block">Desconto:</span>
+                      <strong className="text-lg font-black font-mono text-amber-300">
+                        - {totaisForm.desconto.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg
+                      </strong>
+                    </div>
+
+                    <div className="h-8 w-px bg-emerald-800" />
+
+                    <div>
+                      <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">Peso Líquido:</span>
                       <strong className="text-lg font-black font-mono text-white">
                         {totaisForm.pesoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg
                         <span className="text-xs font-normal text-emerald-300 ml-1.5">
@@ -1619,6 +1779,22 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                     </div>
                     <div>
                       <span style={{ fontSize: '10px', fontWeight: 700, color: '#a7f3d0', textTransform: 'uppercase', display: 'block' }}>
+                        Peso Bruto:
+                      </span>
+                      <strong style={{ fontSize: '16px', fontWeight: 900, fontFamily: 'monospace' }}>
+                        {pesosDoCalculo(ticketModal).bruto.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#fcd34d', textTransform: 'uppercase', display: 'block' }}>
+                        Desconto{descricaoDesconto(ticketModal) ? ` (${descricaoDesconto(ticketModal)})` : ''}:
+                      </span>
+                      <strong style={{ fontSize: '16px', fontWeight: 900, fontFamily: 'monospace', color: '#fcd34d' }}>
+                        - {pesosDoCalculo(ticketModal).desconto.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#a7f3d0', textTransform: 'uppercase', display: 'block' }}>
                         Peso Líquido Total:
                       </span>
                       <strong style={{ fontSize: '16px', fontWeight: 900, fontFamily: 'monospace' }}>
@@ -1721,7 +1897,8 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                     {modalPagamento.valor_total_estimado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono">
-                    {modalPagamento.total_sacos} sacos • {modalPagamento.peso_total_kg.toLocaleString('pt-BR')} kg
+                    {modalPagamento.total_sacos} sacos • {modalPagamento.peso_total_kg.toLocaleString('pt-BR')} kg líquidos
+                    {pesosDoCalculo(modalPagamento).desconto > 0 && ` (bruto ${pesosDoCalculo(modalPagamento).bruto.toLocaleString('pt-BR')} kg)`}
                   </div>
                 </div>
               </div>
@@ -1853,6 +2030,12 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                     className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-emerald-700"
                   />
                 </div>
+
+                {tipoPagamentoForm !== 'A_PAGAR' && (
+                  <div className="sm:col-span-2">
+                    <CampoAnexoComprovante arquivo={anexoPagamento} onChange={setAnexoPagamento} />
+                  </div>
+                )}
               </div>
 
               {/* Botões do Rodapé */}
@@ -1876,6 +2059,10 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
             </form>
           </div>
         </div>
+      )}
+
+      {comprovantesDe && (
+        <ModalComprovantes calculo={comprovantesDe} onFechar={() => setComprovantesDe(null)} permitirRemover permitirAnexar />
       )}
 
     </div>

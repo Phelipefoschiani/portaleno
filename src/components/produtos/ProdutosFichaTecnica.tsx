@@ -22,8 +22,26 @@ import {
   FICHAS_TECNICAS_INICIAIS,
   carregarFichasTecnicas,
   salvarFichasTecnicas,
-  carregarEstoqueProdutos
+  carregarEstoqueProdutos,
+  carregarReceitas,
+  assinaturaComposicaoReceita,
+  consumoPorPacoteDaReceita,
+  ReceitaIndustrial
 } from '../../data/produtosData';
+import { RefreshCw, FlaskConical } from 'lucide-react';
+
+const fmtQtd = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+
+// Itens da ficha gerados a partir da composição da receita (MP, quantidade por pacote e por batelada)
+function itensDaReceita(rec?: ReceitaIndustrial): ItemFichaTecnica[] {
+  if (!rec) return [];
+  return consumoPorPacoteDaReceita(rec).map(c => ({
+    item_nome: c.materia_prima_nome,
+    quantidade: `${fmtQtd(c.quantidade_por_pacote)} ${c.unidade_medida}/pacote (${fmtQtd(c.quantidade_receita)} ${c.unidade_medida} na batelada de ${rec.rendimento_pacotes})`,
+    origem: 'RECEITA' as const,
+    materia_prima_id: c.materia_prima_id
+  }));
+}
 import { ProdutosNavTabs } from './ProdutosNavTabs';
 
 interface Props {
@@ -54,6 +72,33 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
   const [fichas, setFichas] = useState<FichaTecnica[]>(() => normalizarFichas(carregarFichasTecnicas()));
   const [busca, setBusca] = useState('');
   const [produtosEstoque, setProdutosEstoque] = useState(() => carregarEstoqueProdutos());
+  const [receitas, setReceitas] = useState<ReceitaIndustrial[]>(() => carregarReceitas());
+  const [formReceitaId, setFormReceitaId] = useState('');
+  const [formAssinatura, setFormAssinatura] = useState('');
+  const [formValidadeMeses, setFormValidadeMeses] = useState<number>(24);
+
+  const receitaDoProduto = (produtoId: string) => {
+    const prod = produtosEstoque.find(p => p.id === produtoId);
+    return prod?.receita_id ? receitas.find(r => r.id === prod.receita_id) : undefined;
+  };
+
+  // Substitui os itens vindos da receita, mantendo os itens livres preenchidos
+  const aplicarItensDaReceita = (produtoId: string, itensAtuais: ItemFichaTecnica[]) => {
+    const rec = receitaDoProduto(produtoId);
+    const livres = itensAtuais.filter(it => it.origem !== 'RECEITA' && (it.item_nome.trim() !== '' || it.quantidade.trim() !== ''));
+    const daReceita = itensDaReceita(rec);
+    setFormReceitaId(rec?.id || '');
+    setFormAssinatura(assinaturaComposicaoReceita(rec));
+    const novos = [...daReceita, ...livres];
+    setFormItens(novos.length > 0 ? novos : [{ item_nome: '', quantidade: '' }]);
+  };
+
+  const fichaDesatualizada = (f: FichaTecnica) => {
+    if (!f.produto_id) return false;
+    const rec = receitaDoProduto(f.produto_id);
+    if (!rec) return false;
+    return f.receita_id !== rec.id || (f.receita_assinatura || '') !== assinaturaComposicaoReceita(rec);
+  };
   
   // Modais
   const [fichaVisualizar, setFichaVisualizar] = useState<FichaTecnica | null>(null);
@@ -85,12 +130,15 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
     const handleAtualizacao = () => {
       setFichas(normalizarFichas(carregarFichasTecnicas()));
       setProdutosEstoque(carregarEstoqueProdutos());
+      setReceitas(carregarReceitas());
     };
     window.addEventListener('fichas_tecnicas_updated', handleAtualizacao);
     window.addEventListener('produtos_updated', handleAtualizacao);
+    window.addEventListener('receitas_updated', handleAtualizacao);
     return () => {
       window.removeEventListener('fichas_tecnicas_updated', handleAtualizacao);
       window.removeEventListener('produtos_updated', handleAtualizacao);
+      window.removeEventListener('receitas_updated', handleAtualizacao);
     };
   }, []);
 
@@ -130,6 +178,9 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
     setFormCodigo(`FT-${Date.now().toString().slice(-4)}`);
     setFormDescricao('');
     setFormRegistroMapa('SIF nº 0048/2024');
+    setFormReceitaId('');
+    setFormAssinatura('');
+    setFormValidadeMeses(24);
     // Inicia com linhas livres para o usuário colocar o que quiser e a quantidade que quiser
     setFormItens([
       { item_nome: '', quantidade: '' },
@@ -146,6 +197,9 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
     setFormCodigo(ficha.codigo || `FT-${Date.now().toString().slice(-4)}`);
     setFormDescricao(ficha.descricao_padrao || '');
     setFormRegistroMapa(ficha.registro_sif_mapa || '');
+    setFormReceitaId(ficha.receita_id || '');
+    setFormAssinatura(ficha.receita_assinatura || '');
+    setFormValidadeMeses(Number(ficha.prazo_validade_meses) || 24);
     
     // Se a ficha já tem itens, carrega eles; senão, cria uma linha vazia
     if (ficha.itens_especificacao && ficha.itens_especificacao.length > 0) {
@@ -181,7 +235,10 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
             codigo: formCodigo,
             descricao_padrao: formDescricao,
             registro_sif_mapa: formRegistroMapa,
-            itens_especificacao: itensValidos
+            itens_especificacao: itensValidos,
+            receita_id: formReceitaId || undefined,
+            receita_assinatura: formAssinatura || undefined,
+            prazo_validade_meses: formValidadeMeses > 0 ? formValidadeMeses : undefined
           };
         }
         return f;
@@ -197,7 +254,10 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
         codigo: formCodigo,
         descricao_padrao: formDescricao,
         registro_sif_mapa: formRegistroMapa,
-        itens_especificacao: itensValidos
+        itens_especificacao: itensValidos,
+        receita_id: formReceitaId || undefined,
+        receita_assinatura: formAssinatura || undefined,
+        prazo_validade_meses: formValidadeMeses > 0 ? formValidadeMeses : undefined
       };
       const atualizadas = [nova, ...fichas];
       salvarFichasTecnicas(atualizadas);
@@ -346,7 +406,14 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
                   return (
                     <tr key={f.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3.5 px-5">
-                        <div className="font-bold text-slate-900">{f.produto_nome}</div>
+                        <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                          <span>{f.produto_nome}</span>
+                          {fichaDesatualizada(f) && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-50 border border-amber-300 text-amber-800 text-[10px] font-bold">
+                              Receita alterada — atualizar ficha
+                            </span>
+                          )}
+                        </div>
                         {f.descricao_padrao && (
                           <div className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{f.descricao_padrao}</div>
                         )}
@@ -451,6 +518,8 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
                       const prod = produtosEstoque.find(p => p.id === selectedId);
                       setFormProdutoId(selectedId);
                       if (prod) setFormProdutoNome(prod.nome);
+                      // Preenche automaticamente com as matérias-primas da receita do produto
+                      aplicarItensDaReceita(selectedId, formItens);
                     }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
                   >
@@ -493,6 +562,47 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:outline-none focus:border-emerald-700 leading-relaxed"
                 />
               </div>
+
+              {/* VÍNCULO COM A RECEITA + VALIDADE */}
+              {(() => {
+                const rec = formProdutoId ? receitaDoProduto(formProdutoId) : undefined;
+                const desatualizada = !!rec && (formReceitaId !== rec.id || formAssinatura !== assinaturaComposicaoReceita(rec));
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                    <div className={`sm:col-span-8 p-3 rounded-xl border flex flex-wrap items-center justify-between gap-2 ${desatualizada ? 'bg-amber-50 border-amber-300' : 'bg-emerald-50/60 border-emerald-200'}`}>
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-800">
+                        <FlaskConical className="w-3.5 h-3.5 text-emerald-700" />
+                        {formProdutoId
+                          ? rec
+                            ? <span>Receita: <strong>{rec.nome || rec.produto_nome}</strong>{desatualizada ? ' — a composição mudou desde a última atualização da ficha' : ' — itens da composição sincronizados'}</span>
+                            : <span>Produto sem receita vinculada (cadastre a receita no produto).</span>
+                          : <span>Escolha o produto para puxar as matérias-primas da receita.</span>}
+                      </div>
+                      {rec && (
+                        <button
+                          type="button"
+                          onClick={() => aplicarItensDaReceita(formProdutoId, formItens)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${desatualizada ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-white border border-emerald-300 text-emerald-900 hover:bg-emerald-100'}`}
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Atualizar da receita</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="sm:col-span-4">
+                      <label className="block font-bold text-slate-800 mb-1">Prazo de Validade (meses)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={formValidadeMeses}
+                        onChange={(e) => setFormValidadeMeses(parseInt(e.target.value) || 0)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
+                      />
+                      <span className="text-[10px] text-slate-500">Usado na validade padrão das Ordens de Produção</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* SEÇÃO DINÂMICA: A PESSOA ADICIONA AS COISAS QUE QUER E A QUANTIDADE */}
               <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/70 p-4 space-y-3">
@@ -539,6 +649,9 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
                               placeholder={`Ex: ${idx === 0 ? 'Mandioca Selecionada' : idx === 1 ? 'Umidade' : 'Embalagem'}`}
                               className="w-full bg-slate-50 hover:bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
                             />
+                            {item.origem === 'RECEITA' && (
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700">da receita</span>
+                            )}
                           </td>
 
                           {/* Quantidade ou valor que a pessoa quer colocar */}

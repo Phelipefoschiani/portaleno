@@ -8,9 +8,22 @@ const PREFIXO_AUTH = 'grupo_eno_auth_';
 const KEY_MODO_LIMPO = 'grupo_eno_modo_limpo_v1';
 const KEY_LIMPEZA_V2 = 'grupo_eno_limpeza_v2';
 const KEY_LIMPEZA_INICIAL_ANTIGA = 'grupo_eno_limpeza_inicial_v1';
+// Data do último backup em arquivo (src/lib/backup.ts). Não entra no backup e o reset preserva.
+export const KEY_ULTIMO_BACKUP = 'grupo_eno_ultimo_backup_v1';
 
 // Flags de controle que o reset manual preserva (não são dados do usuário)
-const FLAGS_CONTROLE = new Set<string>([KEY_MODO_LIMPO, KEY_LIMPEZA_V2, KEY_LIMPEZA_INICIAL_ANTIGA]);
+const FLAGS_CONTROLE = new Set<string>([KEY_MODO_LIMPO, KEY_LIMPEZA_V2, KEY_LIMPEZA_INICIAL_ANTIGA, KEY_ULTIMO_BACKUP]);
+
+/** true para flags de controle internas (preservadas no reset e na restauração de backup). */
+export function ehFlagDeControle(chave: string): boolean {
+  return FLAGS_CONTROLE.has(chave);
+}
+
+/** Garante a flag da limpeza inicial (sem ela o App apagaria tudo na próxima abertura). */
+export function marcarLimpezaInicialConcluida(): void {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem(KEY_LIMPEZA_V2) === null) localStorage.setItem(KEY_LIMPEZA_V2, 'true');
+}
 
 // Cadastros base preservados quando limparTodoOSistema(true)
 const CHAVES_CADASTROS_BASE = new Set<string>([
@@ -37,6 +50,7 @@ const EVENTOS_ATUALIZACAO = [
   'tabelas_preco_updated',
   'clientes_updated',
   'cadastros_updated',
+  'comprovantes_updated',
   'sitio_controle_despesas_updated',
   'sistema_reset_updated'
 ];
@@ -52,12 +66,12 @@ export function isModoLimpoAtivo(): boolean {
   return val === 'true';
 }
 
-function ehChaveDeDados(chave: string | null): chave is string {
+export function ehChaveDeDados(chave: string | null): chave is string {
   return !!chave && chave.startsWith(PREFIXO_DADOS) && !chave.startsWith(PREFIXO_AUTH);
 }
 
 // Lista as chaves 'grupo_eno_*' existentes (exceto auth). Coleta antes de remover para não pular índices.
-function listarChavesDeDados(): string[] {
+export function listarChavesDeDados(): string[] {
   const chaves: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const chave = localStorage.key(i);

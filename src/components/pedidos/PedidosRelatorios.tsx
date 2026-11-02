@@ -42,7 +42,9 @@ import {
   carregarPedidosVenda
 } from '../../data/pedidosVendaData';
 import { converterQuantidade, normalizarUnidade } from '../../data/produtosData';
-import { hojeISO } from '../../lib/datas';
+import { hojeISO, formatarDataBR } from '../../lib/datas';
+import { montarVendasComissaoRca, VendaComissaoRCA } from '../../data/cadastrosData';
+import { formatarMoeda } from '../../data/financeiroData';
 import {
   PedidoCompraGeral,
   carregarPedidosCompra
@@ -60,7 +62,8 @@ type TipoRelatorio =
   | 'PRODUCAO'
   | 'FATURAMENTO'
   | 'ENTREGAS'
-  | 'MIX_PRODUTOS';
+  | 'MIX_PRODUTOS'
+  | 'COMISSOES';
 
 export function PedidosRelatorios({ onNavigate }: Props) {
   const [pedidosVenda, setPedidosVenda] = useState<PedidoVenda[]>([]);
@@ -69,10 +72,14 @@ export function PedidosRelatorios({ onNavigate }: Props) {
   const [filtroPeriodo, setFiltroPeriodo] = useState('SAFRA_ATUAL');
   const [filtroRca, setFiltroRca] = useState<string>('TODOS');
   const [buscaTabela, setBuscaTabela] = useState('');
+  const [comissoes, setComissoes] = useState<VendaComissaoRCA[]>([]);
 
   const recarregar = () => {
-    setPedidosVenda(carregarPedidosVenda());
+    const vendas = carregarPedidosVenda();
+    setPedidosVenda(vendas);
     setPedidosCompra(carregarPedidosCompra());
+    // Comissões de RCA com o status real do título no Contas a Pagar
+    setComissoes(montarVendasComissaoRca(vendas).filter(v => !!v.pedido_id));
   };
 
   useEffect(() => {
@@ -80,9 +87,11 @@ export function PedidosRelatorios({ onNavigate }: Props) {
     const handleUpdate = () => recarregar();
     window.addEventListener('pedidos_venda_updated', handleUpdate);
     window.addEventListener('pedidos_compra_updated', handleUpdate);
+    window.addEventListener('financeiro_updated', handleUpdate);
     return () => {
       window.removeEventListener('pedidos_venda_updated', handleUpdate);
       window.removeEventListener('pedidos_compra_updated', handleUpdate);
+      window.removeEventListener('financeiro_updated', handleUpdate);
     };
   }, []);
 
@@ -210,7 +219,12 @@ export function PedidosRelatorios({ onNavigate }: Props) {
     let cabecalho = '';
     let linhas = '';
 
-    if (relatorioAtivo === 'COMPRAS') {
+    if (relatorioAtivo === 'COMISSOES') {
+      cabecalho = 'Pedido,Data_Faturamento,RCA,Cliente,Regra,Valor_Faturado,Percentual,Comissao,Status_Titulo,Vencimento,Pagamento\n';
+      linhas = comissoes.map(c =>
+        `"${c.numero_pedido}","${c.data}","${pedidosVenda.find(p => p.id === c.pedido_id)?.rca_nome || c.rca_id}","${c.cliente_nome}","${c.tipo_regra_aplicada}",${c.valor_faturado.toFixed(2)},${c.percentual_comissao},${c.valor_comissao.toFixed(2)},"${c.status_comissao === 'Pago (PIX)' ? 'PAGO' : c.titulo_status || 'SEM_TITULO'}","${c.titulo_vencimento || ''}","${c.data_pagamento_pix || ''}"`
+      ).join('\n');
+    } else if (relatorioAtivo === 'COMPRAS') {
       cabecalho = 'Data,Item/Produto,Categoria,Parceiro/Fornecedor,Local_Compra,Comprador,Quantidade,Unidade,Valor_Unitario,Valor_Total,Status\n';
       linhas = pedidosCompra.map(p => 
         `"${p.data}","${p.item_descricao}","${p.categoria}","${p.agricultor_nome || p.fornecedor_nome}","${p.local_compra || ''}","${p.comprador_nome || ''}",${p.quantidade},"${p.unidade_medida}",${p.valor_unitario},${p.valor_total},"${p.status_pedido}"`
@@ -281,7 +295,8 @@ export function PedidosRelatorios({ onNavigate }: Props) {
             { id: 'PRODUCAO', label: 'Produção Diária & Lotes', icon: Factory },
             { id: 'FATURAMENTO', label: 'Faturamento & NF-e', icon: Receipt },
             { id: 'ENTREGAS', label: 'Logística & Entregas', icon: Truck },
-            { id: 'MIX_PRODUTOS', label: 'Curva ABC & Mix', icon: Boxes }
+            { id: 'MIX_PRODUTOS', label: 'Curva ABC & Mix', icon: Boxes },
+            { id: 'COMISSOES', label: 'Comissões de RCA', icon: Users }
           ].map(tab => {
             const Icon = tab.icon;
             const ativo = relatorioAtivo === tab.id;
@@ -565,6 +580,84 @@ export function PedidosRelatorios({ onNavigate }: Props) {
             </div>
           </div>
         )}
+
+        {/* COMISSÕES DE RCA (títulos no Contas a Pagar gerados no faturamento) */}
+        {relatorioAtivo === 'COMISSOES' && (() => {
+          const pagas = comissoes.filter(c => c.status_comissao === 'Pago (PIX)');
+          const aPagar = comissoes.filter(c => c.status_comissao !== 'Pago (PIX)');
+          const soma = (l: VendaComissaoRCA[]) => l.reduce((acc, c) => acc + c.valor_comissao, 0);
+          return (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-400 block uppercase">Comissões Geradas</span>
+                  <span className="text-xl font-black font-mono text-slate-900 mt-1 block">{formatarMoeda(soma(comissoes))}</span>
+                  <span className="text-[11px] text-slate-500">{comissoes.length} pedido(s) faturado(s) com RCA</span>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-400 block uppercase">A Pagar aos RCAs</span>
+                  <span className="text-xl font-black font-mono text-amber-700 mt-1 block">{formatarMoeda(soma(aPagar))}</span>
+                  <span className="text-[11px] text-slate-500">Títulos em aberto no Contas a Pagar</span>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-400 block uppercase">Pagas (PIX)</span>
+                  <span className="text-xl font-black font-mono text-emerald-800 mt-1 block">{formatarMoeda(soma(pagas))}</span>
+                  <span className="text-[11px] text-slate-500">Baixadas no financeiro</span>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+                <div className="px-5 py-3 border-b border-slate-200">
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-slate-700">Comissões por Pedido Faturado</h3>
+                </div>
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
+                      <th className="py-2.5 px-4">Pedido</th>
+                      <th className="py-2.5 px-4">Faturamento</th>
+                      <th className="py-2.5 px-4">RCA / Cliente</th>
+                      <th className="py-2.5 px-4">Regra</th>
+                      <th className="py-2.5 px-4 text-right">Faturado</th>
+                      <th className="py-2.5 px-4 text-right">%</th>
+                      <th className="py-2.5 px-4 text-right">Comissão</th>
+                      <th className="py-2.5 px-4 text-center">Título</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {comissoes.length === 0 && (
+                      <tr><td colSpan={8} className="py-8 text-center text-slate-400 font-medium">Nenhum pedido faturado com RCA.</td></tr>
+                    )}
+                    {comissoes.map(c => (
+                      <tr key={c.id} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-4 font-mono font-bold text-slate-900">{c.numero_pedido}</td>
+                        <td className="py-2.5 px-4 font-mono text-slate-600">{formatarDataBR(c.data)}</td>
+                        <td className="py-2.5 px-4">
+                          <div className="font-bold text-slate-900">{pedidosVenda.find(p => p.id === c.pedido_id)?.rca_nome || '-'}</div>
+                          <div className="text-[10px] text-slate-500">{c.cliente_nome}</div>
+                        </td>
+                        <td className="py-2.5 px-4 text-slate-700">{c.tipo_regra_aplicada}</td>
+                        <td className="py-2.5 px-4 font-mono text-right">{formatarMoeda(c.valor_faturado)}</td>
+                        <td className="py-2.5 px-4 font-mono text-right">{c.percentual_comissao}%</td>
+                        <td className="py-2.5 px-4 font-mono font-bold text-right text-emerald-900">{formatarMoeda(c.valor_comissao)}</td>
+                        <td className="py-2.5 px-4 text-center">
+                          {c.status_comissao === 'Pago (PIX)' ? (
+                            <span className="text-emerald-700 font-bold">Pago {c.data_pagamento_pix ? formatarDataBR(c.data_pagamento_pix) : ''}</span>
+                          ) : c.titulo_pagar_id ? (
+                            <span className={c.titulo_status === 'VENCIDO' ? 'text-red-700 font-bold' : 'text-amber-700 font-bold'}>
+                              {c.titulo_status === 'VENCIDO' ? 'Vencido' : 'A pagar'} • {formatarDataBR(c.titulo_vencimento)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">Sem título</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* E. RELATÓRIO DE ENTREGAS & LOGÍSTICA */}
         {relatorioAtivo === 'ENTREGAS' && (

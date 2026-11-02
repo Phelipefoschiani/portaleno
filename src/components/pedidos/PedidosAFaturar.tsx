@@ -28,9 +28,35 @@ import {
   PedidoVenda,
   carregarPedidosVenda,
   salvarPedidosVenda,
-  moverPedidoEtapa
+  moverPedidoEtapa,
+  pacotesDoItem
 } from '../../data/pedidosVendaData';
+import { verificarDisponibilidadeProduto } from '../../data/produtosData';
 import { PedidosNavTabs } from './PedidosNavTabs';
+
+interface FaltaEstoqueFaturar {
+  produto_id: string;
+  produto_nome: string;
+  pacotes: number;
+  disponivel: number;
+  falta: number;
+}
+
+// Compara o pedido (em pacotes, por produto) com o estoque de produto acabado
+function faltasEstoquePedido(p: PedidoVenda): FaltaEstoqueFaturar[] {
+  const porProduto = new Map<string, { nome: string; pacotes: number }>();
+  p.itens.forEach(it => {
+    const atual = porProduto.get(it.produto_id) || { nome: it.produto_nome, pacotes: 0 };
+    atual.pacotes += pacotesDoItem(it);
+    porProduto.set(it.produto_id, atual);
+  });
+  const faltas: FaltaEstoqueFaturar[] = [];
+  porProduto.forEach((v, id) => {
+    const d = verificarDisponibilidadeProduto(id, v.pacotes);
+    if (d.falta > 0) faltas.push({ produto_id: id, produto_nome: v.nome, pacotes: v.pacotes, disponivel: d.disponivel, falta: d.falta });
+  });
+  return faltas;
+}
 import { hojeISO, paraISO } from '../../lib/datas';
 
 interface Props {
@@ -75,8 +101,19 @@ export function PedidosAFaturar({ onNavigate }: Props) {
     recarregar();
     const handleUpdate = () => recarregar();
     window.addEventListener('pedidos_venda_updated', handleUpdate);
-    return () => window.removeEventListener('pedidos_venda_updated', handleUpdate);
+    window.addEventListener('produtos_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('pedidos_venda_updated', handleUpdate);
+      window.removeEventListener('produtos_updated', handleUpdate);
+    };
   }, []);
+
+  // Faltas de estoque de produto acabado por pedido (avisa, não bloqueia)
+  const faltasPorPedido = useMemo(() => {
+    const mapa = new Map<string, FaltaEstoqueFaturar[]>();
+    pedidos.forEach(p => mapa.set(p.id, faltasEstoquePedido(p)));
+    return mapa;
+  }, [pedidos]);
 
   // Métricas
   const metricas = useMemo(() => {
@@ -193,6 +230,13 @@ export function PedidosAFaturar({ onNavigate }: Props) {
     if (!chaveAcessoImport.trim()) {
       alert('Informe a Chave de Acesso da NF-e (44 dígitos).');
       return;
+    }
+
+    // Aviso de estoque insuficiente: avisa e deixa seguir
+    const faltas = faltasEstoquePedido(modalImportarNf);
+    if (faltas.length > 0) {
+      const lista = faltas.map(f => `• ${f.produto_nome}: pedido ${f.pacotes} pct, estoque ${f.disponivel} pct (faltam ${f.falta} pct)`).join('\n');
+      if (!confirm(`Atenção: o estoque de produto acabado não cobre este pedido.\n\n${lista}\n\nO estoque desses produtos ficará zerado. Faturar mesmo assim?`)) return;
     }
 
     const valorFinal = parseFloat(valorNfImport) || modalImportarNf.valor_total;
@@ -355,6 +399,15 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                         <div className="font-mono font-bold text-slate-900">
                           {item.numero_pedido}
                         </div>
+                        {(faltasPorPedido.get(item.id) || []).length > 0 && (
+                          <div
+                            className="text-[10px] text-red-700 font-bold flex items-center gap-1"
+                            title={(faltasPorPedido.get(item.id) || []).map(f => `${f.produto_nome}: faltam ${f.falta} pct`).join(' | ')}
+                          >
+                            <AlertTriangle className="w-3 h-3 text-red-600" />
+                            <span>Estoque não cobre</span>
+                          </div>
+                        )}
                         <div className="text-[11px] text-slate-400 font-mono">
                           {item.data_emissao.split('-').reverse().join('/')}
                         </div>
@@ -462,6 +515,25 @@ export function PedidosAFaturar({ onNavigate }: Props) {
             </div>
 
             <form onSubmit={handleConfirmarGuardaNf} className="p-6 space-y-5 text-xs overflow-y-auto flex-1">
+
+              {/* Aviso de estoque de produto acabado insuficiente */}
+              {(() => {
+                const faltas = faltasEstoquePedido(modalImportarNf);
+                if (faltas.length === 0) return null;
+                return (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-800 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4 text-red-600" />
+                      <span>Estoque de produto acabado não cobre este pedido (é possível faturar mesmo assim)</span>
+                    </div>
+                    {faltas.map(f => (
+                      <div key={f.produto_id} className="text-[11px] font-mono">
+                        {f.produto_nome}: pedido {f.pacotes} pct · estoque {f.disponivel} pct · <strong>faltam {f.falta} pct</strong>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
               
               {/* Aviso explicativo */}
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 flex items-start gap-2.5">

@@ -20,6 +20,7 @@ import { CalculoNaRocaComponent } from './pedidos/CalculoNaRoca';
 import { PedidoCompra } from './pedidos/PedidoCompra';
 import { PedidosOrcamentosSugestivo } from './pedidos/PedidosOrcamentosSugestivo';
 import { PedidosEmProducao } from './pedidos/PedidosEmProducao';
+import { OrdensProducaoPainel } from './producao/OrdensProducaoPainel';
 import { PedidosAFaturar } from './pedidos/PedidosAFaturar';
 import { PedidosFaturados } from './pedidos/PedidosFaturados';
 import { PedidosEntregues } from './pedidos/PedidosEntregues';
@@ -140,6 +141,7 @@ export function AdminDashboard({ onLogout, initialPageId }: AdminDashboardProps)
         { id: 'pedidos_compra', label: 'Pedido de Compra' },
         { id: 'pedidos_orcamentos_sugestivo', label: 'Vendas' },
         { id: 'pedidos_em_producao', label: 'Em Produção' },
+        { id: 'pedidos_ordens_producao', label: 'Ordens de Produção' },
         { id: 'pedidos_a_faturar', label: 'A Faturar' },
         { id: 'pedidos_faturados', label: 'Faturados' },
         { id: 'pedidos_entregues', label: 'Entregues' },
@@ -200,6 +202,7 @@ export function AdminDashboard({ onLogout, initialPageId }: AdminDashboardProps)
       'pedidos_compra': 'Pedido de Compra',
       'pedidos_orcamentos_sugestivo': 'Vendas',
       'pedidos_em_producao': 'Em Produção',
+      'pedidos_ordens_producao': 'Ordens de Produção',
       'pedidos_a_faturar': 'A Faturar',
       'pedidos_faturados': 'Faturados',
       'pedidos_entregues': 'Entregues',
@@ -425,6 +428,8 @@ export function AdminDashboard({ onLogout, initialPageId }: AdminDashboardProps)
             <PedidosOrcamentosSugestivo onNavigate={handleSelectPedidosPage} />
           ) : activePage.id === 'pedidos_em_producao' ? (
             <PedidosEmProducao onNavigate={handleSelectPedidosPage} />
+          ) : activePage.id === 'pedidos_ordens_producao' ? (
+            <OrdensProducaoPainel modo="ADMIN" onNavigate={handleSelectPedidosPage} />
           ) : activePage.id === 'pedidos_a_faturar' ? (
             <PedidosAFaturar onNavigate={handleSelectPedidosPage} />
           ) : activePage.id === 'pedidos_faturados' ? (

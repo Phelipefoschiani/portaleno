@@ -63,31 +63,23 @@ import {
 } from '../../data/cadastrosData';
 import { carregarClientes, salvarClientes } from '../../data/clientesData';
 import { carregarPedidosVenda } from '../../data/pedidosVendaData';
+import { carregarEstoqueProdutos, carregarTabelasPreco } from '../../data/produtosData';
+import { baixarTituloComissao, sincronizarTitulosComissao, DIA_VENCIMENTO_COMISSAO_PADRAO } from '../../data/comissoesData';
 import { useListaPersistida } from '../../lib/useListaPersistida';
 import { formatarDataBR, hojeISO } from '../../lib/datas';
 import { ultimosMesesReferencia } from '../../lib/mesesReferencia';
 
 /**
- * Grupos de Produtos do Grupo ENO
+ * Grupos de Produto para comissão = categorias reais do cadastro de produtos (ProdutoEstoque.categoria).
+ * O id do grupo é a própria categoria (é o que o cálculo da comissão compara).
  */
-export const GRUPOS_PRODUTO_ENO = [
-  { id: 'grp_01', nome: 'Fécula de Mandioca Nativa Industrial' },
-  { id: 'grp_02', nome: 'Féculas Modificadas (Catiônica / Oxidada)' },
-  { id: 'grp_03', nome: 'Farinhas de Mandioca (Torrada / Especial)' },
-  { id: 'grp_04', nome: 'Polvilhos Especiais (Azedo / Doce)' },
-  { id: 'grp_05', nome: 'Mandioca Descascada & Congelada' },
-  { id: 'grp_06', nome: 'Goma de Tapioca Hidratada' },
-];
+export function obterGruposProdutoComissao(): { id: string; nome: string }[] {
+  const cats = Array.from(new Set(carregarEstoqueProdutos().map(p => String(p.categoria || '').trim()).filter(Boolean)));
+  return cats.sort((a, b) => a.localeCompare(b, 'pt-BR')).map(c => ({ id: c, nome: c }));
+}
 
-/**
- * Tabelas de Preço do Grupo ENO
- */
-export const TABELAS_PRECO_OPTIONS = [
-  { id: 'tab_01', nome: 'Tabela Padrão (Distribuição)' },
-  { id: 'tab_02', nome: 'Tabela Varejo / Supermercados' },
-  { id: 'tab_03', nome: 'Tabela Atacado / Grande Porte' },
-  { id: 'tab_04', nome: 'Tabela Especial / Contratos' },
-];
+/** Tabelas de Preço reais (Produtos > Tabelas de Preço) */
+const nomeTabelaPreco = (id?: string) => (id ? carregarTabelasPreco().find(t => t.id === id)?.nome : undefined);
 
 // Tipos e persistência centralizados em cadastrosData (lidos também pelo Portal RCA e Pedidos)
 export type {
@@ -116,18 +108,27 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
     window.addEventListener('clientes_updated', h);
     window.addEventListener('pedidos_venda_updated', h);
     window.addEventListener('sistema_reset_updated', h);
+    window.addEventListener('financeiro_updated', h);
+    window.addEventListener('produtos_updated', h);
     return () => {
       window.removeEventListener('clientes_updated', h);
       window.removeEventListener('pedidos_venda_updated', h);
       window.removeEventListener('sistema_reset_updated', h);
+      window.removeEventListener('financeiro_updated', h);
+      window.removeEventListener('produtos_updated', h);
     };
   }, []);
   const pedidosVenda = useMemo(() => carregarPedidosVenda(), [versaoDados]);
+  // Pedido excluído/cancelado ou que voltou de etapa: remove a comissão a pagar ainda não paga
+  React.useEffect(() => {
+    sincronizarTitulosComissao(pedidosVenda);
+  }, [pedidosVenda]);
+  const gruposProduto = useMemo(() => obterGruposProdutoComissao(), [versaoDados]);
   const clientesDisponiveis = useMemo<ClienteVinculado[]>(
     () => montarClientesVinculados(carregarClientes(), pedidosVenda),
     [versaoDados, pedidosVenda]
   );
-  const vendas = useMemo(() => montarVendasComissaoRca(pedidosVenda, vendasSalvas), [pedidosVenda, vendasSalvas]);
+  const vendas = useMemo(() => montarVendasComissaoRca(pedidosVenda, vendasSalvas), [pedidosVenda, vendasSalvas, versaoDados]);
 
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<string>('TODOS');
@@ -145,7 +146,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
   const [clienteModal, setClienteModal] = useState<ClienteVinculado | null>(null);
 
   // Estados temporários para adicionar regras no formulário
-  const [novoGrupoId, setNovoGrupoId] = useState<string>(GRUPOS_PRODUTO_ENO[0].id);
+  const [novoGrupoId, setNovoGrupoId] = useState<string>('');
   const [novoGrupoPercentual, setNovoGrupoPercentual] = useState<number>(3.5);
   const [novoClienteId, setNovoClienteId] = useState<string>('');
   const [novoClientePercentual, setNovoClientePercentual] = useState<number>(3.0);
@@ -291,8 +292,11 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
   };
 
   const handleAdicionarComissaoGrupo = () => {
-    const grupo = GRUPOS_PRODUTO_ENO.find(g => g.id === novoGrupoId);
-    if (!grupo) return;
+    const grupo = gruposProduto.find(g => g.id === (novoGrupoId || gruposProduto[0]?.id));
+    if (!grupo) {
+      alert('Cadastre a categoria nos produtos para usar comissão por grupo.');
+      return;
+    }
     
     const existentes = formData.comissoes_por_grupo || [];
     if (existentes.some(g => g.grupo_id === grupo.id)) {
@@ -398,14 +402,15 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
         regiao_atuacao: formData.regiao_atuacao || '',
         estados_atuacao: formData.estados_atuacao || ['PR'],
         cidades_principais: formData.cidades_principais || '',
-        tabela_preco_padrao_id: formData.tabela_preco_padrao_id || 'tab_01',
-        tabela_preco_padrao_nome: TABELAS_PRECO_OPTIONS.find(t => t.id === formData.tabela_preco_padrao_id)?.nome || 'Tabela Padrão',
+        tabela_preco_padrao_id: formData.tabela_preco_padrao_id || '',
+        tabela_preco_padrao_nome: nomeTabelaPreco(formData.tabela_preco_padrao_id) || 'Tabela Padrão',
         modelo_comissao: formData.modelo_comissao || 'geral',
         comissao_padrao_percentual: Number(formData.comissao_padrao_percentual) || 3.5,
         comissoes_por_grupo: formData.comissoes_por_grupo || [],
         comissoes_por_cliente: formData.comissoes_por_cliente || [],
         clientes_vinculados_ids: formData.clientes_vinculados_ids || [],
         chave_pix: formData.chave_pix || '',
+        dia_vencimento_comissao: formData.dia_vencimento_comissao ?? DIA_VENCIMENTO_COMISSAO_PADRAO,
         tipo_chave_pix: formData.tipo_chave_pix || 'CPF',
         titular_pix: formData.titular_pix || formData.nome_completo || '',
         banco_nome: formData.banco_nome || '',
@@ -431,7 +436,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
           ...selectedRca.endereco,
           ...(formData.endereco || {})
         },
-        tabela_preco_padrao_nome: TABELAS_PRECO_OPTIONS.find(t => t.id === formData.tabela_preco_padrao_id)?.nome || selectedRca.tabela_preco_padrao_nome,
+        tabela_preco_padrao_nome: nomeTabelaPreco(formData.tabela_preco_padrao_id) || selectedRca.tabela_preco_padrao_nome,
         comissao_padrao_percentual: Number(formData.comissao_padrao_percentual),
         comissoes_por_grupo: formData.comissoes_por_grupo || [],
         comissoes_por_cliente: formData.comissoes_por_cliente || [],
@@ -491,14 +496,27 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
     setTimeout(() => setCopiedPix(false), 2000);
   };
 
+  // Pago (PIX): baixa o título de comissão no Contas a Pagar (status PAGO + saída no caixa)
   const handleLiquidadoPix = (vendaId: string) => {
-    const hoje = formatarDataBR(hojeISO());
     const venda = vendas.find(v => v.id === vendaId);
     if (!venda) return;
-    const atualizada: VendaComissaoRCA = { ...venda, status_comissao: 'Pago (PIX)', data_pagamento_pix: hoje };
-    setVendasSalvas(prev => prev.some(v => v.id === vendaId)
-      ? prev.map(v => v.id === vendaId ? atualizada : v)
-      : [atualizada, ...prev]);
+    const pedido = pedidosVenda.find(p => p.id === venda.pedido_id);
+    if (!pedido) {
+      // Lançamento antigo sem pedido de venda: mantém só a marcação legada
+      const hoje = formatarDataBR(hojeISO());
+      const atualizada: VendaComissaoRCA = { ...venda, status_comissao: 'Pago (PIX)', data_pagamento_pix: hoje };
+      setVendasSalvas(prev => prev.some(v => v.id === vendaId)
+        ? prev.map(v => v.id === vendaId ? atualizada : v)
+        : [atualizada, ...prev]);
+      return;
+    }
+    if (!window.confirm(`Confirmar o pagamento PIX da comissão do pedido ${venda.numero_pedido} (R$ ${venda.valor_comissao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})? O título será baixado no Contas a Pagar e sairá do caixa.`)) return;
+    const pago = baixarTituloComissao(pedido);
+    if (!pago) {
+      alert('Não há comissão a pagar para este pedido (valor zero ou pedido sem RCA).');
+      return;
+    }
+    setVersaoDados(v => v + 1);
   };
 
   // Helper para rotular o modelo de comissão
@@ -941,6 +959,21 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
                       </div>
                     </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-bold text-slate-700 block mb-1">Vencimento da comissão (dia do mês seguinte ao faturamento)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          max="31"
+                          value={formData.dia_vencimento_comissao ?? DIA_VENCIMENTO_COMISSAO_PADRAO}
+                          onChange={(e) => setFormData({ ...formData, dia_vencimento_comissao: Math.min(31, Math.max(1, Number(e.target.value) || DIA_VENCIMENTO_COMISSAO_PADRAO)) })}
+                          className="w-24 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        />
+                        <span className="text-[11px] text-slate-500">Ao faturar o pedido, a comissão vira conta a pagar ao RCA com este vencimento e a chave PIX cadastrada.</span>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Subseção A: Comissões por Grupo de Produto */}
@@ -959,7 +992,12 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                         <div className="space-y-1.5 mb-3">
                           {formData.comissoes_por_grupo?.map((cg) => (
                             <div key={cg.id} className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-200 text-xs">
-                              <span className="font-semibold text-slate-800">{cg.grupo_nome}</span>
+                              <span className="font-semibold text-slate-800">
+                                {cg.grupo_nome}
+                                {!gruposProduto.some(g => g.id === cg.grupo_id || g.nome === cg.grupo_nome) && (
+                                  <span className="ml-2 text-[10px] font-bold text-red-600">não corresponde a nenhuma categoria de produto — não será aplicada</span>
+                                )}
+                              </span>
                               <div className="flex items-center gap-3">
                                 <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                                   {cg.percentual}%
@@ -982,11 +1020,12 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                       {/* Adicionar Grupo */}
                       <div className="flex items-center gap-2">
                         <select
-                          value={novoGrupoId}
+                          value={novoGrupoId || gruposProduto[0]?.id || ''}
                           onChange={(e) => setNovoGrupoId(e.target.value)}
                           className="flex-1 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-medium"
                         >
-                          {GRUPOS_PRODUTO_ENO.map(g => (
+                          {gruposProduto.length === 0 && <option value="">Nenhuma categoria de produto cadastrada</option>}
+                          {gruposProduto.map(g => (
                             <option key={g.id} value={g.id}>{g.nome}</option>
                           ))}
                         </select>
@@ -1608,7 +1647,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                 <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200">
                   <div>
                     <h3 className="text-base font-black text-slate-900">Extrato de Vendas & Liquidação de Comissões</h3>
-                    <p className="text-xs text-slate-500">Pedidos gerados com identificação da regra aplicada e status de pagamento PIX</p>
+                    <p className="text-xs text-slate-500">Pedidos faturados, regra aplicada e status real do título de comissão no Contas a Pagar</p>
                   </div>
                 </div>
 
@@ -1623,7 +1662,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                         <th className="py-2.5 px-3 text-right">Faturado</th>
                         <th className="py-2.5 px-3 text-right">% Com.</th>
                         <th className="py-2.5 px-3 text-right">Comissão</th>
-                        <th className="py-2.5 px-3 text-center">Status PIX</th>
+                        <th className="py-2.5 px-3 text-center">Contas a Pagar</th>
                         <th className="py-2.5 px-3 text-right">Ação</th>
                       </tr>
                     </thead>
@@ -1633,7 +1672,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                         return (
                           <tr key={v.id} className="hover:bg-slate-50/80 transition-colors">
                             <td className="py-3 px-3 font-mono font-bold text-slate-900">{v.numero_pedido}</td>
-                            <td className="py-3 px-3 text-slate-600">{v.data}</td>
+                            <td className="py-3 px-3 text-slate-600">{formatarDataBR(v.data)}</td>
                             <td className="py-3 px-3">
                               <p className="font-bold text-slate-800 line-clamp-1">{v.cliente_nome}</p>
                               <p className="text-[10px] text-slate-400">{v.cliente_cidade}</p>
@@ -1642,6 +1681,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                                 v.tipo_regra_aplicada === 'Por Cliente' ? 'bg-amber-50 text-amber-800 border-amber-200' :
                                 v.tipo_regra_aplicada === 'Por Grupo' ? 'bg-blue-50 text-blue-800 border-blue-200' :
+                                v.tipo_regra_aplicada === 'Mista' ? 'bg-purple-50 text-purple-800 border-purple-200' :
                                 'bg-slate-100 text-slate-700 border-slate-200'
                               }`}>
                                 {v.tipo_regra_aplicada}
@@ -1659,10 +1699,16 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                             <td className="py-3 px-3 text-center">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                                 isPago ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                                v.titulo_status === 'VENCIDO' ? 'bg-red-100 text-red-800 border-red-300' :
                                 'bg-amber-100 text-amber-800 border-amber-300'
                               }`}>
-                                {v.status_comissao}
+                                {v.titulo_pagar_id
+                                  ? (isPago ? 'Pago (PIX)' : v.titulo_status === 'VENCIDO' ? 'Vencido' : 'A pagar')
+                                  : (isPago ? 'Pago (PIX)' : 'Sem título')}
                               </span>
+                              {v.titulo_pagar_id && !isPago && v.titulo_vencimento && (
+                                <span className="block text-[10px] text-slate-400 mt-0.5">vence {formatarDataBR(v.titulo_vencimento)}</span>
+                              )}
                             </td>
                             <td className="py-3 px-3 text-right">
                               {!isPago && (
@@ -1674,7 +1720,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                                 </button>
                               )}
                               {isPago && (
-                                <span className="text-[10px] text-slate-400 font-medium">{v.data_pagamento_pix}</span>
+                                <span className="text-[10px] text-slate-400 font-medium">{formatarDataBR(v.data_pagamento_pix)}</span>
                               )}
                             </td>
                           </tr>

@@ -28,6 +28,16 @@ import {
   carregarEstoqueProdutos,
   ProdutoEstoque
 } from '../../data/produtosData';
+import {
+  calcularPrecoNaTabela,
+  descreverRegraTabela,
+  nomeModoTabela,
+  MODOS_TABELA_PRECO,
+  ModoTabelaPreco,
+  tabelaPrecoAtiva
+} from '../../data/precosData';
+import { formatarMoeda } from '../../data/financeiroData';
+import { formatarDataBR, hojeISO } from '../../lib/datas';
 import { ProdutosNavTabs } from './ProdutosNavTabs';
 
 interface Props {
@@ -46,6 +56,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
   // Toast e Cópia
   const [toastMsg, setToastMsg] = useState('');
   const [copiado, setCopiado] = useState(false);
+  const [mostrarCustos, setMostrarCustos] = useState(false);
 
   // Produtos do catálogo de estoque para exibir na tabela comercial
   const [produtosEstoque, setProdutosEstoque] = useState<ProdutoEstoque[]>(() => carregarEstoqueProdutos());
@@ -72,7 +83,11 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
     codigo: '',
     nome: '',
     tipo: 'Atacado / Distribuidor' as TabelaPreco['tipo'],
-    desconto_padrao_percentual: 0,
+    modo_preco: 'ACRESCIMO_DESCONTO' as ModoTabelaPreco,
+    ajuste_percentual: 0,
+    margem_percentual: 30,
+    precos_fixos: {} as Record<string, number>,
+    excecoes_preco: {} as Record<string, number>,
     prazo_padrao: 'Boleto Bancário 28 Dias',
     frete_tipo: 'CIF (Entrega Grupo ENO)' as TabelaPreco['frete_tipo'],
     vigencia_inicio: '01/01/2026',
@@ -93,11 +108,15 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       codigo: `TAB-${Date.now().toString().slice(-4)}`,
       nome: '',
       tipo: 'Atacado / Distribuidor',
-      desconto_padrao_percentual: 0,
+      modo_preco: 'ACRESCIMO_DESCONTO',
+      ajuste_percentual: 0,
+      margem_percentual: 30,
+      precos_fixos: {},
+      excecoes_preco: {},
       prazo_padrao: 'Boleto Bancário 28 Dias',
       frete_tipo: 'CIF (Entrega Grupo ENO)',
-      vigencia_inicio: '01/04/2026',
-      vigencia_fim: '31/12/2026',
+      vigencia_inicio: formatarDataBR(hojeISO()),
+      vigencia_fim: `31/12/${new Date().getFullYear()}`,
       status: 'VIGENTE',
       produtos_ids: []
     });
@@ -110,7 +129,11 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       codigo: tabela.codigo,
       nome: tabela.nome,
       tipo: tabela.tipo,
-      desconto_padrao_percentual: tabela.desconto_padrao_percentual,
+      modo_preco: tabela.modo_preco || 'ACRESCIMO_DESCONTO',
+      ajuste_percentual: Number(tabela.ajuste_percentual) || 0,
+      margem_percentual: Number(tabela.margem_percentual) || 0,
+      precos_fixos: { ...(tabela.precos_fixos || {}) },
+      excecoes_preco: { ...(tabela.excecoes_preco || {}) },
       prazo_padrao: tabela.prazo_padrao,
       frete_tipo: tabela.frete_tipo,
       vigencia_inicio: tabela.vigencia_inicio,
@@ -133,17 +156,38 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       alert('Não é possível salvar uma tabela de preços sem produtos. Selecione pelo menos um produto abaixo.');
       return;
     }
-    
-    // Validação estrita: requer pelo menos um produto selecionado
-    // (A implementação da checkbox ainda precisa de estado, mas esta é a validação de bloqueio solicitada)
-    // Se a lógica de checkboxes não estiver integrada, o usuário será bloqueado corretamente.
-    
+
+    if (formData.modo_preco === 'PRECO_FIXO') {
+      const semPreco = produtosEstoque.filter(p =>
+        formData.produtos_ids.includes(p.id) && !(Number(formData.precos_fixos[p.id]) > 0) && !(Number(formData.excecoes_preco[p.id]) > 0)
+      );
+      if (semPreco.length > 0) {
+        alert(`Tabela de preço fixo: digite o preço de ${semPreco.map(p => p.nome).join(', ')}.`);
+        return;
+      }
+    }
+
+    const abaixoCusto = produtosEstoque.filter(p => formData.produtos_ids.includes(p.id) && previaNoForm(p).abaixo_custo);
+    if (abaixoCusto.length > 0 && !window.confirm(`Atenção: preço abaixo do custo em ${abaixoCusto.map(p => p.nome).join(', ')}. Salvar mesmo assim?`)) {
+      return;
+    }
+
+    // Mantém só os preços dos produtos que estão na tabela; o desconto legado deixa de valer
+    const soDaTabela = (m: Record<string, number>) =>
+      Object.fromEntries(Object.entries(m).filter(([id, v]) => formData.produtos_ids.includes(id) && Number(v) > 0));
+    const dadosTabela = {
+      ...formData,
+      precos_fixos: soDaTabela(formData.precos_fixos),
+      excecoes_preco: soDaTabela(formData.excecoes_preco),
+      desconto_padrao_percentual: undefined
+    };
+
     if (tabelaEmEdicao) {
       const atualizadas = tabelas.map(t => {
         if (t.id === tabelaEmEdicao.id) {
           return {
             ...t,
-            ...formData
+            ...dadosTabela
           };
         }
         return t;
@@ -154,7 +198,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
     } else {
       const nova: TabelaPreco = {
         id: `tab_${Date.now()}`,
-        ...formData
+        ...dadosTabela
       };
       const atualizadas = [nova, ...tabelas];
       salvarTabelasPreco(atualizadas);
@@ -179,32 +223,31 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
   const produtosDaTabelaPreco = (tab: TabelaPreco) =>
     Array.isArray(tab.produtos_ids) ? produtosEstoque.filter(p => tab.produtos_ids!.includes(p.id)) : produtosEstoque;
 
+  // Prévia do preço com os dados do formulário (antes de salvar)
+  const previaNoForm = (prod: ProdutoEstoque) =>
+    calcularPrecoNaTabela(prod, { id: tabelaEmEdicao?.id || 'nova', ...formData } as TabelaPreco);
+
+  const textoVigencia = (tab: TabelaPreco) =>
+    `${tab.vigencia_inicio || '-'} a ${tab.vigencia_fim || 'sem término'}`;
+
   // Copiar resumo formatado para WhatsApp ou texto
   const handleCopiarTabela = (tab: TabelaPreco) => {
-    const desconto = tab.desconto_padrao_percentual || 0;
     let texto = `*GRUPO ENO - TABELA DE PREÇOS OFICIAL*\n`;
     texto += `*Tabela:* ${tab.nome} (${tab.codigo})\n`;
     texto += `*Condição:* ${tab.prazo_padrao} | Frete: ${tab.frete_tipo}\n`;
-    if (desconto > 0) {
-      texto += `*Desconto Comercial Aplicado:* ${desconto}%\n`;
-    }
-    texto += `*Vigência:* ${tab.vigencia_inicio} a ${tab.vigencia_fim}\n\n`;
+    texto += `*Vigência:* ${textoVigencia(tab)}\n\n`;
     texto += `*PRODUTOS & PREÇOS:*\n`;
 
     const produtosDaTabela = produtosDaTabelaPreco(tab);
     if (produtosDaTabela.length === 0) texto += `(Nenhum produto vinculado a esta tabela)
 `;
     produtosDaTabela.forEach(p => {
-      const precoBase = p.preco_unitario_venda || 0;
-      const precoFinal = precoBase * (1 - desconto / 100);
-      const acondQtd = p.unidades_por_acondicionamento || 1;
-      const acondTipo = p.tipo_acondicionamento || (p.tipo_embalagem.includes('Fardo') ? 'Fardo' : p.tipo_embalagem.includes('Caixa') ? 'Caixa' : 'Saco');
-      const precoAcond = precoFinal * acondQtd;
+      const calc = calcularPrecoNaTabela(p, tab);
 
       texto += `• *${p.nome}* (${p.tipo_embalagem})\n`;
-      texto += `  Preço Un: R$ ${precoFinal.toFixed(2)}`;
-      if (acondQtd > 1) {
-        texto += ` | ${acondTipo} c/ ${acondQtd}: R$ ${precoAcond.toFixed(2)}`;
+      texto += `  Preço Un: ${formatarMoeda(calc.preco)}`;
+      if (calc.unidades > 1) {
+        texto += ` | ${calc.tipo_acondicionamento} c/ ${calc.unidades}: ${formatarMoeda(calc.preco_acondicionamento)}`;
       }
       texto += `\n`;
     });
@@ -251,26 +294,17 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
 
         {/* STAT BAR MINIMALISTA EM LINHA */}
         <div className="flex flex-wrap items-center gap-6 pt-3 mt-3 border-t border-slate-100 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Tabela Principal:</span>
-            <span className="font-mono font-bold text-slate-900 text-sm">
-              R$ 87,50 / saco 25kg (Fécula Padrão)
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Desconto Carga Fechada (+30 Ton):</span>
-            <span className="font-mono font-bold text-emerald-700">
-              Até 7.5% de desconto
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Condição FOB (Retira):</span>
-            <span className="font-mono font-bold text-slate-900">
-              10% de desconto à vista
-            </span>
-          </div>
+          {MODOS_TABELA_PRECO.map((m, i) => (
+            <React.Fragment key={m.id}>
+              {i > 0 && <div className="w-px h-4 bg-slate-200 hidden sm:block" />}
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 font-medium">{m.nome}:</span>
+                <span className="font-mono font-bold text-slate-900">
+                  {tabelas.filter(t => (t.modo_preco || 'ACRESCIMO_DESCONTO') === m.id).length} tabela(s)
+                </span>
+              </div>
+            </React.Fragment>
+          ))}
         </div>
       </div>
 
@@ -307,7 +341,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
               <tr className="bg-slate-50/90 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
                 <th className="py-3 px-5">Tabela & Código</th>
                 <th className="py-3 px-4">Segmento de Mercado</th>
-                <th className="py-3 px-3 text-center">Desconto</th>
+                <th className="py-3 px-3 text-center">Regra de Preço</th>
                 <th className="py-3 px-4">Condição de Pagamento</th>
                 <th className="py-3 px-4">Frete</th>
                 <th className="py-3 px-4">Vigência</th>
@@ -334,13 +368,13 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                       {item.tipo}
                     </td>
 
-                    <td className="py-3.5 px-3 font-mono font-bold text-center">
-                      {item.desconto_padrao_percentual > 0 ? (
-                        <span className="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-black border border-emerald-200">
-                          -{item.desconto_padrao_percentual}%
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 font-normal">0% (Base)</span>
+                    <td className="py-3.5 px-3 text-center">
+                      <div className="text-[10px] font-bold uppercase text-slate-400">{nomeModoTabela(item.modo_preco)}</div>
+                      <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-bold border border-emerald-200 font-mono">
+                        {descreverRegraTabela(item)}
+                      </span>
+                      {Object.keys(item.excecoes_preco || {}).length > 0 && (
+                        <div className="text-[10px] text-amber-700 mt-0.5">{Object.keys(item.excecoes_preco || {}).length} exceção(ões) por produto</div>
                       )}
                     </td>
 
@@ -353,14 +387,20 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                     </td>
 
                     <td className="py-3.5 px-4 font-mono text-slate-600 text-xs">
-                      {item.vigencia_inicio} a {item.vigencia_fim}
+                      {textoVigencia(item)}
                     </td>
 
                     <td className="py-3.5 px-3 text-center">
-                      <span className="inline-flex items-center gap-1.5 text-emerald-700 font-medium">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                        <span>Vigente</span>
-                      </span>
+                      {(() => {
+                        const ativa = tabelaPrecoAtiva(item);
+                        const rotulo = item.status === 'ARQUIVADA' ? 'Arquivada' : ativa ? 'Vigente' : item.status === 'PROGRAMADA' ? 'Programada' : 'Fora da vigência';
+                        return (
+                          <span className={`inline-flex items-center gap-1.5 font-medium ${ativa ? 'text-emerald-700' : 'text-slate-400'}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${ativa ? 'bg-emerald-600' : 'bg-slate-400'}`} />
+                            <span>{rotulo}</span>
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     <td className="py-3.5 px-5 text-right">
@@ -444,17 +484,64 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                 </div>
 
                 <div className="sm:col-span-3">
-                  <label className="block font-bold text-slate-700 mb-1">Desconto Comercial (%)</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    max="50"
-                    value={formData.desconto_padrao_percentual}
-                    onChange={(e) => setFormData({ ...formData, desconto_padrao_percentual: parseFloat(e.target.value) || 0 })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-center text-slate-800 focus:outline-none focus:border-emerald-700"
-                  />
+                  <label className="block font-bold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as TabelaPreco['status'] })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-medium text-slate-800 focus:outline-none focus:border-emerald-700 cursor-pointer"
+                  >
+                    <option value="VIGENTE">Vigente</option>
+                    <option value="PROGRAMADA">Programada</option>
+                    <option value="ARQUIVADA">Arquivada</option>
+                  </select>
                 </div>
+              </div>
+
+              {/* COMO A TABELA FORMA O PREÇO */}
+              <div className="p-3 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-2">
+                <label className="block font-bold text-slate-700">Como esta tabela forma o preço</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {MODOS_TABELA_PRECO.map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, modo_preco: m.id })}
+                      className={`text-left p-2.5 rounded-lg border transition-colors cursor-pointer ${formData.modo_preco === m.id ? 'bg-emerald-900 border-emerald-900 text-white' : 'bg-white border-slate-200 text-slate-700 hover:border-emerald-400'}`}
+                    >
+                      <div className="font-bold">{m.nome}</div>
+                      <div className={`text-[10px] ${formData.modo_preco === m.id ? 'text-emerald-200' : 'text-slate-400'}`}>{m.descricao}</div>
+                    </button>
+                  ))}
+                </div>
+                {formData.modo_preco === 'ACRESCIMO_DESCONTO' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-slate-700">Ajuste sobre o preço base (%)</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={formData.ajuste_percentual}
+                      onChange={(e) => setFormData({ ...formData, ajuste_percentual: parseFloat(e.target.value) || 0 })}
+                      className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-1.5 font-mono font-bold text-center text-slate-800 focus:outline-none focus:border-emerald-700"
+                    />
+                    <span className="text-[10px] text-slate-500">positivo = acréscimo • negativo = desconto (ex.: −5)</span>
+                  </div>
+                )}
+                {formData.modo_preco === 'MARGEM_CUSTO' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-slate-700">Margem sobre o custo atual (%)</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={formData.margem_percentual}
+                      onChange={(e) => setFormData({ ...formData, margem_percentual: parseFloat(e.target.value) || 0 })}
+                      className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-1.5 font-mono font-bold text-center text-slate-800 focus:outline-none focus:border-emerald-700"
+                    />
+                    <span className="text-[10px] text-slate-500">preço = custo do produto (receita + operacional + impostos) × (1 + margem)</span>
+                  </div>
+                )}
+                {formData.modo_preco === 'PRECO_FIXO' && (
+                  <p className="text-[10px] text-slate-500">Digite o preço do pacote de cada produto na lista abaixo.</p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -514,7 +601,6 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                   <label className="block font-bold text-slate-700 mb-1">Término da Vigência</label>
                   <input
                     type="text"
-                    required
                     value={formData.vigencia_fim}
                     onChange={(e) => setFormData({ ...formData, vigencia_fim: e.target.value })}
                     placeholder="DD/MM/AAAA"
@@ -529,9 +615,22 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                   {produtosEstoque.length === 0 ? (
                     <p className="text-slate-400 italic">Nenhum produto cadastrado no estoque para adicionar à tabela.</p>
                   ) : (
-                    produtosEstoque.map((prod) => (
-                      <div key={prod.id} className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
-                        <input 
+                    produtosEstoque.map((prod) => {
+                      const selecionado = formData.produtos_ids.includes(prod.id);
+                      const calc = previaNoForm(prod);
+                      const ehFixo = formData.modo_preco === 'PRECO_FIXO';
+                      const mapaCampo = ehFixo ? formData.precos_fixos : formData.excecoes_preco;
+                      const valorCampo = mapaCampo[prod.id];
+                      const alterarCampo = (texto: string) => {
+                        const n = parseFloat(texto.replace(',', '.'));
+                        const novo = { ...mapaCampo };
+                        if (texto === '' || !Number.isFinite(n) || n <= 0) delete novo[prod.id];
+                        else novo[prod.id] = n;
+                        setFormData(prev => ehFixo ? { ...prev, precos_fixos: novo } : { ...prev, excecoes_preco: novo });
+                      };
+                      return (
+                      <div key={prod.id} className={`flex flex-wrap items-center gap-3 p-2.5 rounded-lg border transition-colors ${selecionado && calc.abaixo_custo ? 'bg-red-50 border-red-300' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
+                        <input
                           type="checkbox" 
                           id={`prod-${prod.id}`}
                           className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
@@ -546,20 +645,56 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                             }));
                           }}
                         />
-                        <label htmlFor={`prod-${prod.id}`} className="flex-1 font-bold text-slate-800 cursor-pointer">
+                        <label htmlFor={`prod-${prod.id}`} className="flex-1 min-w-[160px] font-bold text-slate-800 cursor-pointer">
                           {prod.nome}
                           <span className="ml-2 text-[10px] text-slate-500 font-normal uppercase tracking-wide">({prod.tipo_embalagem})</span>
+                          {selecionado && calc.abaixo_custo && (
+                            <span className="block text-[10px] text-red-700 font-bold">⚠️ Preço abaixo do custo</span>
+                          )}
+                          {selecionado && calc.sem_preco && formData.modo_preco === 'MARGEM_CUSTO' && (
+                            <span className="block text-[10px] text-amber-700 font-bold">Sem custo apurado: usando o preço base</span>
+                          )}
                         </label>
-                        <div className="text-right">
+                        <div className="text-right w-20">
+                          <div className="text-[10px] text-slate-400 font-bold uppercase">Custo</div>
+                          <div className="font-mono font-bold text-slate-600">{calc.custo > 0 ? formatarMoeda(calc.custo) : '—'}</div>
+                        </div>
+                        <div className="text-right w-20">
                           <div className="text-[10px] text-slate-400 font-bold uppercase">Preço Base</div>
-                          <div className="font-mono font-bold text-emerald-800">
-                            R$ {(prod.preco_unitario_venda || 0).toFixed(2)}
+                          <div className="font-mono font-bold text-slate-600">{formatarMoeda(calc.preco_base)}</div>
+                        </div>
+                        <div className="text-right w-24">
+                          <div className="text-[10px] text-slate-400 font-bold uppercase">{ehFixo ? 'Preço Fixo' : 'Exceção'}</div>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            disabled={!selecionado}
+                            value={valorCampo ?? ''}
+                            placeholder={ehFixo ? 'digitar' : 'regra'}
+                            onChange={(e) => alterarCampo(e.target.value)}
+                            title={ehFixo ? 'Preço do pacote nesta tabela' : 'Preço específico deste produto (sobrescreve a regra da tabela)'}
+                            className="w-full bg-white border border-slate-200 rounded px-1.5 py-0.5 text-right font-mono font-bold text-slate-900 disabled:bg-slate-100 focus:outline-none focus:border-emerald-700"
+                          />
+                        </div>
+                        <div className="text-right w-24">
+                          <div className="text-[10px] text-slate-400 font-bold uppercase">Na Tabela</div>
+                          <div className={`font-mono font-black ${calc.abaixo_custo ? 'text-red-700' : 'text-emerald-800'}`}>{formatarMoeda(calc.preco)}</div>
+                        </div>
+                        <div className="text-right w-16">
+                          <div className="text-[10px] text-slate-400 font-bold uppercase">Margem</div>
+                          <div className={`font-mono font-bold ${calc.markup_percentual === null ? 'text-slate-300' : calc.abaixo_custo ? 'text-red-700' : 'text-slate-800'}`}>
+                            {calc.markup_percentual === null ? '—' : `${calc.markup_percentual.toFixed(1)}%`}
                           </div>
                         </div>
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Margem = (preço na tabela − custo) ÷ custo. {formData.modo_preco === 'PRECO_FIXO' ? '' : 'Exceção: preencha só se este produto tiver preço diferente da regra da tabela.'}
+                </p>
               </div>
 
               <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2.5">
@@ -664,28 +799,37 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
 
                   <div>
                     <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Vigência Oficial</span>
-                    <span className="font-mono font-bold text-slate-900">{tabelaVisualizar.vigencia_inicio} a {tabelaVisualizar.vigencia_fim}</span>
+                    <span className="font-mono font-bold text-slate-900">{textoVigencia(tabelaVisualizar)}</span>
                   </div>
                 </div>
 
-                {tabelaVisualizar.desconto_padrao_percentual > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-200/80 flex items-center justify-between text-xs">
-                    <span className="text-emerald-900 font-bold flex items-center gap-1.5">
-                      <BadgePercent className="w-4 h-4 text-emerald-700" />
-                      Desconto comercial configurado para este canal:
-                    </span>
-                    <span className="font-mono font-black text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded border border-emerald-300">
-                      -{tabelaVisualizar.desconto_padrao_percentual}% sobre o preço base
-                    </span>
-                  </div>
-                )}
+                <div className="mt-3 pt-3 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="text-emerald-900 font-bold flex items-center gap-1.5">
+                    <BadgePercent className="w-4 h-4 text-emerald-700" />
+                    Regra de preço desta tabela ({nomeModoTabela(tabelaVisualizar.modo_preco)}):
+                  </span>
+                  <span className="font-mono font-black text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded border border-emerald-300">
+                    {descreverRegraTabela(tabelaVisualizar)}
+                  </span>
+                </div>
               </div>
 
               {/* Tabela de Produtos Formatada em Linhas */}
               <div>
-                <span className="font-bold text-slate-900 uppercase tracking-wider text-xs block mb-2">
-                  Catálogo de Produtos & Preços Praticados
-                </span>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <span className="font-bold text-slate-900 uppercase tracking-wider text-xs block">
+                    Catálogo de Produtos & Preços Praticados
+                  </span>
+                  <label className="print:hidden flex items-center gap-1.5 text-[11px] text-slate-500 font-medium cursor-pointer" data-html2canvas-ignore="true">
+                    <input
+                      type="checkbox"
+                      checked={mostrarCustos}
+                      onChange={(e) => setMostrarCustos(e.target.checked)}
+                      className="w-3.5 h-3.5 cursor-pointer"
+                    />
+                    Mostrar custo e margem (uso interno, não imprime)
+                  </label>
+                </div>
 
                 <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
                   <table className="w-full text-left border-collapse">
@@ -694,24 +838,19 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                         <th className="py-2.5 px-4">Código / Produto</th>
                         <th className="py-2.5 px-3">Embalagem Individual</th>
                         <th className="py-2.5 px-3">Acondicionamento</th>
-                        <th className="py-2.5 px-3 text-right">Preço Base</th>
-                        {tabelaVisualizar.desconto_padrao_percentual > 0 && (
-                          <th className="py-2.5 px-3 text-right text-emerald-800">Preço com Desconto</th>
-                        )}
-                        <th className="py-2.5 px-4 text-right">Preço Pacote / Fardo Fechado</th>
+                        {mostrarCustos && <th className="py-2.5 px-3 text-right print:hidden">Custo</th>}
+                        {mostrarCustos && <th className="py-2.5 px-3 text-right print:hidden">Preço Base</th>}
+                        <th className="py-2.5 px-3 text-right text-emerald-800">Preço Pacote</th>
+                        {mostrarCustos && <th className="py-2.5 px-3 text-right print:hidden">Margem s/ Custo</th>}
+                        <th className="py-2.5 px-4 text-right">Preço Fardo / Caixa Fechada</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
                       {produtosDaTabelaPreco(tabelaVisualizar).map((p) => {
-                        const desconto = tabelaVisualizar.desconto_padrao_percentual || 0;
-                        const precoBase = p.preco_unitario_venda || 0;
-                        const precoFinal = precoBase * (1 - desconto / 100);
-                        const acondQtd = p.unidades_por_acondicionamento || 1;
-                        const acondTipo = p.tipo_acondicionamento || (p.tipo_embalagem.includes('Fardo') ? 'Fardo' : p.tipo_embalagem.includes('Caixa') ? 'Caixa' : 'Saco');
-                        const precoAcond = precoFinal * acondQtd;
+                        const calc = calcularPrecoNaTabela(p, tabelaVisualizar);
 
                         return (
-                          <tr key={p.id} className="hover:bg-slate-50/60 transition-colors">
+                          <tr key={p.id} className={`transition-colors ${mostrarCustos && calc.abaixo_custo ? 'bg-red-50/70' : 'hover:bg-slate-50/60'}`}>
                             <td className="py-3 px-4">
                               <div className="font-bold text-slate-900">{p.nome}</div>
                               <div className="text-[10px] text-slate-400 font-mono mt-0.5">{p.codigo}</div>
@@ -723,23 +862,38 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
 
                             <td className="py-3 px-3">
                               <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-bold text-[10px] border border-slate-200">
-                                {acondTipo} {acondQtd > 1 ? `c/ ${acondQtd} un` : 'Avulso'}
+                                {calc.tipo_acondicionamento} {calc.unidades > 1 ? `c/ ${calc.unidades} un` : 'Avulso'}
                               </span>
                             </td>
 
-                            <td className={`py-3 px-3 text-right font-mono ${desconto > 0 ? 'text-slate-400 line-through text-[11px]' : 'font-bold text-slate-900'}`}>
-                              {precoBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            {mostrarCustos && (
+                              <td className="py-3 px-3 text-right font-mono text-slate-600 print:hidden">
+                                {calc.custo > 0 ? formatarMoeda(calc.custo) : '—'}
+                              </td>
+                            )}
+                            {mostrarCustos && (
+                              <td className="py-3 px-3 text-right font-mono text-slate-600 print:hidden">
+                                {formatarMoeda(calc.preco_base)}
+                              </td>
+                            )}
+
+                            <td className="py-3 px-3 text-right font-mono font-black text-emerald-950 bg-emerald-50/40">
+                              {formatarMoeda(calc.preco)}
+                              {mostrarCustos && calc.origem === 'EXCECAO' && (
+                                <span className="block text-[9px] font-sans font-bold text-amber-700 print:hidden">exceção</span>
+                              )}
                             </td>
 
-                            {desconto > 0 && (
-                              <td className="py-3 px-3 text-right font-mono font-black text-emerald-950 bg-emerald-50/40">
-                                {precoFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            {mostrarCustos && (
+                              <td className={`py-3 px-3 text-right font-mono font-bold print:hidden ${calc.abaixo_custo ? 'text-red-700' : 'text-slate-800'}`}>
+                                {calc.markup_percentual === null ? '—' : `${calc.markup_percentual.toFixed(1)}%`}
+                                {calc.abaixo_custo && <span className="block text-[9px] font-sans">abaixo do custo</span>}
                               </td>
                             )}
 
                             <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
-                              {precoAcond.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                              <span className="text-[10px] text-slate-400 font-normal font-sans ml-1">/{acondTipo}</span>
+                              {formatarMoeda(calc.preco_acondicionamento)}
+                              <span className="text-[10px] text-slate-400 font-normal font-sans ml-1">/{calc.tipo_acondicionamento}</span>
                             </td>
                           </tr>
                         );

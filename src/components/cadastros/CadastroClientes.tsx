@@ -39,6 +39,7 @@ import { carregarClientes, salvarClientes, Cliente } from '../../data/clientesDa
 import { carregarRcas, EVENTO_CADASTROS_ATUALIZADOS, RCA } from '../../data/cadastrosData';
 import { carregarPedidosVenda, PedidoVenda } from '../../data/pedidosVendaData';
 import { carregarTitulosReceber } from '../../data/financeiroData';
+import { carregarTabelasPreco } from '../../data/produtosData';
 import { mesReferenciaDe, ultimosMesesReferencia } from '../../lib/mesesReferencia';
 import { formatarDataBR } from '../../lib/datas';
 
@@ -126,13 +127,12 @@ const PRAZOS_PAGAMENTO_OPTIONS = [
   { id: 'pp_7', nome: '30 / 60 / 90 Dias (3x)', dias: 90, parcelas: 3 },
 ];
 
-// Tabelas de Preço do Grupo ENO (public.tabelas_preco)
-const TABELAS_PRECO_OPTIONS = [
-  { id: 'tab_01', nome: 'Tabela Padrão (Distribuição)' },
-  { id: 'tab_02', nome: 'Tabela Varejo / Supermercados' },
-  { id: 'tab_03', nome: 'Tabela Atacado / Grande Porte' },
-  { id: 'tab_04', nome: 'Tabela Especial / Contratos' },
-];
+// Tabelas de Preço reais (Produtos > Tabelas de Preço); arquivadas não aparecem para novos vínculos
+function opcoesTabelasPreco(): { id: string; nome: string }[] {
+  return carregarTabelasPreco()
+    .filter(t => t.status !== 'ARQUIVADA')
+    .map(t => ({ id: t.id, nome: `${t.nome} (${t.codigo})` }));
+}
 
 
 // Tooltip customizado para o gráfico
@@ -240,7 +240,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
     forma_pagamento_id: 'fp_1',
     prazo_pagamento_id: 'pp_1',
     vendedor_id: '',
-    tabela_preco_id: 'tab_01',
+    tabela_preco_id: '',
     ativo: true,
   });
 
@@ -264,7 +264,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
       forma_pagamento_id: 'fp_1',
       prazo_pagamento_id: 'pp_1',
       vendedor_id: '',
-      tabela_preco_id: 'tab_01',
+      tabela_preco_id: '',
       ativo: true,
     });
     setModo('formulario');
@@ -290,7 +290,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
       forma_pagamento_id: cliente.forma_pagamento_id,
       prazo_pagamento_id: cliente.prazo_pagamento_id,
       vendedor_id: cliente.vendedor_id || '',
-      tabela_preco_id: cliente.tabela_preco_id || 'tab_01',
+      tabela_preco_id: cliente.tabela_preco_id || '',
       ativo: cliente.ativo,
     });
     setModo('formulario');
@@ -321,7 +321,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
     const pp = PRAZOS_PAGAMENTO_OPTIONS.find(p => p.id === formData.prazo_pagamento_id);
     const rcaSel = rcasCadastrados.find(r => r.id === formData.vendedor_id);
     const vend = rcaSel ? { nome: rcaSel.nome_fantasia || rcaSel.nome_completo } : undefined;
-    const tab = TABELAS_PRECO_OPTIONS.find(t => t.id === formData.tabela_preco_id);
+    const tab = opcoesTabelasPreco().find(t => t.id === formData.tabela_preco_id);
 
     if (clienteSelecionado) {
       // UPDATE
@@ -1105,7 +1105,8 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
                       onChange={(e) => setFormData({ ...formData, tabela_preco_id: e.target.value })}
                       className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
                     >
-                      {TABELAS_PRECO_OPTIONS.map(tab => (
+                      <option value="">-- Sem tabela definida --</option>
+                      {opcoesTabelasPreco().map(tab => (
                         <option key={tab.id} value={tab.id}>
                           {tab.nome}
                         </option>

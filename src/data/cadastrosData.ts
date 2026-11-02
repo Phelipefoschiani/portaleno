@@ -1,11 +1,12 @@
 // Persistência compartilhada dos cadastros (agricultores, fornecedores, RCAs, equipe de produção,
-// cadastros provisórios do portfólio, romaneios de mandioca e pedidos do portfólio).
+// cadastros provisórios do portfólio e pedidos do portfólio).
 // Todas as telas que listam esses cadastros devem ler daqui, nunca de constantes fixas.
 
 import type { Agricultor, Fornecedor } from './mockStore';
 import type { CadastroProvisorio, PedidoPortifolio } from './portfolioData';
 import type { Cliente } from './clientesData';
 import type { PedidoVenda } from './pedidosVendaData';
+import { carregarTitulosPagar, statusEfetivoPagar } from './financeiroData';
 
 export const EVENTO_CADASTROS_ATUALIZADOS = 'cadastros_updated';
 
@@ -15,7 +16,6 @@ const STORAGE_KEY_RCAS = 'grupo_eno_rcas_v1';
 const STORAGE_KEY_VENDAS_RCA = 'grupo_eno_vendas_rca_v1';
 const STORAGE_KEY_COLABORADORES_PRODUCAO = 'grupo_eno_colaboradores_producao_v1';
 const STORAGE_KEY_CADASTROS_PROVISORIOS = 'grupo_eno_cadastros_provisorios_v1';
-const STORAGE_KEY_ROMANEIOS_MANDIOCA = 'grupo_eno_romaneios_mandioca_v1';
 const STORAGE_KEY_PEDIDOS_PORTFOLIO = 'grupo_eno_pedidos_portfolio_v1';
 
 function lerLista<T>(chave: string): T[] {
@@ -56,34 +56,8 @@ export function salvarFornecedores(lista: Fornecedor[]): void {
   gravarLista(STORAGE_KEY_FORNECEDORES, lista);
 }
 
-// =====================================================================
-// ROMANEIOS DE MANDIOCA (lançados no Cadastro de Agricultores)
-// =====================================================================
-
-export interface EntregaRomaneioMandioca {
-  id: string;
-  empresa_id: string;
-  agricultor_id: string;
-  numero_romaneio: string;
-  data: string; // 'DD/MM/AAAA' ou 'AAAA-MM-DD' (ler com parseData)
-  safra_referencia: string;
-  mes_referencia: string; // Ex: 'Out/25'
-  peso_mandioca_kg: number;
-  preco_kg: number;
-  valor_total: number;
-  residuo_destopo_casca_kg: number;
-  status_pagamento: 'Pago (PIX)' | 'Pendente';
-  data_liquidacao_pix?: string;
-  observacoes?: string;
-}
-
-export function carregarRomaneiosMandioca(): EntregaRomaneioMandioca[] {
-  return lerLista<EntregaRomaneioMandioca>(STORAGE_KEY_ROMANEIOS_MANDIOCA);
-}
-
-export function salvarRomaneiosMandioca(lista: EntregaRomaneioMandioca[]): void {
-  gravarLista(STORAGE_KEY_ROMANEIOS_MANDIOCA, lista);
-}
+// Compras de mandioca: a única fonte é o Cálculo na Roça (calculoRocaData.ts).
+// O antigo romaneio manual ('grupo_eno_romaneios_mandioca_v1') foi descontinuado.
 
 // =====================================================================
 // RCAs (Representantes Comerciais) e vendas/comissões
@@ -138,6 +112,8 @@ export interface RCA {
   comissoes_por_cliente: ComissaoCliente[];
   chave_pix: string;
   tipo_chave_pix: 'CPF' | 'CNPJ' | 'Celular' | 'E-mail' | 'Aleatória';
+  /** Dia do mês seguinte ao faturamento em que a comissão vence no Contas a Pagar (padrão 10) */
+  dia_vencimento_comissao?: number;
   titular_pix?: string;
   banco_nome?: string;
   agencia?: string;
@@ -159,7 +135,7 @@ export interface VendaComissaoRCA {
   cliente_nome: string;
   cliente_cidade: string;
   grupo_produto_nome?: string;
-  tipo_regra_aplicada: 'Por Cliente' | 'Por Grupo' | 'Taxa Geral';
+  tipo_regra_aplicada: 'Por Cliente' | 'Por Grupo' | 'Taxa Geral' | 'Mista';
   data: string;
   mes_referencia: string;
   valor_faturado: number;
@@ -167,6 +143,11 @@ export interface VendaComissaoRCA {
   valor_comissao: number;
   status_comissao: 'Pago (PIX)' | 'Liberado' | 'Pendente';
   data_pagamento_pix?: string;
+  pedido_id?: string;
+  /** Título no Contas a Pagar (comissão vira conta a pagar ao faturar) */
+  titulo_pagar_id?: string;
+  titulo_status?: 'A_PAGAR' | 'PAGO' | 'VENCIDO';
+  titulo_vencimento?: string;
 }
 
 export function carregarRcas(): RCA[] {
@@ -211,33 +192,56 @@ function mesRef(dataISO: string): string {
 
 /**
  * Comissões do RCA a partir dos pedidos de venda reais faturados/entregues (rca_id do pedido).
- * O status de pagamento da comissão fica gravado em 'grupo_eno_vendas_rca_v1' (mesmo id).
+ * Status real vem do título de comissão no Contas a Pagar ('pag_com_<pedidoId>'):
+ * PAGO → 'Pago (PIX)'; em aberto → 'Liberado'. Sem título (faturado antes da regra) usa o status
+ * legado gravado em 'grupo_eno_vendas_rca_v1' (mesmo id).
  */
 export function montarVendasComissaoRca(pedidos: PedidoVenda[], vendasSalvas: VendaComissaoRCA[] = carregarVendasRca()): VendaComissaoRCA[] {
   const salvasPorId = new Map(vendasSalvas.map(v => [v.id, v]));
+  const titulos = new Map(
+    carregarTitulosPagar().filter(t => String(t.id).startsWith('pag_com_')).map(t => [t.id, t])
+  );
   const derivadas: VendaComissaoRCA[] = pedidos
     .filter(p => p.rca_id && p.tipo === 'PEDIDO_VENDA' && (p.etapa === 'FATURADO' || p.etapa === 'ENTREGUE'))
     .map(p => {
       const id = `vrca_${p.id}`;
       const salva = salvasPorId.get(id);
+      const titulo = titulos.get(`pag_com_${p.id}`);
       const data = p.data_faturamento || p.data_emissao;
-      const valorFaturado = Number(p.valor_faturado ?? p.valor_total) || 0;
-      const percentual = Number(p.comissao_percentual) || 0;
+      const valorFaturado = Number(p.valor_faturado) || Number(p.nota_fiscal?.valor_nota) || Number(p.valor_total) || 0;
+      const total = Number(p.valor_total) || 0;
+      const regraPedido = (p as PedidoVenda & { comissao_regra?: string }).comissao_regra;
+      const regra: VendaComissaoRCA['tipo_regra_aplicada'] =
+        regraPedido === 'Por Cliente' || regraPedido === 'Por Grupo' || regraPedido === 'Mista' ? regraPedido : 'Taxa Geral';
+      const percentual = total > 0 && Number(p.comissao_valor) > 0
+        ? Math.round(((Number(p.comissao_valor) / total) * 100) * 100) / 100
+        : Number(p.comissao_percentual) || 0;
+      const valorComissao = titulo ? Number(titulo.valor) || 0 : Math.round(valorFaturado * percentual) / 100;
+      const statusTitulo = titulo ? statusEfetivoPagar(titulo) : undefined;
+      const itensComissao = (p as PedidoVenda & { comissao_itens?: { grupo?: string }[] }).comissao_itens || [];
+      const grupos = Array.from(new Set(itensComissao.map(i => i.grupo || '').filter(Boolean)));
       return {
         id,
         rca_id: p.rca_id,
+        pedido_id: p.id,
         numero_pedido: p.numero_pedido,
         cliente_id: p.cliente_id,
         cliente_nome: p.cliente_nome,
         cliente_cidade: p.cliente_cidade_uf,
-        tipo_regra_aplicada: 'Taxa Geral' as const,
+        grupo_produto_nome: grupos.length > 0 ? grupos.join(', ') : (p.itens || []).map(i => i.produto_nome).join(', '),
+        tipo_regra_aplicada: regra,
         data,
         mes_referencia: mesRef(data),
         valor_faturado: valorFaturado,
         percentual_comissao: percentual,
-        valor_comissao: Number(p.comissao_valor) || (valorFaturado * percentual) / 100,
-        status_comissao: salva?.status_comissao || 'Liberado',
-        data_pagamento_pix: salva?.data_pagamento_pix,
+        valor_comissao: valorComissao,
+        status_comissao: titulo
+          ? (titulo.status === 'PAGO' ? 'Pago (PIX)' : 'Liberado')
+          : (salva?.status_comissao || 'Liberado'),
+        data_pagamento_pix: titulo ? titulo.data_pagamento : salva?.data_pagamento_pix,
+        titulo_pagar_id: titulo?.id,
+        titulo_status: statusTitulo,
+        titulo_vencimento: titulo?.data_vencimento,
       };
     });
   const idsDerivados = new Set(derivadas.map(v => v.id));

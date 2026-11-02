@@ -44,8 +44,10 @@ export interface ClienteLookup {
   status_credito?: 'Liberado' | 'Em Análise' | 'Bloqueado';
   rca_id?: string;
   rca_nome?: string;
+  /** % padrão do RCA (ou regra do cliente) — só referência; o cálculo real é calcularComissaoPedido (comissoesData) */
   comissao?: number;
   prazo?: string;
+  tabela_preco_id?: string;
 }
 
 export const CLIENTES_INICIAIS: Cliente[] = [];
@@ -94,7 +96,8 @@ export function obterClientesParaVenda(): ClienteLookup[] {
       rca_id: rca?.id || '',
       rca_nome: rca ? (rca.nome_fantasia || rca.nome_completo) : '',
       comissao: rca ? Number(regraCliente?.percentual ?? rca.comissao_padrao_percentual) || 0 : undefined,
-      prazo: c.prazo_pagamento_nome || 'À Vista'
+      prazo: c.prazo_pagamento_nome || 'À Vista',
+      tabela_preco_id: c.tabela_preco_id || undefined
     };
   });
 }

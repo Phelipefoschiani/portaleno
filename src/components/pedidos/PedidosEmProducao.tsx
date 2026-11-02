@@ -32,8 +32,33 @@ import {
   salvarPedidosVenda,
   moverPedidoEtapa
 } from '../../data/pedidosVendaData';
-import { pesoDoItemKg } from '../../data/pedidosVendaData';
+import { pesoDoItemKg, pacotesDoItem } from '../../data/pedidosVendaData';
 import { PedidosNavTabs } from './PedidosNavTabs';
+import {
+  OrdemProducao,
+  EVENTO_OPS,
+  carregarOrdensProducao,
+  ordensDoPedido,
+  sincronizarOrdensComPedido,
+  garantirOrdensDosPedidosEmProducao
+} from '../../data/ordensProducaoData';
+import { calcularConsumoProducao, ConsumoMateriaPrimaProducao } from '../../data/pipelineIntegrado';
+import { TabelaMateriaPrimaOP } from '../producao/OrdensProducaoPainel';
+
+// MP necessária para o que falta produzir no pedido (consolidada por matéria-prima)
+function necessidadeRestantePedido(p: PedidoVenda): ConsumoMateriaPrimaProducao[] {
+  const mapa = new Map<string, ConsumoMateriaPrimaProducao>();
+  p.itens.forEach(it => {
+    const restante = Math.max(0, pacotesDoItem(it) - pacotesDoItem(it, Number(it.quantidade_produzida) || 0));
+    if (restante <= 0) return;
+    calcularConsumoProducao(it.produto_id, restante, { produtoNome: it.produto_nome, pesoUnitarioKg: it.peso_unitario_kg }).forEach(c => {
+      const ac = mapa.get(c.materia_prima_id);
+      if (!ac) mapa.set(c.materia_prima_id, { ...c });
+      else ac.quantidade_necessaria = parseFloat((ac.quantidade_necessaria + c.quantidade_necessaria).toFixed(4));
+    });
+  });
+  return Array.from(mapa.values()).map(c => ({ ...c, falta: Math.max(0, parseFloat((c.quantidade_necessaria - c.estoque_atual).toFixed(4))) }));
+}
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -61,17 +86,43 @@ export function PedidosEmProducao({ onNavigate }: Props) {
   const [dataFabricacaoInput, setDataFabricacaoInput] = useState('');
   const [dataVencimentoInput, setDataVencimentoInput] = useState('');
 
+  const [ordens, setOrdens] = useState<OrdemProducao[]>([]);
+  const [versaoEstoque, setVersaoEstoque] = useState(0);
+
   const recarregar = () => {
     const todos = carregarPedidosVenda();
     setPedidos(todos.filter(p => p.etapa === 'EM_PRODUCAO'));
+    setOrdens(carregarOrdensProducao());
+    setVersaoEstoque(v => v + 1);
   };
 
   useEffect(() => {
+    try {
+      garantirOrdensDosPedidosEmProducao();
+    } catch (e) {
+      console.error('Erro ao gerar OPs dos pedidos em produção:', e);
+    }
     recarregar();
     const handleUpdate = () => recarregar();
     window.addEventListener('pedidos_venda_updated', handleUpdate);
-    return () => window.removeEventListener('pedidos_venda_updated', handleUpdate);
+    window.addEventListener(EVENTO_OPS, handleUpdate);
+    window.addEventListener('produtos_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('pedidos_venda_updated', handleUpdate);
+      window.removeEventListener(EVENTO_OPS, handleUpdate);
+      window.removeEventListener('produtos_updated', handleUpdate);
+    };
   }, []);
+
+  // OP de cada item do pedido (índice do item -> OP do ciclo atual)
+  const opDoItem = (pedidoId: string, idx: number) => ordensDoPedido(pedidoId, ordens).find(o => o.item_index === idx);
+
+  // Pedidos com falta de matéria-prima para o que ainda falta produzir
+  const faltaMpPorPedido = useMemo(() => {
+    const mapa = new Map<string, ConsumoMateriaPrimaProducao[]>();
+    pedidos.forEach(p => mapa.set(p.id, necessidadeRestantePedido(p)));
+    return mapa;
+  }, [pedidos, versaoEstoque]);
 
   // Abrir Modal de Apontamento por Produto (com opção de escolher produto inicial)
   const handleAbrirProducao = (p: PedidoVenda, produtoIdInicial?: string) => {
@@ -122,6 +173,11 @@ export function PedidosEmProducao({ onNavigate }: Props) {
     if (itemAlvoIndex === -1) return;
 
     const itemAlvo = pedidoAtual.itens[itemAlvoIndex];
+    const opItem = opDoItem(pedidoAtual.id, itemAlvoIndex);
+    if (opItem?.status === 'CONCLUIDA') {
+      alert(`A ${opItem.numero} deste produto já foi concluída (estoque lançado). Para produzir mais, crie uma nova OP em "Ordens de Produção".`);
+      return;
+    }
     const qtdAnterior = itemAlvo.quantidade_produzida || 0;
     const novaQtdProduzida = qtdAnterior + qtdEmbalagens;
     // Peso considera os pacotes de cada fardo/caixa
@@ -164,6 +220,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
 
     todos[index] = atualizado;
     salvarPedidosVenda(todos);
+    sincronizarOrdensComPedido(atualizado);
     setModalProducao(atualizado);
     setQtdEmbalagensInput('');
     setObservacaoApontamento('');
@@ -201,6 +258,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
 
       todos[index] = atualizado;
       salvarPedidosVenda(todos);
+      sincronizarOrdensComPedido(atualizado);
       setModalProducao(atualizado);
     }
   };
@@ -433,6 +491,12 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                         <div className="font-mono font-bold text-slate-900 group-hover:text-emerald-900">
                           {item.numero_pedido}
                         </div>
+                        {(faltaMpPorPedido.get(item.id) || []).some(c => c.falta > 0) && (
+                          <div className="text-[10px] text-red-700 font-bold flex items-center gap-1 mt-0.5" title="O estoque de matéria-prima não cobre o que falta produzir">
+                            <AlertTriangle className="w-3 h-3 text-red-600" />
+                            <span>Falta matéria-prima</span>
+                          </div>
+                        )}
                         {temLote ? (
                           <div className="text-[11px] text-emerald-800 font-mono font-semibold flex items-center gap-1 mt-0.5">
                             <Tag className="w-3 h-3 text-emerald-600" />
@@ -649,6 +713,15 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                           <div>
                             <div className="font-black text-slate-900 text-xs">{item.produto_nome}</div>
                             <div className="text-[10px] text-slate-500">Embalagem: {item.tipo_embalagem}</div>
+                            {(() => {
+                              const op = opDoItem(modalProducao.id, idx);
+                              if (!op) return null;
+                              return (
+                                <div className={`text-[10px] font-bold font-mono ${op.status === 'CONCLUIDA' ? 'text-emerald-700' : 'text-violet-700'}`}>
+                                  {op.numero} · {op.status === 'CONCLUIDA' ? 'OP concluída (estoque lançado)' : op.status === 'EM_PRODUCAO' ? 'OP em produção' : 'OP planejada'}
+                                </div>
+                              );
+                            })()}
                           </div>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full font-mono ${
                             isConcluido
@@ -684,6 +757,22 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                   })}
                 </div>
               </div>
+
+              {/* MATÉRIA-PRIMA NECESSÁRIA PARA O QUE FALTA PRODUZIR (AVISA, NÃO BLOQUEIA) */}
+              {(() => {
+                const nec = faltaMpPorPedido.get(modalProducao.id) || necessidadeRestantePedido(modalProducao);
+                return (
+                  <div className="space-y-2">
+                    <TabelaMateriaPrimaOP itens={nec} titulo="Matéria-prima necessária para o que falta produzir x estoque atual (baixa na conclusão das OPs)" />
+                    {nec.some(c => c.falta > 0) && (
+                      <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-800 font-semibold flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span>O estoque de matéria-prima não cobre a produção restante. É possível seguir; a falta fica registrada.</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* GRID: FORMULÁRIO DE APONTAMENTO À ESQUERDA + HISTÓRICO À DIREITA */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

@@ -43,6 +43,7 @@ import {
 } from './pedidosVendaData';
 
 import { carregarClientes } from './clientesData';
+import { gerarTituloComissaoAoFaturar } from './comissoesData';
 
 import {
   carregarControleSitio,
@@ -244,92 +245,176 @@ function fatorMandiocaDaReceita(rec?: ReceitaIndustrial): number {
   return FATOR_MANDIOCA_PADRAO;
 }
 
-/**
- * 2. PRODUÇÃO: Ao finalizar a ordem de produção:
- * - Alimenta o estoque de produtos acabados com o que foi REALMENTE apontado (0 apontado = 0)
- * - Consome a matéria-prima pela receita do produto (mandioca pelo fator da receita; 3,7 só como fallback)
- */
-export function integrarConclusaoProducao(pedido: PedidoVenda): void {
-  if (pedido.producao_integrada) return;
+export interface ConsumoMateriaPrimaProducao {
+  materia_prima_id: string;
+  materia_prima_nome: string;
+  unidade: string; // unidade da matéria-prima no estoque
+  quantidade_necessaria: number; // na unidade da MP
+  estoque_atual: number; // estoque no momento do cálculo
+  falta: number; // quanto falta para cobrir (0 = coberto)
+  quantidade_consumida?: number; // gravado na conclusão (baixa real)
+  unidade_incompativel?: boolean; // unidade da receita não converte para a da MP (não baixa)
+}
 
+/**
+ * Calcula a matéria-prima necessária para produzir `pacotes` de um produto, pela receita.
+ * - Receita com composição: cada MP proporcional (qtd ÷ rendimento × pacotes), com conversão de unidade.
+ *   Mandioca usa o fator kg raiz/kg produto da receita quando informado.
+ * - Sem receita (legado): mandioca pelo fator padrão e 1 sacaria por embalagem.
+ */
+export function calcularConsumoProducao(
+  produtoId: string,
+  pacotes: number,
+  opcoes?: { produtoNome?: string; pesoUnitarioKg?: number; embalagens?: number; materias?: MateriaPrimaEstoque[] }
+): ConsumoMateriaPrimaProducao[] {
+  const qtdPacotes = Math.max(0, Number(pacotes) || 0);
+  if (qtdPacotes <= 0) return [];
   const produtos = carregarEstoqueProdutos();
   const receitas = carregarReceitas();
-  const materias = carregarMateriaPrima();
+  const materias = opcoes?.materias || carregarMateriaPrima();
+  const prod = produtos.find(p => p.id === produtoId) || (opcoes?.produtoNome ? produtos.find(p => p.nome === opcoes.produtoNome) : undefined);
+  const pesoPacote = Number(opcoes?.pesoUnitarioKg) || Number(prod?.peso_unitario_kg) || 0;
+  const pesoKg = qtdPacotes * pesoPacote;
+  const rec = prod?.receita_id ? receitas.find(r => r.id === prod.receita_id) : undefined;
+
+  const mapa = new Map<string, ConsumoMateriaPrimaProducao>();
+  const somar = (mp: MateriaPrimaEstoque, qtd: number | null) => {
+    const atual = mapa.get(mp.id) || {
+      materia_prima_id: mp.id,
+      materia_prima_nome: mp.nome,
+      unidade: mp.unidade_medida,
+      quantidade_necessaria: 0,
+      estoque_atual: Math.max(0, Number(mp.estoque_atual) || 0),
+      falta: 0
+    };
+    if (qtd === null) atual.unidade_incompativel = true;
+    else atual.quantidade_necessaria = parseFloat((atual.quantidade_necessaria + qtd).toFixed(4));
+    mapa.set(mp.id, atual);
+  };
+
+  if (rec && (rec.rendimento_pacotes || 0) > 0 && (rec.materias_primas || []).length > 0) {
+    const proporcao = qtdPacotes / rec.rendimento_pacotes;
+    rec.materias_primas.forEach(mi => {
+      const mp = materias.find(m => m.id === mi.materia_prima_id) || localizarMateriaPrimaCadastrada(mi.materia_prima_nome, materias);
+      if (!mp) return;
+      if (ehMandioca(mi.materia_prima_nome) && (rec.kg_mandioca_por_kg_produto || 0) > 0 && pesoKg > 0) {
+        somar(mp, converterQuantidade(pesoKg * (rec.kg_mandioca_por_kg_produto || 0), 'KG', mp.unidade_medida));
+        return;
+      }
+      somar(mp, converterQuantidade((Number(mi.quantidade) || 0) * proporcao, mi.unidade_medida, mp.unidade_medida));
+    });
+  } else {
+    // Legado: produto sem receita/composição
+    const kgMandioca = pesoKg * fatorMandiocaDaReceita(rec);
+    const mpMandioca = materias.find(m => ehMandioca(m.nome));
+    if (kgMandioca > 0 && mpMandioca) somar(mpMandioca, converterQuantidade(kgMandioca, 'KG', mpMandioca.unidade_medida));
+    const mpSaco = materias.find(m => ehSacaria(m.nome));
+    const embalagens = opcoes?.embalagens ?? qtdPacotes;
+    if (mpSaco && embalagens > 0) somar(mpSaco, embalagens);
+  }
+
+  return Array.from(mapa.values()).map(c => ({
+    ...c,
+    falta: Math.max(0, parseFloat((c.quantidade_necessaria - c.estoque_atual).toFixed(4)))
+  }));
+}
+
+export interface ItemProducaoEstoque {
+  produto_id: string;
+  produto_nome?: string;
+  pacotes: number;
+  embalagens?: number; // só para o fallback de sacaria sem receita
+  peso_unitario_kg?: number;
+  lote?: string;
+}
+
+/**
+ * Efetiva produção no estoque: entra o produto acabado (pacotes) e baixa a matéria-prima pela receita.
+ * Não deixa o estoque de MP negativo, mas devolve a falta registrada (avisa e deixa seguir).
+ * Quem chama garante que roda UMA vez por produção (OP.estoque_integrado / pedido.producao_integrada).
+ */
+export function aplicarProducaoNoEstoque(itens: ItemProducaoEstoque[]): ConsumoMateriaPrimaProducao[] {
+  const validos = itens.filter(i => (Number(i.pacotes) || 0) > 0);
+  if (validos.length === 0) return [];
+  const produtos = carregarEstoqueProdutos();
   let houveAlteracaoProduto = false;
 
-  const consumo = new Map<string, number>(); // materia_prima_id -> qtd na unidade da MP
-  const somarConsumo = (id: string, qtd: number) => consumo.set(id, (consumo.get(id) || 0) + qtd);
-  let kgMandiocaConsumida = 0;
-  let embalagensSemReceita = 0;
-
-  pedido.itens.forEach(item => {
-    const embalagensProduzidas = Number(item.quantidade_produzida) || 0;
-    if (embalagensProduzidas <= 0) return;
+  // Consumo consolidado (calculado antes de mexer no estoque)
+  const consumo = new Map<string, ConsumoMateriaPrimaProducao>();
+  validos.forEach(item => {
+    calcularConsumoProducao(item.produto_id, item.pacotes, {
+      produtoNome: item.produto_nome,
+      pesoUnitarioKg: item.peso_unitario_kg,
+      embalagens: item.embalagens
+    }).forEach(c => {
+      const ac = consumo.get(c.materia_prima_id);
+      if (!ac) consumo.set(c.materia_prima_id, { ...c });
+      else {
+        ac.quantidade_necessaria = parseFloat((ac.quantidade_necessaria + c.quantidade_necessaria).toFixed(4));
+        ac.unidade_incompativel = ac.unidade_incompativel || c.unidade_incompativel;
+      }
+    });
 
     const prodIdx = produtos.findIndex(p => p.id === item.produto_id);
     const idx = prodIdx >= 0 ? prodIdx : produtos.findIndex(p => p.nome === item.produto_nome);
-    const prod = idx >= 0 ? produtos[idx] : undefined;
-
-    const pacotes = pacotesDoItem(item, embalagensProduzidas);
-    const pesoPacote = Number(item.peso_unitario_kg) || Number(prod?.peso_unitario_kg) || 0;
-    const pesoKg = pacotes * pesoPacote;
-
-    if (prod) {
-      houveAlteracaoProduto = true;
-      const novoKg = (Number(prod.estoque_atual_kg) || 0) + pesoKg;
-      produtos[idx] = {
-        ...prod,
-        estoque_atual_sacos: (Number(prod.estoque_atual_sacos) || 0) + pacotes,
-        estoque_atual_kg: novoKg,
-        lote_recente: item.lote_producao || pedido.lote_producao || prod.lote_recente,
-        status: calcularStatusProduto(novoKg, prod.estoque_minimo_kg)
-      };
-    }
-
-    const rec = prod?.receita_id ? receitas.find(r => r.id === prod.receita_id) : undefined;
-    kgMandiocaConsumida += pesoKg * fatorMandiocaDaReceita(rec);
-
-    if (rec && (rec.rendimento_pacotes || 0) > 0 && (rec.materias_primas || []).length > 0) {
-      const proporcao = pacotes / rec.rendimento_pacotes;
-      rec.materias_primas.forEach(mi => {
-        if (ehMandioca(mi.materia_prima_nome)) return; // mandioca já tratada pelo fator
-        const mp = materias.find(m => m.id === mi.materia_prima_id);
-        if (!mp) return;
-        const qtd = converterQuantidade((Number(mi.quantidade) || 0) * proporcao, mi.unidade_medida, mp.unidade_medida);
-        if (qtd !== null && qtd > 0) somarConsumo(mp.id, qtd);
-      });
-    } else {
-      embalagensSemReceita += embalagensProduzidas;
-    }
+    if (idx < 0) return;
+    const prod = produtos[idx];
+    const pesoKg = item.pacotes * (Number(item.peso_unitario_kg) || Number(prod.peso_unitario_kg) || 0);
+    houveAlteracaoProduto = true;
+    const novoKg = (Number(prod.estoque_atual_kg) || 0) + pesoKg;
+    produtos[idx] = {
+      ...prod,
+      estoque_atual_sacos: (Number(prod.estoque_atual_sacos) || 0) + item.pacotes,
+      estoque_atual_kg: novoKg,
+      lote_recente: item.lote || prod.lote_recente,
+      status: calcularStatusProduto(novoKg, prod.estoque_minimo_kg)
+    };
   });
 
-  if (houveAlteracaoProduto) {
-    salvarEstoqueProdutos(produtos);
-  }
+  if (houveAlteracaoProduto) salvarEstoqueProdutos(produtos);
 
-  if (kgMandiocaConsumida > 0) {
-    const mpMandioca = materias.find(m => ehMandioca(m.nome));
-    if (mpMandioca) {
-      const qtd = converterQuantidade(kgMandiocaConsumida, 'KG', mpMandioca.unidade_medida);
-      if (qtd !== null) somarConsumo(mpMandioca.id, qtd);
-    }
-  }
-  if (embalagensSemReceita > 0) {
-    const mpSaco = materias.find(m => ehSacaria(m.nome));
-    if (mpSaco) somarConsumo(mpSaco.id, embalagensSemReceita);
-  }
-
-  if (consumo.size > 0) {
-    const materiasAtualizadas = materias.map(mat => {
-      const qtd = consumo.get(mat.id);
-      if (!qtd) return mat;
-      return comStatusAtualizado({
-        ...mat,
-        estoque_atual: Math.max(0, parseFloat(((Number(mat.estoque_atual) || 0) - qtd).toFixed(3)))
-      });
+  const materias = carregarMateriaPrima();
+  const resultado: ConsumoMateriaPrimaProducao[] = [];
+  const materiasAtualizadas = materias.map(mat => {
+    const c = consumo.get(mat.id);
+    if (!c) return mat;
+    const estoqueAntes = Math.max(0, Number(mat.estoque_atual) || 0);
+    const baixa = c.unidade_incompativel ? 0 : Math.min(estoqueAntes, c.quantidade_necessaria);
+    resultado.push({
+      ...c,
+      estoque_atual: estoqueAntes,
+      falta: Math.max(0, parseFloat((c.quantidade_necessaria - estoqueAntes).toFixed(4))),
+      quantidade_consumida: parseFloat(baixa.toFixed(4))
     });
-    salvarMateriaPrima(materiasAtualizadas);
-  }
+    if (baixa <= 0) return mat;
+    return comStatusAtualizado({ ...mat, estoque_atual: parseFloat((estoqueAntes - baixa).toFixed(3)) });
+  });
+  if (resultado.some(r => (r.quantidade_consumida || 0) > 0)) salvarMateriaPrima(materiasAtualizadas);
+  return resultado;
+}
+
+/**
+ * 2. PRODUÇÃO (legado, pedidos sem Ordem de Produção): ao concluir a produção do pedido,
+ * entra o produto pelo apontado e baixa a matéria-prima pela receita.
+ * `ignorarIndices`: itens do pedido já tratados por Ordens de Produção (não entram/baixam em dobro).
+ */
+export function integrarConclusaoProducao(pedido: PedidoVenda, ignorarIndices: number[] = []): ConsumoMateriaPrimaProducao[] {
+  if (pedido.producao_integrada) return [];
+  const itens: ItemProducaoEstoque[] = [];
+  pedido.itens.forEach((item, i) => {
+    if (ignorarIndices.includes(i)) return;
+    const embalagensProduzidas = Number(item.quantidade_produzida) || 0;
+    if (embalagensProduzidas <= 0) return;
+    itens.push({
+      produto_id: item.produto_id,
+      produto_nome: item.produto_nome,
+      pacotes: pacotesDoItem(item, embalagensProduzidas),
+      embalagens: embalagensProduzidas,
+      peso_unitario_kg: Number(item.peso_unitario_kg) || undefined,
+      lote: item.lote_producao || pedido.lote_producao
+    });
+  });
+  return aplicarProducaoNoEstoque(itens);
 }
 
 /**
@@ -454,6 +539,13 @@ export function integrarFaturamentoPedidoVenda(pedido: PedidoVenda): void {
     }
   } catch (err) {
     console.error('Erro ao gerar NF de saída:', err);
+  }
+
+  // 4. Comissão do RCA vira Conta a Pagar (um título por pedido)
+  try {
+    gerarTituloComissaoAoFaturar(pedido);
+  } catch (err) {
+    console.error('Erro ao gerar título de comissão do RCA:', err);
   }
 }
 

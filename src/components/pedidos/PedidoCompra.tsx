@@ -51,8 +51,10 @@ import {
 } from '../../data/mockStore';
 import {
   carregarCalculosNaRoca,
-  definirPagamentoCalculoRoca
+  definirPagamentoCalculoRoca,
+  adicionarComprovante
 } from '../../data/calculoRocaData';
+import { CampoAnexoComprovante, ArquivoComprovante } from './ComprovantesRoca';
 import {
   carregarAgricultores,
   carregarFornecedores,
@@ -93,6 +95,8 @@ export function PedidoCompra() {
   const [contaBancariaDef, setContaBancariaDef] = useState('Banco do Brasil - Conta Movimento');
   const [valorAdiantadoDef, setValorAdiantadoDef] = useState('');
   const [obsPagamentoDef, setObsPagamentoDef] = useState('');
+  // Comprovante de pagamento (somente compras do Cálculo na Roça; guardado em chave própria)
+  const [anexoPagamentoDef, setAnexoPagamentoDef] = useState<ArquivoComprovante | null>(null);
 
   // Sincronização de pedidos de compra e detecção de redirecionamento do Cálculo na Roça
   React.useEffect(() => {
@@ -115,6 +119,7 @@ export function PedidoCompra() {
         setFormaPagamentoDef(ped.forma_pagamento || 'PIX');
         setDataPagamentoOuVencDef(new Date().toLocaleDateString('pt-BR'));
         setObsPagamentoDef('');
+        setAnexoPagamentoDef(null);
         setMensagemSucesso(`Pedido gerado a partir do Cálculo na Roça! Defina abaixo a situação para virar despesa.`);
         setTimeout(() => setMensagemSucesso(null), 8000);
       }
@@ -466,6 +471,7 @@ export function PedidoCompra() {
     setFormaPagamentoDef(pedido.forma_pagamento || 'PIX');
     setDataPagamentoOuVencDef(new Date().toLocaleDateString('pt-BR'));
     setObsPagamentoDef('');
+    setAnexoPagamentoDef(null);
   };
 
   const handleSalvarDefinicaoPagamento = (e: React.FormEvent) => {
@@ -508,7 +514,14 @@ export function PedidoCompra() {
         },
         { item_descricao: itemEfetivado, valor_total: valTotal, categoria: categoriaDef }
       );
-      setMensagemSucesso(res.mensagem);
+      let mensagem = res.mensagem;
+      if (res.sucesso && anexoPagamentoDef) {
+        const anexo = adicionarComprovante(calculoCorrespondente.id, anexoPagamentoDef);
+        mensagem = anexo.sucesso ? `${mensagem} Comprovante anexado.` : `${mensagem} ATENÇÃO: ${anexo.mensagem}`;
+        if (!anexo.sucesso) alert(anexo.mensagem);
+      }
+      setAnexoPagamentoDef(null);
+      setMensagemSucesso(mensagem);
     } else {
       // Pedido comum (não-roça): mesmo núcleo idempotente (sem duplicar título/despesa/estoque)
       const res = efetivarPedidoCompra(ped.id, {
@@ -2375,6 +2388,12 @@ export function PedidoCompra() {
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:border-emerald-700 text-xs"
                   />
                 </div>
+
+                {tipoPagamentoDef !== 'A_PAGAR' && carregarCalculosNaRoca().some(c => c.pedido_compra_id === pedidoDefinirPagamento.id || c.id === pedidoDefinirPagamento.id) && (
+                  <div className="sm:col-span-2">
+                    <CampoAnexoComprovante arquivo={anexoPagamentoDef} onChange={setAnexoPagamentoDef} />
+                  </div>
+                )}
               </div>
 
               {/* Botões do Rodapé */}

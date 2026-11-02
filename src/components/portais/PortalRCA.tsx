@@ -33,6 +33,7 @@ import {
 import { carregarClientes } from '../../data/clientesData';
 import { carregarPedidosVenda } from '../../data/pedidosVendaData';
 import { formatarDataBR } from '../../lib/datas';
+import { sincronizarTitulosComissao } from '../../data/comissoesData';
 
 interface PortalRCAProps {
   onVoltar: () => void;
@@ -51,7 +52,7 @@ export function PortalRCA({ onVoltar, rcaId, permitirSelecaoAdmin = false }: Por
   const [versao, setVersao] = useState(0);
   React.useEffect(() => {
     const h = () => setVersao(v => v + 1);
-    const eventos = [EVENTO_CADASTROS_ATUALIZADOS, 'clientes_updated', 'pedidos_venda_updated', 'sistema_reset_updated'];
+    const eventos = [EVENTO_CADASTROS_ATUALIZADOS, 'clientes_updated', 'pedidos_venda_updated', 'sistema_reset_updated', 'financeiro_updated'];
     eventos.forEach(ev => window.addEventListener(ev, h));
     return () => eventos.forEach(ev => window.removeEventListener(ev, h));
   }, []);
@@ -73,6 +74,10 @@ export function PortalRCA({ onVoltar, rcaId, permitirSelecaoAdmin = false }: Por
   } : null;
 
   const pedidosVenda = useMemo(() => carregarPedidosVenda(), [versao]);
+  // Comissão de pedido excluído/estornado (ainda não paga) sai do Contas a Pagar
+  React.useEffect(() => {
+    sincronizarTitulosComissao(pedidosVenda);
+  }, [pedidosVenda]);
 
   // Somente os clientes cujo vendedor_id é o id deste RCA
   const clientesDoRca = useMemo(() => {
@@ -439,8 +444,9 @@ export function PortalRCA({ onVoltar, rcaId, permitirSelecaoAdmin = false }: Por
                       <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900">
                         R$ {venda.valor_faturado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="py-3.5 px-4 text-center font-mono font-bold text-emerald-800">
-                        {venda.percentual_comissao.toFixed(1)}%
+                      <td className="py-3.5 px-4 text-center">
+                        <div className="text-[10px] font-bold text-slate-500">{venda.tipo_regra_aplicada}</div>
+                        <div className="font-mono font-bold text-emerald-800">{venda.percentual_comissao.toFixed(2)}%</div>
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-700 text-sm">
                         R$ {venda.valor_comissao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -449,8 +455,18 @@ export function PortalRCA({ onVoltar, rcaId, permitirSelecaoAdmin = false }: Por
                         {venda.status_comissao === 'Pago (PIX)' ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            <span>Pago (PIX)</span>
+                            <span>Pago (PIX){venda.data_pagamento_pix ? ` ${formatarDataBR(venda.data_pagamento_pix)}` : ''}</span>
                           </span>
+                        ) : venda.titulo_pagar_id ? (
+                          <div className="inline-flex flex-col items-center">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black border ${venda.titulo_status === 'VENCIDO' ? 'bg-red-100 text-red-800 border-red-300' : 'bg-lime-100 text-lime-900 border-lime-300'}`}>
+                              <Clock className="w-3 h-3" />
+                              <span>{venda.titulo_status === 'VENCIDO' ? 'Atrasada' : 'A receber'}</span>
+                            </span>
+                            {venda.titulo_vencimento && (
+                              <span className="text-[10px] text-slate-400 mt-0.5">previsto {formatarDataBR(venda.titulo_vencimento)}</span>
+                            )}
+                          </div>
                         ) : venda.status_comissao === 'Liberado' ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-lime-100 text-lime-900 border border-lime-300">
                             <span>Liberado</span>

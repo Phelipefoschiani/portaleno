@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyRound,
   Plus,
@@ -10,6 +10,9 @@ import {
   CheckCircle2,
   XCircle,
   Edit2,
+  Download,
+  Upload,
+  DatabaseBackup,
 } from 'lucide-react';
 import {
   listarUsuarios,
@@ -31,6 +34,15 @@ import {
   EVENTO_CADASTROS_ATUALIZADOS,
 } from '../../data/cadastrosData';
 import { formatarDataBR } from '../../lib/datas';
+import {
+  baixarBackup,
+  lerArquivoBackup,
+  restaurarBackup,
+  obterDataUltimoBackup,
+  diasDesdeUltimoBackup,
+  backupAtrasado,
+  DIAS_LEMBRETE_BACKUP,
+} from '../../lib/backup';
 
 const PERFIS_COM_VINCULO: PerfilUsuario[] = ['AGRICULTOR', 'RCA', 'PROVISORIO'];
 
@@ -64,6 +76,10 @@ export function UsuariosAcessos() {
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
   const [salvando, setSalvando] = useState(false);
+  // Backup em arquivo
+  const [ultimoBackup, setUltimoBackup] = useState<string | null>(() => obterDataUltimoBackup());
+  const [restaurando, setRestaurando] = useState(false);
+  const inputBackupRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const atualizarUsuarios = () => setUsuarios(listarUsuarios());
@@ -182,6 +198,47 @@ export function UsuariosAcessos() {
     executar(() => excluirUsuario(u.id), 'Usuário excluído.');
   };
 
+  const handleBaixarBackup = () => {
+    setErro('');
+    try {
+      const r = baixarBackup();
+      setUltimoBackup(obterDataUltimoBackup());
+      setAviso(`Backup gerado: ${r.nomeArquivo} (${r.totalChaves} conjuntos de dados). Guarde o arquivo em local seguro (pen drive, nuvem).`);
+    } catch (e) {
+      setErro('Não foi possível gerar o backup.');
+    }
+  };
+
+  const handleRestaurarBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const arquivo = e.target.files?.[0];
+    e.target.value = '';
+    if (!arquivo) return;
+    setErro('');
+    setAviso('');
+    setRestaurando(true);
+    try {
+      const backup = await lerArquivoBackup(arquivo);
+      const dataBackup = backup.gerado_em ? new Date(backup.gerado_em).toLocaleString('pt-BR') : 'data desconhecida';
+      const ok = window.confirm(
+        `Restaurar o backup de ${dataBackup} (${backup.total_chaves} conjuntos de dados)?
+
+` +
+        'ATENÇÃO: todos os dados atuais do sistema neste navegador serão SUBSTITUÍDOS pelos do arquivo. ' +
+        'Usuários e senhas não são alterados. A página será recarregada.'
+      );
+      if (!ok) return;
+      restaurarBackup(backup);
+      window.location.reload();
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Não foi possível restaurar o backup.');
+    } finally {
+      setRestaurando(false);
+    }
+  };
+
+  const diasBackup = diasDesdeUltimoBackup();
+  const lembreteBackup = backupAtrasado();
+
   const rotuloPerfil = (p: PerfilUsuario) => PERFIS_USUARIO.find(x => x.id === p)?.rotulo || p;
   const precisaVinculo = PERFIS_COM_VINCULO.includes(form.perfil);
   const inputCls = 'w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20';
@@ -274,6 +331,51 @@ export function UsuariosAcessos() {
             ))}
           </tbody>
         </table>
+
+        {/* BACKUP DOS DADOS (somente ADMIN) */}
+        <div className={`mt-6 rounded-2xl border p-5 ${lembreteBackup ? 'border-amber-300 bg-amber-50/60' : 'border-slate-200 bg-slate-50/60'}`}>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shrink-0">
+                <DatabaseBackup className="w-5 h-5 text-emerald-300" />
+              </div>
+              <div>
+                <h3 className="font-black text-slate-900">Backup dos Dados</h3>
+                <p className="text-xs text-slate-600 max-w-xl">
+                  Os dados ficam apenas neste navegador. Baixe um arquivo de backup regularmente para não perder nada
+                  (limpeza do navegador, troca de computador). Usuários e senhas não entram no backup.
+                </p>
+                <p className="text-xs mt-1.5 font-bold text-slate-700">
+                  Último backup: {ultimoBackup ? `${formatarDataBR(ultimoBackup)}${diasBackup !== null ? ` (${diasBackup === 0 ? 'hoje' : diasBackup === 1 ? 'há 1 dia' : `há ${diasBackup} dias`})` : ''}` : 'nunca feito neste navegador'}
+                </p>
+                {lembreteBackup && (
+                  <p className="text-xs mt-1 font-bold text-amber-700 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {ultimoBackup ? `Já se passaram mais de ${DIAS_LEMBRETE_BACKUP} dias desde o último backup. Faça um novo agora.` : 'Recomendado: faça o primeiro backup agora.'}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleBaixarBackup}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Baixar backup</span>
+              </button>
+              <input ref={inputBackupRef} type="file" accept="application/json,.json" className="hidden" onChange={handleRestaurarBackup} />
+              <button
+                onClick={() => inputBackupRef.current?.click()}
+                disabled={restaurando}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs font-bold cursor-pointer disabled:opacity-60"
+              >
+                <Upload className="w-4 h-4" />
+                <span>{restaurando ? 'Lendo arquivo...' : 'Restaurar backup'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {modal && (

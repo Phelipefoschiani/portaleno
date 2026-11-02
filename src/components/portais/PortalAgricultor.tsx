@@ -23,11 +23,15 @@ import {
 } from 'lucide-react';
 import {
   CalculoNaRoca,
-  carregarCalculosNaRoca
+  carregarCalculosNaRoca,
+  pesosDoCalculo,
+  descricaoDesconto
 } from '../../data/calculoRocaData';
+import { ExtratoAgricultor } from '../pedidos/ComprovantesRoca';
+import { formatarMoeda } from '../../data/financeiroData';
 import type { Agricultor } from '../../data/mockStore';
 import { carregarAgricultores, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
-import { parseData } from '../../lib/datas';
+import { formatarDataBR } from '../../lib/datas';
 
 interface PortalAgricultorProps {
   onVoltar: () => void;
@@ -48,7 +52,6 @@ export function PortalAgricultor({ onVoltar, agricultorId, permitirSelecaoAdmin 
   const [agricultorAdminId, setAgricultorAdminId] = useState<string>(agricultorId || '');
   const agricultorSelecionadoId = permitirSelecaoAdmin ? (agricultorAdminId || agricultorId || '') : (agricultorId || '');
   const [calculos, setCalculos] = useState<CalculoNaRoca[]>([]);
-  const [filtroMes, setFiltroMes] = useState<string>('TODOS');
   const [ticketModal, setTicketModal] = useState<CalculoNaRoca | null>(null);
 
   // Carregar dados de cálculos na roça
@@ -73,36 +76,6 @@ export function PortalAgricultor({ onVoltar, agricultorId, permitirSelecaoAdmin 
     // Filtro por id exato (nunca por nome)
     return calculos.filter(c => c.fornecedor_tipo === 'AGRICULTOR' && c.fornecedor_id === agricultorAtivo.id);
   }, [calculos, agricultorAtivo]);
-
-  // Filtradas por mês
-  const pesagensFiltradas = useMemo(() => {
-    return pesagensDoAgricultor.filter(p => {
-      if (filtroMes === 'TODOS') return true;
-      const d = parseData(p.data);
-      return d ? String(d.getMonth() + 1).padStart(2, '0') === filtroMes : false;
-    });
-  }, [pesagensDoAgricultor, filtroMes]);
-
-  // Totais
-  const estatisticas = useMemo(() => {
-    const totalCargas = pesagensFiltradas.length;
-    const totalKg = pesagensFiltradas.reduce((acc, p) => acc + (p.peso_total_kg || 0), 0);
-    const totalToneladas = (totalKg / 1000).toFixed(2);
-    const totalValor = pesagensFiltradas.reduce((acc, p) => acc + (p.valor_total_estimado || 0), 0);
-    const totalJaPago = pesagensFiltradas
-      .filter(p => p.situacao_pagamento === 'JA_PAGO' || (p.detalhes_pagamento?.valor_pago || 0) > 0)
-      .reduce((acc, p) => acc + (p.detalhes_pagamento?.valor_pago || (p.situacao_pagamento === 'JA_PAGO' ? p.valor_total_estimado : 0)), 0);
-    const totalPendente = totalValor - totalJaPago;
-
-    return {
-      totalCargas,
-      totalKg,
-      totalToneladas,
-      totalValor,
-      totalJaPago,
-      totalPendente
-    };
-  }, [pesagensFiltradas]);
 
   return (
     <div className="min-h-screen bg-[#f8faf9] text-slate-800 flex flex-col font-sans select-none">
@@ -223,171 +196,10 @@ export function PortalAgricultor({ onVoltar, agricultorId, permitirSelecaoAdmin 
           </div>
         )}
 
-        {/* 4 Cards de Métricas e Extrato de Pesagem */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-            <div className="text-xs font-bold text-slate-500">Cargas Entregues</div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">
-              {estatisticas.totalCargas}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Tickets de romaneio</div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-            <div className="text-xs font-bold text-slate-500">Volume Total Entregue</div>
-            <div className="text-2xl sm:text-3xl font-black text-emerald-700 mt-1">
-              {estatisticas.totalToneladas} <span className="text-sm font-bold text-slate-500">ton</span>
-            </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">
-              {estatisticas.totalKg.toLocaleString('pt-BR')} kg de mandioca limpa
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-            <div className="text-xs font-bold text-slate-500">Valor Total Bruto</div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">
-              R$ {estatisticas.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </div>
-            <div className="text-[11px] text-emerald-700 font-semibold mt-0.5">
-              Preço negociado saco a saco
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-            <div className="text-xs font-bold text-slate-500">Total Liquidado (PIX/Banco)</div>
-            <div className="text-2xl sm:text-3xl font-black text-emerald-600 mt-1">
-              R$ {estatisticas.totalJaPago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">
-              {estatisticas.totalPendente > 0 ? (
-                <span className="text-amber-600 font-bold">R$ {estatisticas.totalPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em liquidação</span>
-              ) : (
-                <span className="text-emerald-700 font-bold">100% dos pagamentos em dia</span>
-              )}
-            </div>
-          </div>
-
-        </div>
-
-        {/* Tabela de Pesagens e Romaneios da Roça */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-
-          <div className="px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-50/50">
-            <div>
-              <h3 className="font-extrabold text-slate-900 text-base">
-                Extrato de Pesagens e Tickets de Mandioca
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Histórico completo com pesagem de cada saco, valor pago por kg e comprovantes
-              </p>
-            </div>
-
-            {/* Filtro por mês */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-600">Filtrar Mês:</span>
-              <select
-                value={filtroMes}
-                onChange={(e) => setFiltroMes(e.target.value)}
-                className="bg-white border border-slate-200 text-xs font-bold rounded-xl px-3 py-1.5 outline-none cursor-pointer"
-              >
-                <option value="TODOS">Todos os Meses</option>
-                <option value="01">Janeiro</option>
-                <option value="02">Fevereiro</option>
-                <option value="03">Março</option>
-                <option value="04">Abril</option>
-                <option value="05">Maio</option>
-                <option value="06">Junho</option>
-                <option value="07">Julho</option>
-                <option value="08">Agosto</option>
-                <option value="09">Setembro</option>
-                <option value="10">Outubro</option>
-                <option value="11">Novembro</option>
-                <option value="12">Dezembro</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100/75 text-slate-700 font-extrabold uppercase tracking-wider text-[11px] border-b border-slate-200">
-                <tr>
-                  <th className="py-3 px-5">Ticket / Data</th>
-                  <th className="py-3 px-4">Local / Roça</th>
-                  <th className="py-3 px-4 text-center">Sacos</th>
-                  <th className="py-3 px-4 text-right">Peso Total</th>
-                  <th className="py-3 px-4 text-right">Preço/KG</th>
-                  <th className="py-3 px-4 text-right">Valor Total</th>
-                  <th className="py-3 px-4 text-center">Pagamento</th>
-                  <th className="py-3 px-5 text-right">Ticket</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {pesagensFiltradas.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
-                      Nenhuma pesagem encontrada para este produtor no período selecionado.
-                    </td>
-                  </tr>
-                ) : (
-                  pesagensFiltradas.map((ticket) => (
-                    <tr key={ticket.id} className="hover:bg-emerald-50/30 transition-colors">
-                      <td className="py-3.5 px-5">
-                        <div className="font-extrabold text-slate-900 font-mono">{ticket.numero_ticket}</div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                          <Calendar className="w-3 h-3" />
-                          <span>{ticket.data} {ticket.hora ? `às ${ticket.hora}` : ''}</span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-700 font-medium">
-                        {ticket.local_pesagem || ticket.fornecedor_propriedade || 'Propriedade Rural'}
-                      </td>
-                      <td className="py-3.5 px-4 text-center font-bold text-slate-900">
-                        {ticket.total_sacos} sc
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-800">
-                        {ticket.peso_total_kg.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} kg
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-mono text-slate-700">
-                        R$ {ticket.preco_por_kg.toFixed(2)}
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-black text-slate-900 text-sm">
-                        R$ {ticket.valor_total_estimado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        {ticket.situacao_pagamento === 'JA_PAGO' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            <span>Pago (PIX)</span>
-                          </span>
-                        ) : ticket.situacao_pagamento === 'ADIANTAMENTO_PARCIAL' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-300">
-                            <span>Adiantado</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">
-                            <Clock className="w-3 h-3 text-amber-600" />
-                            <span>A Pagar</span>
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-5 text-right">
-                        <button
-                          onClick={() => setTicketModal(ticket)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-200 transition-colors cursor-pointer"
-                        >
-                          <FileText className="w-3.5 h-3.5 text-emerald-700" />
-                          <span>Ver Ticket</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-        </div>
+        {/* Extrato: totais, filtro por período/safra, pagamentos e comprovantes (somente as pesagens deste produtor) */}
+        {agricultorAtivo && (
+          <ExtratoAgricultor calculos={pesagensDoAgricultor} onVerTicket={setTicketModal} />
+        )}
 
       </main>
 
@@ -416,7 +228,7 @@ export function PortalAgricultor({ onVoltar, agricultorId, permitirSelecaoAdmin 
                 </div>
                 <div>
                   <div className="text-slate-500">Data / Hora:</div>
-                  <div className="font-bold text-slate-900">{ticketModal.data} {ticketModal.hora}</div>
+                  <div className="font-bold text-slate-900">{formatarDataBR(ticketModal.data)} {ticketModal.hora}</div>
                 </div>
                 <div>
                   <div className="text-slate-500">Local da Roça:</div>
@@ -430,29 +242,37 @@ export function PortalAgricultor({ onVoltar, agricultorId, permitirSelecaoAdmin 
 
               <div className="border border-slate-200 rounded-xl p-3">
                 <div className="font-bold text-slate-800 mb-2">Resumo da Carga:</div>
-                <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                   <div className="bg-emerald-50 p-2 rounded-lg">
                     <div className="text-[10px] text-slate-500">Total Sacos</div>
                     <div className="text-base font-black text-emerald-800">{ticketModal.total_sacos} sc</div>
                   </div>
-                  <div className="bg-emerald-50 p-2 rounded-lg">
-                    <div className="text-[10px] text-slate-500">Peso Total</div>
-                    <div className="text-base font-black text-emerald-800">{ticketModal.peso_total_kg.toFixed(1)} kg</div>
+                  <div className="bg-slate-50 p-2 rounded-lg">
+                    <div className="text-[10px] text-slate-500">Peso Bruto</div>
+                    <div className="text-base font-black text-slate-800">{pesosDoCalculo(ticketModal).bruto.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} kg</div>
+                  </div>
+                  <div className="bg-amber-50 p-2 rounded-lg">
+                    <div className="text-[10px] text-slate-500">Desconto</div>
+                    <div className="text-base font-black text-amber-700">- {pesosDoCalculo(ticketModal).desconto.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} kg</div>
                   </div>
                   <div className="bg-emerald-50 p-2 rounded-lg">
-                    <div className="text-[10px] text-slate-500">Média / Saco</div>
-                    <div className="text-base font-black text-emerald-800">{ticketModal.peso_medio_saco_kg.toFixed(1)} kg</div>
+                    <div className="text-[10px] text-slate-500">Peso Líquido</div>
+                    <div className="text-base font-black text-emerald-800">{pesosDoCalculo(ticketModal).liquido.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} kg</div>
                   </div>
                 </div>
+                {descricaoDesconto(ticketModal) && (
+                  <div className="mt-2 text-[11px] text-amber-800">Desconto aplicado: {descricaoDesconto(ticketModal)}</div>
+                )}
+                <div className="mt-1 text-[11px] text-slate-500">Média por saco: {ticketModal.peso_medio_saco_kg.toFixed(1)} kg</div>
               </div>
 
               <div className="bg-emerald-950 text-white rounded-xl p-4 flex items-center justify-between">
                 <div>
                   <div className="text-[10px] text-emerald-300 uppercase font-semibold">Valor Total Líquido</div>
-                  <div className="text-xs text-slate-300">R$ {ticketModal.preco_por_kg.toFixed(2)} por kg</div>
+                  <div className="text-xs text-slate-300">{formatarMoeda(ticketModal.preco_por_kg)} por kg × peso líquido</div>
                 </div>
                 <div className="text-xl font-black text-emerald-400">
-                  R$ {ticketModal.valor_total_estimado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  {formatarMoeda(ticketModal.valor_total_estimado)}
                 </div>
               </div>
 

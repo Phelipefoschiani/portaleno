@@ -26,8 +26,9 @@ export interface TituloPagar {
   pedido_compra_id?: string;
   numero_documento: string; // ex: DUP-ENT-1048
   favorecido_nome: string;
-  tipo_favorecido: 'Agricultor' | 'Fornecedor' | 'Operacional';
-  categoria: 'Mandioca / Matéria-Prima' | 'Lenha & Biomassa' | 'Embalagens' | 'Energia / Concessionárias' | 'Manutenção Mecânica' | 'Fretes';
+  tipo_favorecido: 'Agricultor' | 'Fornecedor' | 'Operacional' | 'RCA';
+  categoria: 'Mandioca / Matéria-Prima' | 'Lenha & Biomassa' | 'Embalagens' | 'Energia / Concessionárias' | 'Manutenção Mecânica' | 'Fretes' | 'Comissão de RCA';
+  pedido_venda_id?: string; // Comissão de RCA: pedido de venda que gerou o título
   valor: number;
   data_emissao: string;
   data_vencimento: string;

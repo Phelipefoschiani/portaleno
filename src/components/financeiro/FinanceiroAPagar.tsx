@@ -401,6 +401,7 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
                     <option value="Energia / Concessionárias">Energia / Concessionárias</option>
                     <option value="Manutenção Mecânica">Manutenção Mecânica</option>
                     <option value="Fretes">Fretes</option>
+                    <option value="Comissão de RCA">Comissão de RCA</option>
                   </select>
                 </div>
 

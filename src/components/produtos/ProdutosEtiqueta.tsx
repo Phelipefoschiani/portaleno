@@ -12,6 +12,7 @@ import {
 import { carregarEstoqueProdutos, carregarFichasTecnicas, ProdutoEstoque } from '../../data/produtosData';
 import { hojeISO, parseData, formatarDataBR } from '../../lib/datas';
 import { ProdutosNavTabs } from './ProdutosNavTabs';
+import { lotesConcluidosDoProduto, EVENTO_OPS, OrdemProducao } from '../../data/ordensProducaoData';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -24,12 +25,39 @@ export function ProdutosEtiqueta({ onNavigate }: Props) {
   const [lote, setLote] = useState(`LOTE-ENO-${hojeISO().slice(2).replace(/-/g, '')}`);
   const [dataFabricacao, setDataFabricacao] = useState(hojeISO());
   const [quantidadeEtiquetas, setQuantidadeEtiquetas] = useState('1');
+  // Lotes vindos das Ordens de Produção concluídas do produto
+  const [lotesOP, setLotesOP] = useState<OrdemProducao[]>([]);
+  const [opSelId, setOpSelId] = useState('');
+  const [versaoOps, setVersaoOps] = useState(0);
 
   useEffect(() => {
     const atualizar = () => setProdutos(carregarEstoqueProdutos());
+    const atualizarOps = () => setVersaoOps(v => v + 1);
     window.addEventListener('produtos_updated', atualizar);
-    return () => window.removeEventListener('produtos_updated', atualizar);
+    window.addEventListener(EVENTO_OPS, atualizarOps);
+    return () => {
+      window.removeEventListener('produtos_updated', atualizar);
+      window.removeEventListener(EVENTO_OPS, atualizarOps);
+    };
   }, []);
+
+  const aplicarLoteOP = (op?: OrdemProducao) => {
+    if (!op) {
+      setOpSelId('');
+      return;
+    }
+    setOpSelId(op.id);
+    setLote(op.lote || '');
+    if (op.data_fabricacao) setDataFabricacao(op.data_fabricacao);
+  };
+
+  // Ao trocar de produto, sugere o lote da OP concluída mais recente
+  useEffect(() => {
+    const lista = produtoSelId ? lotesConcluidosDoProduto(produtoSelId) : [];
+    setLotesOP(lista);
+    if (lista.length > 0 && !lista.some(o => o.id === opSelId)) aplicarLoteOP(lista[0]);
+    if (lista.length === 0) setOpSelId('');
+  }, [produtoSelId, versaoOps]);
 
   useEffect(() => {
     if (!produtos.some(p => p.id === produtoSelId)) setProdutoSelId(produtos[0]?.id || '');
@@ -69,7 +97,9 @@ export function ProdutosEtiqueta({ onNavigate }: Props) {
   }
 
   const dataFabricacaoFormatada = formatarDataBR(dataFabricacao);
-  const validadeFormatada = calcValidade();
+  const opSelecionada = lotesOP.find(o => o.id === opSelId);
+  // Validade da OP quando o lote veio dela; senão calculada pela ficha técnica
+  const validadeFormatada = opSelecionada?.data_validade ? formatarDataBR(opSelecionada.data_validade) : calcValidade();
   const codigoBarrasSimulado = `78989${Math.abs(produto.nome.length * 12345678).toString().padEnd(8, '0')}`;
 
   return (
@@ -129,13 +159,29 @@ export function ProdutosEtiqueta({ onNavigate }: Props) {
             </select>
           </div>
 
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Lote de Ordem de Produção concluída</label>
+            <select
+              value={opSelId}
+              onChange={(e) => aplicarLoteOP(lotesOP.find(o => o.id === e.target.value))}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
+            >
+              <option value="">{lotesOP.length > 0 ? '-- Lote manual (digitar abaixo) --' : '-- Nenhuma OP concluída deste produto --'}</option>
+              {lotesOP.map(o => (
+                <option key={o.id} value={o.id}>
+                  {o.lote} · {o.numero} · fab. {formatarDataBR(o.data_fabricacao)} · val. {formatarDataBR(o.data_validade)} · {o.quantidade_produzida_pacotes} pct
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block font-bold text-slate-700 mb-1">Número do Lote</label>
               <input
                 type="text"
                 value={lote}
-                onChange={(e) => setLote(e.target.value)}
+                onChange={(e) => { setLote(e.target.value); setOpSelId(''); }}
                 className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
               />
             </div>
@@ -145,7 +191,7 @@ export function ProdutosEtiqueta({ onNavigate }: Props) {
               <input
                 type="date"
                 value={dataFabricacao}
-                onChange={(e) => setDataFabricacao(e.target.value)}
+                onChange={(e) => { setDataFabricacao(e.target.value); setOpSelId(''); }}
                 className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
               />
             </div>
