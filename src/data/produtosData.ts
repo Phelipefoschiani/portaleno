@@ -1,5 +1,7 @@
 // Módulo de Dados de Produtos, Formulações, Custos e Estoques do Grupo ENO
 
+import { hojeISO } from '../lib/datas';
+
 export interface ItemMateriaPrimaReceita {
   materia_prima_id: string;
   materia_prima_nome: string;
@@ -75,8 +77,8 @@ export interface MateriaPrimaEstoque {
   id: string;
   codigo: string;
   nome: string;
-  categoria: 'Raiz In Natura' | 'Biomassa / Lenha' | 'Embalagens' | 'Insumos Industriais';
-  unidade_medida: 'KG' | 'TON' | 'ESTÉREO (m³)' | 'UN' | 'LITRO';
+  categoria: 'Raiz In Natura' | 'Ingredientes' | 'Biomassa / Lenha' | 'Embalagens' | 'Insumos Industriais';
+  unidade_medida: 'KG' | 'G' | 'TON' | 'ESTÉREO (m³)' | 'UN' | 'LITRO' | 'ML';
   estoque_atual: number;
   estoque_minimo: number;
   custo_medio_unitario: number;
@@ -143,7 +145,7 @@ export interface TabelaPreco {
 // UNIDADES DE MEDIDA (normalização e conversão)
 // ============================================================
 
-export type UnidadeNormalizada = 'KG' | 'TON' | 'UN' | 'LITRO' | 'M3' | string;
+export type UnidadeNormalizada = 'KG' | 'G' | 'TON' | 'UN' | 'LITRO' | 'ML' | 'M3' | string;
 
 // Normaliza variações de escrita ('Toneladas', 'TON', 't', 'Kg', 'Litros', 'Sacos'...) para um código único
 export function normalizarUnidade(unidade?: string | null): UnidadeNormalizada {
@@ -155,8 +157,10 @@ export function normalizarUnidade(unidade?: string | null): UnidadeNormalizada {
     .replace(/\s+/g, ' ');
   if (!s) return '';
   if (['KG', 'KGS', 'QUILO', 'QUILOS', 'KILO', 'KILOS', 'QUILOGRAMA', 'QUILOGRAMAS'].includes(s)) return 'KG';
+  if (['G', 'GR', 'GRS', 'GRAMA', 'GRAMAS'].includes(s)) return 'G';
   if (['TON', 'TONS', 'T', 'TONELADA', 'TONELADAS'].includes(s)) return 'TON';
   if (['L', 'LT', 'LTS', 'LITRO', 'LITROS'].includes(s)) return 'LITRO';
+  if (['ML', 'MILILITRO', 'MILILITROS'].includes(s)) return 'ML';
   if (s.startsWith('ESTEREO') || s === 'M3' || s === 'M³') return 'M3';
   if ([
     'UN', 'UND', 'UNID', 'UNIDADE', 'UNIDADES', 'PC', 'PCS', 'PECA', 'PECAS',
@@ -170,8 +174,11 @@ export function converterQuantidade(quantidade: number, de?: string | null, para
   const a = normalizarUnidade(de);
   const b = normalizarUnidade(para);
   if (!a || !b || a === b) return quantidade;
-  if (a === 'KG' && b === 'TON') return quantidade / 1000;
-  if (a === 'TON' && b === 'KG') return quantidade * 1000;
+  // Massa (em gramas) e volume (em mililitros) convertem entre si dentro do mesmo grupo
+  const massa: Record<string, number> = { G: 1, KG: 1000, TON: 1000000 };
+  const volume: Record<string, number> = { ML: 1, LITRO: 1000 };
+  if (massa[a] && massa[b]) return (quantidade * massa[a]) / massa[b];
+  if (volume[a] && volume[b]) return (quantidade * volume[a]) / volume[b];
   return null;
 }
 
@@ -421,6 +428,108 @@ export function salvarMateriaPrima(dados: MateriaPrimaEstoque[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(STORAGE_KEY_MATERIA_PRIMA, JSON.stringify(dados));
   window.dispatchEvent(new Event('produtos_updated'));
+}
+
+// ============================================================
+// MOVIMENTAÇÃO MANUAL DO ESTOQUE DE MATÉRIA-PRIMA (com histórico)
+// ENTRADA: abastecimento/recebimento (recalcula custo médio ponderado)
+// SAIDA: uso/abertura de embalagem | PERDA: avaria, vencido, descarte
+// AJUSTE: contagem física (o saldo passa a ser a quantidade contada)
+// ============================================================
+
+export type TipoMovimentoMP = 'ENTRADA' | 'SAIDA' | 'PERDA' | 'AJUSTE';
+
+export interface MovimentoMateriaPrima {
+  id: string;
+  materia_prima_id: string;
+  materia_prima_nome: string;
+  tipo: TipoMovimentoMP;
+  quantidade: number; // na unidade da matéria-prima (no AJUSTE: diferença aplicada)
+  unidade_medida: string;
+  saldo_anterior: number;
+  saldo_posterior: number;
+  custo_unitario?: number;
+  data: string; // AAAA-MM-DD
+  registrado_em: string; // ISO completo
+  observacao?: string;
+}
+
+const STORAGE_KEY_MOVIMENTOS_MP = 'grupo_eno_movimentos_mp_v1';
+
+export function carregarMovimentosMateriaPrima(materiaPrimaId?: string): MovimentoMateriaPrima[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_MOVIMENTOS_MP);
+    const lista: MovimentoMateriaPrima[] = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(lista)) return [];
+    return materiaPrimaId ? lista.filter(m => m.materia_prima_id === materiaPrimaId) : lista;
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * Registra um movimento e atualiza o saldo da matéria-prima.
+ * `gravarMateria=false` só registra o histórico (usado no saldo inicial do cadastro, que já grava a MP).
+ * Retorna a matéria-prima atualizada ou uma mensagem de erro.
+ */
+export function registrarMovimentoMateriaPrima(
+  mp: MateriaPrimaEstoque,
+  dados: { tipo: TipoMovimentoMP; quantidade: number; custo_unitario?: number; data?: string; observacao?: string },
+  gravarMateria = true
+): { materia?: MateriaPrimaEstoque; erro?: string } {
+  const qtd = Number(dados.quantidade);
+  if (!(qtd >= 0) || (dados.tipo !== 'AJUSTE' && !(qtd > 0))) {
+    return { erro: 'Informe uma quantidade maior que zero.' };
+  }
+  const saldoAnterior = gravarMateria ? Number(mp.estoque_atual) || 0 : 0;
+  if ((dados.tipo === 'SAIDA' || dados.tipo === 'PERDA') && qtd > saldoAnterior) {
+    return { erro: `Saldo insuficiente: há ${saldoAnterior} ${mp.unidade_medida} em estoque.` };
+  }
+
+  let saldoPosterior = saldoAnterior;
+  let custoMedio = Number(mp.custo_medio_unitario) || 0;
+  if (dados.tipo === 'ENTRADA') {
+    saldoPosterior = saldoAnterior + qtd;
+    const custoEntrada = Number(dados.custo_unitario);
+    if (custoEntrada > 0 && saldoPosterior > 0) {
+      custoMedio = (saldoAnterior * custoMedio + qtd * custoEntrada) / saldoPosterior;
+    }
+  } else if (dados.tipo === 'SAIDA' || dados.tipo === 'PERDA') {
+    saldoPosterior = saldoAnterior - qtd;
+  } else {
+    saldoPosterior = qtd; // AJUSTE: quantidade contada
+  }
+  saldoPosterior = parseFloat(saldoPosterior.toFixed(4));
+
+  const atualizada: MateriaPrimaEstoque = {
+    ...mp,
+    estoque_atual: saldoPosterior,
+    custo_medio_unitario: parseFloat(custoMedio.toFixed(6)),
+    status: calcularStatusMateriaPrima(saldoPosterior, mp.estoque_minimo)
+  };
+
+  if (gravarMateria) {
+    salvarMateriaPrima(carregarMateriaPrima().map(m => (m.id === mp.id ? atualizada : m)));
+  }
+
+  const movimento: MovimentoMateriaPrima = {
+    id: `mov_mp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    materia_prima_id: mp.id,
+    materia_prima_nome: mp.nome,
+    tipo: dados.tipo,
+    quantidade: dados.tipo === 'AJUSTE' ? parseFloat((saldoPosterior - saldoAnterior).toFixed(4)) : qtd,
+    unidade_medida: mp.unidade_medida,
+    saldo_anterior: saldoAnterior,
+    saldo_posterior: saldoPosterior,
+    custo_unitario: dados.tipo === 'ENTRADA' && Number(dados.custo_unitario) > 0 ? Number(dados.custo_unitario) : undefined,
+    data: dados.data || hojeISO(),
+    registrado_em: new Date().toISOString(),
+    observacao: dados.observacao?.trim() || undefined
+  };
+  localStorage.setItem(STORAGE_KEY_MOVIMENTOS_MP, JSON.stringify([movimento, ...carregarMovimentosMateriaPrima()]));
+  window.dispatchEvent(new Event('produtos_updated'));
+  return { materia: atualizada };
 }
 
 // Lê as receitas com custos recalculados pelo custo médio atual das matérias-primas
