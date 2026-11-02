@@ -297,7 +297,8 @@ export function CadastroFornecedores() {
   const [novoItemUnidade, setNovoItemUnidade] = useState('UN');
   const [novoItemCategoria, setNovoItemCategoria] = useState<'Matéria-Prima' | 'Embalagens' | 'Insumos Agrícolas' | 'Químicos' | 'Outros'>('Matéria-Prima');
   const [novoItemCodigoFornecedor, setNovoItemCodigoFornecedor] = useState('');
-  const [cadastrarNoEstoqueMateriaPrima, setCadastrarNoEstoqueMateriaPrima] = useState(true);
+  // Matéria-prima só é criada em Produtos → Matéria-Prima; aqui nunca cadastra no estoque
+  const cadastrarNoEstoqueMateriaPrima = false;
 
   const toggleExpandirCompra = (compraId: string) => {
     setCompraExpandidaId(prev => (prev === compraId ? null : compraId));
@@ -1335,19 +1336,11 @@ export function CadastroFornecedores() {
                 <div className="p-4 rounded-xl bg-emerald-50/50 border border-emerald-200/90 space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="block text-xs font-bold text-emerald-950">
-                      Cadastrar novo item fornecido e integrar ao estoque:
+                      Item fornecido que não é matéria-prima (serviço, peça, outros):
                     </span>
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={cadastrarNoEstoqueMateriaPrima}
-                        onChange={(e) => setCadastrarNoEstoqueMateriaPrima(e.target.checked)}
-                        className="w-4 h-4 rounded text-emerald-700 focus:ring-emerald-500 border-slate-300 cursor-pointer"
-                      />
-                      <span className="text-xs font-bold text-emerald-900">
-                        Cadastrar também em Matéria Prima (Estoque)
-                      </span>
-                    </label>
+                    <span className="text-[11px] font-semibold text-emerald-900">
+                      Matéria-prima se cadastra em Produtos → Matéria-Prima e depois se vincula pelo catálogo.
+                    </span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">

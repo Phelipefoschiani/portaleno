@@ -193,14 +193,15 @@ export function ProdutosReceita({ onNavigate }: Props) {
 
   // Adicionar Nova Linha de Matéria-Prima no Formulário
   const handleAdicionarLinhaMateriaPrima = () => {
-    const primeiro = materiasPrimasDisponiveis[0];
+    // A receita só usa matérias-primas já cadastradas (não cria matéria-prima aqui)
+    if (materiasPrimasDisponiveis.length === 0) return;
     const novaLinha: ItemMateriaPrimaReceita = {
-      materia_prima_id: primeiro ? primeiro.id : `custom_${Date.now()}`,
-      materia_prima_nome: primeiro ? primeiro.nome : 'Nova Matéria-Prima',
+      materia_prima_id: '',
+      materia_prima_nome: '',
       quantidade: 1,
-      unidade_medida: primeiro ? primeiro.unidade_medida : 'KG',
-      custo_unitario: primeiro ? primeiro.custo_medio_unitario : 0,
-      custo_total: primeiro ? primeiro.custo_medio_unitario : 0
+      unidade_medida: '',
+      custo_unitario: 0,
+      custo_total: 0
     };
     setFormMateriasPrimas([...formMateriasPrimas, novaLinha]);
   };
@@ -298,6 +299,17 @@ export function ProdutosReceita({ onNavigate }: Props) {
 
     if (formMateriasPrimas.length === 0) {
       setFormErro('Adicione ao menos uma matéria-prima utilizada na receita.');
+      return;
+    }
+
+    // Só matérias-primas cadastradas em Produtos → Matéria-Prima
+    const idsCadastrados = new Set(materiasPrimasDisponiveis.map(m => m.id));
+    if (formMateriasPrimas.some(item => !idsCadastrados.has(item.materia_prima_id))) {
+      setFormErro('Selecione apenas matérias-primas cadastradas em Matéria-Prima. Remova as linhas sem matéria-prima selecionada.');
+      return;
+    }
+    if (formMateriasPrimas.some(item => !(Number(item.quantidade) > 0))) {
+      setFormErro('Informe a quantidade usada de cada matéria-prima (maior que zero).');
       return;
     }
 
@@ -834,12 +846,28 @@ export function ProdutosReceita({ onNavigate }: Props) {
                   <button
                     type="button"
                     onClick={handleAdicionarLinhaMateriaPrima}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs shrink-0"
+                    disabled={materiasPrimasDisponiveis.length === 0}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>+ Adicionar Matéria-Prima</span>
                   </button>
                 </div>
+
+                {materiasPrimasDisponiveis.length === 0 && (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-900 flex flex-wrap items-center justify-between gap-2">
+                    <span>Nenhuma matéria-prima cadastrada. Cadastre primeiro em <b>Matéria-Prima</b> para montar a receita.</span>
+                    {onNavigate && (
+                      <button
+                        type="button"
+                        onClick={() => { setModalReceitaAberto(false); onNavigate('produtos_materia_prima'); }}
+                        className="px-2.5 py-1 rounded-lg bg-white border border-amber-400 font-bold text-amber-900 hover:bg-amber-100 cursor-pointer"
+                      >
+                        Cadastrar Matéria-Prima →
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {/* Tabela de Insumos */}
                 <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
@@ -857,33 +885,31 @@ export function ProdutosReceita({ onNavigate }: Props) {
                     <tbody className="divide-y divide-slate-100 text-xs">
                       {formMateriasPrimas.map((item, idx) => (
                         <tr key={idx} className="hover:bg-slate-50/80">
-                          {/* Seleção ou Digitação da Matéria-Prima */}
+                          {/* Seleção da Matéria-Prima cadastrada (obrigatória) */}
                           <td className="py-2 px-3">
-                            <input
-                              type="text"
-                              required
-                              value={item.materia_prima_nome}
-                              onChange={(e) => handleAtualizarLinhaMateriaPrima(idx, 'materia_prima_nome', e.target.value)}
-                              placeholder="O que quer colocar (ex: Mandioca, Sal, Embalagem...)"
-                              className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-700 mb-1"
-                            />
                             <select
-                              value={item.materia_prima_id}
+                              required
+                              value={materiasPrimasDisponiveis.some(mp => mp.id === item.materia_prima_id) ? item.materia_prima_id : ''}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 if (val) {
                                   handleAtualizarLinhaMateriaPrima(idx, 'materia_prima_id', val);
                                 }
                               }}
-                              className="w-full bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-[10px] text-slate-600 focus:outline-none cursor-pointer font-medium"
+                              className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-700 cursor-pointer"
                             >
-                              <option value="">-- Puxar de Insumo Cadastrado (opcional) --</option>
+                              <option value="">-- Selecione a matéria-prima --</option>
                               {materiasPrimasDisponiveis.map(mp => (
                                 <option key={mp.id} value={mp.id}>
                                   {mp.nome} ({mp.unidade_medida} - R$ {mp.custo_medio_unitario.toFixed(2)})
                                 </option>
                               ))}
                             </select>
+                            {item.materia_prima_id && !materiasPrimasDisponiveis.some(mp => mp.id === item.materia_prima_id) && (
+                              <span className="block mt-1 text-[10px] font-bold text-red-600">
+                                "{item.materia_prima_nome}" não está cadastrada em Matéria-Prima — selecione uma cadastrada.
+                              </span>
+                            )}
                           </td>
 
                           {/* Quanto que usa */}
@@ -901,25 +927,13 @@ export function ProdutosReceita({ onNavigate }: Props) {
                           </td>
 
                           {/* Unidade */}
-                          <td className="py-2 px-3 font-mono font-semibold text-slate-700 text-xs">
-                            <input
-                              type="text"
-                              value={item.unidade_medida}
-                              onChange={(e) => handleAtualizarLinhaMateriaPrima(idx, 'unidade_medida', e.target.value.toUpperCase())}
-                              className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-center text-slate-800 uppercase focus:outline-none focus:border-emerald-700"
-                            />
+                          <td className="py-2 px-3 font-mono font-bold text-slate-700 text-xs text-center">
+                            {item.unidade_medida || '-'}
                           </td>
 
-                          {/* Custo Unitário */}
-                          <td className="py-2 px-3">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={item.custo_unitario ?? 0}
-                              onChange={(e) => handleAtualizarLinhaMateriaPrima(idx, 'custo_unitario', e.target.value)}
-                              className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-800 text-right focus:outline-none focus:border-emerald-700"
-                            />
+                          {/* Custo Unitário (vem do cadastro da matéria-prima) */}
+                          <td className="py-2 px-3 text-right font-mono text-slate-800">
+                            {(item.custo_unitario || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                           </td>
 
                           {/* Subtotal */}
