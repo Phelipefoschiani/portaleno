@@ -245,21 +245,42 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       };
     });
 
+  const montarPdf = (tab: TabelaPreco) =>
+    gerarPdfTabelaPreco({
+      nome: tab.nome,
+      codigo: tab.codigo,
+      segmento: tab.tipo,
+      vigencia: textoVigencia(tab),
+      pagamento: tab.prazo_padrao,
+      frete: tab.frete_tipo,
+      mostrarUnitario: mostraUnitario(tab),
+      mostrarAcondicionamento: mostraAcondicionamento(tab),
+      linhas: linhasDocumento(tab)
+    });
+
+  // Prévia A4 no visualizador = o mesmo PDF que é baixado
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!tabelaVisualizar) return;
+    let url: string | null = null;
+    let cancelado = false;
+    setPdfPreviewUrl(null);
+    montarPdf(tabelaVisualizar).then(doc => {
+      if (cancelado) return;
+      url = URL.createObjectURL(doc.output('blob'));
+      setPdfPreviewUrl(url);
+    });
+    return () => {
+      cancelado = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [tabelaVisualizar]);
+
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const handlePdf = async (tab: TabelaPreco, acao: 'baixar' | 'imprimir') => {
     setGerandoPdf(true);
     try {
-      const doc = await gerarPdfTabelaPreco({
-        nome: tab.nome,
-        codigo: tab.codigo,
-        segmento: tab.tipo,
-        vigencia: textoVigencia(tab),
-        pagamento: tab.prazo_padrao,
-        frete: tab.frete_tipo,
-        mostrarUnitario: mostraUnitario(tab),
-        mostrarAcondicionamento: mostraAcondicionamento(tab),
-        linhas: linhasDocumento(tab)
-      });
+      const doc = await montarPdf(tab);
       if (acao === 'baixar') {
         const slug = tab.nome.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '-').toLowerCase();
         doc.save(`tabela-preco-${slug}-${hojeISO()}.pdf`);
@@ -789,7 +810,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       {/* 6. MODAL VISUALIZAR TABELA DE PREÇOS (PRONTO PARA FOTO, WHATSAPP OU PDF) */}
       {tabelaVisualizar && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-4xl lg:max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
+          <div className="relative w-full max-w-4xl lg:max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto h-[calc(100vh-2rem)] sm:h-[calc(100vh-3.5rem)]">
             
             {/* Barra Superior de Ações */}
             <div className="bg-slate-900 text-white px-6 py-3.5 flex items-center justify-between border-b border-slate-800 shrink-0">
@@ -818,147 +839,19 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
             </div>
 
             {/* Conteúdo Imprimível / Catálogo Comercial Formatado */}
-            {/* Folha da tabela (mesmo desenho do PDF) sobre fundo escuro, como prova de impressão */}
-            <div className="overflow-y-auto flex-1 bg-[#1b2a22] p-3 sm:p-6">
-              {/* Uso interno: fica fora da folha, nunca vai para o PDF */}
-              <label className="mb-3 flex items-center gap-2 text-[11px] text-emerald-100/80 font-medium cursor-pointer w-fit">
-                <input
-                  type="checkbox"
-                  checked={mostrarCustos}
-                  onChange={(e) => setMostrarCustos(e.target.checked)}
-                  className="w-3.5 h-3.5 cursor-pointer accent-emerald-500"
+            {/* Prévia A4: é o próprio PDF que será baixado */}
+            <div className="flex-1 bg-[#1b2a22] p-2 sm:p-4 min-h-[60vh] flex">
+              {pdfPreviewUrl ? (
+                <iframe
+                  src={`${pdfPreviewUrl}#zoom=page-fit&navpanes=0`}
+                  title="Prévia A4 da tabela de preços"
+                  className="flex-1 w-full rounded-md bg-white"
                 />
-                Mostrar custo e margem na tela (uso interno, não sai no PDF)
-              </label>
-
-              <div id="tabela-preco-imprimivel" className="mx-auto max-w-[820px] bg-[#fbfaf5] rounded-sm shadow-[0_30px_60px_-25px_rgba(0,0,0,0.6)] overflow-hidden text-[#171e1a]">
-                <FaixaMarcaEno
-                  rotulo="Tabela de Preços"
-                  titulo={tabelaVisualizar.nome}
-                  subtitulo={`Código ${tabelaVisualizar.codigo} · Emitida em ${new Date().toLocaleDateString('pt-BR')}`}
-                />
-
-                {/* Condições da tabela */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 px-6 sm:px-8 py-4 gap-y-3 border-b border-[#e6e1d2]">
-                  {[
-                    ['Vigência', textoVigencia(tabelaVisualizar)],
-                    ['Pagamento', tabelaVisualizar.prazo_padrao || '-'],
-                    ['Frete', tabelaVisualizar.frete_tipo || '-'],
-                    ['Segmento', tabelaVisualizar.tipo || '-']
-                  ].map(([rotulo, valor], i) => (
-                    <div key={rotulo} className={`pr-3 ${i > 0 ? 'sm:pl-4 sm:border-l sm:border-[#ddd6c4]' : ''}`}>
-                      <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6e7470]">{rotulo}</div>
-                      <div className="text-[13px] font-bold text-[#171e1a] mt-0.5 leading-snug">{valor}</div>
-                    </div>
-                  ))}
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-emerald-100/80 text-xs font-bold">
+                  Gerando prévia A4...
                 </div>
-
-                {/* Produtos por categoria */}
-                {(() => {
-                  const verUn = mostraUnitario(tabelaVisualizar);
-                  const verCx = mostraAcondicionamento(tabelaVisualizar);
-                  const lista = produtosDaTabelaPreco(tabelaVisualizar);
-                  const grupos = new Map<string, ProdutoEstoque[]>();
-                  lista.forEach(p => {
-                    const cat = p.categoria || 'Sem categoria';
-                    if (!grupos.has(cat)) grupos.set(cat, []);
-                    grupos.get(cat)!.push(p);
-                  });
-                  return (
-                    <div className="px-4 sm:px-8 py-5 overflow-x-auto">
-                      <table className="w-full min-w-[560px] text-left border-collapse">
-                        <thead>
-                          <tr className="bg-[#0b3d24] text-white text-[10px] font-bold uppercase tracking-[0.12em]">
-                            <th className="py-2.5 pl-4 pr-3 rounded-l-md">Produto</th>
-                            <th className="py-2.5 px-3">Peso / Embalagem</th>
-                            {mostrarCustos && <th className="py-2.5 px-3 text-right text-amber-200">Custo</th>}
-                            {mostrarCustos && <th className="py-2.5 px-3 text-right text-amber-200">Margem</th>}
-                            {verUn && <th className={`py-2.5 px-3 text-right ${verCx ? '' : 'rounded-r-md'}`}>Preço unitário</th>}
-                            {verCx && <th className="py-2.5 pl-3 pr-4 text-right rounded-r-md">Preço caixa / fardo</th>}
-                          </tr>
-                        </thead>
-                        {lista.length === 0 && (
-                          <tbody>
-                            <tr>
-                              <td colSpan={6} className="py-10 text-center text-[#6e7470] text-xs">
-                                Nenhum produto com preço nesta tabela. Clique em <b>Editar</b> e preencha o valor dos produtos.
-                              </td>
-                            </tr>
-                          </tbody>
-                        )}
-                        {[...grupos.entries()].map(([categoria, itens]) => (
-                          <tbody key={categoria}>
-                            <tr>
-                              <td colSpan={6} className="pt-3">
-                                <div className="flex items-center justify-between bg-[#f3ead3] border-l-[3px] border-[#c9a24a] px-3 py-1.5">
-                                  <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#064e3b]">{categoria}</span>
-                                  <span className="text-[10px] text-[#6e7470] tabular-nums">{itens.length} {itens.length === 1 ? 'item' : 'itens'}</span>
-                                </div>
-                              </td>
-                            </tr>
-                            {itens.map((p, idx) => {
-                              const calc = calcularPrecoNaTabela(p, tabelaVisualizar);
-                              return (
-                                <tr key={p.id} className={`border-b border-[#e6e1d2] ${idx % 2 === 1 ? 'bg-[#f6f3ea]' : ''} ${mostrarCustos && calc.margem_negativa ? '!bg-red-50' : ''}`}>
-                                  <td className="py-2.5 pl-4 pr-3">
-                                    <div className="text-[13px] font-bold text-[#171e1a]">{p.nome}</div>
-                                    <div className="text-[10px] text-[#6e7470] tabular-nums">{p.codigo}</div>
-                                  </td>
-                                  <td className="py-2.5 px-3 text-xs text-[#171e1a]">
-                                    {[pesoTexto(p), calc.unidades > 1 ? `${calc.tipo_acondicionamento} c/ ${calc.unidades} un` : 'Unidade avulsa'].filter(Boolean).join(' · ')}
-                                  </td>
-                                  {mostrarCustos && (
-                                    <td className="py-2.5 px-3 text-right text-xs tabular-nums text-[#6e7470]">
-                                      {calc.custo > 0 ? formatarMoeda(calc.custo) : '—'}
-                                    </td>
-                                  )}
-                                  {mostrarCustos && (
-                                    <td className={`py-2.5 px-3 text-right text-xs tabular-nums font-bold ${calc.margem_negativa ? 'text-red-700' : 'text-[#064e3b]'}`}>
-                                      {formatarMoeda(calc.margem_liquida)}
-                                      <span className="block text-[9px] font-normal">
-                                        {calc.margem_negativa ? 'negativa' : `${(calc.margem_liquida_percentual ?? 0).toFixed(1)}%`}
-                                      </span>
-                                    </td>
-                                  )}
-                                  {verUn && (
-                                    <td className="py-2.5 px-3 text-right text-[15px] font-black tabular-nums text-[#064e3b] whitespace-nowrap">
-                                      {formatarMoeda(calc.preco)}
-                                    </td>
-                                  )}
-                                  {verCx && (
-                                    <td className="py-2.5 pl-3 pr-4 text-right whitespace-nowrap">
-                                      <div className="text-[15px] font-black tabular-nums text-[#171e1a]">{formatarMoeda(calc.preco_acondicionamento)}</div>
-                                      <div className="text-[10px] text-[#6e7470]">por {(calc.unidades > 1 ? String(calc.tipo_acondicionamento) : 'unidade').toLowerCase()}</div>
-                                    </td>
-                                  )}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        ))}
-                      </table>
-                    </div>
-                  );
-                })()}
-
-                {/* Condições comerciais (dados reais da tabela) */}
-                <div className="px-6 sm:px-8 pb-5">
-                  <div className="w-10 h-[2px] bg-[#c9a24a] mb-2" />
-                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#064e3b] mb-1.5">Condições comerciais</div>
-                  <ul className="text-[11px] text-[#171e1a] space-y-1">
-                    <li>· Valores em reais (R$), válidos durante a vigência indicada no topo.</li>
-                    <li>· Pagamento: {tabelaVisualizar.prazo_padrao || 'a combinar'}. Frete: {tabelaVisualizar.frete_tipo || 'a combinar'}.</li>
-                    <li>· Pedidos sujeitos à análise de crédito e à disponibilidade de estoque.</li>
-                  </ul>
-                </div>
-
-                <div className="px-6 sm:px-8 py-3 border-t border-[#ddd6c4] flex flex-wrap items-center justify-between gap-2 text-[10px] text-[#6e7470]">
-                  <span>Grupo ENO Agroindustrial · Tabela {tabelaVisualizar.nome} ({tabelaVisualizar.codigo})</span>
-                  <span className="tabular-nums">
-                    {(() => { const n = produtosDaTabelaPreco(tabelaVisualizar).length; return `${n} ${n === 1 ? 'produto' : 'produtos'}`; })()}
-                  </span>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Rodapé de Ações do Modal */}

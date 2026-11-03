@@ -43,6 +43,7 @@ const moeda = (v: number) => (Number(v) || 0).toLocaleString('pt-BR', { style: '
 
 export async function gerarPdfTabelaPreco(dados: DadosTabelaPrecoPdf): Promise<jsPDF> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  doc.setProperties({ title: `Tabela de Preços ${dados.nome} (${dados.codigo})` });
   const L = 210;
   const A = 297;
   const M = 14; // margem lateral

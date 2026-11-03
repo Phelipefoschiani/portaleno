@@ -468,21 +468,11 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     if (!printRef.current) return;
     try {
       setGerandoExportacao(true);
-      const zoomSalvo = zoomDocumento;
-      if (zoomDocumento !== 100) {
-        setZoomDocumento(100);
-        await new Promise(r => setTimeout(r, 60));
-      }
-
       const canvas = await html2canvas(printRef.current, {
         scale: 2,
         useCORS: true,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#fbfaf5'
       });
-
-      if (zoomSalvo !== 100) {
-        setZoomDocumento(zoomSalvo);
-      }
 
       const dataUrl = canvas.toDataURL('image/png');
       const link = document.createElement('a');
@@ -498,23 +488,39 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     }
   };
 
+  // Prévia A4 no visualizador = o mesmo PDF que é baixado (refeita ao trocar nome do documento ou modo)
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!modalDetalhes) return;
+    let url: string | null = null;
+    let cancelado = false;
+    setPdfPreviewUrl(null);
+    const timer = setTimeout(async () => {
+      if (!printRef.current || cancelado) return;
+      try {
+        const pdf = await gerarPdfDeElemento(printRef.current);
+        if (cancelado) return;
+        pdf.setProperties({ title: `${tipoDocumentoVisualizacao} ${modalDetalhes.numero_pedido} - ${modalDetalhes.cliente_nome}` });
+        url = URL.createObjectURL(pdf.output('blob'));
+        setPdfPreviewUrl(url);
+      } catch (err) {
+        console.error('Erro ao gerar prévia:', err);
+      }
+    }, 150);
+    return () => {
+      cancelado = true;
+      clearTimeout(timer);
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [modalDetalhes, tipoDocumentoVisualizacao, modoExibicao]);
+
   // Exportar Documento PDF Oficial A4
   const exportarPDF = async (pedido: PedidoVenda) => {
     if (!printRef.current) return;
     try {
       setGerandoExportacao(true);
-      const zoomSalvo = zoomDocumento;
-      if (zoomDocumento !== 100) {
-        setZoomDocumento(100);
-        await new Promise(r => setTimeout(r, 60));
-      }
-
       // Documento inteiro, com quebra de página entre os itens
       const pdf = await gerarPdfDeElemento(printRef.current);
-
-      if (zoomSalvo !== 100) {
-        setZoomDocumento(zoomSalvo);
-      }
 
       const modoTag = modoExibicao === 'FARDO' ? 'Fardo' : 'Unitario';
       const nomeArquivo = `${tipoDocumentoVisualizacao.replace(/\s+/g, '_')}_${pedido.numero_pedido}_${modoTag}.pdf`;
@@ -1595,7 +1601,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
       {/* 6. MODAL VISUALIZADOR DE DOCUMENTO COMERCIAL (PRÉVIA OFICIAL ANTES DE EXPORTAR) */}
       {modalDetalhes && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/80 backdrop-blur-xs p-2 sm:p-4 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-6xl xl:max-w-7xl bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-700 flex flex-col my-auto max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2.5rem)]">
+          <div className="relative w-full max-w-6xl xl:max-w-7xl bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-700 flex flex-col my-auto h-[calc(100vh-1.5rem)] sm:h-[calc(100vh-2.5rem)]">
             
             {/* 1. TOPO: TÍTULO DO VISUALIZADOR E CONTROLES DE ZOOM */}
             <div className="bg-slate-950 text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 shrink-0">
@@ -1616,37 +1622,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                 </div>
               </div>
 
-              {/* Controles de Zoom da Folha */}
+              {/* Zoom fica no próprio visualizador de PDF (Ctrl + roda do mouse) */}
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setZoomDocumento(prev => Math.max(70, prev - 10))}
-                    className="p-1 hover:bg-slate-700 rounded text-slate-300 hover:text-white cursor-pointer"
-                    title="Diminuir Zoom"
-                  >
-                    <ZoomOut className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="font-mono text-[11px] text-slate-200 w-10 text-center font-bold">
-                    {zoomDocumento}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setZoomDocumento(prev => Math.min(130, prev + 10))}
-                    className="p-1 hover:bg-slate-700 rounded text-slate-300 hover:text-white cursor-pointer"
-                    title="Aumentar Zoom"
-                  >
-                    <ZoomIn className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setZoomDocumento(100)}
-                    className="text-[10px] text-slate-400 hover:text-emerald-400 px-1 py-0.5 rounded cursor-pointer font-semibold"
-                    title="Ajustar para 100%"
-                  >
-                    100%
-                  </button>
-                </div>
 
                 <button
                   onClick={() => setModalDetalhes(null)}
@@ -1742,20 +1719,27 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
 
             </div>
 
-            {/* 3. ÁREA DE PRÉVIA ESTILO MESA DE TRABALHO COM FOLHA A4 */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-800/80 flex justify-center items-start">
-              <div
-                style={{
-                  transform: zoomDocumento !== 100 ? `scale(${zoomDocumento / 100})` : undefined,
-                  transformOrigin: 'top center',
-                  transition: 'transform 0.15s ease'
-                }}
-                className="w-full flex justify-center"
-              >
-                {/* FOLHA DO DOCUMENTO CAPTURÁVEL (mesmo estilo da Tabela de Preços) */}
+            {/* 3. PRÉVIA A4: é o próprio PDF que será baixado */}
+            <div className="flex-1 min-h-0 bg-slate-800/80 p-2 sm:p-4 flex">
+              {pdfPreviewUrl ? (
+                <iframe
+                  src={`${pdfPreviewUrl}#zoom=page-fit&navpanes=0`}
+                  title="Prévia A4 do documento"
+                  className="flex-1 w-full rounded-md bg-white"
+                />
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-slate-300 text-xs font-bold">
+                  Gerando prévia A4...
+                </div>
+              )}
+            </div>
+
+            {/* Folha de origem do PDF (fora da tela, largura de A4 = 794px) */}
+            <div aria-hidden="true" style={{ position: 'fixed', left: '-10000px', top: 0, pointerEvents: 'none' }}>
+              <div>
                 <div
                   ref={printRef}
-                  className="w-full max-w-[820px] bg-[#fbfaf5] text-[#171e1a] font-sans rounded-sm shadow-[0_30px_60px_-25px_rgba(0,0,0,0.6)] overflow-hidden text-xs"
+                  className="w-[794px] bg-[#fbfaf5] text-[#171e1a] font-sans overflow-hidden text-xs"
                 >
                   <FaixaMarcaEno
                     rotulo={
