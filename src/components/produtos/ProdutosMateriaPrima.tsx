@@ -26,6 +26,15 @@ import {
   MovimentoMateriaPrima,
   TipoMovimentoMP
 } from '../../data/produtosData';
+import {
+  carregarFornecedores,
+  definirFornecedorDaMateriaPrima,
+  ehMandioca,
+  EVENTO_CADASTROS_ATUALIZADOS,
+  fornecedoresDaMateriaPrima,
+  origemDaMateriaPrima,
+  SEM_FORNECEDOR
+} from '../../data/cadastrosData';
 import { ProdutosNavTabs } from './ProdutosNavTabs';
 
 interface Props {
@@ -50,6 +59,7 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
     estoque_minimo: 0,
     custo_medio_unitario: 0,
     fornecedor_principal: '',
+    fornecedor_id: '',
     localizacao_patio: ''
   });
 
@@ -61,7 +71,11 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
     recarregar();
     const handleUpdate = () => recarregar();
     window.addEventListener('produtos_updated', handleUpdate);
-    return () => window.removeEventListener('produtos_updated', handleUpdate);
+    window.addEventListener(EVENTO_CADASTROS_ATUALIZADOS, handleUpdate);
+    return () => {
+      window.removeEventListener('produtos_updated', handleUpdate);
+      window.removeEventListener(EVENTO_CADASTROS_ATUALIZADOS, handleUpdate);
+    };
   }, []);
 
   // Métricas
@@ -83,7 +97,7 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
       const match =
         m.nome.toLowerCase().includes(busca.toLowerCase()) ||
         m.codigo.toLowerCase().includes(busca.toLowerCase()) ||
-        m.fornecedor_principal.toLowerCase().includes(busca.toLowerCase());
+        origemDaMateriaPrima(m).texto.toLowerCase().includes(busca.toLowerCase());
 
       if (!match) return false;
       if (filtroCategoria !== 'TODAS' && m.categoria !== filtroCategoria) return false;
@@ -103,6 +117,7 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
       estoque_minimo: 0,
       custo_medio_unitario: 0,
       fornecedor_principal: '',
+      fornecedor_id: '',
       localizacao_patio: ''
     });
     setModalAberto(true);
@@ -119,6 +134,7 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
       estoque_minimo: item.estoque_minimo,
       custo_medio_unitario: item.custo_medio_unitario,
       fornecedor_principal: item.fornecedor_principal,
+      fornecedor_id: fornecedoresDaMateriaPrima(item)[0]?.id || '',
       localizacao_patio: item.localizacao_patio
     });
     setModalAberto(true);
@@ -130,9 +146,16 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
       alert('Selecione a categoria e a unidade de medida do insumo.');
       return;
     }
-    const dados = formData as typeof formData & {
-      categoria: MateriaPrimaEstoque['categoria'];
-      unidade_medida: MateriaPrimaEstoque['unidade_medida'];
+    // Fornecedor: mandioca vem dos Agricultores; demais, do fornecedor escolhido (ou "Sem fornecedor")
+    const { fornecedor_id: fornecedorId, ...semFornecedorId } = formData;
+    const mandioca = formData.categoria === 'Raiz In Natura';
+    const fornecedorSel = !mandioca && fornecedorId ? carregarFornecedores().find(f => f.id === fornecedorId) : undefined;
+    const dados = {
+      ...semFornecedorId,
+      fornecedor_principal: mandioca ? 'Agricultores' : fornecedorSel ? (fornecedorSel.fantasia || fornecedorSel.razao_nome) : ''
+    } as Omit<MateriaPrimaEstoque, 'id' | 'status'>;
+    const gravarVinculoFornecedor = (mp: MateriaPrimaEstoque) => {
+      if (!ehMandioca(mp)) definirFornecedorDaMateriaPrima(mp, fornecedorId);
     };
 
     if (modoEdicao) {
@@ -161,6 +184,8 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
         return m;
       });
       salvarMateriaPrima(atualizados);
+      const salva = atualizados.find(m => m.id === modoEdicao.id);
+      if (salva) gravarVinculoFornecedor(salva);
     } else {
       const status = calcularStatusMateriaPrima(dados.estoque_atual, dados.estoque_minimo);
       const novo: MateriaPrimaEstoque = {
@@ -177,6 +202,7 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
         }, false);
       }
       salvarMateriaPrima([novo, ...materias]);
+      gravarVinculoFornecedor(novo);
     }
     setModalAberto(false);
   };
@@ -352,7 +378,11 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
                       <td className="py-3.5 px-5">
                         <div className="font-bold text-slate-900">{item.nome}</div>
                         <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                          {item.codigo} • Fornec: {item.fornecedor_principal || 'Produtores Regionais'}
+                          {item.codigo} • Fornec:{' '}
+                          {(() => {
+                            const o = origemDaMateriaPrima(item);
+                            return <span className={o.semFornecedor ? 'font-sans font-bold text-amber-700' : ''}>{o.texto}</span>;
+                          })()}
                         </div>
                       </td>
 
@@ -539,14 +569,23 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Fornecedor Principal</label>
-                  <input
-                    type="text"
-                    value={formData.fornecedor_principal}
-                    onChange={(e) => setFormData({ ...formData, fornecedor_principal: e.target.value })}
-                    placeholder="Ex: Cooperativa ou Empresa"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700"
-                  />
+                  <label className="block font-bold text-slate-700 mb-1">Fornecedor</label>
+                  {formData.categoria === 'Raiz In Natura' ? (
+                    <div className="w-full bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-emerald-900 font-bold">
+                      Agricultores (Cadastro de Agricultores)
+                    </div>
+                  ) : (
+                    <select
+                      value={formData.fornecedor_id}
+                      onChange={(e) => setFormData({ ...formData, fornecedor_id: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
+                    >
+                      <option value="">{SEM_FORNECEDOR}</option>
+                      {carregarFornecedores().filter(f => f.ativo !== false).map(f => (
+                        <option key={f.id} value={f.id}>{f.fantasia || f.razao_nome}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
 

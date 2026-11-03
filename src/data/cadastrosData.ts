@@ -56,6 +56,76 @@ export function salvarFornecedores(lista: Fornecedor[]): void {
   gravarLista(STORAGE_KEY_FORNECEDORES, lista);
 }
 
+// =====================================================================
+// QUEM FORNECE CADA MATÉRIA-PRIMA
+// Mandioca (Raiz In Natura) vem dos Agricultores; as demais, dos Fornecedores
+// que têm a matéria-prima vinculada. Sem vínculo = "Sem fornecedor".
+// =====================================================================
+
+export const SEM_FORNECEDOR = 'Sem fornecedor';
+
+interface MateriaPrimaRef {
+  id: string;
+  nome: string;
+  codigo?: string;
+  categoria?: string;
+  unidade_medida?: string;
+}
+
+const itensFornecidos = (f: Fornecedor): any[] => {
+  const lista = (f as any).produtos_fornecidos;
+  return Array.isArray(lista) ? lista : [];
+};
+
+export const ehMandioca = (mp: MateriaPrimaRef) => mp.categoria === 'Raiz In Natura';
+
+/** Fornecedores cadastrados que têm esta matéria-prima vinculada. */
+export function fornecedoresDaMateriaPrima(mp: MateriaPrimaRef): Fornecedor[] {
+  return carregarFornecedores().filter(f => f.ativo !== false && itensFornecidos(f).some(i => String(i.materia_prima_id) === String(mp.id)));
+}
+
+/** Texto de origem exibido na lista de matérias-primas. */
+export function origemDaMateriaPrima(mp: MateriaPrimaRef): { texto: string; semFornecedor: boolean } {
+  if (ehMandioca(mp)) {
+    const qtd = carregarAgricultores().filter(a => a.ativo !== false).length;
+    return { texto: qtd > 0 ? `Agricultores (${qtd})` : 'Agricultores (nenhum cadastrado)', semFornecedor: qtd === 0 };
+  }
+  const nomes = fornecedoresDaMateriaPrima(mp).map(f => f.fantasia || f.razao_nome);
+  if (nomes.length > 0) return { texto: nomes.join(', '), semFornecedor: false };
+  return { texto: SEM_FORNECEDOR, semFornecedor: true };
+}
+
+/**
+ * Define o fornecedor de uma matéria-prima (grava o vínculo no cadastro do fornecedor).
+ * fornecedorId vazio = "Sem fornecedor" (remove os vínculos existentes).
+ */
+export function definirFornecedorDaMateriaPrima(mp: MateriaPrimaRef, fornecedorId: string): void {
+  const lista = carregarFornecedores().map(f => {
+    const itens = itensFornecidos(f);
+    const tem = itens.some(i => String(i.materia_prima_id) === String(mp.id));
+    if (f.id === fornecedorId) {
+      if (tem) return f;
+      const novo = {
+        id: `prod_${Date.now()}`,
+        produto_id: mp.id,
+        materia_prima_id: mp.id,
+        codigo_referencia: mp.codigo,
+        codigo_materia_prima: mp.codigo,
+        nome: mp.nome,
+        unidade: mp.unidade_medida || '',
+        categoria: mp.categoria === 'Embalagens' ? 'Embalagens' : 'Matéria-Prima',
+        integrado_materia_prima: true
+      };
+      return { ...f, produtos_fornecidos: [...itens, novo] } as Fornecedor;
+    }
+    if (tem) {
+      return { ...f, produtos_fornecidos: itens.filter(i => String(i.materia_prima_id) !== String(mp.id)) } as Fornecedor;
+    }
+    return f;
+  });
+  salvarFornecedores(lista);
+}
+
 // Compras de mandioca: a única fonte é o Cálculo na Roça (calculoRocaData.ts).
 // O antigo romaneio manual ('grupo_eno_romaneios_mandioca_v1') foi descontinuado.
 
