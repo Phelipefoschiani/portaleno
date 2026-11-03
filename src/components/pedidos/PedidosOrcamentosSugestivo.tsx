@@ -400,6 +400,15 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
       if (cli.prazo) setPrazoPagamentoForm(cli.prazo);
       // Tabela de preço do cadastro do cliente (se ativa e nenhum item lançado ainda)
       const tabCli = cli.tabela_preco_id ? tabelasDisponiveis.find(t => t.id === cli.tabela_preco_id) : undefined;
+      // RCA/portal: a tabela é sempre a do cliente (definida pela fábrica); troca refaz os itens
+      if (modoPortal) {
+        if (tabCli) handleTrocarTabela(tabCli.id);
+        else {
+          setTabelaIdForm('');
+          setItensForm([]);
+        }
+        return;
+      }
       if (tabCli && itensForm.length === 0) {
         setTabelaIdForm(tabCli.id);
         const obrig = modoObrigatorioDaTabela(tabCli);
@@ -711,7 +720,9 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
   const handleAddItem = () => {
     if (!tabelaIdForm) {
-      alert('Por favor, selecione primeiro uma Tabela de Preço para carregar os produtos e preços permitidos.');
+      alert(modoPortal
+        ? 'Este cliente ainda não tem tabela de preço liberada pela fábrica. Sem tabela não é possível lançar produtos.'
+        : 'Por favor, selecione primeiro uma Tabela de Preço para carregar os produtos e preços permitidos.');
       return;
     }
     const defaultProd = produtosFiltradosPorTabela[0];
@@ -752,8 +763,18 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
     }
 
     if (!tabelaIdForm) {
-      alert('Selecione uma Tabela de Preço válida para prosseguir.');
+      alert(modoPortal
+        ? 'Este cliente ainda não tem tabela de preço liberada pela fábrica. Peça ao administrador para definir a tabela no cadastro do cliente.'
+        : 'Selecione uma Tabela de Preço válida para prosseguir.');
       return;
+    }
+    // RCA/cliente: o pedido usa sempre a tabela do cadastro do cliente
+    if (modoPortal) {
+      const tabDoCliente = clientesDisponiveis.find(c => c.id === clienteIdForm)?.tabela_preco_id;
+      if (tabDoCliente !== tabelaIdForm) {
+        alert('A tabela de preço deste cliente mudou. Abra o pedido de novo para atualizar os preços.');
+        return;
+      }
     }
 
     if (itensForm.length === 0 || !itensForm[0].produtoId) {
@@ -1605,10 +1626,17 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Tabela de Preço *</label>
-                  {modoCliente ? (
-                    <div className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-bold truncate" title="Tabela do seu cadastro">
-                      {tabelasDisponiveis.find(t => t.id === tabelaIdForm)?.nome || 'Tabela não liberada'}
-                    </div>
+                  {modoPortal ? (
+                    // RCA e cliente: a tabela é a do cadastro do cliente, definida pela fábrica
+                    tabelasDisponiveis.find(t => t.id === tabelaIdForm) ? (
+                      <div className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-bold truncate" title="Tabela definida pela fábrica para este cliente">
+                        {tabelasDisponiveis.find(t => t.id === tabelaIdForm)?.nome}
+                      </div>
+                    ) : (
+                      <div className="w-full bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 text-amber-900 font-bold text-[11px]">
+                        {clienteIdForm ? 'Cliente sem tabela liberada — a fábrica precisa definir a tabela de preço' : 'Escolha o cliente'}
+                      </div>
+                    )
                   ) : tabelasDisponiveis.length === 0 ? (
                     <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-[11px] text-amber-900">
                       <div className="flex items-center gap-1.5 font-bold">

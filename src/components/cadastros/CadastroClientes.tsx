@@ -310,7 +310,8 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
       prazo_pagamento_id: 'livre',
       prazo_dias: '',
       vendedor_id: rcaFixoId || '',
-      tabela_preco_id: modoRca ? (rcasCadastrados.find(r => r.id === rcaFixoId)?.tabela_preco_padrao_id || '') : '',
+      // Tabela de preço é sempre definida pela fábrica (administrador); o RCA não escolhe
+      tabela_preco_id: '',
       ativo: true,
     });
     setAcessoExistente(undefined);
@@ -690,7 +691,9 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     </div>
                     {cli.fantasia && <div className="text-[11px] text-slate-500 truncate">{cli.fantasia}</div>}
                     <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">{cli.endereco.municipio}/{cli.endereco.uf} · {cli.telefone || 'sem telefone'}</div>
-                    <div className="text-[11px] text-emerald-800 font-semibold mt-0.5 truncate">{cli.tabela_preco_nome || 'Tabela padrão'} · {cli.prazo_pagamento_nome}</div>
+                    <div className={`text-[11px] font-semibold mt-0.5 truncate ${cli.tabela_preco_id ? 'text-emerald-800' : 'text-amber-700'}`}>
+                      {cli.tabela_preco_id ? cli.tabela_preco_nome : 'Sem tabela (aguardando fábrica)'} · {cli.prazo_pagamento_nome}
+                    </div>
                   </div>
                   <div className="flex flex-col gap-1.5 shrink-0">
                     <button
@@ -813,9 +816,9 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                           <UserCheck className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
                           <span className="truncate max-w-[170px]">{cli.vendedor_nome || 'Não vinculado'}</span>
                         </div>
-                        <div className="flex items-center gap-1 text-[11px] text-emerald-800 font-semibold mt-0.5">
-                          <Tag className="w-3 h-3 text-emerald-600 shrink-0" />
-                          <span className="truncate max-w-[170px]">{cli.tabela_preco_nome || 'Tabela Padrão'}</span>
+                        <div className={`flex items-center gap-1 text-[11px] font-semibold mt-0.5 ${cli.tabela_preco_id ? 'text-emerald-800' : 'text-amber-700'}`}>
+                          <Tag className={`w-3 h-3 shrink-0 ${cli.tabela_preco_id ? 'text-emerald-600' : 'text-amber-600'}`} />
+                          <span className="truncate max-w-[170px]">{cli.tabela_preco_id ? cli.tabela_preco_nome : 'Sem tabela — definir'}</span>
                         </div>
                       </td>
 
@@ -1272,24 +1275,39 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                 <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-sm flex flex-col justify-between">
                   <div>
                     <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                      Tabela de Preço Vinculada <span className="text-red-500">*</span>
-                      <span className="text-[10px] text-slate-400 font-mono ml-1.5">(tabela_preco_id)</span>
+                      Tabela de Preço Vinculada {!modoRca && <span className="text-red-500">*</span>}
                     </label>
-                    <select
-                      value={formData.tabela_preco_id}
-                      onChange={(e) => setFormData({ ...formData, tabela_preco_id: e.target.value })}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
-                    >
-                      <option value="">-- Sem tabela definida --</option>
-                      {opcoesTabelasPreco().map(tab => (
-                        <option key={tab.id} value={tab.id}>
-                          {tab.nome}
-                        </option>
-                      ))}
-                    </select>
+                    {modoRca ? (
+                      // RCA não define tabela: a fábrica libera depois
+                      (() => {
+                        const nome = opcoesTabelasPreco().find(t => t.id === formData.tabela_preco_id)?.nome;
+                        return nome ? (
+                          <div className="w-full px-3 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs sm:text-sm font-bold text-emerald-900">{nome}</div>
+                        ) : (
+                          <div className="w-full px-3 py-2.5 rounded-xl border border-amber-300 bg-amber-50 text-xs sm:text-sm font-bold text-amber-900">
+                            Aguardando a fábrica definir a tabela
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <select
+                        value={formData.tabela_preco_id}
+                        onChange={(e) => setFormData({ ...formData, tabela_preco_id: e.target.value })}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                      >
+                        <option value="">-- Sem tabela definida --</option>
+                        {opcoesTabelasPreco().map(tab => (
+                          <option key={tab.id} value={tab.id}>
+                            {tab.nome}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-2">
-                    Usada automaticamente nos orçamentos e pedidos de venda
+                    {modoRca
+                      ? 'A tabela de preço é definida pela fábrica. Até lá, não é possível fazer pedido para este cliente.'
+                      : 'Define os produtos e preços que o RCA e o cliente podem usar nos pedidos'}
                   </p>
                 </div>
 
