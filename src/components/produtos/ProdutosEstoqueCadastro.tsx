@@ -1007,23 +1007,6 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                     </div>
                   )}
 
-                  {/* Resumo Consolidado de Impostos */}
-                  <div className="pt-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                    <span className="font-bold text-slate-500">Impostos no custo (base Custo/Fixo):</span>
-                    <span className="font-mono font-black tabular-nums text-slate-900 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
-                      {formatarMoeda(calculosFormulario.impostosValor)} / unidade
-                    </span>
-                  </div>
-                  {(calculosFormulario.percentualVenda > 0 || calculosFormulario.valorFixoVenda > 0) && (
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                      <span className="font-bold text-slate-500">Impostos sobre a venda (entram na margem de cada tabela):</span>
-                      <span className="font-mono font-black tabular-nums text-amber-900 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200">
-                        {calculosFormulario.percentualVenda > 0 && `${calculosFormulario.percentualVenda.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% do preço da tabela`}
-                        {calculosFormulario.percentualVenda > 0 && calculosFormulario.valorFixoVenda > 0 && ' + '}
-                        {calculosFormulario.valorFixoVenda > 0 && `${formatarMoeda(calculosFormulario.valorFixoVenda)}/un`}
-                      </span>
-                    </div>
-                  )}
                 </div>
 
                 <div className="bg-emerald-900 p-4 rounded-2xl text-white flex items-center justify-between shadow-md">

@@ -14,7 +14,8 @@ import {
   Copy,
   Building2,
   AlertCircle,
-  LayoutList
+  LayoutList,
+  Download
 } from 'lucide-react';
 import {
   TabelaPreco,
@@ -37,6 +38,7 @@ import { formatarMoeda } from '../../data/financeiroData';
 import { formatarDataBR, hojeISO } from '../../lib/datas';
 import { ProdutosNavTabs } from './ProdutosNavTabs';
 import { CampoPrecoTabela } from './CampoPrecoTabela';
+import { gerarPdfTabelaPreco, LinhaTabelaPrecoPdf } from '../../lib/pdfTabelaPreco';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -224,7 +226,52 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
     ordenarProdutos(produtosEstoque.filter(p => calcularPrecoNaTabela(p, tab).na_tabela));
 
   const textoVigencia = (tab: TabelaPreco) =>
-    `${tab.vigencia_inicio || '-'} a ${tab.vigencia_fim || 'sem término'}`;
+    `${tab.vigencia_inicio ? formatarDataBR(tab.vigencia_inicio) : '-'} a ${tab.vigencia_fim ? formatarDataBR(tab.vigencia_fim) : 'sem término'}`;
+
+  // Linhas do documento (tela e PDF usam a mesma fonte)
+  const linhasDocumento = (tab: TabelaPreco): LinhaTabelaPrecoPdf[] =>
+    produtosDaTabelaPreco(tab).map(p => {
+      const calc = calcularPrecoNaTabela(p, tab);
+      return {
+        categoria: p.categoria || 'Sem categoria',
+        nome: p.nome,
+        codigo: p.codigo,
+        peso: pesoTexto(p),
+        acondicionamento: calc.unidades > 1 ? `${calc.tipo_acondicionamento} c/ ${calc.unidades} un` : 'Unidade avulsa',
+        preco: calc.preco,
+        precoAcondicionamento: calc.preco_acondicionamento,
+        rotuloAcondicionamento: calc.unidades > 1 ? String(calc.tipo_acondicionamento) : 'Unidade'
+      };
+    });
+
+  const [gerandoPdf, setGerandoPdf] = useState(false);
+  const handlePdf = async (tab: TabelaPreco, acao: 'baixar' | 'imprimir') => {
+    setGerandoPdf(true);
+    try {
+      const doc = await gerarPdfTabelaPreco({
+        nome: tab.nome,
+        codigo: tab.codigo,
+        segmento: tab.tipo,
+        vigencia: textoVigencia(tab),
+        pagamento: tab.prazo_padrao,
+        frete: tab.frete_tipo,
+        mostrarUnitario: mostraUnitario(tab),
+        mostrarAcondicionamento: mostraAcondicionamento(tab),
+        linhas: linhasDocumento(tab)
+      });
+      if (acao === 'baixar') {
+        const slug = tab.nome.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '-').toLowerCase();
+        doc.save(`tabela-preco-${slug}-${hojeISO()}.pdf`);
+      } else {
+        doc.autoPrint();
+        window.open(doc.output('bloburl'), '_blank');
+      }
+    } catch (e) {
+      dispararToast('Não foi possível gerar o PDF.');
+    } finally {
+      setGerandoPdf(false);
+    }
+  };
 
   // Copiar resumo formatado para WhatsApp ou texto (respeita "Mostrar preço" da tabela)
   const handleCopiarTabela = (tab: TabelaPreco) => {
@@ -770,196 +817,192 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
             </div>
 
             {/* Conteúdo Imprimível / Catálogo Comercial Formatado */}
-            <div id="tabela-preco-imprimivel" className="p-6 sm:p-8 space-y-5 text-xs overflow-y-auto flex-1 bg-white">
-              
-              {/* Cabeçalho Comercial Oficial com Informações da Empresa */}
-              <div className="border-b-2 border-slate-900 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Building2 className="w-6 h-6 text-emerald-900" />
-                    <span className="text-xl font-black text-slate-900 tracking-tight">GRUPO ENO AGROINDUSTRIAL</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 font-medium">
-                    Fecularia & Mandioca Gourmet • Rodovia PR-482, km 14 • CNPJ: 14.882.910/0001-44
-                  </p>
-                  <p className="text-[10px] text-slate-500 font-medium flex items-center gap-2 mt-0.5">
-                    <span>Telefone: (44) 3639-8200</span>
-                    <span>•</span>
-                    <span>E-mail: comercial@grupoeno.com.br</span>
-                  </p>
-                </div>
+            {/* Folha da tabela (mesmo desenho do PDF) sobre fundo escuro, como prova de impressão */}
+            <div className="overflow-y-auto flex-1 bg-[#1b2a22] p-3 sm:p-6">
+              {/* Uso interno: fica fora da folha, nunca vai para o PDF */}
+              <label className="mb-3 flex items-center gap-2 text-[11px] text-emerald-100/80 font-medium cursor-pointer w-fit">
+                <input
+                  type="checkbox"
+                  checked={mostrarCustos}
+                  onChange={(e) => setMostrarCustos(e.target.checked)}
+                  className="w-3.5 h-3.5 cursor-pointer accent-emerald-500"
+                />
+                Mostrar custo e margem na tela (uso interno, não sai no PDF)
+              </label>
 
-                <div className="text-right">
-                  <div className="inline-block px-3 py-1 bg-emerald-900 text-white font-black rounded-lg text-xs uppercase font-mono tracking-wider">
-                    TABELA DE PREÇOS VIGENTE
+              <div id="tabela-preco-imprimivel" className="mx-auto max-w-[820px] bg-[#fbfaf5] rounded-sm shadow-[0_30px_60px_-25px_rgba(0,0,0,0.6)] overflow-hidden text-[#171e1a]">
+                {/* Faixa da marca */}
+                <div className="relative bg-[linear-gradient(100deg,#042013_0%,#0b3d24_70%,#13502f_100%)] px-6 sm:px-8 pt-6 pb-5 overflow-hidden">
+                  <div className="pointer-events-none absolute -right-16 -top-20 w-72 h-72 rounded-full bg-[radial-gradient(circle,rgba(201,162,74,0.28),transparent_65%)]" />
+                  <div className="pointer-events-none absolute inset-0 opacity-[0.07] bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:10px_10px]" />
+                  <div className="relative flex flex-col sm:flex-row sm:items-start justify-between gap-5">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-lg bg-white p-1.5 shadow-[0_8px_24px_-8px_rgba(201,162,74,0.6)] shrink-0">
+                        <img src="/logo.jpg?v=3" alt="Grupo ENO" className="w-full h-full object-contain" />
+                      </div>
+                      <div>
+                        <div className="text-2xl font-black tracking-tight text-white leading-none">GRUPO ENO</div>
+                        <div className="text-[11px] text-[#a7d6ba] mt-1.5">Agroindústria · Fecularia & Mandioca Gourmet</div>
+                      </div>
+                    </div>
+                    <div className="sm:text-right">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.32em] text-[#c9a24a]">Tabela de Preços</div>
+                      <div className="text-3xl sm:text-[34px] font-black tracking-tight text-white leading-tight mt-1 uppercase break-words">
+                        {tabelaVisualizar.nome}
+                      </div>
+                      <div className="text-[11px] text-[#a7d6ba] mt-1 tabular-nums">
+                        Código {tabelaVisualizar.codigo} · Emitida em {new Date().toLocaleDateString('pt-BR')}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[11px] text-slate-500 mt-1 font-mono">
-                    Código: <span className="font-bold text-slate-900">{tabelaVisualizar.codigo}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Informações da Política Comercial Desta Tabela */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Nome da Tabela</span>
-                    <span className="font-bold text-slate-900 text-sm">{tabelaVisualizar.nome}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Segmento / Canal</span>
-                    <span className="font-medium text-slate-800">{tabelaVisualizar.tipo}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Prazo & Frete</span>
-                    <span className="font-medium text-slate-800">{tabelaVisualizar.prazo_padrao} • {tabelaVisualizar.frete_tipo}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Vigência Oficial</span>
-                    <span className="font-mono font-bold text-slate-900">{textoVigencia(tabelaVisualizar)}</span>
+                  <div className="relative mt-4 text-[10px] text-[#8abaa0]">
+                    Rodovia PR-482, km 14 · CNPJ 14.882.910/0001-44 · (44) 3639-8200 · comercial@grupoeno.com.br
                   </div>
                 </div>
+                <div className="h-[3px] bg-[linear-gradient(90deg,#9c7a2e,#e2c27a,#9c7a2e)]" />
 
-                <div className="mt-3 pt-3 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span className="text-emerald-900 font-bold">Preços apresentados:</span>
-                  <span className="font-black text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded border border-emerald-300 uppercase tracking-wide text-[11px]">
-                    {nomeMostrarPreco(tabelaVisualizar)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Tabela de Produtos Formatada em Linhas */}
-              <div>
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <span className="font-bold text-slate-900 uppercase tracking-wider text-xs block">
-                    Catálogo de Produtos & Preços Praticados
-                  </span>
-                  <label className="print:hidden flex items-center gap-1.5 text-[11px] text-slate-500 font-medium cursor-pointer" data-html2canvas-ignore="true">
-                    <input
-                      type="checkbox"
-                      checked={mostrarCustos}
-                      onChange={(e) => setMostrarCustos(e.target.checked)}
-                      className="w-3.5 h-3.5 cursor-pointer"
-                    />
-                    Mostrar custo e margem (uso interno, não imprime)
-                  </label>
+                {/* Condições da tabela */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 px-6 sm:px-8 py-4 gap-y-3 border-b border-[#e6e1d2]">
+                  {[
+                    ['Vigência', textoVigencia(tabelaVisualizar)],
+                    ['Pagamento', tabelaVisualizar.prazo_padrao || '-'],
+                    ['Frete', tabelaVisualizar.frete_tipo || '-'],
+                    ['Segmento', tabelaVisualizar.tipo || '-']
+                  ].map(([rotulo, valor], i) => (
+                    <div key={rotulo} className={`pr-3 ${i > 0 ? 'sm:pl-4 sm:border-l sm:border-[#ddd6c4]' : ''}`}>
+                      <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6e7470]">{rotulo}</div>
+                      <div className="text-[13px] font-bold text-[#171e1a] mt-0.5 leading-snug">{valor}</div>
+                    </div>
+                  ))}
                 </div>
 
+                {/* Produtos por categoria */}
                 {(() => {
                   const verUn = mostraUnitario(tabelaVisualizar);
                   const verCx = mostraAcondicionamento(tabelaVisualizar);
                   const lista = produtosDaTabelaPreco(tabelaVisualizar);
+                  const grupos = new Map<string, ProdutoEstoque[]>();
+                  lista.forEach(p => {
+                    const cat = p.categoria || 'Sem categoria';
+                    if (!grupos.has(cat)) grupos.set(cat, []);
+                    grupos.get(cat)!.push(p);
+                  });
                   return (
-                <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-2xs">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-slate-100/80 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
-                      <tr>
-                        <th className="py-2.5 px-4">Código / Produto</th>
-                        <th className="py-2.5 px-3">Peso / Acondicionamento</th>
-                        {mostrarCustos && <th className="py-2.5 px-3 text-right print:hidden">Custo</th>}
-                        {mostrarCustos && <th className="py-2.5 px-3 text-right print:hidden">Imp. venda</th>}
-                        {mostrarCustos && <th className="py-2.5 px-3 text-right print:hidden">Margem líquida</th>}
-                        {verUn && <th className="py-2.5 px-3 text-right text-emerald-800">Preço Unitário</th>}
-                        {verCx && <th className="py-2.5 px-4 text-right text-emerald-800">Preço Caixa / Fardo</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs">
-                      {lista.length === 0 && (
-                        <tr>
-                          <td colSpan={7} className="py-8 text-center text-slate-400">Nenhum produto com preço nesta tabela.</td>
-                        </tr>
-                      )}
-                      {lista.map((p) => {
-                        const calc = calcularPrecoNaTabela(p, tabelaVisualizar);
-                        return (
-                          <tr key={p.id} className={`transition-colors ${mostrarCustos && calc.margem_negativa ? 'bg-red-50/70' : 'hover:bg-slate-50/60'}`}>
-                            <td className="py-3 px-4">
-                              <div className="font-bold text-slate-900">{p.nome}</div>
-                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">{p.codigo}</div>
-                            </td>
-
-                            <td className="py-3 px-3">
-                              <span className="text-slate-600 font-medium mr-1.5">{pesoTexto(p)}</span>
-                              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-bold text-[10px] border border-slate-200">
-                                {calc.tipo_acondicionamento} {calc.unidades > 1 ? `c/ ${calc.unidades} un` : 'Avulso'}
-                              </span>
-                            </td>
-
-                            {mostrarCustos && (
-                              <td className="py-3 px-3 text-right font-mono tabular-nums text-slate-600 print:hidden">
-                                {calc.custo > 0 ? formatarMoeda(calc.custo) : '—'}
-                              </td>
-                            )}
-                            {mostrarCustos && (
-                              <td className="py-3 px-3 text-right font-mono tabular-nums text-slate-600 print:hidden">
-                                {formatarMoeda(calc.impostos_venda)}
-                              </td>
-                            )}
-                            {mostrarCustos && (
-                              <td className={`py-3 px-3 text-right font-mono tabular-nums font-bold print:hidden ${calc.margem_negativa ? 'text-red-700' : 'text-slate-800'}`}>
-                                {formatarMoeda(calc.margem_liquida)}
-                                <span className="block text-[9px] font-sans">
-                                  {calc.margem_negativa ? 'margem negativa' : `${(calc.margem_liquida_percentual ?? 0).toFixed(1)}%`}
-                                </span>
-                              </td>
-                            )}
-
-                            {verUn && (
-                              <td className="py-3 px-3 text-right font-mono tabular-nums font-black text-emerald-950 bg-emerald-50/40">
-                                {formatarMoeda(calc.preco)}
-                              </td>
-                            )}
-
-                            {verCx && (
-                              <td className="py-3 px-4 text-right font-mono tabular-nums font-bold text-slate-900">
-                                {formatarMoeda(calc.preco_acondicionamento)}
-                                <span className="text-[10px] text-slate-400 font-normal font-sans ml-1">/{calc.unidades > 1 ? calc.tipo_acondicionamento : 'un'}</span>
-                              </td>
-                            )}
+                    <div className="px-4 sm:px-8 py-5 overflow-x-auto">
+                      <table className="w-full min-w-[560px] text-left border-collapse">
+                        <thead>
+                          <tr className="bg-[#0b3d24] text-white text-[10px] font-bold uppercase tracking-[0.12em]">
+                            <th className="py-2.5 pl-4 pr-3 rounded-l-md">Produto</th>
+                            <th className="py-2.5 px-3">Peso / Embalagem</th>
+                            {mostrarCustos && <th className="py-2.5 px-3 text-right text-amber-200">Custo</th>}
+                            {mostrarCustos && <th className="py-2.5 px-3 text-right text-amber-200">Margem</th>}
+                            {verUn && <th className={`py-2.5 px-3 text-right ${verCx ? '' : 'rounded-r-md'}`}>Preço unitário</th>}
+                            {verCx && <th className="py-2.5 pl-3 pr-4 text-right rounded-r-md">Preço caixa / fardo</th>}
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                        </thead>
+                        {lista.length === 0 && (
+                          <tbody>
+                            <tr>
+                              <td colSpan={6} className="py-10 text-center text-[#6e7470] text-xs">
+                                Nenhum produto com preço nesta tabela. Clique em <b>Editar</b> e preencha o valor dos produtos.
+                              </td>
+                            </tr>
+                          </tbody>
+                        )}
+                        {[...grupos.entries()].map(([categoria, itens]) => (
+                          <tbody key={categoria}>
+                            <tr>
+                              <td colSpan={6} className="pt-3">
+                                <div className="flex items-center justify-between bg-[#f3ead3] border-l-[3px] border-[#c9a24a] px-3 py-1.5">
+                                  <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#064e3b]">{categoria}</span>
+                                  <span className="text-[10px] text-[#6e7470] tabular-nums">{itens.length} {itens.length === 1 ? 'item' : 'itens'}</span>
+                                </div>
+                              </td>
+                            </tr>
+                            {itens.map((p, idx) => {
+                              const calc = calcularPrecoNaTabela(p, tabelaVisualizar);
+                              return (
+                                <tr key={p.id} className={`border-b border-[#e6e1d2] ${idx % 2 === 1 ? 'bg-[#f6f3ea]' : ''} ${mostrarCustos && calc.margem_negativa ? '!bg-red-50' : ''}`}>
+                                  <td className="py-2.5 pl-4 pr-3">
+                                    <div className="text-[13px] font-bold text-[#171e1a]">{p.nome}</div>
+                                    <div className="text-[10px] text-[#6e7470] tabular-nums">{p.codigo}</div>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-xs text-[#171e1a]">
+                                    {[pesoTexto(p), calc.unidades > 1 ? `${calc.tipo_acondicionamento} c/ ${calc.unidades} un` : 'Unidade avulsa'].filter(Boolean).join(' · ')}
+                                  </td>
+                                  {mostrarCustos && (
+                                    <td className="py-2.5 px-3 text-right text-xs tabular-nums text-[#6e7470]">
+                                      {calc.custo > 0 ? formatarMoeda(calc.custo) : '—'}
+                                    </td>
+                                  )}
+                                  {mostrarCustos && (
+                                    <td className={`py-2.5 px-3 text-right text-xs tabular-nums font-bold ${calc.margem_negativa ? 'text-red-700' : 'text-[#064e3b]'}`}>
+                                      {formatarMoeda(calc.margem_liquida)}
+                                      <span className="block text-[9px] font-normal">
+                                        {calc.margem_negativa ? 'negativa' : `${(calc.margem_liquida_percentual ?? 0).toFixed(1)}%`}
+                                      </span>
+                                    </td>
+                                  )}
+                                  {verUn && (
+                                    <td className="py-2.5 px-3 text-right text-[15px] font-black tabular-nums text-[#064e3b] whitespace-nowrap">
+                                      {formatarMoeda(calc.preco)}
+                                    </td>
+                                  )}
+                                  {verCx && (
+                                    <td className="py-2.5 pl-3 pr-4 text-right whitespace-nowrap">
+                                      <div className="text-[15px] font-black tabular-nums text-[#171e1a]">{formatarMoeda(calc.preco_acondicionamento)}</div>
+                                      <div className="text-[10px] text-[#6e7470]">por {(calc.unidades > 1 ? String(calc.tipo_acondicionamento) : 'unidade').toLowerCase()}</div>
+                                    </td>
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        ))}
+                      </table>
+                    </div>
                   );
                 })()}
-              </div>
 
-              {/* Condições Gerais e Observações Comerciais */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600 space-y-1.5">
-                <span className="font-bold text-slate-900 block uppercase tracking-wider text-[10px]">
-                  Condições Gerais de Faturamento e Entrega:
-                </span>
-                <p>• Preços expressos em Reais (R$), com impostos inclusos conforme legislação tributária vigente.</p>
-                <p>• Carga Fechada (+30 Toneladas) possui frete CIF bonificado e prioridade de carregamento na fábrica.</p>
-                <p>• Pedidos faturados sujeitos à análise prévia de crédito e disponibilidade física no galpão industrial.</p>
-              </div>
-
-              {/* Rodapé com Assinatura Comercial */}
-              <div className="pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between text-[11px] text-slate-500">
-                <div>
-                  Diretoria Comercial • <span className="font-bold text-slate-800">Grupo ENO Agroindustrial</span>
+                {/* Condições comerciais (dados reais da tabela) */}
+                <div className="px-6 sm:px-8 pb-5">
+                  <div className="w-10 h-[2px] bg-[#c9a24a] mb-2" />
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#064e3b] mb-1.5">Condições comerciais</div>
+                  <ul className="text-[11px] text-[#171e1a] space-y-1">
+                    <li>· Valores em reais (R$), válidos durante a vigência indicada no topo.</li>
+                    <li>· Pagamento: {tabelaVisualizar.prazo_padrao || 'a combinar'}. Frete: {tabelaVisualizar.frete_tipo || 'a combinar'}.</li>
+                    <li>· Pedidos sujeitos à análise de crédito e à disponibilidade de estoque.</li>
+                  </ul>
                 </div>
-                <div className="font-mono text-[10px]">
-                  Documento gerado automaticamente pelo ERP Grupo ENO • {new Date().toLocaleDateString('pt-BR')}
+
+                <div className="px-6 sm:px-8 py-3 border-t border-[#ddd6c4] flex flex-wrap items-center justify-between gap-2 text-[10px] text-[#6e7470]">
+                  <span>Grupo ENO Agroindustrial · Tabela {tabelaVisualizar.nome} ({tabelaVisualizar.codigo})</span>
+                  <span className="tabular-nums">
+                    {(() => { const n = produtosDaTabelaPreco(tabelaVisualizar).length; return `${n} ${n === 1 ? 'produto' : 'produtos'}`; })()}
+                  </span>
                 </div>
               </div>
-
             </div>
 
             {/* Rodapé de Ações do Modal */}
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold cursor-pointer text-xs shadow-xs transition-colors"
+                  onClick={() => handlePdf(tabelaVisualizar, 'baixar')}
+                  disabled={gerandoPdf}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-900 hover:bg-emerald-950 disabled:opacity-60 text-white font-bold cursor-pointer text-xs shadow-xs transition-colors"
                 >
-                  <Printer className="w-4 h-4" />
-                  <span>Imprimir / Salvar em PDF</span>
+                  <Download className="w-4 h-4" />
+                  <span>{gerandoPdf ? 'Gerando PDF...' : 'Baixar PDF'}</span>
+                </button>
+
+                <button
+                  onClick={() => handlePdf(tabelaVisualizar, 'imprimir')}
+                  disabled={gerandoPdf}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 disabled:opacity-60 cursor-pointer text-xs shadow-2xs transition-colors"
+                >
+                  <Printer className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Imprimir</span>
                 </button>
 
                 <button
