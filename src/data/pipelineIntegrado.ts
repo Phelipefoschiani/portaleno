@@ -422,7 +422,8 @@ export function integrarConclusaoProducao(pedido: PedidoVenda, ignorarIndices: n
  * Ex.: "Boleto Bancário 28 Dias" -> [28]; "28/35/42 dias" -> [28, 35, 42]; "À Vista" -> [0]
  */
 export function extrairPrazosDias(texto?: string): number[] {
-  const t = semAcento(texto || '');
+  // Ignora anotações entre parênteses, ex.: "(3x)" não é prazo
+  const t = semAcento(texto || '').replace(/\(.*?\)/g, '');
   const numeros = (t.match(/\d+/g) || []).map(Number).filter(n => n >= 0 && n <= 365);
   if (numeros.length > 0) return numeros;
   if (t.includes('vista') || t.includes('antecipad') || t.includes('pix') || t.includes('dinheiro')) return [0];

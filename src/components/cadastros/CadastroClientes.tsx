@@ -42,6 +42,7 @@ import { carregarTitulosReceber } from '../../data/financeiroData';
 import { carregarTabelasPreco } from '../../data/produtosData';
 import { mesReferenciaDe, ultimosMesesReferencia } from '../../lib/mesesReferencia';
 import { formatarDataBR } from '../../lib/datas';
+import { lerCondicao, normalizarDias, textoCondicao } from '../../lib/prazoPagamento';
 
 // Converte os pedidos de venda reais do cliente para a estrutura do histórico
 function montarHistoricoCompras(clienteId: string): CompraCliente[] {
@@ -117,15 +118,6 @@ const FORMAS_PAGAMENTO_OPTIONS = [
   { id: 'fp_5', nome: 'Dinheiro' },
 ];
 
-const PRAZOS_PAGAMENTO_OPTIONS = [
-  { id: 'pp_1', nome: 'À Vista (0 dias)', dias: 0, parcelas: 1 },
-  { id: 'pp_2', nome: '7 Dias', dias: 7, parcelas: 1 },
-  { id: 'pp_3', nome: '14 Dias', dias: 14, parcelas: 1 },
-  { id: 'pp_4', nome: '21 Dias', dias: 21, parcelas: 1 },
-  { id: 'pp_5', nome: '28 Dias', dias: 28, parcelas: 1 },
-  { id: 'pp_6', nome: '30 / 60 Dias (2x)', dias: 60, parcelas: 2 },
-  { id: 'pp_7', nome: '30 / 60 / 90 Dias (3x)', dias: 90, parcelas: 3 },
-];
 
 // Tabelas de Preço reais (Produtos > Tabelas de Preço); arquivadas não aparecem para novos vínculos
 function opcoesTabelasPreco(): { id: string; nome: string }[] {
@@ -219,6 +211,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
     complemento: string;
     forma_pagamento_id: string;
     prazo_pagamento_id: string;
+    prazo_dias: string;
     vendedor_id: string;
     tabela_preco_id: string;
     ativo: boolean;
@@ -238,7 +231,8 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
     uf: 'SP',
     complemento: '',
     forma_pagamento_id: 'fp_1',
-    prazo_pagamento_id: 'pp_1',
+    prazo_pagamento_id: 'livre',
+    prazo_dias: '',
     vendedor_id: '',
     tabela_preco_id: '',
     ativo: true,
@@ -262,7 +256,8 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
       uf: 'SP',
       complemento: '',
       forma_pagamento_id: 'fp_1',
-      prazo_pagamento_id: 'pp_1',
+      prazo_pagamento_id: 'livre',
+      prazo_dias: '',
       vendedor_id: '',
       tabela_preco_id: '',
       ativo: true,
@@ -289,6 +284,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
       complemento: cliente.endereco.complemento || '',
       forma_pagamento_id: cliente.forma_pagamento_id,
       prazo_pagamento_id: cliente.prazo_pagamento_id,
+      prazo_dias: lerCondicao(cliente.prazo_pagamento_nome).dias,
       vendedor_id: cliente.vendedor_id || '',
       tabela_preco_id: cliente.tabela_preco_id || '',
       ativo: cliente.ativo,
@@ -318,7 +314,8 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
     }
 
     const fp = FORMAS_PAGAMENTO_OPTIONS.find(f => f.id === formData.forma_pagamento_id);
-    const pp = PRAZOS_PAGAMENTO_OPTIONS.find(p => p.id === formData.prazo_pagamento_id);
+    // Prazo digitado livremente (ex.: 28 ou 28/35/42); vazio = à vista
+    const pp = { nome: textoCondicao(fp?.nome || 'Boleto Bancário', formData.prazo_dias) };
     const rcaSel = rcasCadastrados.find(r => r.id === formData.vendedor_id);
     const vend = rcaSel ? { nome: rcaSel.nome_fantasia || rcaSel.nome_completo } : undefined;
     const tab = opcoesTabelasPreco().find(t => t.id === formData.tabela_preco_id);
@@ -345,8 +342,8 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
         },
         forma_pagamento_id: formData.forma_pagamento_id,
         forma_pagamento_nome: fp?.nome,
-        prazo_pagamento_id: formData.prazo_pagamento_id,
-        prazo_pagamento_nome: pp?.nome,
+        prazo_pagamento_id: 'livre',
+        prazo_pagamento_nome: pp.nome,
         vendedor_id: rcaSel ? rcaSel.id : undefined,
         vendedor_nome: vend?.nome,
         tabela_preco_id: formData.tabela_preco_id,
@@ -378,8 +375,8 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
         },
         forma_pagamento_id: formData.forma_pagamento_id,
         forma_pagamento_nome: fp?.nome,
-        prazo_pagamento_id: formData.prazo_pagamento_id,
-        prazo_pagamento_nome: pp?.nome,
+        prazo_pagamento_id: 'livre',
+        prazo_pagamento_nome: pp.nome,
         vendedor_id: rcaSel ? rcaSel.id : undefined,
         vendedor_nome: vend?.nome,
         tabela_preco_id: formData.tabela_preco_id,
@@ -1144,21 +1141,26 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
                 <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-sm flex flex-col justify-between">
                   <div>
                     <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                      Prazo de Pagamento Padrão <span className="text-red-500">*</span>
-                      <span className="text-[10px] text-slate-400 font-mono ml-1.5">(prazo_pagamento_id)</span>
+                      Prazo de Pagamento (dias)
                     </label>
-                    <select
-                      value={formData.prazo_pagamento_id}
-                      onChange={(e) => setFormData({ ...formData, prazo_pagamento_id: e.target.value })}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
-                    >
-                      {PRAZOS_PAGAMENTO_OPTIONS.map(pp => (
-                        <option key={pp.id} value={pp.id}>{pp.nome}</option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={formData.prazo_dias}
+                        onChange={(e) => setFormData({ ...formData, prazo_dias: e.target.value.replace(/[^\d/ ,]/g, '') })}
+                        onBlur={(e) => setFormData({ ...formData, prazo_dias: normalizarDias(e.target.value) })}
+                        placeholder="Ex.: 28  ou  28/35/42"
+                        className="w-full pl-3 pr-12 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold tabular-nums focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">dias</span>
+                    </div>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-2">
-                    Intervalo de dias e faturamento pré-estabelecido
+                    {(() => {
+                      const fp = FORMAS_PAGAMENTO_OPTIONS.find(f => f.id === formData.forma_pagamento_id);
+                      return <>Fica: <b className="text-slate-700">{textoCondicao(fp?.nome || 'Boleto Bancário', formData.prazo_dias)}</b>. Vazio = à vista; use "/" para parcelas.</>;
+                    })()}
                   </p>
                 </div>
               </div>

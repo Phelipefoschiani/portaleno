@@ -33,8 +33,10 @@ import {
   ArrowLeftRight,
   ZoomIn,
   ZoomOut,
-  Maximize2
+  Maximize2,
+  Pencil
 } from 'lucide-react';
+import { FORMAS_PAGAMENTO, lerCondicao, normalizarDias, textoCondicao } from '../../lib/prazoPagamento';
 import {
   PedidoVenda,
   carregarPedidosVenda,
@@ -113,7 +115,17 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
   const [tabelaIdForm, setTabelaIdForm] = useState('');
   const [rcaIdForm, setRcaIdForm] = useState('');
   const [tipoFreteForm, setTipoFreteForm] = useState<'FOB (Retira na Fábrica)' | 'CIF (Entrega Grupo ENO)'>('CIF (Entrega Grupo ENO)');
-  const [prazoPagamentoForm, setPrazoPagamentoForm] = useState('Boleto Bancário 28 Dias');
+  // Condição de pagamento: forma + dias digitados (ex.: 28 ou 28/35/42)
+  const [formaPagamentoForm, setFormaPagamentoForm] = useState(FORMAS_PAGAMENTO[0]);
+  const [diasPagamentoForm, setDiasPagamentoForm] = useState('28');
+  const prazoPagamentoForm = textoCondicao(formaPagamentoForm, diasPagamentoForm);
+  const setPrazoPagamentoForm = (texto: string) => {
+    const c = lerCondicao(texto);
+    setFormaPagamentoForm(c.forma);
+    setDiasPagamentoForm(c.dias);
+  };
+  // Pedido sendo editado (null = nova venda)
+  const [pedidoEmEdicao, setPedidoEmEdicao] = useState<PedidoVenda | null>(null);
   const [diasValidadeForm, setDiasValidadeForm] = useState('7');
   const [observacoesForm, setObservacoesForm] = useState('');
 
@@ -218,6 +230,10 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
 
   // Abrir formulário de nova venda sempre limpo
   const abrirNovaVenda = () => {
+    setPedidoEmEdicao(null);
+    setDiasValidadeForm('7');
+    setFormaPagamentoForm(FORMAS_PAGAMENTO[0]);
+    setDiasPagamentoForm('28');
     setSubtipoForm('Orçamento');
     setModoLancamentoForm('FARDO');
     setTabelaIdForm('');
@@ -232,6 +248,41 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
       setTabelaIdForm(tabCli.id);
       setModoLancamentoForm(modoObrigatorioDaTabela(tabCli) || 'FARDO');
     }
+    setModalNovo(true);
+  };
+
+  // Abrir um pedido existente para edição (mesmo formulário, já preenchido)
+  const abrirEdicaoVenda = (pedido: PedidoVenda) => {
+    setPedidoEmEdicao(pedido);
+    setSubtipoForm(pedido.subtipo_venda || (pedido.tipo === 'PEDIDO_VENDA' ? 'Pedido' : 'Orçamento'));
+    const modo = pedido.modo_exibicao_padrao || 'FARDO';
+    setModoLancamentoForm(modo);
+    setClienteIdForm(pedido.cliente_id);
+    setTabelaIdForm(pedido.tabela_id || '');
+    setRcaIdForm(pedido.rca_id || '');
+    setTipoFreteForm(pedido.tipo_frete);
+    const cond = lerCondicao(pedido.prazo_pagamento || pedido.forma_pagamento, pedido.forma_pagamento || FORMAS_PAGAMENTO[0]);
+    setFormaPagamentoForm(cond.forma);
+    setDiasPagamentoForm(cond.dias);
+    setObservacoesForm(pedido.observacoes || '');
+    if (pedido.data_validade_orcamento) {
+      const dias = Math.round(
+        (new Date(`${pedido.data_validade_orcamento}T00:00:00`).getTime() - new Date(`${pedido.data_emissao}T00:00:00`).getTime()) / 86400000
+      );
+      setDiasValidadeForm(String(dias > 0 ? dias : 7));
+    }
+    // Itens voltam no modo em que foram lançados
+    setItensForm(pedido.itens.map(it => {
+      const fator = fatorItem(it.unidades_por_fardo);
+      const emUnitario = modo === 'UNITARIO' && fator > 1;
+      return {
+        produtoId: it.produto_id,
+        tipoEmbalagem: it.tipo_embalagem,
+        quantidade: emUnitario ? it.quantidade * fator : it.quantidade,
+        precoUnitario: emUnitario ? it.preco_unitario / fator : it.preco_unitario,
+        unidadesPorFardo: it.unidades_por_fardo
+      };
+    }));
     setModalNovo(true);
   };
 
@@ -570,7 +621,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     }
     const rcaSel = rcasDisponiveis.find(r => r.id === rcaIdForm);
 
-    const dataHojeStr = hojeISO();
+    const dataHojeStr = pedidoEmEdicao?.data_emissao || hojeISO();
     const dataValidadeStr = somarDias(dataHojeStr, parseInt(diasValidadeForm) || 7);
 
     const itensMapeados = itensForm.map(it => {
@@ -636,8 +687,10 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     const tabelaSel = tabelasDisponiveis.find(t => t.id === tabelaIdForm);
 
     const novoRegistro: PedidoVenda & CamposComissaoPedido = {
-      id: `ped_venda_${Date.now()}`,
-      numero_pedido: novoNum,
+      // Edição: mantém o que não é do formulário (histórico, datas de etapa etc.)
+      ...(pedidoEmEdicao || {}),
+      id: pedidoEmEdicao?.id || `ped_venda_${Date.now()}`,
+      numero_pedido: pedidoEmEdicao?.numero_pedido || novoNum,
       tipo: subtipoForm === 'Pedido' ? 'PEDIDO_VENDA' : 'ORCAMENTO',
       etapa: 'ORCAMENTO',
       subtipo_venda: subtipoForm,
@@ -662,7 +715,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
       itens: itensMapeados,
       peso_total_kg: pesoTotal,
       valor_total: valorTotal,
-      forma_pagamento: 'Boleto Bancário',
+      forma_pagamento: formaPagamentoForm,
       prazo_pagamento: prazoPagamentoForm,
       tipo_frete: tipoFreteForm,
       origem: subtipoForm === 'Pedido Sugestivo' ? 'Sugestão Reposição' : 'RCA',
@@ -670,8 +723,11 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     };
 
     const todosAtuais = carregarPedidosVenda();
-    const atualizados = [novoRegistro, ...todosAtuais];
+    const atualizados = pedidoEmEdicao
+      ? todosAtuais.map(p => (p.id === pedidoEmEdicao.id ? novoRegistro : p))
+      : [novoRegistro, ...todosAtuais];
     salvarPedidosVenda(atualizados);
+    setPedidoEmEdicao(null);
     setModalNovo(false);
   };
 
@@ -966,6 +1022,19 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                             <span>Aprovar</span>
                           </button>
 
+                          <button
+                            onClick={() => abrirEdicaoVenda(item)}
+                            className="
+                              flex items-center gap-1.5 px-3 py-1.5 rounded-lg
+                              bg-white hover:bg-slate-50 text-slate-800 border border-slate-300
+                              font-bold text-xs transition-colors cursor-pointer shadow-2xs
+                            "
+                            title="Editar itens, cliente, tabela e condições"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-slate-600" />
+                            <span>Editar</span>
+                          </button>
+
                           {/* BOTÃO DO OLHO: VER / EXPORTAR */}
                           <button
                             onClick={() => abrirVisualizacao(item)}
@@ -1007,10 +1076,12 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                 <FileText className="w-5 h-5 text-emerald-400" />
                 <div>
                   <h3 className="font-bold text-sm sm:text-base text-white">
-                    Nova Venda / Proposta Comercial
+                    {pedidoEmEdicao ? `Editar ${pedidoEmEdicao.numero_pedido}` : 'Nova Venda / Proposta Comercial'}
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Cadastre um novo Orçamento, Pedido Sugestivo ou Pedido de Venda.
+                    {pedidoEmEdicao
+                      ? 'Altere itens, cliente, tabela ou condições. O número e a data de emissão são mantidos.'
+                      : 'Cadastre um novo Orçamento, Pedido Sugestivo ou Pedido de Venda.'}
                   </p>
                 </div>
               </div>
@@ -1218,14 +1289,30 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Prazo de Pagamento</label>
-                  <input
-                    type="text"
-                    value={prazoPagamentoForm}
-                    onChange={(e) => setPrazoPagamentoForm(e.target.value)}
-                    placeholder="Ex: Boleto Bancário 28 Dias"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700"
-                  />
+                  <label className="block font-bold text-slate-700 mb-1">Pagamento</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={formaPagamentoForm}
+                      onChange={(e) => setFormaPagamentoForm(e.target.value)}
+                      className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
+                    >
+                      {FORMAS_PAGAMENTO.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                    <div className="relative w-28 shrink-0">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={diasPagamentoForm}
+                        onChange={(e) => setDiasPagamentoForm(e.target.value.replace(/[^\d/ ,]/g, ''))}
+                        onBlur={(e) => setDiasPagamentoForm(normalizarDias(e.target.value))}
+                        placeholder="28"
+                        title="Dias para pagar. Parcelas: 28/35/42. Vazio = à vista."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-2.5 pr-9 py-2 font-bold tabular-nums text-slate-800 focus:outline-none focus:border-emerald-700"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">dias</span>
+                    </div>
+                  </div>
+                  <span className="block mt-1 text-[10px] text-slate-500">{prazoPagamentoForm} · use "/" para parcelas</span>
                 </div>
               </div>
 
