@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { EMPRESA } from '../../lib/empresa';
 import {
   Building2,
   Calendar,
@@ -222,14 +223,15 @@ export function PortalConvidadoExclusivo({
       {/* 1. TOPO EXCLUSIVO DO PORTAL RESERVADO (SHOWROOM VIP)       */}
       {/* ========================================================= */}
       <header className="sticky top-0 z-40 w-full bg-[#041d13]/95 backdrop-blur-md border-b border-emerald-800/50 shadow-2xl">
-        <div className="mx-auto flex h-[72px] w-full max-w-[1700px] items-center justify-between px-4 sm:px-8">
+        <div className="mx-auto flex h-14 sm:h-[72px] w-full max-w-[1700px] items-center justify-between gap-2 px-3 sm:px-8">
 
           {/* Logo e Identificação */}
-          <div className="flex items-center gap-3.5">
+          <div className="flex items-center gap-2 sm:gap-3.5 min-w-0">
             <button
               onClick={onVoltar}
+              aria-label="Sair do portal"
               className="
-                flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold
+                flex items-center justify-center gap-1.5 h-10 min-w-10 px-2.5 sm:px-3 rounded-md text-xs sm:text-sm font-bold shrink-0
                 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-200
                 transition-colors cursor-pointer shadow-sm
               "
@@ -239,16 +241,14 @@ export function PortalConvidadoExclusivo({
               <span className="hidden sm:inline">Voltar ao Painel</span>
             </button>
 
-            <div className="h-6 w-px bg-emerald-800/60" />
+            <div className="hidden sm:block h-6 w-px bg-emerald-800/60" />
 
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-lime-500 text-emerald-950 font-black shadow-lg shadow-emerald-500/20">
-                <Building2 className="w-6 h-6 stroke-[2.2]" />
-              </div>
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <img src={EMPRESA.logo} alt="" className="h-8 w-8 sm:h-10 sm:w-10 object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)] shrink-0" />
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xl sm:text-2xl font-black tracking-tight text-white">Grupo ENO</span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider uppercase bg-amber-400/20 text-amber-300 border border-amber-400/40">
+                  <span className="text-[15px] sm:text-2xl font-extrabold tracking-tight text-white whitespace-nowrap">Grupo ENO</span>
+                  <span className="hidden sm:inline px-2 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider uppercase bg-amber-400/20 text-amber-300 border border-amber-400/40">
                     Portfólio Reservado VIP
                   </span>
                 </div>
@@ -266,22 +266,22 @@ export function PortalConvidadoExclusivo({
                 <Users className="w-3.5 h-3.5 text-emerald-400" />
                 <span>{cadastro.nome_convidado}</span>
               </div>
-              <span className="text-[11px] text-emerald-300/80 font-mono truncate max-w-[240px]">
+              <span className="text-[11px] text-emerald-300/80 tabular-nums truncate max-w-[240px]">
                 {cadastro.empresa_solicitante}
               </span>
             </div>
 
             {/* Badge de Validade / Vencimento */}
             {expirado ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-950/80 border border-red-500/80 text-red-200 text-xs font-bold shadow-lg">
+              <div className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-md bg-red-950/80 border border-red-500/80 text-red-200 text-xs font-bold shadow-lg shrink-0">
                 <AlertCircle className="w-4 h-4 text-red-400 animate-pulse" />
-                <span>Acesso Expirado ({dataVencFormatada()})</span>
+                <span>Expirado<span className="hidden sm:inline"> ({dataVencFormatada()})</span></span>
               </div>
             ) : (
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/60 text-emerald-200 text-xs font-bold shadow-lg">
-                <Clock className="w-4 h-4 text-emerald-400" />
-                <span>Válido até {dataVencFormatada()}</span>
-                <span className="px-1.5 py-0.5 rounded bg-emerald-800 text-[10px] text-emerald-100 font-mono">
+              <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-md bg-emerald-950/90 border border-emerald-500/60 text-emerald-200 text-xs font-bold shadow-lg shrink-0">
+                <Clock className="w-4 h-4 text-emerald-400 hidden sm:block" />
+                <span className="hidden sm:inline">Válido até {dataVencFormatada()}</span>
+                <span className="px-1.5 py-0.5 rounded bg-emerald-800 text-[10px] text-emerald-100 tabular-nums">
                   {diasRestantes}d restantes
                 </span>
               </div>
@@ -344,14 +344,14 @@ export function PortalConvidadoExclusivo({
       {/* ========================================================= */}
       {/* 3. HERO BANNER DE BOAS-VINDAS AO CONVIDADO                */}
       {/* ========================================================= */}
-      <section className="relative w-full bg-gradient-to-b from-[#062418] via-[#083020] to-[#0a1510] border-b border-emerald-900/60 py-8 px-4 sm:px-8">
+      <section className="relative w-full bg-gradient-to-b from-[#062418] via-[#083020] to-[#0a1510] border-b border-emerald-900/60 py-5 sm:py-8 px-4 sm:px-8">
         <div className="mx-auto max-w-[1700px]">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
             <div className="space-y-2 max-w-3xl">
               <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight">
                 Seja bem-vindo, {cadastro.nome_convidado}
               </h1>
-              <p className="text-sm sm:text-base text-emerald-200/80 leading-relaxed">
+              <p className="text-sm sm:text-base text-emerald-200/80 leading-relaxed line-clamp-3 sm:line-clamp-none">
                 Este é o showroom digital reservado do <strong className="text-white font-bold">Grupo ENO</strong> preparado especialmente para a equipe da <strong className="text-white font-bold">{cadastro.empresa_solicitante}</strong>. Aqui você tem acesso em primeira mão às fotos em alta resolução de nossas linhas de féculas e polvilhos, agenda de eventos e feiras, parceiros homologados e tabela de preços com condições especiais de negociação.
               </p>
             </div>
@@ -380,14 +380,14 @@ export function PortalConvidadoExclusivo({
           </div>
 
           {/* Abas de Navegação do Portfólio */}
-          <div className="mt-8 flex flex-wrap items-center gap-2 sm:gap-3 border-t border-emerald-800/40 pt-6">
+          <div className="mt-5 sm:mt-8 -mx-4 px-4 sm:mx-0 sm:px-0 flex flex-nowrap sm:flex-wrap items-center gap-2 sm:gap-3 overflow-x-auto border-t border-emerald-800/40 pt-4 sm:pt-6" role="tablist" aria-label="Seções do portfólio">
             {perm.ver_fotos && (
             <button
               onClick={() => setActiveTab('fotos')}
               className={`
-                flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-extrabold transition-all cursor-pointer
+                shrink-0 whitespace-nowrap flex items-center gap-2 sm:gap-2.5 h-11 px-4 sm:px-5 rounded-md text-[13px] sm:text-sm font-extrabold transition-all cursor-pointer
                 ${activeTab === 'fotos'
-                  ? 'bg-gradient-to-r from-emerald-600 to-lime-600 text-white shadow-lg shadow-emerald-700/30'
+                  ? 'bg-gradient-to-r from-emerald-700 to-emerald-600 text-white shadow-lg shadow-emerald-700/30'
                   : 'bg-[#031b12] text-emerald-200/80 hover:bg-[#06281b] hover:text-white border border-emerald-800/50'
                 }
               `}
@@ -401,9 +401,9 @@ export function PortalConvidadoExclusivo({
             <button
               onClick={() => setActiveTab('precos')}
               className={`
-                flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-extrabold transition-all cursor-pointer
+                shrink-0 whitespace-nowrap flex items-center gap-2 sm:gap-2.5 h-11 px-4 sm:px-5 rounded-md text-[13px] sm:text-sm font-extrabold transition-all cursor-pointer
                 ${activeTab === 'precos'
-                  ? 'bg-gradient-to-r from-emerald-600 to-lime-600 text-white shadow-lg shadow-emerald-700/30'
+                  ? 'bg-gradient-to-r from-emerald-700 to-emerald-600 text-white shadow-lg shadow-emerald-700/30'
                   : 'bg-[#031b12] text-emerald-200/80 hover:bg-[#06281b] hover:text-white border border-emerald-800/50'
                 }
               `}
@@ -417,16 +417,16 @@ export function PortalConvidadoExclusivo({
             <button
               onClick={() => setActiveTab('eventos')}
               className={`
-                flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-extrabold transition-all cursor-pointer
+                shrink-0 whitespace-nowrap flex items-center gap-2 sm:gap-2.5 h-11 px-4 sm:px-5 rounded-md text-[13px] sm:text-sm font-extrabold transition-all cursor-pointer
                 ${activeTab === 'eventos'
-                  ? 'bg-gradient-to-r from-emerald-600 to-lime-600 text-white shadow-lg shadow-emerald-700/30'
+                  ? 'bg-gradient-to-r from-emerald-700 to-emerald-600 text-white shadow-lg shadow-emerald-700/30'
                   : 'bg-[#031b12] text-emerald-200/80 hover:bg-[#06281b] hover:text-white border border-emerald-800/50'
                 }
               `}
             >
               <Calendar className="w-4.5 h-4.5" />
               <span>Eventos, Feiras & Encontros</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400/20 text-amber-300 font-mono font-bold">
+              <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400/20 text-amber-300 tabular-nums font-bold">
                 {EVENTOS_PORTFOLIO.length}
               </span>
             </button>
@@ -436,9 +436,9 @@ export function PortalConvidadoExclusivo({
             <button
               onClick={() => setActiveTab('parceiros')}
               className={`
-                flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-extrabold transition-all cursor-pointer
+                shrink-0 whitespace-nowrap flex items-center gap-2 sm:gap-2.5 h-11 px-4 sm:px-5 rounded-md text-[13px] sm:text-sm font-extrabold transition-all cursor-pointer
                 ${activeTab === 'parceiros'
-                  ? 'bg-gradient-to-r from-emerald-600 to-lime-600 text-white shadow-lg shadow-emerald-700/30'
+                  ? 'bg-gradient-to-r from-emerald-700 to-emerald-600 text-white shadow-lg shadow-emerald-700/30'
                   : 'bg-[#031b12] text-emerald-200/80 hover:bg-[#06281b] hover:text-white border border-emerald-800/50'
                 }
               `}
@@ -451,7 +451,7 @@ export function PortalConvidadoExclusivo({
             <button
               onClick={() => setActiveTab('pedido')}
               className={`
-                flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-extrabold transition-all cursor-pointer relative
+                shrink-0 whitespace-nowrap flex items-center gap-2 sm:gap-2.5 h-11 px-4 sm:px-5 rounded-md text-[13px] sm:text-sm font-extrabold transition-all cursor-pointer relative
                 ${activeTab === 'pedido'
                   ? 'bg-gradient-to-r from-amber-500 to-emerald-600 text-slate-950 font-black shadow-lg shadow-amber-500/20'
                   : cadastro.permissoes.liberar_pedidos
@@ -477,7 +477,7 @@ export function PortalConvidadoExclusivo({
       {/* ========================================================= */}
       {/* 4. CONTEÚDO PRINCIPAL DAS ABAS                            */}
       {/* ========================================================= */}
-      <main className="flex-1 w-full max-w-[1700px] mx-auto px-4 sm:px-8 py-8">
+      <main className="flex-1 w-full max-w-[1700px] mx-auto px-3 sm:px-8 py-5 sm:py-8">
         {acessoBloqueado ? (
           <div className="bg-[#041c12] rounded-3xl border border-red-500/40 p-8 sm:p-12 text-center max-w-3xl mx-auto shadow-2xl space-y-4">
             <div className="mx-auto w-20 h-20 rounded-3xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-300">
@@ -572,7 +572,7 @@ export function PortalConvidadoExclusivo({
                       {prod.especificacoes.slice(0, 3).map((spec, sIdx) => (
                         <div key={sIdx} className="flex items-center justify-between text-[11px]">
                           <span className="text-slate-400">{spec.rotulo}:</span>
-                          <span className="text-emerald-200 font-bold font-mono">{spec.valor}</span>
+                          <span className="text-emerald-200 font-bold tabular-nums">{spec.valor}</span>
                         </div>
                       ))}
                     </div>
@@ -583,7 +583,7 @@ export function PortalConvidadoExclusivo({
                       <div>
                         <span className="text-[10px] uppercase text-emerald-400/80 font-bold block">A partir de</span>
                         <div className="flex items-baseline gap-1">
-                          <span className="text-lg font-black text-white font-mono">
+                          <span className="text-lg font-black text-white tabular-nums">
                             R$ {prod.preco_kg.toFixed(2).replace('.', ',')}
                           </span>
                           <span className="text-[11px] text-slate-400">/ kg</span>
@@ -646,14 +646,42 @@ export function PortalConvidadoExclusivo({
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="text-xs text-emerald-300 font-mono">
+                <span className="text-xs text-emerald-300 tabular-nums">
                   Base de Cotação: Paraná (PR) e São Paulo (SP)
                 </span>
               </div>
             </div>
 
+            {/* Celular: preços em cartões */}
+            <ul className="sm:hidden rounded-2xl border border-emerald-700/40 bg-[#031d12] divide-y divide-emerald-800/30">
+              {PRODUTOS_PORTFOLIO.map((prod) => (
+                <li key={prod.id} className="px-4 py-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[11px] text-emerald-400/80">{prod.categoria} · {prod.disponibilidade_safra}</div>
+                      <div className="font-extrabold text-white text-[15px] leading-snug">{prod.nome}</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="tabular-nums font-extrabold text-white text-[17px]">R$ {prod.preco_kg.toFixed(2).replace('.', ',')}</div>
+                      <div className="text-[11px] text-emerald-300/80">por kg</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex justify-between text-[12px] tabular-nums text-emerald-200/90">
+                    <span>Saco 25 kg <strong className="text-white">R$ {prod.preco_saco_25kg.toFixed(2).replace('.', ',')}</strong></span>
+                    <span>Big Bag <strong className="text-white">R$ {prod.preco_big_bag.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></span>
+                  </div>
+                  {cadastro.permissoes.liberar_pedidos && (
+                    <div className="mt-2.5 flex gap-2">
+                      <button onClick={() => handleAdicionarAoCarrinho(prod, 'Saco 25kg')} className="flex-1 h-10 rounded-md bg-emerald-800/80 active:bg-emerald-700 text-white text-[13px] font-bold cursor-pointer">+ Saco 25 kg</button>
+                      <button onClick={() => handleAdicionarAoCarrinho(prod, 'Big Bag 1000kg')} className="flex-1 h-10 rounded-md bg-emerald-600 active:bg-emerald-500 text-white text-[13px] font-bold cursor-pointer">+ Big Bag</button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+
             {/* Tabela de Preços Detalhada */}
-            <div className="overflow-x-auto rounded-2xl border border-emerald-700/40 bg-[#031d12] shadow-2xl">
+            <div className="hidden sm:block overflow-x-auto rounded-2xl border border-emerald-700/40 bg-[#031d12] shadow-2xl">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-[#02140c] border-b border-emerald-800/60 text-[11px] font-extrabold uppercase tracking-wider text-emerald-300">
@@ -678,13 +706,13 @@ export function PortalConvidadoExclusivo({
                           {prod.categoria}
                         </span>
                       </td>
-                      <td className="py-4 px-4 text-right font-mono font-extrabold text-white text-base">
+                      <td className="py-4 px-4 text-right tabular-nums font-extrabold text-white text-base">
                         R$ {prod.preco_kg.toFixed(2).replace('.', ',')}
                       </td>
-                      <td className="py-4 px-4 text-right font-mono font-bold text-emerald-200">
+                      <td className="py-4 px-4 text-right tabular-nums font-bold text-emerald-200">
                         R$ {prod.preco_saco_25kg.toFixed(2).replace('.', ',')}
                       </td>
-                      <td className="py-4 px-4 text-right font-mono font-bold text-emerald-300">
+                      <td className="py-4 px-4 text-right tabular-nums font-bold text-emerald-300">
                         R$ {prod.preco_big_bag.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-4 px-4 text-center">
@@ -839,7 +867,7 @@ export function PortalConvidadoExclusivo({
                           setPresencaConfirmada(false);
                         }}
                         className="
-                          w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-lime-600
+                          w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-600
                           hover:from-emerald-500 hover:to-lime-500 text-white font-extrabold text-xs sm:text-sm
                           shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer
                         "
@@ -968,7 +996,7 @@ export function PortalConvidadoExclusivo({
                       </div>
                     </div>
                     {telefoneRca && (
-                      <div className="text-xs text-emerald-300 font-mono font-bold">
+                      <div className="text-xs text-emerald-300 tabular-nums font-bold">
                         {rcaResponsavel?.whatsapp || rcaResponsavel?.telefone}
                       </div>
                     )}
@@ -982,7 +1010,7 @@ export function PortalConvidadoExclusivo({
                     target="_blank"
                     rel="noreferrer"
                     className="
-                      w-full sm:w-auto px-6 py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-lime-600
+                      w-full sm:w-auto px-6 py-3.5 rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-600
                       hover:from-emerald-500 hover:to-lime-500 text-white font-black text-sm
                       shadow-xl shadow-emerald-700/20 transition-all flex items-center justify-center gap-2.5
                     "
@@ -1021,7 +1049,7 @@ export function PortalConvidadoExclusivo({
 
                   <div className="text-right">
                     <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold block">Limite Autorizado</span>
-                    <span className="text-base font-mono font-black text-lime-400">
+                    <span className="text-base tabular-nums font-black text-lime-400">
                       {cadastro.permissoes.limite_valor_pedido
                         ? `Até R$ ${cadastro.permissoes.limite_valor_pedido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                         : 'Sem limite restritivo'
@@ -1044,7 +1072,7 @@ export function PortalConvidadoExclusivo({
                         Pedido Registrado: {pedidoSucesso.numero_pedido}
                       </h3>
                       <p className="text-xs sm:text-sm text-emerald-200 mt-2 max-w-xl mx-auto">
-                        Seu pedido no valor total de <strong className="text-white font-mono">R$ {pedidoSucesso.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> foi transmitido para a equipe de faturamento e para o RCA <strong className="text-white">{pedidoSucesso.rca_nome}</strong>.
+                        Seu pedido no valor total de <strong className="text-white tabular-nums">R$ {pedidoSucesso.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> foi transmitido para a equipe de faturamento e para o RCA <strong className="text-white">{pedidoSucesso.rca_nome}</strong>.
                       </p>
                     </div>
 
@@ -1076,13 +1104,13 @@ export function PortalConvidadoExclusivo({
                     <div className="lg:col-span-8 space-y-6">
 
                       {/* Tabela de Itens no Carrinho */}
-                      <div className="bg-[#031d12] rounded-2xl border border-emerald-700/40 p-5 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-emerald-800/40 pb-3">
+                      <div className="bg-[#031d12] rounded-2xl border border-emerald-700/40 p-3.5 sm:p-5 shadow-xl space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-1 border-b border-emerald-800/40 pb-3">
                           <h3 className="text-base font-extrabold text-white flex items-center gap-2">
                             <Package className="w-5 h-5 text-emerald-400" />
                             <span>Itens do Pedido ({carrinho.length})</span>
                           </h3>
-                          <span className="text-xs text-emerald-300 font-mono">
+                          <span className="text-xs text-emerald-300 tabular-nums">
                             Peso Total: {calcularPesoTotalKg().toLocaleString('pt-BR')} KG ({(calcularPesoTotalKg() / 1000).toFixed(2)} Toneladas)
                           </span>
                         </div>
@@ -1129,22 +1157,22 @@ export function PortalConvidadoExclusivo({
                                   </div>
                                 </div>
 
-                                <div className="flex items-center justify-between sm:justify-end gap-6 pt-2 sm:pt-0 border-t sm:border-t-0 border-emerald-900/50">
+                                <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-6 pt-2 sm:pt-0 border-t sm:border-t-0 border-emerald-900/50">
                                   {/* Seletor de Quantidade */}
                                   <div className="flex items-center gap-2 bg-[#010d08] rounded-xl p-1 border border-emerald-800/60">
                                     <button
                                       onClick={() => handleAlterarQuantidade(index, -1)}
-                                      className="w-7 h-7 rounded-lg bg-emerald-950 hover:bg-emerald-800 text-white flex items-center justify-center transition-colors cursor-pointer"
+                                      className="w-10 h-10 sm:w-7 sm:h-7 rounded-lg bg-emerald-950 hover:bg-emerald-800 text-white flex items-center justify-center transition-colors cursor-pointer"
                                       title="Diminuir"
                                     >
                                       <Minus className="w-3.5 h-3.5" />
                                     </button>
-                                    <span className="w-10 text-center font-mono font-extrabold text-white text-sm">
+                                    <span className="w-10 text-center tabular-nums font-extrabold text-white text-sm">
                                       {item.quantidade}
                                     </span>
                                     <button
                                       onClick={() => handleAlterarQuantidade(index, 1)}
-                                      className="w-7 h-7 rounded-lg bg-emerald-950 hover:bg-emerald-800 text-white flex items-center justify-center transition-colors cursor-pointer"
+                                      className="w-10 h-10 sm:w-7 sm:h-7 rounded-lg bg-emerald-950 hover:bg-emerald-800 text-white flex items-center justify-center transition-colors cursor-pointer"
                                       title="Aumentar"
                                     >
                                       <Plus className="w-3.5 h-3.5" />
@@ -1154,7 +1182,7 @@ export function PortalConvidadoExclusivo({
                                   {/* Subtotal do Item */}
                                   <div className="text-right min-w-[110px]">
                                     <span className="text-[10px] text-slate-400 uppercase font-bold block">Subtotal</span>
-                                    <span className="font-mono font-black text-white text-base">
+                                    <span className="tabular-nums font-black text-white text-base">
                                       R$ {calcularSubtotalItem(item).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                     </span>
                                   </div>
@@ -1162,8 +1190,9 @@ export function PortalConvidadoExclusivo({
                                   {/* Remover */}
                                   <button
                                     onClick={() => handleRemoverItem(index)}
-                                    className="p-2 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-950/40 transition-colors cursor-pointer"
+                                    className="w-10 h-10 inline-flex items-center justify-center rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-950/40 transition-colors cursor-pointer"
                                     title="Remover Item"
+                                    aria-label="Remover item"
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
@@ -1254,12 +1283,12 @@ export function PortalConvidadoExclusivo({
                         <div className="space-y-3 text-xs sm:text-sm">
                           <div className="flex items-center justify-between text-slate-300">
                             <span>Quantidade de Itens:</span>
-                            <span className="font-mono font-bold text-white">{carrinho.length} linhas</span>
+                            <span className="tabular-nums font-bold text-white">{carrinho.length} linhas</span>
                           </div>
 
                           <div className="flex items-center justify-between text-slate-300">
                             <span>Carga Estimada:</span>
-                            <span className="font-mono font-bold text-white">
+                            <span className="tabular-nums font-bold text-white">
                               {calcularPesoTotalKg().toLocaleString('pt-BR')} kg
                             </span>
                           </div>
@@ -1276,7 +1305,7 @@ export function PortalConvidadoExclusivo({
 
                           <div className="pt-3 border-t border-emerald-700/50 flex items-baseline justify-between">
                             <span className="text-sm font-extrabold text-emerald-200">Total do Pedido:</span>
-                            <span className="text-2xl font-black text-lime-400 font-mono">
+                            <span className="text-2xl font-black text-lime-400 tabular-nums">
                               R$ {calcularTotalGeral().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
@@ -1330,22 +1359,23 @@ export function PortalConvidadoExclusivo({
       {/* 5. MODAL DE ZOOM DE FOTO / ESPECIFICAÇÕES TÉCNICAS (AMPLO) */}
       {/* ========================================================= */}
       {fotoModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-5xl lg:max-w-6xl bg-[#031d12] border border-emerald-600/70 rounded-3xl overflow-hidden shadow-2xl flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-emerald-800/60 bg-[#02140c]">
-              <div className="flex items-center gap-2 text-white font-extrabold text-base">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="relative w-full max-w-5xl lg:max-w-6xl bg-[#031d12] border border-emerald-600/70 sm:rounded-2xl overflow-hidden shadow-2xl flex flex-col sm:my-auto h-dvh sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+            <div className="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-emerald-800/60 bg-[#02140c]">
+              <div className="flex items-center gap-2 text-white font-extrabold text-base min-w-0">
                 <ImageIcon className="w-5 h-5 text-emerald-400" />
                 <span>{fotoModal.titulo}</span>
               </div>
               <button
                 onClick={() => setFotoModal(null)}
-                className="p-1.5 rounded-xl hover:bg-emerald-900 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                aria-label="Fechar"
+                className="w-10 h-10 inline-flex items-center justify-center shrink-0 rounded-md hover:bg-emerald-900 text-slate-300 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-6">
+            <div className="flex-1 min-h-0 p-4 sm:p-6 overflow-y-auto space-y-6">
               <div className="rounded-2xl overflow-hidden max-h-[460px] bg-black">
                 <img
                   src={fotoModal.url}
@@ -1363,7 +1393,7 @@ export function PortalConvidadoExclusivo({
                     {fotoModal.specs.map((sp, idx) => (
                       <div key={idx} className="bg-emerald-950/60 p-2.5 rounded-xl border border-emerald-800/40">
                         <span className="text-[10px] text-slate-400 block">{sp.rotulo}</span>
-                        <span className="text-xs font-bold text-white font-mono">{sp.valor}</span>
+                        <span className="text-xs font-bold text-white tabular-nums">{sp.valor}</span>
                       </div>
                     ))}
                   </div>
@@ -1378,8 +1408,8 @@ export function PortalConvidadoExclusivo({
       {/* 6. MODAL DE CONFIRMAÇÃO DE PRESENÇA EM EVENTO (AMPLO)     */}
       {/* ========================================================= */}
       {eventoModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-3xl sm:max-w-4xl bg-[#031d12] border border-emerald-600/70 rounded-3xl overflow-hidden shadow-2xl p-6 sm:p-8 space-y-5 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] overflow-y-auto flex flex-col">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="relative w-full max-w-3xl sm:max-w-4xl bg-[#031d12] border border-emerald-600/70 sm:rounded-2xl overflow-hidden shadow-2xl p-4 sm:p-8 space-y-5 sm:my-auto h-dvh sm:h-auto sm:max-h-[calc(100vh-3.5rem)] overflow-y-auto flex flex-col">
             <div className="flex items-center justify-between border-b border-emerald-800/60 pb-3">
               <div className="flex items-center gap-2 text-white font-black text-base">
                 <Calendar className="w-5 h-5 text-amber-400" />
@@ -1427,7 +1457,7 @@ export function PortalConvidadoExclusivo({
                 <div className="pt-2 flex items-center gap-3">
                   <button
                     onClick={() => setPresencaConfirmada(true)}
-                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-lime-600 hover:from-emerald-500 hover:to-lime-500 text-white font-extrabold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-600 hover:from-emerald-500 hover:to-lime-500 text-white font-extrabold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>Confirmar Agendamento</span>

@@ -1,14 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import {
-  QrCode,
-  Printer,
-  Barcode,
-  Layers,
-  Sparkles,
-  Calendar,
-  CheckCircle2,
-  Package
-} from 'lucide-react';
+import { Printer } from 'lucide-react';
+import { CabecalhoPagina, BotaoPrimario } from '../ui/CabecalhoPagina';
+import { Painel } from '../ui/Painel';
+import { EstadoVazio } from '../ui/EstadoVazio';
+import { Campo, form } from './kitProdutos';
 import { carregarEstoqueProdutos, carregarFichasTecnicas, ProdutoEstoque } from '../../data/produtosData';
 import { hojeISO, parseData, formatarDataBR } from '../../lib/datas';
 import { ProdutosNavTabs } from './ProdutosNavTabs';
@@ -77,19 +72,20 @@ export function ProdutosEtiqueta({ onNavigate }: Props) {
 
   if (!produto) {
     return (
-      <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-hidden">
+      <div className="relative h-full w-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
         <ProdutosNavTabs activeTab="produtos_etiqueta" onNavigate={onNavigate} />
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="max-w-md text-center bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-3">
-            <Package className="w-8 h-8 text-slate-400 mx-auto" />
-            <h2 className="font-black text-slate-900">Nenhum produto cadastrado</h2>
-            <p className="text-xs text-slate-500">Cadastre um produto acabado no estoque para emitir etiquetas.</p>
-            <button
-              onClick={() => onNavigate?.('produtos_estoque_cadastro')}
-              className="px-4 py-2 rounded-lg bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs cursor-pointer"
-            >
-              Ir para Cadastro de Produtos
-            </button>
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[1700px]">
+            <CabecalhoPagina titulo="Etiquetas" resumo="Nenhum produto cadastrado" />
+            <div className="px-4 sm:px-6 pb-8">
+              <div className="bg-papel border border-linha rounded-md">
+                <EstadoVazio
+                  titulo="Nenhum produto para etiquetar"
+                  texto="Cadastre um produto acabado para emitir etiquetas com lote, fabricação e validade."
+                  acao={<BotaoPrimario onClick={() => onNavigate?.('produtos_estoque_cadastro')}>Ir para produtos acabados</BotaoPrimario>}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -102,178 +98,122 @@ export function ProdutosEtiqueta({ onNavigate }: Props) {
   const validadeFormatada = opSelecionada?.data_validade ? formatarDataBR(opSelecionada.data_validade) : calcValidade();
   const codigoBarrasSimulado = `78989${Math.abs(produto.nome.length * 12345678).toString().padEnd(8, '0')}`;
 
+
   return (
-    <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-hidden">
-      
-      {/* 1. NAVEGAÇÃO DE PRODUTOS */}
+    <div className="relative h-full w-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
+      {/* Abas antigas: só fora do shell */}
       <ProdutosNavTabs activeTab="produtos_etiqueta" onNavigate={onNavigate} />
 
-      {/* 2. CABEÇALHO COMPACTO & MINIMALISTA */}
-      <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Emissão de Etiquetas & Rastreabilidade de Lotes</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
-                Padrão Industrial
-              </span>
-            </h1>
-            <p className="text-xs text-slate-500 font-medium">
-              Geração de etiquetas de identificação com código de barras, lote, rastreabilidade e dados técnicos para sacaria e Big Bags.
-            </p>
-          </div>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px]">
+          <CabecalhoPagina
+            titulo="Etiquetas"
+            resumo="Etiqueta de paletização com lote, fabricação, validade e código de barras"
+            acoes={
+              <BotaoPrimario onClick={() => window.print()} className="w-full sm:w-auto h-11 sm:h-9">
+                <Printer className="w-4 h-4" />
+                Imprimir {quantidadeEtiquetas || 0} {Number(quantidadeEtiquetas) === 1 ? 'etiqueta' : 'etiquetas'}
+              </BotaoPrimario>
+            }
+          />
 
-          <button
-            onClick={() => window.print()}
-            className="
-              flex items-center gap-2 px-4 py-2 rounded-xl
-              bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs
-              shadow-xs transition-all cursor-pointer
-            "
-          >
-            <Printer className="w-4 h-4" />
-            <span>Imprimir Lote ({quantidadeEtiquetas} un)</span>
-          </button>
+          <div className="px-4 sm:px-6 pb-8 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* Configuração */}
+            <Painel titulo="Dados da etiqueta" className="lg:col-span-5">
+              <div className="space-y-3">
+                <Campo rotulo="Produto acabado">
+                  <select value={produtoSelId} onChange={(e) => setProdutoSelId(e.target.value)} className={form.select}>
+                    {produtos.map(p => (
+                      <option key={p.id} value={p.id}>{p.nome} ({p.tipo_embalagem})</option>
+                    ))}
+                  </select>
+                </Campo>
+
+                <Campo rotulo="Lote de ordem de produção concluída">
+                  <select value={opSelId} onChange={(e) => aplicarLoteOP(lotesOP.find(o => o.id === e.target.value))} className={form.select}>
+                    <option value="">{lotesOP.length > 0 ? 'Lote manual (digitar abaixo)' : 'Nenhuma OP concluída deste produto'}</option>
+                    {lotesOP.map(o => (
+                      <option key={o.id} value={o.id}>
+                        {o.lote} · {o.numero} · fab. {formatarDataBR(o.data_fabricacao)} · val. {formatarDataBR(o.data_validade)} · {o.quantidade_produzida_pacotes} pct
+                      </option>
+                    ))}
+                  </select>
+                </Campo>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Campo rotulo="Número do lote">
+                    <input type="text" value={lote} onChange={(e) => { setLote(e.target.value); setOpSelId(''); }} className={`${form.campo} tabular-nums`} />
+                  </Campo>
+                  <Campo rotulo="Data de fabricação">
+                    <input type="date" value={dataFabricacao} onChange={(e) => { setDataFabricacao(e.target.value); setOpSelId(''); }} className={form.campo} />
+                  </Campo>
+                </div>
+
+                <Campo rotulo="Quantidade de etiquetas" ajuda="1 palete padrão de saco 25 kg = 40 sacos (1.000 kg).">
+                  <input type="number" inputMode="numeric" min="1" value={quantidadeEtiquetas} onChange={(e) => setQuantidadeEtiquetas(e.target.value)} className={form.campoNumero} />
+                </Campo>
+
+                <dl className="rounded-md border border-linha bg-papel-2 divide-y divide-linha text-[13px]">
+                  <div className="flex items-baseline justify-between gap-3 px-3 py-2">
+                    <dt className="text-cinza">Validade calculada</dt>
+                    <dd className="font-bold tabular-nums text-tinta">{validadeFormatada}</dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3 px-3 py-2">
+                    <dt className="text-cinza">Peso líquido unitário</dt>
+                    <dd className="font-bold tabular-nums text-tinta">{produto.peso_unitario_kg.toLocaleString('pt-BR')} kg</dd>
+                  </div>
+                </dl>
+              </div>
+            </Painel>
+
+            {/* Prévia da etiqueta */}
+            <section className="lg:col-span-7 rounded-md bg-eno-900/[0.06] border border-linha px-3 py-6 sm:p-8 flex flex-col items-center">
+              <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza mb-3">Prévia da etiqueta</div>
+              <div className="w-full max-w-md bg-papel border-2 border-tinta rounded-[3px] p-5 sm:p-6 text-tinta space-y-4 shadow-[0_18px_40px_-24px_rgba(4,32,19,0.5)]">
+                <div className="text-center border-b-2 border-tinta pb-3">
+                  <span className="text-[10px] font-extrabold tracking-[0.2em] uppercase block text-cinza">GRUPO ENO AGROINDUSTRIAL</span>
+                  <h2 className="text-[17px] font-extrabold tracking-tight uppercase mt-1 leading-tight">{produto.nome}</h2>
+                  <span className="text-[12px] font-bold text-tinta-2 tabular-nums">PESO LÍQUIDO: {produto.peso_unitario_kg} KG</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 border-b-2 border-tinta pb-3 tabular-nums">
+                  <div>
+                    <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-cinza block">Lote industrial</span>
+                    <strong className="text-[13px] font-extrabold break-all">{lote}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-cinza block">Registro SIF/MAPA</span>
+                    <strong className="text-[13px] font-extrabold">nº 0048/2024</strong>
+                  </div>
+                  <div>
+                    <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-cinza block">Fabricação</span>
+                    <strong className="text-[13px] font-bold">{dataFabricacaoFormatada}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-cinza block">Validade (24 meses)</span>
+                    <strong className="text-[13px] font-bold">{validadeFormatada}</strong>
+                  </div>
+                </div>
+
+                <div className="text-[10.5px] text-tinta-2 space-y-0.5 leading-snug">
+                  <p><strong>NÃO CONTÉM GLÚTEN.</strong> Produto 100% natural obtido da raiz de mandioca fresca.</p>
+                  <p>Conservar em local seco, arejado, sobre estrados e afastado de paredes.</p>
+                  <p className="text-[9.5px] text-cinza">Indústria Brasileira • CNPJ 14.285.901/0001-44 • Rod. PR-180 km 12</p>
+                </div>
+
+                <div className="pt-1 flex flex-col items-center">
+                  <div
+                    className="h-12 w-full max-w-64"
+                    aria-hidden
+                    style={{ background: 'repeating-linear-gradient(90deg, var(--color-tinta) 0 2px, transparent 2px 4px, var(--color-tinta) 4px 5px, transparent 5px 8px, var(--color-tinta) 8px 11px, transparent 11px 12px)' }}
+                  />
+                  <span className="text-[10.5px] text-tinta-2 tracking-[0.18em] mt-1 tabular-nums">{codigoBarrasSimulado}</span>
+                </div>
+              </div>
+            </section>
+          </div>
         </div>
       </div>
-
-      {/* 3. CORPO DIVIDIDO: CONFIGURAÇÃO À ESQUERDA, PRÉVIA REALISTA À DIREITA */}
-      <div className="flex-1 p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-12 gap-6">
-        
-        {/* Painel de Configuração */}
-        <div className="md:col-span-5 bg-white rounded-xl border border-slate-200/80 p-5 shadow-xs space-y-4 text-xs h-fit">
-          <h3 className="font-bold text-sm text-slate-900 border-b border-slate-100 pb-2">
-            Configurar Etiqueta de Paletização
-          </h3>
-
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">Produto Acabado</label>
-            <select
-              value={produtoSelId}
-              onChange={(e) => setProdutoSelId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
-            >
-              {produtos.map(p => (
-                <option key={p.id} value={p.id}>{p.nome} ({p.tipo_embalagem})</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">Lote de Ordem de Produção concluída</label>
-            <select
-              value={opSelId}
-              onChange={(e) => aplicarLoteOP(lotesOP.find(o => o.id === e.target.value))}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
-            >
-              <option value="">{lotesOP.length > 0 ? '-- Lote manual (digitar abaixo) --' : '-- Nenhuma OP concluída deste produto --'}</option>
-              {lotesOP.map(o => (
-                <option key={o.id} value={o.id}>
-                  {o.lote} · {o.numero} · fab. {formatarDataBR(o.data_fabricacao)} · val. {formatarDataBR(o.data_validade)} · {o.quantidade_produzida_pacotes} pct
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Número do Lote</label>
-              <input
-                type="text"
-                value={lote}
-                onChange={(e) => { setLote(e.target.value); setOpSelId(''); }}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Data de Fabricação</label>
-              <input
-                type="date"
-                value={dataFabricacao}
-                onChange={(e) => { setDataFabricacao(e.target.value); setOpSelId(''); }}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">Quantidade de Etiquetas a Imprimir</label>
-            <input
-              type="number"
-              min="1"
-              value={quantidadeEtiquetas}
-              onChange={(e) => setQuantidadeEtiquetas(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
-            />
-            <span className="text-[10px] text-slate-400 mt-1 block">
-              1 Palete padrão de saco 25kg = 40 sacos (1.000 kg).
-            </span>
-          </div>
-
-          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1 text-slate-600">
-            <div className="flex justify-between">
-              <span>Validade Calculada:</span>
-              <strong className="text-slate-800 font-mono">{validadeFormatada}</strong>
-            </div>
-            <div className="flex justify-between">
-              <span>Peso Líquido Unitário:</span>
-              <strong className="text-slate-800 font-mono">{produto.peso_unitario_kg} kg</strong>
-            </div>
-          </div>
-        </div>
-
-        {/* Prévia Realista da Etiqueta Industrial */}
-        <div className="md:col-span-7 flex flex-col items-center justify-center">
-          <div className="w-full max-w-md bg-white border-2 border-slate-900 rounded-lg p-6 shadow-md text-slate-900 font-sans space-y-4">
-            
-            {/* Cabeçalho da Etiqueta */}
-            <div className="text-center border-b-2 border-slate-900 pb-3">
-              <span className="text-[10px] font-black tracking-widest uppercase block text-slate-500">GRUPO ENO AGROINDUSTRIAL</span>
-              <h2 className="text-base font-black tracking-tight uppercase mt-0.5">{produto.nome}</h2>
-              <span className="text-xs font-bold text-slate-700">PESO LÍQUIDO: {produto.peso_unitario_kg} KG</span>
-            </div>
-
-            {/* Informações de Rastreabilidade */}
-            <div className="grid grid-cols-2 gap-2 text-[11px] font-mono border-b-2 border-slate-900 pb-3">
-              <div>
-                <span className="text-slate-500 text-[10px] block font-sans">LOTE INDUSTRIAL:</span>
-                <strong className="text-xs font-black">{lote}</strong>
-              </div>
-              <div>
-                <span className="text-slate-500 text-[10px] block font-sans">REGISTRO SIF/MAPA:</span>
-                <strong className="text-xs font-black">nº 0048/2024</strong>
-              </div>
-              <div>
-                <span className="text-slate-500 text-[10px] block font-sans">FABRICAÇÃO:</span>
-                <strong className="text-xs font-bold">{dataFabricacaoFormatada}</strong>
-              </div>
-              <div>
-                <span className="text-slate-500 text-[10px] block font-sans">VALIDADE (24 MESES):</span>
-                <strong className="text-xs font-bold">{validadeFormatada}</strong>
-              </div>
-            </div>
-
-            {/* Dados de Conservação & Alergênicos */}
-            <div className="text-[10px] text-slate-600 space-y-0.5">
-              <p><strong>NÃO CONTÉM GLÚTEN.</strong> Produto 100% natural obtido da raiz de mandioca fresca.</p>
-              <p>Conservar em local seco, arejado, sobre estrados e afastado de paredes.</p>
-              <p className="text-[9px] text-slate-400">Indústria Brasileira • CNPJ 14.285.901/0001-44 • Rod. PR-180 km 12</p>
-            </div>
-
-            {/* Simulação de Código de Barras EAN-13 */}
-            <div className="pt-2 text-center flex flex-col items-center">
-              <div className="h-12 w-64 bg-slate-900 flex items-center justify-center tracking-widest text-white font-mono text-[10px] font-bold">
-                ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-              </div>
-              <span className="font-mono text-[10px] text-slate-700 tracking-wider mt-1">{codigoBarrasSimulado}</span>
-            </div>
-
-          </div>
-        </div>
-
-      </div>
-
     </div>
   );
 }

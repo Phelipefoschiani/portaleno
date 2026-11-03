@@ -45,8 +45,8 @@ export type AbaSitio = 'PAINEL' | 'COMBUSTIVEL' | 'HORAS' | 'DESPESAS' | 'MAQUIN
 // ============================================================
 
 export const inputCls =
-  'w-full h-12 px-3.5 rounded-xl border border-slate-300 bg-white text-[15px] font-semibold text-slate-900 ' +
-  'placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 ' +
+  'w-full h-12 px-3.5 rounded-xl border border-linha-forte bg-papel text-[15px] font-semibold text-tinta ' +
+  'placeholder:text-cinza-claro placeholder:font-normal focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 ' +
   'tabular-nums';
 
 export function Campo({
@@ -62,9 +62,9 @@ export function Campo({
 }) {
   return (
     <label className={`block ${className}`}>
-      <span className="block text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-500 mb-1.5">{rotulo}</span>
+      <span className="block text-[11px] font-extrabold uppercase tracking-[0.12em] text-cinza mb-1.5">{rotulo}</span>
       {children}
-      {dica && <span className="block mt-1 text-xs text-slate-500">{dica}</span>}
+      {dica && <span className="block mt-1 text-xs text-cinza">{dica}</span>}
     </label>
   );
 }
@@ -96,7 +96,7 @@ export function Segmentado<T extends string>({
           onClick={() => onChange(o.valor)}
           aria-pressed={valor === o.valor}
           className={`min-h-11 px-4 rounded-xl border text-sm font-bold transition-colors cursor-pointer ${
-            valor === o.valor ? ativo : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+            valor === o.valor ? ativo : 'bg-papel text-tinta-2 border-linha-forte hover:border-linha-forte'
           }`}
         >
           {o.rotulo}
@@ -162,9 +162,9 @@ export function Folha({
       <form
         onSubmit={onSubmit}
         onClick={e => e.stopPropagation()}
-        className="w-full sm:max-w-lg max-h-[94dvh] sm:max-h-[90vh] flex flex-col bg-[#f7faf8] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
+        className="w-full sm:max-w-lg max-h-[94dvh] sm:max-h-[90vh] flex flex-col bg-papel-2 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
       >
-        <div className="relative bg-[#022013] text-white px-5 pt-4 pb-4 shrink-0 overflow-hidden">
+        <div className="relative bg-eno-900 text-white px-5 pt-4 pb-4 shrink-0 overflow-hidden">
           <div className="pointer-events-none absolute -right-10 -top-16 w-48 h-48 rounded-full bg-emerald-500/20 blur-3xl" />
           <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/25 sm:hidden" />
           <div className="relative flex items-start justify-between gap-3">
@@ -186,11 +186,11 @@ export function Folha({
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">{children}</div>
-        <div className="shrink-0 px-5 py-3 border-t border-slate-200 bg-white flex gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 px-5 py-3 border-t border-linha bg-papel flex gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
             onClick={onFechar}
-            className="h-12 px-5 rounded-xl border border-slate-300 font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+            className="h-12 px-5 rounded-xl border border-linha-forte font-bold text-tinta-2 hover:bg-papel-3 cursor-pointer"
           >
             Cancelar
           </button>
@@ -219,7 +219,7 @@ export function BlocoPagamento({
   onChange: (p: { forma?: string; situacao?: SituacaoPagamento; vencimento?: string }) => void;
 }) {
   return (
-    <div className="space-y-3 rounded-2xl bg-white border border-slate-200 p-4">
+    <div className="space-y-3 rounded-2xl bg-papel border border-linha p-4">
       <Campo rotulo="Situação">
         <Segmentado<SituacaoPagamento>
           valor={situacao}
@@ -245,10 +245,10 @@ export function BlocoPagamento({
             <input type="date" required className={inputCls} value={vencimento} onChange={e => onChange({ vencimento: e.target.value })} />
           </Campo>
         ) : (
-          <div className="self-end pb-3 text-xs text-slate-500">Entra como despesa paga no financeiro.</div>
+          <div className="self-end pb-3 text-xs text-cinza">Entra como despesa paga no financeiro.</div>
         )}
       </div>
-      {situacao === 'A_PAGAR' && <p className="text-xs text-slate-500">Vai para Contas a Pagar com esse vencimento.</p>}
+      {situacao === 'A_PAGAR' && <p className="text-xs text-cinza">Vai para Contas a Pagar com esse vencimento.</p>}
     </div>
   );
 }
@@ -307,7 +307,7 @@ export function MedidorTanque({
 export function Vazio({ texto, acao }: { texto: string; acao?: React.ReactNode }) {
   return (
     <div className="py-10 px-4 text-center">
-      <p className="text-sm text-slate-500">{texto}</p>
+      <p className="text-sm text-cinza">{texto}</p>
       {acao && <div className="mt-4 flex justify-center">{acao}</div>}
     </div>
   );
@@ -333,7 +333,7 @@ export function BotaoAcao({
       : tom === 'sky'
       ? 'bg-sky-700 hover:bg-sky-800 text-white shadow-sky-900/25'
       : tom === 'claro'
-      ? 'bg-white hover:bg-emerald-50 text-emerald-950 border border-emerald-200 shadow-emerald-900/5'
+      ? 'bg-papel hover:bg-emerald-50 text-emerald-950 border border-emerald-200 shadow-emerald-900/5'
       : 'bg-emerald-700 hover:bg-emerald-800 text-white shadow-emerald-900/25';
   return (
     <button

@@ -10,6 +10,7 @@ import {
   excluirCategoriaProduto,
   renomearCategoriaProduto
 } from '../../data/categoriasProdutoData';
+import { form, BotaoIcone } from './kitProdutos';
 
 /** Lista de categorias sempre atualizada (cadastro, filtros, comissão). */
 export function useCategoriasProduto(): string[] {
@@ -87,7 +88,8 @@ export function CategoriaProdutoCampo({ value, onChange }: Props) {
     setRenomeando(null);
   };
 
-  const btn = 'p-2 rounded-xl border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/30';
+  const btn =
+    'inline-flex h-11 w-11 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-md border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-eno-700/30';
 
   return (
     <div className="space-y-1.5">
@@ -95,9 +97,9 @@ export function CategoriaProdutoCampo({ value, onChange }: Props) {
         <select
           value={valorNaLista ? categorias.find(c => chaveCategoria(c) === chaveCategoria(value)) : ''}
           onChange={(e) => onChange(e.target.value)}
-          className="min-w-0 flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-800 font-bold focus:outline-none focus:border-emerald-700 cursor-pointer shadow-2xs"
+          className={`${form.select} min-w-0 flex-1`}
         >
-          <option value="" disabled>{vazio ? 'Crie uma categoria →' : '-- Selecione --'}</option>
+          <option value="" disabled>{vazio ? 'Crie uma categoria →' : 'Selecione'}</option>
           {categorias.map(c => (
             <option key={c} value={c}>{c}</option>
           ))}
@@ -105,8 +107,9 @@ export function CategoriaProdutoCampo({ value, onChange }: Props) {
         <button
           type="button"
           onClick={() => { setCriando(v => !v); setGerenciando(false); setAviso(''); }}
-          className={`${btn} ${vazio ? 'bg-emerald-900 border-emerald-900 text-white hover:bg-emerald-950 ring-2 ring-emerald-500/40' : 'bg-white border-slate-300 text-emerald-800 hover:bg-emerald-50'}`}
+          className={`${btn} ${vazio ? 'bg-eno-800 border-eno-800 text-white hover:bg-eno-900' : 'bg-papel border-linha-forte text-eno-700 hover:bg-papel-3'}`}
           title="Nova categoria"
+          aria-label="Nova categoria"
         >
           <Plus className="w-4 h-4" />
         </button>
@@ -114,8 +117,9 @@ export function CategoriaProdutoCampo({ value, onChange }: Props) {
           <button
             type="button"
             onClick={() => { setGerenciando(v => !v); setCriando(false); setAviso(''); }}
-            className={`${btn} ${gerenciando ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
+            className={`${btn} ${gerenciando ? 'bg-eno-900 border-eno-900 text-white' : 'bg-papel border-linha-forte text-cinza hover:text-tinta hover:bg-papel-3'}`}
             title="Gerenciar categorias"
+            aria-label="Gerenciar categorias"
           >
             <ListTree className="w-4 h-4" />
           </button>
@@ -134,23 +138,23 @@ export function CategoriaProdutoCampo({ value, onChange }: Props) {
               if (e.key === 'Escape') setCriando(false);
             }}
             placeholder="Nome da nova categoria"
-            className="min-w-0 flex-1 bg-white border border-emerald-400 rounded-lg px-2.5 py-1.5 font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
+            className={`${form.campo} min-w-0 flex-1`}
           />
-          <button type="button" onClick={criar} className="p-1.5 rounded-lg bg-emerald-900 hover:bg-emerald-950 text-white cursor-pointer" title="Criar">
-            <Check className="w-3.5 h-3.5" />
+          <button type="button" onClick={criar} className={`${btn} bg-eno-800 border-eno-800 text-white hover:bg-eno-900`} title="Criar" aria-label="Criar categoria">
+            <Check className="w-4 h-4" />
           </button>
-          <button type="button" onClick={() => setCriando(false)} className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 cursor-pointer" title="Cancelar">
-            <X className="w-3.5 h-3.5" />
+          <button type="button" onClick={() => setCriando(false)} className={`${btn} bg-papel border-linha-forte text-cinza hover:bg-papel-3`} title="Cancelar" aria-label="Cancelar">
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
       {gerenciando && (
-        <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-56 overflow-y-auto">
+        <div className="rounded-md border border-linha bg-papel max-h-56 overflow-y-auto">
           {categorias.map(c => {
             const qtd = contarProdutosDaCategoria(c);
             return (
-              <div key={c} className="flex items-center gap-2 px-2.5 py-1.5">
+              <div key={c} className="flex items-center gap-1.5 px-2.5 py-1 border-b border-linha last:border-b-0">
                 {renomeando === c ? (
                   <>
                     <input
@@ -162,37 +166,31 @@ export function CategoriaProdutoCampo({ value, onChange }: Props) {
                         if (e.key === 'Enter') { e.preventDefault(); salvarRenomear(); }
                         if (e.key === 'Escape') setRenomeando(null);
                       }}
-                      className="min-w-0 flex-1 bg-white border border-emerald-400 rounded-md px-2 py-1 font-bold text-slate-800 focus:outline-none"
+                      className={`${form.campo} min-w-0 flex-1`}
                     />
-                    <button type="button" onClick={salvarRenomear} className="p-1 rounded-md text-emerald-800 hover:bg-emerald-50 cursor-pointer" title="Salvar nome">
-                      <Check className="w-3.5 h-3.5" />
-                    </button>
-                    <button type="button" onClick={() => setRenomeando(null)} className="p-1 rounded-md text-slate-400 hover:bg-slate-100 cursor-pointer" title="Cancelar">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+                    <BotaoIcone rotulo="Salvar nome" onClick={salvarRenomear} className="text-eno-700">
+                      <Check className="w-4 h-4" />
+                    </BotaoIcone>
+                    <BotaoIcone rotulo="Cancelar" onClick={() => setRenomeando(null)}>
+                      <X className="w-4 h-4" />
+                    </BotaoIcone>
                   </>
                 ) : (
                   <>
-                    <span className="min-w-0 flex-1 truncate font-semibold text-slate-800">{c}</span>
-                    <span className="text-[10px] font-mono tabular-nums text-slate-400 shrink-0">
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-tinta">{c}</span>
+                    <span className="text-[11px] tabular-nums text-cinza shrink-0">
                       {qtd} {qtd === 1 ? 'produto' : 'produtos'}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => { setRenomeando(c); setNomeRenomear(c); }}
-                      className="p-1 rounded-md text-slate-400 hover:text-slate-800 hover:bg-slate-100 cursor-pointer"
-                      title="Renomear (atualiza produtos e comissões por grupo)"
-                    >
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                    <button
-                      type="button"
+                    <BotaoIcone rotulo="Renomear (atualiza produtos e comissões por grupo)" onClick={() => { setRenomeando(c); setNomeRenomear(c); }}>
+                      <Pencil className="w-3.5 h-3.5" />
+                    </BotaoIcone>
+                    <BotaoIcone
+                      rotulo={qtd > 0 ? `Excluir (move ${qtd} produto(s) para "${CATEGORIA_SEM_CATEGORIA}")` : 'Excluir'}
+                      perigo
                       onClick={() => excluir(c)}
-                      className="p-1 rounded-md text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                      title={qtd > 0 ? `Excluir (move ${qtd} produto(s) para "${CATEGORIA_SEM_CATEGORIA}")` : 'Excluir'}
                     >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </BotaoIcone>
                   </>
                 )}
               </div>
@@ -201,9 +199,9 @@ export function CategoriaProdutoCampo({ value, onChange }: Props) {
         </div>
       )}
 
-      {aviso && <p className="text-[10px] font-semibold text-emerald-800">{aviso}</p>}
+      {aviso && <p className="text-[11.5px] font-semibold text-st-pago">{aviso}</p>}
       {vazio && !criando && (
-        <p className="text-[10px] font-semibold text-amber-700">Nenhuma categoria ainda — clique em + para criar.</p>
+        <p className="text-[11.5px] font-semibold text-st-aguardando">Nenhuma categoria ainda — toque em + para criar.</p>
       )}
     </div>
   );

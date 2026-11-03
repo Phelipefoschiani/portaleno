@@ -47,8 +47,8 @@ export function CampoPrecoTabela({
   const valorUn = unitario && unitario > 0 ? unitario : undefined;
   const valorCx = valorUn ? Math.round(valorUn * un * 100) / 100 : undefined;
 
-  const base = `w-full bg-white border rounded-lg px-2 py-1 text-right font-mono font-bold tabular-nums focus:outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/15 disabled:bg-slate-100 placeholder:font-sans placeholder:font-normal placeholder:text-slate-300 ${
-    alerta ? 'border-red-400 text-red-700' : 'border-slate-200 text-slate-900'
+  const base = `w-full h-11 sm:h-8 bg-papel border rounded-md px-2.5 text-right tabular-nums font-semibold text-[16px] sm:text-[13px] focus:outline-none focus:border-eno-700 focus:ring-2 focus:ring-eno-700/15 disabled:bg-papel-2 placeholder:font-normal placeholder:text-cinza-claro ${
+    alerta ? 'border-st-vencido text-st-vencido' : 'border-linha-forte text-tinta'
   }`;
 
   const campo = (qual: 'un' | 'cx') => {
@@ -81,16 +81,16 @@ export function CampoPrecoTabela({
   const verCx = mostrarCaixa && temCaixa;
 
   return (
-    <div className={`grid gap-1.5 ${verUn && verCx ? 'grid-cols-2' : 'grid-cols-1'}`}>
+    <div className={`grid gap-2 ${verUn && verCx ? 'grid-cols-2' : 'grid-cols-1'}`}>
       {verUn && (
         <label className="block">
-          <span className="block text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-0.5">Unitário</span>
+          <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-cinza mb-0.5">Unitário</span>
           {campo('un')}
         </label>
       )}
       {verCx && (
         <label className="block">
-          <span className="block text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400 mb-0.5 truncate">
+          <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-cinza mb-0.5 truncate">
             {tipoAcondicionamento} c/ {un}
           </span>
           {campo('cx')}

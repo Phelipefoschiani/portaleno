@@ -1,23 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CampoNumero } from '../ui/CampoNumero';
+import { Plus, Copy, Check, Save } from 'lucide-react';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, Segmentado, CampoBusca } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { StatusChip } from '../ui/StatusChip';
+import { CardNumero } from '../ui/CardNumero';
+import { EstadoVazio } from '../ui/EstadoVazio';
 import {
-  DollarSign,
-  Plus,
-  Search,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  Copy,
-  Check,
-  Calendar,
-  Building2,
-  Edit2,
-  Trash2,
-  X,
-  Save,
-  Printer,
-  Receipt
-} from 'lucide-react';
+  ModalFolha, Campo, campo, FaixaFin, ListaCartoes, ItemCartao, tomTitulo, moedaSemSimbolo,
+  botaoLinhaPrimario,
+} from './finUi';
 import {
   TituloReceber,
   carregarTitulosReceber,
@@ -79,9 +72,12 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
       t => t.valor
     );
     const qtdAberto = pendentes.length;
-    const qtdVencidos = titulos.filter(t => t.status === 'VENCIDO').length;
+    const vencidos = titulos.filter(t => t.status === 'VENCIDO');
+    const qtdVencidos = vencidos.length;
+    const valorVencido = somarValores(vencidos, t => t.valor);
+    const qtdPagos = titulos.filter(t => t.status === 'PAGO').length;
 
-    return { emAberto, recebidoMes, qtdAberto, qtdVencidos };
+    return { emAberto, recebidoMes, qtdAberto, qtdVencidos, valorVencido, qtdPagos };
   }, [titulos]);
 
   const titulosFiltrados = useMemo(() => {
@@ -136,331 +132,248 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
     setModalNovo(false);
   };
 
+  const abrirNovo = () => {
+    setFormData({
+      numero_documento: `DUP-${Math.floor(1000 + Math.random() * 9000)}`,
+      cliente_nome: '',
+      cliente_cnpj: '',
+      valor: 0,
+      data_emissao: hojeISO(),
+      data_vencimento: somarDias(hojeISO(), 28),
+      forma_pagamento: '',
+      banco_emissor: '',
+      observacoes: ''
+    });
+    setModalNovo(true);
+  };
+
+  const rotuloStatus = (s: string) => (s === 'PAGO' ? 'Recebido' : s === 'VENCIDO' ? 'Vencido' : 'A vencer');
+  const semNenhum = titulos.length === 0;
+  const vazioPorFiltro = !semNenhum && titulosFiltrados.length === 0;
+
+  const estadoVazio = (
+    <EstadoVazio
+      titulo={vazioPorFiltro ? 'Nenhum título com esses filtros' : 'Nenhum título a receber'}
+      texto={
+        vazioPorFiltro
+          ? 'Mude a situação ou a busca para ver os outros títulos.'
+          : 'As duplicatas das vendas faturadas entram aqui sozinhas. Lance à mão só o que veio de fora do sistema.'
+      }
+      acao={
+        vazioPorFiltro ? (
+          <BotaoSecundario onClick={() => { setBusca(''); setFiltroStatus('TODOS'); }}>Limpar filtros</BotaoSecundario>
+        ) : (
+          <BotaoPrimario onClick={abrirNovo}><Plus className="w-4 h-4" /> Novo título</BotaoPrimario>
+        )
+      }
+    />
+  );
+
   return (
-    <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-hidden">
-      
-      {/* 1. NAVEGAÇÃO FINANCEIRO */}
+    <div className="relative h-full w-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
       <FinanceiroNavTabs activeTab="financeiro_a_receber" onNavigate={onNavigate} />
 
-      {/* 2. CABEÇALHO COMPACTO & MINIMALISTA */}
-      <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Contas a Receber</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
-                {metricas.qtdAberto} em aberto
-              </span>
-              {metricas.qtdVencidos > 0 && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-red-50 text-red-700 font-mono">
-                  {metricas.qtdVencidos} vencidos
-                </span>
-              )}
-            </h1>
-          </div>
-
-          <button
-            onClick={() => {
-              setFormData({
-                numero_documento: `DUP-${Math.floor(1000 + Math.random() * 9000)}`,
-                cliente_nome: '',
-                cliente_cnpj: '',
-                valor: 0,
-                data_emissao: hojeISO(),
-                data_vencimento: somarDias(hojeISO(), 28),
-                forma_pagamento: '',
-                banco_emissor: '',
-                observacoes: ''
-              });
-              setModalNovo(true);
-            }}
-            className="
-              flex items-center gap-2 px-4 py-2 rounded-xl
-              bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs
-              shadow-xs transition-all cursor-pointer
-            "
-          >
-            <Plus className="w-4 h-4" />
-            <span>Novo Título a Receber</span>
-          </button>
-        </div>
-
-        {/* STAT BAR MINIMALISTA EM LINHA */}
-        <div className="flex flex-wrap items-center gap-6 pt-3 mt-3 border-t border-slate-100 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Total em Aberto na Carteira:</span>
-            <span className="font-mono font-bold text-slate-900 text-sm">
-              {formatarMoeda(metricas.emAberto)}
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Recebido no Mês:</span>
-            <span className="font-mono font-bold text-emerald-700">
-              {formatarMoeda(metricas.recebidoMes)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. BARRA DE BUSCA E FILTROS */}
-      <div className="bg-[#f1f5f2] px-6 py-2.5 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="flex-1 min-w-[260px] max-w-sm relative">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por Cliente, Documento ou CNPJ..."
-            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-700 font-medium"
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px]">
+          <CabecalhoPagina
+            titulo="Contas a receber"
+            resumo={
+              semNenhum ? 'Nenhum título lançado' : (
+                <>
+                  <span className="font-semibold text-tinta-2">{metricas.qtdAberto} {metricas.qtdAberto === 1 ? 'título em aberto' : 'títulos em aberto'}</span>
+                  {metricas.qtdVencidos > 0 && <span className="text-st-vencido font-semibold"> · {metricas.qtdVencidos} {metricas.qtdVencidos === 1 ? 'vencido' : 'vencidos'}</span>}
+                </>
+              )
+            }
+            acoes={semNenhum ? undefined : (
+              <BotaoPrimario onClick={abrirNovo} className="w-full sm:w-auto h-11 sm:h-9">
+                <Plus className="w-4 h-4" /> Novo título
+              </BotaoPrimario>
+            )}
           />
-        </div>
 
-        <select
-          value={filtroStatus}
-          onChange={(e) => setFiltroStatus(e.target.value)}
-          className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 cursor-pointer focus:outline-none"
-        >
-          <option value="TODOS">Todos os Status</option>
-          <option value="EM_ABERTO">Em Aberto</option>
-          <option value="VENCIDO">Vencidos</option>
-          <option value="PAGO">Liquidados / Pagos</option>
-        </select>
-      </div>
-
-      {/* 4. TABELA LIMPA */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/90 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
-                <th className="py-3 px-5">Documento & Cliente</th>
-                <th className="py-3 px-4">Banco / Cobrança</th>
-                <th className="py-3 px-4">Vencimento</th>
-                <th className="py-3 px-4">Valor Nominal</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-5 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {titulosFiltrados.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
-                    Nenhum título a receber encontrado.
-                  </td>
-                </tr>
-              ) : (
-                titulosFiltrados.map((item) => {
-                  return (
-                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-5">
-                        <div className="font-bold text-slate-900">{item.cliente_nome}</div>
-                        <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                          {item.numero_documento} • CNPJ: {item.cliente_cnpj}
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-slate-700">
-                        <div>{item.banco_emissor}</div>
-                        {item.linha_digitavel && (
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <span className="text-[10px] text-slate-400 font-mono truncate max-w-xs">
-                              {item.linha_digitavel}
-                            </span>
-                            <button
-                              onClick={() => handleCopiarLinha(item.linha_digitavel!, item.id)}
-                              className="p-0.5 hover:text-slate-900 text-slate-400 cursor-pointer"
-                              title="Copiar Linha Digitável do Boleto"
-                            >
-                              {copiadoId === item.id ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                            </button>
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4 font-mono">
-                        <div className="font-bold text-slate-800">{formatarDataBR(item.data_vencimento)}</div>
-                        <div className="text-[10px] text-slate-400 font-sans">Emitido em {formatarDataBR(item.data_emissao)}</div>
-                      </td>
-
-                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900 text-sm">
-                        {formatarMoeda(item.valor)}
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        {item.status === 'PAGO' ? (
-                          <div className="flex items-center gap-1.5 text-emerald-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                            <span className="font-medium">Liquidado</span>
-                          </div>
-                        ) : item.status === 'VENCIDO' ? (
-                          <div className="flex items-center gap-1.5 text-red-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
-                            <span className="font-medium">Vencido</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-amber-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            <span className="font-medium">Aguardando Pagamento</span>
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-5 text-right">
-                        {item.status !== 'PAGO' ? (
-                          <button
-                            onClick={() => handleBaixarTitulo(item.id, item.numero_documento)}
-                            className="
-                              inline-flex items-center gap-1 px-3 py-1.5 rounded-lg
-                              bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs
-                              shadow-2xs transition-colors cursor-pointer
-                            "
-                            title="Confirmar Liquidação Bancária"
-                          >
-                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                            <span>Baixar</span>
-                          </button>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 font-mono">
-                            Pago em {formatarDataBR(item.data_pagamento)}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* 5. MODAL NOVO TÍTULO A RECEBER (AMPLO E HORIZONTAL) */}
-      {modalNovo && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-4xl sm:max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-900/80 border border-emerald-700 flex items-center justify-center text-emerald-300">
-                  <Receipt className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm sm:text-base text-white">Lançar Título a Receber</h3>
-                  <p className="text-[11px] text-slate-400">Contas a receber, faturas e duplicatas de vendas</p>
-                </div>
-              </div>
-              <button onClick={() => setModalNovo(false)} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
+          {!semNenhum && (
+            <div className="px-4 sm:px-6 pb-4">
+              <FaixaFin colunas="lg:grid-cols-[1.45fr_1fr_1fr]">
+                <CardNumero destaque rotulo="Em aberto na carteira" unidade="R$" unidadeAntes valor={moedaSemSimbolo(metricas.emAberto)}
+                  detalhe={`${metricas.qtdAberto} ${metricas.qtdAberto === 1 ? 'título' : 'títulos'}`} />
+                <CardNumero rotulo="Vencido" unidade="R$" unidadeAntes valor={moedaSemSimbolo(metricas.valorVencido)}
+                  detalhe={metricas.qtdVencidos > 0 ? `${metricas.qtdVencidos} para cobrar` : 'Nada atrasado'}
+                  alerta={metricas.qtdVencidos > 0 ? 'vencido' : undefined}
+                  onClick={metricas.qtdVencidos > 0 ? () => setFiltroStatus('VENCIDO') : undefined} />
+                <CardNumero rotulo="Recebido no mês" unidade="R$" unidadeAntes valor={moedaSemSimbolo(metricas.recebidoMes)} />
+              </FaixaFin>
             </div>
+          )}
 
-            <form onSubmit={handleSalvarNovo} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Nº Documento / Duplicata</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.numero_documento}
-                    onChange={(e) => setFormData({ ...formData, numero_documento: e.target.value })}
-                    placeholder="Ex: DUP-4029 / NF-e 891"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
-                  />
-                </div>
+          {!semNenhum && (
+            <BarraFiltros>
+              <Segmentado<string>
+                rotuloAria="Situação dos títulos"
+                valor={filtroStatus}
+                onChange={setFiltroStatus}
+                opcoes={[
+                  { valor: 'TODOS', rotulo: 'Todos', contagem: titulos.length },
+                  { valor: 'EM_ABERTO', rotulo: 'A vencer', contagem: metricas.qtdAberto - metricas.qtdVencidos },
+                  { valor: 'VENCIDO', rotulo: 'Vencidos', contagem: metricas.qtdVencidos },
+                  { valor: 'PAGO', rotulo: 'Recebidos', contagem: metricas.qtdPagos },
+                ]}
+              />
+              <CampoBusca valor={busca} onChange={setBusca} placeholder="Buscar cliente, documento ou CNPJ" className="w-full md:w-80" />
+            </BarraFiltros>
+          )}
 
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Valor do Título (R$)</label>
-                  <CampoNumero
-                    step="0.01"
-                    min={0}
-                    casas={2}
-                    ocultarZero
-                    required
-                    value={formData.valor}
-                    onChange={(n) => setFormData({ ...formData, valor: n })}
-                    placeholder="0.00"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
-                  />
-                </div>
+          <div className="px-4 sm:px-6 pb-6">
+            {titulosFiltrados.length === 0 ? (
+              <div className="bg-papel border border-linha rounded-md">{estadoVazio}</div>
+            ) : (
+              <>
+                <ListaCartoes>
+                  {titulosFiltrados.map(item => (
+                    <ItemCartao key={item.id}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-[11.5px] text-cinza tabular-nums truncate">{item.numero_documento}{item.banco_emissor ? ` · ${item.banco_emissor}` : ''}</div>
+                          <div className="text-[14px] font-bold text-tinta truncate">{item.cliente_nome}</div>
+                        </div>
+                        <StatusChip tom={tomTitulo(item.status)} className="shrink-0">{rotuloStatus(item.status)}</StatusChip>
+                      </div>
+                      <div className="flex items-end justify-between gap-2 mt-2">
+                        <span className={`text-[12px] tabular-nums ${item.status === 'VENCIDO' ? 'text-st-vencido font-semibold' : 'text-cinza'}`}>
+                          {item.status === 'PAGO' ? `Recebido em ${formatarDataBR(item.data_pagamento)}` : `Vence ${formatarDataBR(item.data_vencimento)}`}
+                        </span>
+                        <span className="text-[17px] font-extrabold tracking-[-0.01em] tabular-nums text-tinta">{formatarMoeda(item.valor)}</span>
+                      </div>
+                      {(item.status !== 'PAGO' || item.linha_digitavel) && (
+                        <div className="flex gap-2 mt-2.5">
+                          {item.linha_digitavel && (
+                            <button type="button" onClick={() => handleCopiarLinha(item.linha_digitavel!, item.id)}
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-md border border-linha-forte text-tinta-2 text-[13px] font-semibold active:bg-papel-3">
+                              {copiadoId === item.id ? <Check className="w-4 h-4 text-st-pago" /> : <Copy className="w-4 h-4" />}
+                              {copiadoId === item.id ? 'Copiado' : 'Copiar boleto'}
+                            </button>
+                          )}
+                          {item.status !== 'PAGO' && (
+                            <button type="button" onClick={() => handleBaixarTitulo(item.id, item.numero_documento)}
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-md bg-eno-800 text-white text-[13px] font-semibold active:bg-eno-900">
+                              <Check className="w-4 h-4" /> Dar baixa
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </ItemCartao>
+                  ))}
+                </ListaCartoes>
 
-                <div className="sm:col-span-2">
-                  <label className="block font-bold text-slate-700 mb-1">Cliente Devedor</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.cliente_nome}
-                    onChange={(e) => setFormData({ ...formData, cliente_nome: e.target.value })}
-                    placeholder="Razão Social ou Nome Fantasia do Cliente"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">CNPJ / CPF</label>
-                  <input
-                    type="text"
-                    value={formData.cliente_cnpj}
-                    onChange={(e) => setFormData({ ...formData, cliente_cnpj: e.target.value })}
-                    placeholder="00.000.000/0000-00"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Data de Vencimento</label>
-                  <input
-                    type="date"
-                    required
-                    value={paraISO(formData.data_vencimento)}
-                    onChange={(e) => setFormData({ ...formData, data_vencimento: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Forma de Pagamento</label>
-                  <input
-                    type="text"
-                    value={formData.forma_pagamento}
-                    onChange={(e) => setFormData({ ...formData, forma_pagamento: e.target.value })}
-                    placeholder="Boleto 30/60DD / TED / PIX"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Banco Cobrança</label>
-                  <input
-                    type="text"
-                    value={formData.banco_emissor}
-                    onChange={(e) => setFormData({ ...formData, banco_emissor: e.target.value })}
-                    placeholder="Banco do Brasil / Itaú / Bradesco"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setModalNovo(false)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Gravar Título</span>
-                </button>
-              </div>
-            </form>
+                <TabelaDados className="hidden sm:block">
+                  <thead className={tabela.thead}>
+                    <tr>
+                      <Th>Cliente e documento</Th>
+                      <Th>Cobrança</Th>
+                      <Th>Vencimento</Th>
+                      <Th>Situação</Th>
+                      <Th numero>Valor</Th>
+                      <Th className="text-right">Ação</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {titulosFiltrados.map(item => (
+                      <tr key={item.id} className={tabela.tr}>
+                        <Td className="max-w-[320px]">
+                          <div className="font-semibold text-tinta truncate">{item.cliente_nome}</div>
+                          <div className="text-[11.5px] text-cinza tabular-nums truncate">
+                            {item.numero_documento}{item.cliente_cnpj ? ` · ${item.cliente_cnpj}` : ''}
+                          </div>
+                        </Td>
+                        <Td className="max-w-[260px]">
+                          <div className="truncate">{item.banco_emissor || item.forma_pagamento || <span className="text-cinza-claro">—</span>}</div>
+                          {item.linha_digitavel && (
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="text-[11px] text-cinza tabular-nums truncate">{item.linha_digitavel}</span>
+                              <button type="button" onClick={() => handleCopiarLinha(item.linha_digitavel!, item.id)}
+                                className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded text-cinza hover:bg-papel-3 hover:text-tinta cursor-pointer"
+                                title="Copiar linha digitável" aria-label="Copiar linha digitável">
+                                {copiadoId === item.id ? <Check className="w-3.5 h-3.5 text-st-pago" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+                          )}
+                        </Td>
+                        <Td className="whitespace-nowrap tabular-nums">
+                          <div className={`font-semibold ${item.status === 'VENCIDO' ? 'text-st-vencido' : 'text-tinta'}`}>{formatarDataBR(item.data_vencimento)}</div>
+                          <div className="text-[11.5px] text-cinza">Emitido {formatarDataBR(item.data_emissao)}</div>
+                        </Td>
+                        <Td><StatusChip tom={tomTitulo(item.status)}>{rotuloStatus(item.status)}</StatusChip></Td>
+                        <Td numero><span className="font-bold text-tinta text-[13.5px]">{formatarMoeda(item.valor)}</span></Td>
+                        <Td className="text-right whitespace-nowrap">
+                          {item.status !== 'PAGO' ? (
+                            <button type="button" onClick={() => handleBaixarTitulo(item.id, item.numero_documento)} className={botaoLinhaPrimario} title="Confirmar recebimento">
+                              <Check className="w-3.5 h-3.5" /> Dar baixa
+                            </button>
+                          ) : (
+                            <span className="text-[12px] text-cinza tabular-nums">Recebido {formatarDataBR(item.data_pagamento)}</span>
+                          )}
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </TabelaDados>
+              </>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
+      {modalNovo && (
+        <ModalFolha
+          titulo="Novo título a receber"
+          subtitulo="Duplicata, fatura ou valor a receber de cliente"
+          onFechar={() => setModalNovo(false)}
+          onSubmit={handleSalvarNovo}
+          largura="sm:max-w-2xl"
+          rodape={
+            <>
+              <BotaoSecundario onClick={() => setModalNovo(false)}>Cancelar</BotaoSecundario>
+              <BotaoPrimario type="submit"><Save className="w-4 h-4" /> Gravar título</BotaoPrimario>
+            </>
+          }
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Campo rotulo="Cliente" className="sm:col-span-2">
+              <input type="text" required value={formData.cliente_nome}
+                onChange={e => setFormData({ ...formData, cliente_nome: e.target.value })}
+                placeholder="Razão social ou nome do cliente" className={campo} />
+            </Campo>
+            <Campo rotulo="Valor (R$)">
+              <CampoNumero step="0.01" min={0} casas={2} ocultarZero required value={formData.valor}
+                onChange={n => setFormData({ ...formData, valor: n })} placeholder="0,00" className={`${campo} font-semibold`} />
+            </Campo>
+            <Campo rotulo="Vencimento">
+              <input type="date" required value={paraISO(formData.data_vencimento)}
+                onChange={e => setFormData({ ...formData, data_vencimento: e.target.value })} className={campo} />
+            </Campo>
+            <Campo rotulo="Nº do documento">
+              <input type="text" required value={formData.numero_documento}
+                onChange={e => setFormData({ ...formData, numero_documento: e.target.value })}
+                placeholder="DUP-4029 ou NF-e 891" className={campo} />
+            </Campo>
+            <Campo rotulo="CNPJ / CPF">
+              <input type="text" inputMode="numeric" value={formData.cliente_cnpj}
+                onChange={e => setFormData({ ...formData, cliente_cnpj: e.target.value })}
+                placeholder="00.000.000/0000-00" className={campo} />
+            </Campo>
+            <Campo rotulo="Forma de pagamento">
+              <input type="text" value={formData.forma_pagamento}
+                onChange={e => setFormData({ ...formData, forma_pagamento: e.target.value })}
+                placeholder="Boleto 30/60, TED, PIX" className={campo} />
+            </Campo>
+            <Campo rotulo="Banco da cobrança">
+              <input type="text" value={formData.banco_emissor}
+                onChange={e => setFormData({ ...formData, banco_emissor: e.target.value })}
+                placeholder="Sicredi, Itaú, Banco do Brasil" className={campo} />
+            </Campo>
+          </div>
+        </ModalFolha>
+      )}
     </div>
   );
 }

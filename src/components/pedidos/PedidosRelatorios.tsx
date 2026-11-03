@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { TABELA_CARTAO } from './tabelaCartao';
 import {
   BarChart3,
   TrendingUp,
@@ -51,6 +52,12 @@ import {
   carregarPedidosCompra
 } from '../../data/mockStore';
 import { PedidosNavTabs } from './PedidosNavTabs';
+import { CORES } from '../ui/tokens';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, CampoBusca, Segmentado, SeletorFiltro } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -248,148 +255,119 @@ export function PedidosRelatorios({ onNavigate }: Props) {
   };
 
   return (
-    <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-y-auto">
-      
-      {/* 1. NAVEGAÇÃO DE ESTEIRA UNIFICADA */}
+    <div className="relative h-full w-full flex flex-col bg-papel-2 text-tinta overflow-y-auto">
+
+      {/* Abas antigas do fluxo: só fora do shell */}
       <PedidosNavTabs activeTab="pedidos_relatorios" onNavigate={onNavigate} />
 
-      {/* 2. CABEÇALHO COMPACTO & MINIMALISTA */}
-      <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Central de Relatórios • Menu Pedidos</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono">
-                Consolidado Grupo ENO
-              </span>
-            </h1>
-            <p className="text-xs text-slate-500 font-medium">
-              Relatórios integrados de Compras, Orçamentos, Produção, Faturamento e Entregas.
-            </p>
-          </div>
+      <div className="mx-auto w-full max-w-[1700px]">
+        <CabecalhoPagina
+          titulo="Relatórios"
+          resumo={`${pedidosVenda.length} vendas · ${pedidosCompra.length} compras · ${metricasVendas.faturamentoTotalRealizado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} faturados`}
+          acoes={
+            <>
+              <BotaoSecundario onClick={handleExportarCsv} className="flex-1 sm:flex-none h-10 sm:h-9">
+                <Download className="w-4 h-4" />
+                Exportar CSV
+              </BotaoSecundario>
+              <BotaoPrimario onClick={() => window.print()} className="flex-1 sm:flex-none h-10 sm:h-9">
+                <Printer className="w-4 h-4" />
+                Imprimir
+              </BotaoPrimario>
+            </>
+          }
+        />
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleExportarCsv}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Exportar Excel / CSV</span>
-            </button>
-
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Imprimir</span>
-            </button>
-          </div>
-        </div>
-
-        {/* SUB-TABS DO MENU DE RELATÓRIOS */}
-        <div className="flex items-center gap-1.5 pt-3 mt-3 border-t border-slate-100 text-xs overflow-x-auto">
-          {[
-            { id: 'EXECUTIVO', label: 'Visão Geral & Funil', icon: TrendingUp },
-            { id: 'COMPRAS', label: 'Pedidos de Compra & Matéria-Prima', icon: ShoppingCart },
-            { id: 'ORCAMENTOS', label: 'Orçamentos & Cotações', icon: FileSpreadsheet },
-            { id: 'PRODUCAO', label: 'Produção Diária & Lotes', icon: Factory },
-            { id: 'FATURAMENTO', label: 'Faturamento & NF-e', icon: Receipt },
-            { id: 'ENTREGAS', label: 'Logística & Entregas', icon: Truck },
-            { id: 'MIX_PRODUTOS', label: 'Curva ABC & Mix', icon: Boxes },
-            { id: 'COMISSOES', label: 'Comissões de RCA', icon: Users }
-          ].map(tab => {
-            const Icon = tab.icon;
-            const ativo = relatorioAtivo === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setRelatorioAtivo(tab.id as TipoRelatorio)}
-                className={`
-                  flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all shrink-0 cursor-pointer
-                  ${ativo
-                    ? 'bg-emerald-900 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }
-                `}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        {/* Qual relatório: rola por dentro no celular */}
+        <BarraFiltros>
+          <Segmentado<TipoRelatorio>
+            rotuloAria="Relatório"
+            valor={relatorioAtivo}
+            onChange={setRelatorioAtivo}
+            className="w-full md:w-fit [&>button]:h-9 sm:[&>button]:h-7"
+            opcoes={[
+              { valor: 'EXECUTIVO', rotulo: 'Visão geral' },
+              { valor: 'COMPRAS', rotulo: 'Compras' },
+              { valor: 'ORCAMENTOS', rotulo: 'Orçamentos' },
+              { valor: 'PRODUCAO', rotulo: 'Produção e lotes' },
+              { valor: 'FATURAMENTO', rotulo: 'Faturamento' },
+              { valor: 'ENTREGAS', rotulo: 'Entregas' },
+              { valor: 'MIX_PRODUTOS', rotulo: 'Curva ABC' },
+              { valor: 'COMISSOES', rotulo: 'Comissões' },
+            ]}
+          />
+        </BarraFiltros>
       </div>
 
-      {/* 3. CONTEÚDO DINÂMICO CONFORME A SUB-TAB SELECIONADA */}
-      <div className="p-6 space-y-6">
+      {/* Conteúdo do relatório escolhido */}
+      <div className="mx-auto w-full max-w-[1700px] px-4 sm:px-6 pb-6 space-y-6">
 
         {/* A. VISÃO GERAL & FUNIL */}
         {relatorioAtivo === 'EXECUTIVO' && (
           <div className="space-y-6">
             {/* CARDS DE RESUMO EXECUTIVO */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Total Comprado (Custos)</span>
-                <span className="text-xl font-black font-mono text-slate-900 block mt-1">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-linha border border-linha rounded-md overflow-hidden">
+              <div className="bg-papel px-4 py-3.5 min-w-0">
+                <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">Total Comprado (Custos)</span>
+                <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-tinta block mt-1">
                   {metricasCompras.totalCompras.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </span>
-                <span className="text-[11px] text-emerald-700 font-semibold mt-0.5 block">
+                <span className="text-[11px] text-eno-700 font-semibold mt-0.5 block">
                   {metricasCompras.qtdTotal} pedidos de suprimentos e mandioca
                 </span>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Faturamento Realizado (Vendas)</span>
-                <span className="text-xl font-black font-mono text-emerald-900 block mt-1">
+              <div className="bg-papel px-4 py-3.5 min-w-0">
+                <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">Faturamento Realizado (Vendas)</span>
+                <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-eno-800 block mt-1">
                   {metricasVendas.faturamentoTotalRealizado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </span>
-                <span className="text-[11px] text-slate-500 font-medium mt-0.5 block">
+                <span className="text-[11px] text-cinza font-medium mt-0.5 block">
                   {(metricasVendas.volumeTotalRealizadoKg / 1000).toLocaleString('pt-BR')} Ton despachadas
                 </span>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Saldo Pendente a Faturar</span>
-                <span className="text-xl font-black font-mono text-amber-700 block mt-1">
+              <div className="bg-papel px-4 py-3.5 min-w-0">
+                <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">Saldo Pendente a Faturar</span>
+                <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-st-aguardando block mt-1">
                   {metricasVendas.saldoAFaturar.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </span>
-                <span className="text-[11px] text-slate-500 font-medium mt-0.5 block">
+                <span className="text-[11px] text-cinza font-medium mt-0.5 block">
                   {metricasVendas.contagens.aFaturar} cargas prontas na fábrica
                 </span>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Taxa de Conversão do Funil</span>
-                <span className="text-xl font-black font-mono text-slate-900 block mt-1">
+              <div className="bg-papel px-4 py-3.5 min-w-0">
+                <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">Taxa de Conversão do Funil</span>
+                <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-tinta block mt-1">
                   {metricasVendas.taxaConversao}%
                 </span>
-                <span className="text-[11px] text-emerald-700 font-semibold mt-0.5 block">
+                <span className="text-[11px] text-eno-700 font-semibold mt-0.5 block">
                   Cotações convertidas em pedidos
                 </span>
               </div>
             </div>
 
             {/* GRÁFICO DO FUNIL DA ESTEIRA */}
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+            <div className="bg-papel rounded-md border border-linha p-5 shadow-xs">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="font-bold text-sm text-slate-900">Esteira Completa do Menu Pedidos</h3>
-                  <p className="text-xs text-slate-400">Distribuição de valores em R$ por etapa do fluxo comercial e produtivo.</p>
+                  <h3 className="font-bold text-sm text-tinta">Esteira Completa do Menu Pedidos</h3>
+                  <p className="text-xs text-cinza">Distribuição de valores em R$ por etapa do fluxo comercial e produtivo.</p>
                 </div>
               </div>
 
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={dadosGraficoFunil}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="etapa" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} />
-                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={CORES.linha} vertical={false} />
+                    <XAxis dataKey="etapa" tick={{ fontSize: 11, fill: CORES.cinza }} axisLine={{ stroke: CORES.linha }} />
+                    <YAxis tick={{ fontSize: 11, fill: CORES.cinza }} axisLine={{ stroke: CORES.linha }} />
                     <Tooltip
                       formatter={(val: any) => parseFloat(val).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      contentStyle={{ backgroundColor: '#0f172a', color: '#fff', borderRadius: '8px', fontSize: '11px' }}
+                      contentStyle={{ backgroundColor: CORES.eno900, color: '#fff', borderRadius: '6px', border: 'none', fontSize: '11px' }}
                     />
-                    <Bar dataKey="valor" name="Volume Financeiro (R$)" fill="#064e3b" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="valor" name="Volume Financeiro (R$)" fill={CORES.eno700} radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -400,74 +378,74 @@ export function PedidosRelatorios({ onNavigate }: Props) {
         {/* B. RELATÓRIO DE PEDIDOS DE COMPRA */}
         {relatorioAtivo === 'COMPRAS' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <div className="bg-white p-4 rounded-xl border border-slate-200">
-                <span className="text-[11px] font-bold text-slate-400 block uppercase">Mandioca (Matéria-Prima)</span>
-                <span className="text-lg font-black font-mono text-emerald-950 mt-1 block">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-linha border border-linha rounded-md overflow-hidden">
+              <div className="bg-papel px-4 py-3.5 min-w-0">
+                <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">Mandioca (Matéria-Prima)</span>
+                <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-eno-800 mt-1 block">
                   {metricasCompras.porCategoria.mandioca.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </span>
-                <span className="text-[10px] text-slate-500">{(metricasCompras.volumeMandiocaKg / 1000).toLocaleString('pt-BR')} Ton moídas</span>
+                <span className="text-[10px] text-cinza">{(metricasCompras.volumeMandiocaKg / 1000).toLocaleString('pt-BR')} Ton moídas</span>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-slate-200">
-                <span className="text-[11px] font-bold text-slate-400 block uppercase">Resíduo / Destopo / Casca</span>
-                <span className="text-lg font-black font-mono text-amber-800 mt-1 block">
+              <div className="bg-papel px-4 py-3.5 min-w-0">
+                <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">Resíduo / Destopo / Casca</span>
+                <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-st-aguardando mt-1 block">
                   {(metricasCompras.refugoDestopoKg / 1000).toLocaleString('pt-BR')} Ton
                 </span>
-                <span className="text-[10px] text-amber-700 font-semibold">Aproveitamento fabril e coprodutos</span>
+                <span className="text-[10px] text-st-aguardando font-semibold">Aproveitamento fabril e coprodutos</span>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-slate-200">
-                <span className="text-[11px] font-bold text-slate-400 block uppercase">Insumos & Sacaria</span>
-                <span className="text-lg font-black font-mono text-sky-900 mt-1 block">
+              <div className="bg-papel px-4 py-3.5 min-w-0">
+                <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">Insumos & Sacaria</span>
+                <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-st-producao mt-1 block">
                   {(metricasCompras.porCategoria.insumos + metricasCompras.porCategoria.embalagens).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </span>
-                <span className="text-[10px] text-slate-500">Embalagens, aditivos e produtos químicos</span>
+                <span className="text-[10px] text-cinza">Embalagens, aditivos e produtos químicos</span>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-slate-200">
-                <span className="text-[11px] font-bold text-slate-400 block uppercase">Compras a Confirmar</span>
-                <span className="text-lg font-black font-mono text-amber-700 mt-1 block">
+              <div className="bg-papel px-4 py-3.5 min-w-0">
+                <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">Compras a Confirmar</span>
+                <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-st-aguardando mt-1 block">
                   {metricasCompras.valorAConfirmar.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </span>
-                <span className="text-[10px] text-amber-700 font-bold">{metricasCompras.qtdAConfirmar} pedidos pendentes</span>
+                <span className="text-[10px] text-st-aguardando font-bold">{metricasCompras.qtdAConfirmar} pedidos pendentes</span>
               </div>
             </div>
 
             {/* TABELA DE COMPRAS */}
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-              <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
-                <h3 className="font-bold text-xs uppercase tracking-wider text-slate-700">Histórico de Compras por Categoria</h3>
-                <span className="text-xs font-mono font-bold text-slate-500">{pedidosCompra.length} registros</span>
+            <div className="bg-papel rounded-md border border-linha overflow-hidden shadow-xs">
+              <div className="px-5 py-3 border-b border-linha flex items-center justify-between">
+                <h3 className="font-bold text-xs uppercase tracking-wider text-tinta-2">Histórico de Compras por Categoria</h3>
+                <span className="text-xs tabular-nums font-bold text-cinza">{pedidosCompra.length} registros</span>
               </div>
-              <table className="w-full text-left border-collapse text-xs">
+              <table className={`${TABELA_CARTAO} ${TABELA_CARTAO} w-full text-left border-collapse text-xs`}>
                 <thead>
-                  <tr className="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
+                  <tr className="bg-papel-2 text-[10px] font-bold uppercase text-cinza border-b border-linha">
                     <th className="py-2.5 px-4">Data</th>
                     <th className="py-2.5 px-4">Item / Produto</th>
                     <th className="py-2.5 px-4">Categoria</th>
                     <th className="py-2.5 px-4">Fornecedor / Agricultor</th>
                     <th className="py-2.5 px-4">Onde Comprou / Local</th>
-                    <th className="py-2.5 px-4 font-mono text-right">Valor Total</th>
+                    <th className="py-2.5 px-4 tabular-nums text-right">Valor Total</th>
                     <th className="py-2.5 px-4 text-center">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-linha">
                   {pedidosCompra.map(p => (
-                    <tr key={p.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-4 font-mono text-slate-600">{p.data}</td>
-                      <td className="py-2.5 px-4 font-bold text-slate-900">{p.item_descricao}</td>
-                      <td className="py-2.5 px-4 text-slate-700">{p.categoria}</td>
-                      <td className="py-2.5 px-4 text-slate-800">{p.agricultor_nome || p.fornecedor_nome}</td>
-                      <td className="py-2.5 px-4 text-slate-600">{p.local_compra || 'Sede'}</td>
-                      <td className="py-2.5 px-4 font-mono font-bold text-right text-slate-900">
+                    <tr key={p.id} className="hover:bg-papel-2">
+                      <td data-rotulo="Data" className="py-2.5 px-4 tabular-nums text-tinta-2">{p.data}</td>
+                      <td data-rotulo="Item / Produto" className="py-2.5 px-4 font-bold text-tinta">{p.item_descricao}</td>
+                      <td data-rotulo="Categoria" className="py-2.5 px-4 text-tinta-2">{p.categoria}</td>
+                      <td data-rotulo="Fornecedor / Agricultor" className="py-2.5 px-4 text-tinta">{p.agricultor_nome || p.fornecedor_nome}</td>
+                      <td data-rotulo="Onde Comprou / Local" className="py-2.5 px-4 text-tinta-2">{p.local_compra || 'Sede'}</td>
+                      <td data-rotulo="Valor Total" className="py-2.5 px-4 tabular-nums font-bold text-right text-tinta">
                         {p.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </td>
-                      <td className="py-2.5 px-4 text-center">
+                      <td data-rotulo="Status" className="py-2.5 px-4 text-center">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                           p.status_pedido === 'A Confirmar'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-emerald-100 text-emerald-800'
+                            ? 'bg-st-aguardando-bg text-st-aguardando'
+                            : 'bg-eno-100 text-eno-800'
                         }`}>
                           {p.status_pedido}
                         </span>
@@ -483,33 +461,33 @@ export function PedidosRelatorios({ onNavigate }: Props) {
         {/* C. RELATÓRIO DE PRODUÇÃO */}
         {relatorioAtivo === 'PRODUCAO' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-              <h3 className="font-bold text-sm text-slate-900 mb-1">Rastreabilidade Fabril & Lotes</h3>
-              <p className="text-xs text-slate-400 mb-4">Controle diário de lotes gerados, embalagens e datas de vencimento.</p>
+            <div className="bg-papel rounded-md border border-linha p-5 shadow-xs">
+              <h3 className="font-bold text-sm text-tinta mb-1">Rastreabilidade Fabril & Lotes</h3>
+              <p className="text-xs text-cinza mb-4">Controle diário de lotes gerados, embalagens e datas de vencimento.</p>
               
-              <table className="w-full text-left border-collapse text-xs">
+              <table className={`${TABELA_CARTAO} ${TABELA_CARTAO} w-full text-left border-collapse text-xs`}>
                 <thead>
-                  <tr className="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
+                  <tr className="bg-papel-2 text-[10px] font-bold uppercase text-cinza border-b border-linha">
                     <th className="py-2.5 px-4">Pedido</th>
                     <th className="py-2.5 px-4">Cliente</th>
                     <th className="py-2.5 px-4">Lote Fabril</th>
                     <th className="py-2.5 px-4">Data Fabricação</th>
                     <th className="py-2.5 px-4">Data Vencimento</th>
-                    <th className="py-2.5 px-4 font-mono text-center">Volume (Ton)</th>
+                    <th className="py-2.5 px-4 tabular-nums text-center">Volume (Ton)</th>
                     <th className="py-2.5 px-4 text-center">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 font-mono">
+                <tbody className="divide-y divide-linha tabular-nums">
                   {pedidosVenda.filter(p => p.lote_producao || p.etapa === 'EM_PRODUCAO').map(p => (
-                    <tr key={p.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-4 font-bold text-slate-900 font-sans">{p.numero_pedido}</td>
-                      <td className="py-2.5 px-4 font-sans text-slate-700">{p.cliente_nome}</td>
-                      <td className="py-2.5 px-4 font-bold text-emerald-900">{p.lote_producao || 'LOT-2026-F01'}</td>
-                      <td className="py-2.5 px-4 text-slate-600">{formatarDataBR(p.data_fabricacao || p.data_emissao)}</td>
-                      <td className="py-2.5 px-4 text-slate-600">{p.data_vencimento ? formatarDataBR(p.data_vencimento) : '-'}</td>
-                      <td className="py-2.5 px-4 text-center font-bold">{(p.peso_total_kg / 1000).toFixed(1)} Ton</td>
-                      <td className="py-2.5 px-4 text-center font-sans">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                    <tr key={p.id} className="hover:bg-papel-2">
+                      <td data-rotulo="Pedido" className="py-2.5 px-4 font-bold text-tinta font-sans">{p.numero_pedido}</td>
+                      <td data-rotulo="Cliente" className="py-2.5 px-4 font-sans text-tinta-2">{p.cliente_nome}</td>
+                      <td data-rotulo="Lote Fabril" className="py-2.5 px-4 font-bold text-eno-800">{p.lote_producao || 'LOT-2026-F01'}</td>
+                      <td data-rotulo="Data Fabricação" className="py-2.5 px-4 text-tinta-2">{formatarDataBR(p.data_fabricacao || p.data_emissao)}</td>
+                      <td data-rotulo="Data Vencimento" className="py-2.5 px-4 text-tinta-2">{p.data_vencimento ? formatarDataBR(p.data_vencimento) : '-'}</td>
+                      <td data-rotulo="Volume (Ton)" className="py-2.5 px-4 text-center font-bold">{(p.peso_total_kg / 1000).toFixed(1)} Ton</td>
+                      <td data-rotulo="Status" className="py-2.5 px-4 text-center font-sans">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-eno-100 text-eno-800">
                           {p.etapa === 'EM_PRODUCAO' ? 'Em Ensaque' : 'Concluído'}
                         </span>
                       </td>
@@ -524,54 +502,54 @@ export function PedidosRelatorios({ onNavigate }: Props) {
         {/* D. RELATÓRIO DE FATURAMENTO & NF-E */}
         {relatorioAtivo === 'FATURAMENTO' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white p-4 rounded-xl border border-slate-200">
-                <span className="text-[11px] font-bold text-slate-400 block uppercase">Total Faturado</span>
-                <span className="text-xl font-black font-mono text-emerald-950 mt-1 block">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-linha border border-linha rounded-md overflow-hidden">
+              <div className="bg-papel px-4 py-3.5 min-w-0">
+                <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">Total Faturado</span>
+                <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-eno-800 mt-1 block">
                   {metricasVendas.faturamentoTotalRealizado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </span>
-                <span className="text-[11px] text-slate-500">Notas emitidas e transmitidas</span>
+                <span className="text-[11px] text-cinza">Notas emitidas e transmitidas</span>
               </div>
-              <div className="bg-white p-4 rounded-xl border border-slate-200">
-                <span className="text-[11px] font-bold text-slate-400 block uppercase">A Faturar (Pendente)</span>
-                <span className="text-xl font-black font-mono text-amber-700 mt-1 block">
+              <div className="bg-papel px-4 py-3.5 min-w-0">
+                <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">A Faturar (Pendente)</span>
+                <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-st-aguardando mt-1 block">
                   {metricasVendas.saldoAFaturar.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </span>
-                <span className="text-[11px] text-slate-500">Pronto para emissão/importação</span>
+                <span className="text-[11px] text-cinza">Pronto para emissão/importação</span>
               </div>
-              <div className="bg-white p-4 rounded-xl border border-slate-200">
-                <span className="text-[11px] font-bold text-slate-400 block uppercase">Volume Faturado</span>
-                <span className="text-xl font-black font-mono text-slate-900 mt-1 block">
+              <div className="bg-papel px-4 py-3.5 min-w-0">
+                <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">Volume Faturado</span>
+                <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-tinta mt-1 block">
                   {(metricasVendas.volumeTotalRealizadoKg / 1000).toLocaleString('pt-BR')} Ton
                 </span>
-                <span className="text-[11px] text-slate-500">Fécula, amidos e derivados</span>
+                <span className="text-[11px] text-cinza">Fécula, amidos e derivados</span>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-              <div className="px-5 py-3 border-b border-slate-200">
-                <h3 className="font-bold text-xs uppercase tracking-wider text-slate-700">Espelho de Notas Fiscais Emitidas e Importadas</h3>
+            <div className="bg-papel rounded-md border border-linha overflow-hidden shadow-xs">
+              <div className="px-5 py-3 border-b border-linha">
+                <h3 className="font-bold text-xs uppercase tracking-wider text-tinta-2">Espelho de Notas Fiscais Emitidas e Importadas</h3>
               </div>
-              <table className="w-full text-left border-collapse text-xs">
+              <table className={`${TABELA_CARTAO} ${TABELA_CARTAO} w-full text-left border-collapse text-xs`}>
                 <thead>
-                  <tr className="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
+                  <tr className="bg-papel-2 text-[10px] font-bold uppercase text-cinza border-b border-linha">
                     <th className="py-2.5 px-4">NF-e</th>
                     <th className="py-2.5 px-4">Pedido</th>
                     <th className="py-2.5 px-4">Destinatário</th>
                     <th className="py-2.5 px-4">Data Emissão</th>
                     <th className="py-2.5 px-4">Transportadora</th>
-                    <th className="py-2.5 px-4 font-mono text-right">Valor NF-e</th>
+                    <th className="py-2.5 px-4 tabular-nums text-right">Valor NF-e</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-linha">
                   {pedidosVenda.filter(p => p.nota_fiscal).map(p => (
-                    <tr key={p.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-4 font-mono font-bold text-emerald-900">NF-e {p.nota_fiscal?.numero}</td>
-                      <td className="py-2.5 px-4 font-mono text-slate-600">{p.numero_pedido}</td>
-                      <td className="py-2.5 px-4 font-medium text-slate-900">{p.cliente_nome}</td>
-                      <td className="py-2.5 px-4 font-mono text-slate-600">{p.nota_fiscal?.data_emissao}</td>
-                      <td className="py-2.5 px-4 text-slate-700">{p.transportadora || 'Frota Grupo ENO'}</td>
-                      <td className="py-2.5 px-4 font-mono font-bold text-right text-slate-900">
+                    <tr key={p.id} className="hover:bg-papel-2">
+                      <td data-rotulo="NF-e" className="py-2.5 px-4 tabular-nums font-bold text-eno-800">NF-e {p.nota_fiscal?.numero}</td>
+                      <td data-rotulo="Pedido" className="py-2.5 px-4 tabular-nums text-tinta-2">{p.numero_pedido}</td>
+                      <td data-rotulo="Destinatário" className="py-2.5 px-4 font-medium text-tinta">{p.cliente_nome}</td>
+                      <td data-rotulo="Data Emissão" className="py-2.5 px-4 tabular-nums text-tinta-2">{p.nota_fiscal?.data_emissao}</td>
+                      <td data-rotulo="Transportadora" className="py-2.5 px-4 text-tinta-2">{p.transportadora || 'Frota Grupo ENO'}</td>
+                      <td data-rotulo="Valor NF-e" className="py-2.5 px-4 tabular-nums font-bold text-right text-tinta">
                         {p.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </td>
                     </tr>
@@ -589,31 +567,31 @@ export function PedidosRelatorios({ onNavigate }: Props) {
           const soma = (l: VendaComissaoRCA[]) => l.reduce((acc, c) => acc + c.valor_comissao, 0);
           return (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white p-4 rounded-xl border border-slate-200">
-                  <span className="text-[11px] font-bold text-slate-400 block uppercase">Comissões Geradas</span>
-                  <span className="text-xl font-black font-mono text-slate-900 mt-1 block">{formatarMoeda(soma(comissoes))}</span>
-                  <span className="text-[11px] text-slate-500">{comissoes.length} pedido(s) faturado(s) com RCA</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-linha border border-linha rounded-md overflow-hidden">
+                <div className="bg-papel px-4 py-3.5 min-w-0">
+                  <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">Comissões Geradas</span>
+                  <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-tinta mt-1 block">{formatarMoeda(soma(comissoes))}</span>
+                  <span className="text-[11px] text-cinza">{comissoes.length} pedido(s) faturado(s) com RCA</span>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200">
-                  <span className="text-[11px] font-bold text-slate-400 block uppercase">A Pagar aos RCAs</span>
-                  <span className="text-xl font-black font-mono text-amber-700 mt-1 block">{formatarMoeda(soma(aPagar))}</span>
-                  <span className="text-[11px] text-slate-500">Títulos em aberto no Contas a Pagar</span>
+                <div className="bg-papel px-4 py-3.5 min-w-0">
+                  <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">A Pagar aos RCAs</span>
+                  <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-st-aguardando mt-1 block">{formatarMoeda(soma(aPagar))}</span>
+                  <span className="text-[11px] text-cinza">Títulos em aberto no Contas a Pagar</span>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200">
-                  <span className="text-[11px] font-bold text-slate-400 block uppercase">Pagas (PIX)</span>
-                  <span className="text-xl font-black font-mono text-emerald-800 mt-1 block">{formatarMoeda(soma(pagas))}</span>
-                  <span className="text-[11px] text-slate-500">Baixadas no financeiro</span>
+                <div className="bg-papel px-4 py-3.5 min-w-0">
+                  <span className="text-[10.5px] font-bold text-cinza uppercase tracking-[0.14em] block">Pagas (PIX)</span>
+                  <span className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] tabular-nums truncate text-eno-800 mt-1 block">{formatarMoeda(soma(pagas))}</span>
+                  <span className="text-[11px] text-cinza">Baixadas no financeiro</span>
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-                <div className="px-5 py-3 border-b border-slate-200">
-                  <h3 className="font-bold text-xs uppercase tracking-wider text-slate-700">Comissões por Pedido Faturado</h3>
+              <div className="bg-papel rounded-md border border-linha overflow-hidden shadow-xs">
+                <div className="px-5 py-3 border-b border-linha">
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-tinta-2">Comissões por Pedido Faturado</h3>
                 </div>
-                <table className="w-full text-left border-collapse text-xs">
+                <table className={`${TABELA_CARTAO} ${TABELA_CARTAO} w-full text-left border-collapse text-xs`}>
                   <thead>
-                    <tr className="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
+                    <tr className="bg-papel-2 text-[10px] font-bold uppercase text-cinza border-b border-linha">
                       <th className="py-2.5 px-4">Pedido</th>
                       <th className="py-2.5 px-4">Faturamento</th>
                       <th className="py-2.5 px-4">RCA / Cliente</th>
@@ -624,31 +602,31 @@ export function PedidosRelatorios({ onNavigate }: Props) {
                       <th className="py-2.5 px-4 text-center">Título</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-linha">
                     {comissoes.length === 0 && (
-                      <tr><td colSpan={8} className="py-8 text-center text-slate-400 font-medium">Nenhum pedido faturado com RCA.</td></tr>
+                      <tr><td data-rotulo="Pedido" colSpan={8} className="py-8 text-center text-cinza font-medium">Nenhum pedido faturado com RCA.</td></tr>
                     )}
                     {comissoes.map(c => (
-                      <tr key={c.id} className="hover:bg-slate-50">
-                        <td className="py-2.5 px-4 font-mono font-bold text-slate-900">{c.numero_pedido}</td>
-                        <td className="py-2.5 px-4 font-mono text-slate-600">{formatarDataBR(c.data)}</td>
-                        <td className="py-2.5 px-4">
-                          <div className="font-bold text-slate-900">{pedidosVenda.find(p => p.id === c.pedido_id)?.rca_nome || '-'}</div>
-                          <div className="text-[10px] text-slate-500">{c.cliente_nome}</div>
+                      <tr key={c.id} className="hover:bg-papel-2">
+                        <td data-rotulo="Pedido" className="py-2.5 px-4 tabular-nums font-bold text-tinta">{c.numero_pedido}</td>
+                        <td data-rotulo="Faturamento" className="py-2.5 px-4 tabular-nums text-tinta-2">{formatarDataBR(c.data)}</td>
+                        <td data-rotulo="RCA / Cliente" className="py-2.5 px-4">
+                          <div className="font-bold text-tinta">{pedidosVenda.find(p => p.id === c.pedido_id)?.rca_nome || '-'}</div>
+                          <div className="text-[10px] text-cinza">{c.cliente_nome}</div>
                         </td>
-                        <td className="py-2.5 px-4 text-slate-700">{rotuloRegraComissao(c.tipo_regra_aplicada)}</td>
-                        <td className="py-2.5 px-4 font-mono text-right">{formatarMoeda(c.valor_faturado)}</td>
-                        <td className="py-2.5 px-4 font-mono text-right">{c.percentual_comissao}%</td>
-                        <td className="py-2.5 px-4 font-mono font-bold text-right text-emerald-900">{formatarMoeda(c.valor_comissao)}</td>
-                        <td className="py-2.5 px-4 text-center">
+                        <td data-rotulo="Regra" className="py-2.5 px-4 text-tinta-2">{rotuloRegraComissao(c.tipo_regra_aplicada)}</td>
+                        <td data-rotulo="Faturado" className="py-2.5 px-4 tabular-nums text-right">{formatarMoeda(c.valor_faturado)}</td>
+                        <td data-rotulo="%" className="py-2.5 px-4 tabular-nums text-right">{c.percentual_comissao}%</td>
+                        <td data-rotulo="Comissão" className="py-2.5 px-4 tabular-nums font-bold text-right text-eno-800">{formatarMoeda(c.valor_comissao)}</td>
+                        <td data-rotulo="Título" className="py-2.5 px-4 text-center">
                           {c.status_comissao === 'Pago (PIX)' ? (
-                            <span className="text-emerald-700 font-bold">Pago {c.data_pagamento_pix ? formatarDataBR(c.data_pagamento_pix) : ''}</span>
+                            <span className="text-eno-700 font-bold">Pago {c.data_pagamento_pix ? formatarDataBR(c.data_pagamento_pix) : ''}</span>
                           ) : c.titulo_pagar_id ? (
-                            <span className={c.titulo_status === 'VENCIDO' ? 'text-red-700 font-bold' : 'text-amber-700 font-bold'}>
+                            <span className={c.titulo_status === 'VENCIDO' ? 'text-st-vencido font-bold' : 'text-st-aguardando font-bold'}>
                               {c.titulo_status === 'VENCIDO' ? 'Vencido' : 'A pagar'} • {formatarDataBR(c.titulo_vencimento)}
                             </span>
                           ) : (
-                            <span className="text-slate-400">Sem título</span>
+                            <span className="text-cinza">Sem título</span>
                           )}
                         </td>
                       </tr>
@@ -663,13 +641,13 @@ export function PedidosRelatorios({ onNavigate }: Props) {
         {/* E. RELATÓRIO DE ENTREGAS & LOGÍSTICA */}
         {relatorioAtivo === 'ENTREGAS' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-              <h3 className="font-bold text-sm text-slate-900 mb-1">Controle de Entregas & Canhotos</h3>
-              <p className="text-xs text-slate-400 mb-4">Acompanhamento das programações de entrega e confirmações de recebimento pelo cliente.</p>
+            <div className="bg-papel rounded-md border border-linha p-5 shadow-xs">
+              <h3 className="font-bold text-sm text-tinta mb-1">Controle de Entregas & Canhotos</h3>
+              <p className="text-xs text-cinza mb-4">Acompanhamento das programações de entrega e confirmações de recebimento pelo cliente.</p>
 
-              <table className="w-full text-left border-collapse text-xs">
+              <table className={`${TABELA_CARTAO} ${TABELA_CARTAO} w-full text-left border-collapse text-xs`}>
                 <thead>
-                  <tr className="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
+                  <tr className="bg-papel-2 text-[10px] font-bold uppercase text-cinza border-b border-linha">
                     <th className="py-2.5 px-4">Pedido</th>
                     <th className="py-2.5 px-4">Cliente</th>
                     <th className="py-2.5 px-4">Data Programada</th>
@@ -678,21 +656,21 @@ export function PedidosRelatorios({ onNavigate }: Props) {
                     <th className="py-2.5 px-4 text-center">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 font-mono">
+                <tbody className="divide-y divide-linha tabular-nums">
                   {pedidosVenda.filter(p => p.etapa === 'FATURADO' || p.etapa === 'ENTREGUE').map(p => (
-                    <tr key={p.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-4 font-bold font-sans text-slate-900">{p.numero_pedido}</td>
-                      <td className="py-2.5 px-4 font-sans text-slate-700">{p.cliente_nome}</td>
-                      <td className="py-2.5 px-4 text-slate-600">{p.programacao_entrega?.data_programada || p.data_previsao_entrega}</td>
-                      <td className="py-2.5 px-4 text-slate-800 font-bold">{p.data_entrega_realizada || 'Em trânsito'}</td>
-                      <td className="py-2.5 px-4 font-sans text-slate-700">
+                    <tr key={p.id} className="hover:bg-papel-2">
+                      <td data-rotulo="Pedido" className="py-2.5 px-4 font-bold font-sans text-tinta">{p.numero_pedido}</td>
+                      <td data-rotulo="Cliente" className="py-2.5 px-4 font-sans text-tinta-2">{p.cliente_nome}</td>
+                      <td data-rotulo="Data Programada" className="py-2.5 px-4 text-tinta-2">{p.programacao_entrega?.data_programada || p.data_previsao_entrega}</td>
+                      <td data-rotulo="Data Entrega" className="py-2.5 px-4 text-tinta font-bold">{p.data_entrega_realizada || 'Em trânsito'}</td>
+                      <td data-rotulo="Motorista / Transportadora" className="py-2.5 px-4 font-sans text-tinta-2">
                         {p.programacao_entrega?.motorista || p.motorista_nome || 'Sebastião Antunes'} ({p.transportadora || 'Própria'})
                       </td>
-                      <td className="py-2.5 px-4 text-center font-sans">
+                      <td data-rotulo="Status" className="py-2.5 px-4 text-center font-sans">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                           p.etapa === 'ENTREGUE'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-800'
+                            ? 'bg-eno-100 text-eno-800'
+                            : 'bg-st-aguardando-bg text-st-aguardando'
                         }`}>
                           {p.etapa === 'ENTREGUE' ? 'Entregue • Canhoto OK' : 'Programado em Rota'}
                         </span>
@@ -708,37 +686,37 @@ export function PedidosRelatorios({ onNavigate }: Props) {
         {/* F. ORÇAMENTOS E COTAÇÕES */}
         {relatorioAtivo === 'ORCAMENTOS' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-              <h3 className="font-bold text-sm text-slate-900 mb-1">Cotações & Orçamentos Sugestivos</h3>
-              <p className="text-xs text-slate-400 mb-4">Propostas emitidas, prazos de validade e apresentações comerciais (Fardos, Caixas, Sacos e Big Bags).</p>
+            <div className="bg-papel rounded-md border border-linha p-5 shadow-xs">
+              <h3 className="font-bold text-sm text-tinta mb-1">Cotações & Orçamentos Sugestivos</h3>
+              <p className="text-xs text-cinza mb-4">Propostas emitidas, prazos de validade e apresentações comerciais (Fardos, Caixas, Sacos e Big Bags).</p>
 
-              <table className="w-full text-left border-collapse text-xs">
+              <table className={`${TABELA_CARTAO} ${TABELA_CARTAO} w-full text-left border-collapse text-xs`}>
                 <thead>
-                  <tr className="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
+                  <tr className="bg-papel-2 text-[10px] font-bold uppercase text-cinza border-b border-linha">
                     <th className="py-2.5 px-4">Orçamento</th>
                     <th className="py-2.5 px-4">Cliente</th>
                     <th className="py-2.5 px-4">Emissão</th>
                     <th className="py-2.5 px-4">RCA</th>
                     <th className="py-2.5 px-4">Itens & Embalagem</th>
-                    <th className="py-2.5 px-4 font-mono text-right">Valor Total</th>
+                    <th className="py-2.5 px-4 tabular-nums text-right">Valor Total</th>
                     <th className="py-2.5 px-4 text-center">Origem</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-linha">
                   {pedidosVenda.filter(p => p.etapa === 'ORCAMENTO' || p.origem === 'Sugestão Reposição').map(p => (
-                    <tr key={p.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-4 font-mono font-bold text-slate-900">{p.numero_pedido}</td>
-                      <td className="py-2.5 px-4 font-medium text-slate-900">{p.cliente_nome}</td>
-                      <td className="py-2.5 px-4 font-mono text-slate-600">{p.data_emissao}</td>
-                      <td className="py-2.5 px-4 text-slate-700">{p.rca_nome}</td>
-                      <td className="py-2.5 px-4 text-slate-600">
+                    <tr key={p.id} className="hover:bg-papel-2">
+                      <td data-rotulo="Orçamento" className="py-2.5 px-4 tabular-nums font-bold text-tinta">{p.numero_pedido}</td>
+                      <td data-rotulo="Cliente" className="py-2.5 px-4 font-medium text-tinta">{p.cliente_nome}</td>
+                      <td data-rotulo="Emissão" className="py-2.5 px-4 tabular-nums text-tinta-2">{p.data_emissao}</td>
+                      <td data-rotulo="RCA" className="py-2.5 px-4 text-tinta-2">{p.rca_nome}</td>
+                      <td data-rotulo="Itens & Embalagem" className="py-2.5 px-4 text-tinta-2">
                         {p.itens.map(i => `${i.quantidade}x ${i.tipo_embalagem}`).join(', ')}
                       </td>
-                      <td className="py-2.5 px-4 font-mono font-bold text-right text-slate-900">
+                      <td data-rotulo="Valor Total" className="py-2.5 px-4 tabular-nums font-bold text-right text-tinta">
                         {p.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </td>
-                      <td className="py-2.5 px-4 text-center">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                      <td data-rotulo="Origem" className="py-2.5 px-4 text-center">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-papel-3/60 text-tinta-2">
                           {p.origem || 'Cotação Padrão'}
                         </span>
                       </td>
@@ -753,34 +731,34 @@ export function PedidosRelatorios({ onNavigate }: Props) {
         {/* G. MIX DE PRODUTOS & CURVA ABC */}
         {relatorioAtivo === 'MIX_PRODUTOS' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-              <h3 className="font-bold text-sm text-slate-900 mb-1">Curva ABC de Produtos & Faturamento</h3>
-              <p className="text-xs text-slate-400 mb-4">Classificação por faturamento gerado e volume físico movimentado.</p>
+            <div className="bg-papel rounded-md border border-linha p-5 shadow-xs">
+              <h3 className="font-bold text-sm text-tinta mb-1">Curva ABC de Produtos & Faturamento</h3>
+              <p className="text-xs text-cinza mb-4">Classificação por faturamento gerado e volume físico movimentado.</p>
 
-              <table className="w-full text-left border-collapse text-xs">
+              <table className={`${TABELA_CARTAO} ${TABELA_CARTAO} w-full text-left border-collapse text-xs`}>
                 <thead>
-                  <tr className="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
+                  <tr className="bg-papel-2 text-[10px] font-bold uppercase text-cinza border-b border-linha">
                     <th className="py-2.5 px-4">Produto</th>
                     <th className="py-2.5 px-4 text-center">Unidades</th>
                     <th className="py-2.5 px-4 text-center">Peso Físico</th>
-                    <th className="py-2.5 px-4 font-mono text-right">Faturamento Total</th>
+                    <th className="py-2.5 px-4 tabular-nums text-right">Faturamento Total</th>
                     <th className="py-2.5 px-4 text-right">Participação %</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 font-mono">
+                <tbody className="divide-y divide-linha tabular-nums">
                   {mixProdutos.map((p, idx) => {
                     const perc = metricasVendas.faturamentoTotalRealizado > 0
                       ? (p.valorTotal / metricasVendas.faturamentoTotalRealizado) * 100
                       : 0;
                     return (
-                      <tr key={idx} className="hover:bg-slate-50">
-                        <td className="py-2.5 px-4 font-sans font-bold text-slate-900">{p.nome}</td>
-                        <td className="py-2.5 px-4 text-center text-slate-700">{p.quantidade.toLocaleString('pt-BR')} un</td>
-                        <td className="py-2.5 px-4 text-center text-slate-700">{(p.pesoKg / 1000).toFixed(1)} Ton</td>
-                        <td className="py-2.5 px-4 text-right font-bold text-slate-900">
+                      <tr key={idx} className="hover:bg-papel-2">
+                        <td data-rotulo="Produto" className="py-2.5 px-4 font-sans font-bold text-tinta">{p.nome}</td>
+                        <td data-rotulo="Unidades" className="py-2.5 px-4 text-center text-tinta-2">{p.quantidade.toLocaleString('pt-BR')} un</td>
+                        <td data-rotulo="Peso Físico" className="py-2.5 px-4 text-center text-tinta-2">{(p.pesoKg / 1000).toFixed(1)} Ton</td>
+                        <td data-rotulo="Faturamento Total" className="py-2.5 px-4 text-right font-bold text-tinta">
                           {p.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </td>
-                        <td className="py-2.5 px-4 text-right font-bold text-emerald-800">{perc.toFixed(1)}%</td>
+                        <td data-rotulo="Participação %" className="py-2.5 px-4 text-right font-bold text-eno-800">{perc.toFixed(1)}%</td>
                       </tr>
                     );
                   })}

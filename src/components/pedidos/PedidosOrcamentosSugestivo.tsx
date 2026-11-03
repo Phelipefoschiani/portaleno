@@ -1355,16 +1355,16 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
       {/* 5. MODAL NOVA VENDA / PROPOSTA COMERCIAL */}
       {modalNovo && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-5xl lg:max-w-6xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-5xl lg:max-w-6xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+            <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
               <div className="flex items-center gap-3">
-                <FileText className="w-5 h-5 text-emerald-400" />
+                <FileText className="w-5 h-5 text-ouro-claro" />
                 <div>
                   <h3 className="font-bold text-sm sm:text-base text-white">
                     {pedidoEmEdicao ? `Editar ${pedidoEmEdicao.numero_pedido}` : modoCliente ? 'Novo pedido' : 'Nova Venda / Proposta Comercial'}
                   </h3>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-eno-100/70 max-sm:hidden">
                     {pedidoEmEdicao
                       ? (modoCliente ? 'Altere itens e quantidades. O número e a data do pedido são mantidos.' : 'Altere itens, cliente, tabela ou condições. O número e a data de emissão são mantidos.')
                       : modoCliente
@@ -1375,7 +1375,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                   </p>
                 </div>
               </div>
-              <button onClick={() => setModalNovo(false)} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
+              <button onClick={() => setModalNovo(false)} className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-eno-800 text-eno-100 hover:text-white transition-colors cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1383,23 +1383,23 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
             <form onSubmit={handleSalvarNovo} className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1 text-xs">
               
               {/* Escolha do Tipo de Documento e Modo de Lançamento */}
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+              <div className="p-3.5 bg-papel-2 rounded-md border border-linha flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3">
                 {modoCliente ? (
                   <div>
-                    <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Documento</span>
-                    <span className="block text-sm font-black text-slate-900">Pedido de compra</span>
+                    <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-cinza">Documento</span>
+                    <span className="block text-sm font-extrabold text-tinta">Pedido de compra</span>
                   </div>
                 ) : (
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Tipo de Documento Comercial *</label>
-                  <div className="inline-flex flex-wrap rounded-lg bg-white p-1 border border-slate-200">
+                  <label className="block font-bold text-tinta-2 mb-1">Tipo de Documento Comercial *</label>
+                  <div className="flex w-full sm:inline-flex sm:w-auto flex-wrap rounded-md bg-papel p-0.5 border border-linha-forte max-sm:[&>button]:flex-1 max-sm:[&>button]:min-h-10 max-sm:[&>button]:justify-center">
                     <button
                       type="button"
                       onClick={() => setSubtipoForm('Orçamento')}
                       className={`px-3 py-1.5 rounded-md font-bold text-xs transition-all cursor-pointer ${
                         subtipoForm === 'Orçamento'
-                          ? 'bg-emerald-900 text-white shadow-2xs'
-                          : 'text-slate-600 hover:text-slate-900'
+                          ? 'bg-eno-800 text-white'
+                          : 'text-tinta-2 hover:text-tinta'
                       }`}
                     >
                       Orçamento Comercial
@@ -1409,8 +1409,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                       onClick={() => setSubtipoForm('Pedido Sugestivo')}
                       className={`px-3 py-1.5 rounded-md font-bold text-xs transition-all cursor-pointer ${
                         subtipoForm === 'Pedido Sugestivo'
-                          ? 'bg-amber-600 text-white shadow-2xs'
-                          : 'text-slate-600 hover:text-slate-900'
+                          ? 'bg-eno-800 text-white'
+                          : 'text-tinta-2 hover:text-tinta'
                       }`}
                     >
                       Pedido Sugestivo (Reposição)
@@ -1420,8 +1420,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                       onClick={() => setSubtipoForm('Pedido')}
                       className={`px-3 py-1.5 rounded-md font-bold text-xs transition-all cursor-pointer ${
                         subtipoForm === 'Pedido'
-                          ? 'bg-blue-700 text-white shadow-2xs'
-                          : 'text-slate-600 hover:text-slate-900'
+                          ? 'bg-eno-800 text-white'
+                          : 'text-tinta-2 hover:text-tinta'
                       }`}
                     >
                       Pedido de Venda
@@ -1432,16 +1432,16 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
                 {/* Alternador de Modo de Preenchimento: Fardo vs Unitário */}
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Preenchimento de Itens</label>
-                  <div className="inline-flex flex-wrap rounded-lg bg-white p-1 border border-slate-200">
+                  <label className="block font-bold text-tinta-2 mb-1">Preenchimento de Itens</label>
+                  <div className="flex w-full sm:inline-flex sm:w-auto flex-wrap rounded-md bg-papel p-0.5 border border-linha-forte max-sm:[&>button]:flex-1 max-sm:[&>button]:min-h-10 max-sm:[&>button]:justify-center">
                     <button
                       type="button"
                       onClick={() => handleTrocarModo('FARDO')}
                       disabled={modoObrigatorioForm === 'UNITARIO'}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold text-xs transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
                         modoLancamentoForm === 'FARDO'
-                          ? 'bg-emerald-700 text-white shadow-2xs'
-                          : 'text-slate-600 hover:text-slate-900'
+                          ? 'bg-eno-800 text-white'
+                          : 'text-tinta-2 hover:text-tinta'
                       }`}
                       title={modoObrigatorioForm === 'UNITARIO' ? 'Esta tabela vende só por unidade' : 'Lançar valores em Fardos ou Embalagens'}
                     >
@@ -1454,8 +1454,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                       disabled={modoObrigatorioForm === 'FARDO'}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold text-xs transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
                         modoLancamentoForm === 'UNITARIO'
-                          ? 'bg-emerald-700 text-white shadow-2xs'
-                          : 'text-slate-600 hover:text-slate-900'
+                          ? 'bg-eno-800 text-white'
+                          : 'text-tinta-2 hover:text-tinta'
                       }`}
                       title={modoObrigatorioForm === 'FARDO' ? 'Esta tabela vende só por caixa/fardo' : 'Lançar valores por Unidade ou Kg individual'}
                     >
@@ -1464,7 +1464,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                     </button>
                   </div>
                   {modoObrigatorioForm && (
-                    <span className="block text-[10px] text-slate-500 mt-0.5">
+                    <span className="block text-[10px] text-cinza mt-0.5">
                       Tabela vende só {modoObrigatorioForm === 'FARDO' ? 'por caixa/fardo' : 'por unidade'}
                     </span>
                   )}
@@ -1473,8 +1473,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
               {/* Verificação se existem produtos cadastrados */}
               {modoCliente && (tabelasDisponiveis.length === 0 || (tabelaIdForm && produtosFiltradosPorTabela.length === 0)) && (
-                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2.5 text-amber-900">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-700" />
+                <div className="p-3.5 bg-st-aguardando-bg border border-ouro rounded-md flex items-start gap-2.5 text-st-aguardando">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-st-aguardando" />
                   <span className="text-[12px] font-medium">
                     Sua tabela de preço ainda não está liberada para pedidos pelo portal. Fale com seu representante ou com a fábrica.
                   </span>
@@ -1482,12 +1482,12 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
               )}
 
               {produtosDisponiveis.length === 0 && !modoCliente && (
-                <div className="p-3.5 bg-orange-50 border-2 border-orange-300 rounded-xl space-y-2">
+                <div className="p-3.5 bg-st-aguardando-bg border-2 border-ouro rounded-md space-y-2">
                   <div className="flex items-start gap-2.5">
-                    <Package className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
+                    <Package className="w-5 h-5 text-st-aguardando shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="font-bold text-orange-900 text-xs">⚠️ Nenhum Produto Cadastrado no Catálogo!</h4>
-                      <p className="text-orange-800 text-[11px] mt-0.5">
+                      <h4 className="font-bold text-st-aguardando text-xs">Nenhum Produto Cadastrado no Catálogo!</h4>
+                      <p className="text-st-aguardando text-[11px] mt-0.5">
                         Não há produtos no catálogo da fábrica. Cadastre seus produtos acabados antes de formular orçamentos ou vendas.
                       </p>
                     </div>
@@ -1499,7 +1499,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                         setModalNovo(false);
                         onNavigate?.('produtos_estoque_cadastro');
                       }}
-                      className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-ouro-escuro hover:bg-ouro-escuro text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
                     >
                       <Package className="w-3.5 h-3.5" />
                       <span>+ Cadastrar Produto no Estoque</span>
@@ -1510,15 +1510,15 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">{modoCliente ? 'Cliente' : 'Cliente Solicitante *'}</label>
+                  <label className="block font-bold text-tinta-2 mb-1">{modoCliente ? 'Cliente' : 'Cliente Solicitante *'}</label>
                   {modoCliente ? (
-                    <div className="w-full bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-emerald-900 font-bold truncate" title={clientesDisponiveis[0]?.nome}>
+                    <div className="w-full bg-eno-50 border border-eno-100 rounded-lg px-3 py-2 text-eno-800 font-bold truncate" title={clientesDisponiveis[0]?.nome}>
                       {clientesDisponiveis[0]?.nome || 'Cadastro não encontrado'}
                     </div>
                   ) : clientesDisponiveis.length === 0 ? (
-                    <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-[11px] text-amber-900 space-y-1.5">
+                    <div className="p-2.5 bg-st-aguardando-bg border border-ouro rounded-lg text-[11px] text-st-aguardando space-y-1.5">
                       <div className="flex items-center gap-1.5 font-bold">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                        <AlertCircle className="w-3.5 h-3.5 text-st-aguardando shrink-0" />
                         <span>{modoPortal ? 'Sua carteira não tem clientes ativos.' : 'Falta Cadastrar Cliente!'}</span>
                       </div>
                       <div className="flex flex-wrap gap-1">
@@ -1528,7 +1528,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                             setModalNovo(false);
                             onNavigate?.('cadastro_clientes');
                           }}
-                          className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] cursor-pointer"
+                          className="px-2 py-1 rounded bg-ouro-escuro hover:bg-ouro-escuro text-white font-bold text-[10px] cursor-pointer"
                         >
                           {modoPortal ? '+ Adicionar em Meus Clientes' : '+ Cadastrar Cliente'}
                         </button>
@@ -1538,7 +1538,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                     <select
                       value={clienteIdForm}
                       onChange={(e) => handleTrocarCliente(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
+                      className="w-full bg-papel-2 border border-linha rounded-lg px-3 py-2 text-tinta font-medium focus:outline-none focus:border-eno-700 cursor-pointer"
                     >
                       {clientesDisponiveis.map(c => (
                         <option key={c.id} value={c.id}>{c.nome} ({c.cidade_uf})</option>
@@ -1548,22 +1548,22 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Tabela de Preço *</label>
+                  <label className="block font-bold text-tinta-2 mb-1">Tabela de Preço *</label>
                   {modoPortal ? (
                     // RCA e cliente: a tabela é a do cadastro do cliente, definida pela fábrica
                     tabelasDisponiveis.find(t => t.id === tabelaIdForm) ? (
-                      <div className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-bold truncate" title="Tabela definida pela fábrica para este cliente">
+                      <div className="w-full bg-papel-3/60 border border-linha rounded-lg px-3 py-2 text-tinta font-bold truncate" title="Tabela definida pela fábrica para este cliente">
                         {tabelasDisponiveis.find(t => t.id === tabelaIdForm)?.nome}
                       </div>
                     ) : (
-                      <div className="w-full bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 text-amber-900 font-bold text-[11px]">
+                      <div className="w-full bg-st-aguardando-bg border border-ouro rounded-lg px-3 py-2 text-st-aguardando font-bold text-[11px]">
                         {clienteIdForm ? 'Cliente sem tabela liberada — a fábrica precisa definir a tabela de preço' : 'Escolha o cliente'}
                       </div>
                     )
                   ) : tabelasDisponiveis.length === 0 ? (
-                    <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-[11px] text-amber-900">
+                    <div className="p-2.5 bg-st-aguardando-bg border border-ouro rounded-lg text-[11px] text-st-aguardando">
                       <div className="flex items-center gap-1.5 font-bold">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                        <AlertCircle className="w-3.5 h-3.5 text-st-aguardando shrink-0" />
                         <span>Falta Cadastrar Tabela!</span>
                       </div>
                     </div>
@@ -1571,7 +1571,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                     <select
                       value={tabelaIdForm}
                       onChange={(e) => handleTrocarTabela(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-bold text-slate-800 focus:outline-none focus:border-emerald-700 cursor-pointer"
+                      className="w-full bg-papel-2 border border-linha rounded-lg px-3 py-2 font-bold text-tinta focus:outline-none focus:border-eno-700 cursor-pointer"
                     >
                       <option value="">-- Selecione a Tabela --</option>
                       {tabelasDisponiveis.map((tab) => (
@@ -1584,16 +1584,16 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">{modoCliente ? 'Seu representante' : 'RCA Responsável'}</label>
+                  <label className="block font-bold text-tinta-2 mb-1">{modoCliente ? 'Seu representante' : 'RCA Responsável'}</label>
                   {modoPortal ? (
-                    <div className="w-full bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-emerald-900 font-bold truncate">
+                    <div className="w-full bg-eno-50 border border-eno-100 rounded-lg px-3 py-2 text-eno-800 font-bold truncate">
                       {rcasDisponiveis[0]?.nome || (modoCliente ? 'Atendimento direto da fábrica' : 'Você')}
                     </div>
                   ) : (
                   <select
                     value={rcaIdForm}
                     onChange={(e) => setRcaIdForm(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
+                    className="w-full bg-papel-2 border border-linha rounded-lg px-3 py-2 text-tinta font-medium focus:outline-none focus:border-eno-700 cursor-pointer"
                   >
                     <option value="">Venda Direta (sem RCA)</option>
                     {rcasDisponiveis.filter(r => r.ativo || r.id === rcaIdForm).map(r => (
@@ -1604,11 +1604,11 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Tipo de Frete</label>
+                  <label className="block font-bold text-tinta-2 mb-1">Tipo de Frete</label>
                   <select
                     value={tipoFreteForm}
                     onChange={(e) => setTipoFreteForm(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
+                    className="w-full bg-papel-2 border border-linha rounded-lg px-3 py-2 text-tinta font-medium focus:outline-none focus:border-eno-700 cursor-pointer"
                   >
                     <option value="CIF (Entrega Grupo ENO)">CIF (Entrega Grupo ENO)</option>
                     <option value="FOB (Retira na Fábrica)">FOB (Retira na Fábrica)</option>
@@ -1616,9 +1616,9 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Pagamento</label>
+                  <label className="block font-bold text-tinta-2 mb-1">Pagamento</label>
                   {modoCliente ? (
-                    <div className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-bold truncate" title="Condição do seu cadastro">
+                    <div className="w-full bg-papel-3/60 border border-linha rounded-lg px-3 py-2 text-tinta font-bold truncate" title="Condição do seu cadastro">
                       {prazoPagamentoForm}
                     </div>
                   ) : (
@@ -1627,7 +1627,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                     <select
                       value={formaPagamentoForm}
                       onChange={(e) => setFormaPagamentoForm(e.target.value)}
-                      className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
+                      className="flex-1 min-w-0 bg-papel-2 border border-linha rounded-lg px-2 py-2 text-tinta font-medium focus:outline-none focus:border-eno-700 cursor-pointer"
                     >
                       {FORMAS_PAGAMENTO.map(f => <option key={f} value={f}>{f}</option>)}
                     </select>
@@ -1640,27 +1640,27 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                         onBlur={(e) => setDiasPagamentoForm(normalizarDias(e.target.value))}
                         placeholder="28"
                         title="Dias para pagar. Parcelas: 28/35/42. Vazio = à vista."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-2.5 pr-9 py-2 font-bold tabular-nums text-slate-800 focus:outline-none focus:border-emerald-700"
+                        className="w-full bg-papel-2 border border-linha rounded-lg pl-2.5 pr-9 py-2 font-bold tabular-nums text-tinta focus:outline-none focus:border-eno-700"
                       />
-                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">dias</span>
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-cinza">dias</span>
                     </div>
                   </div>
-                  <span className="block mt-1 text-[10px] text-slate-500">{prazoPagamentoForm} · use "/" para parcelas</span>
+                  <span className="block mt-1 text-[10px] text-cinza">{prazoPagamentoForm} · use "/" para parcelas</span>
                   </>
                   )}
                 </div>
               </div>
 
               {/* Itens */}
-              <div className="pt-2 border-t border-slate-100">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
+              <div className="pt-2 border-t border-linha">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="font-bold text-cinza uppercase tracking-[0.12em] text-[10.5px]">
                     Itens da Venda ({modoLancamentoForm === 'FARDO' ? 'Preço e Qtd por Fardo/Embalagem' : 'Preço e Qtd por Unitário/Kg'})
                   </span>
                   <button
                     type="button"
                     onClick={handleAddItem}
-                    className="text-emerald-800 hover:text-emerald-950 font-bold flex items-center gap-1 cursor-pointer"
+                    className="inline-flex items-center gap-1 h-10 sm:h-7 px-2.5 rounded-md text-eno-700 hover:bg-papel-3 font-bold cursor-pointer shrink-0"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Adicionar Item</span>
@@ -1669,7 +1669,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
                 <div className="space-y-3">
                   {itensForm.length === 0 ? (
-                    <div className="p-3 bg-slate-100 rounded-lg text-slate-500 text-center text-xs font-medium">
+                    <div className="p-3 bg-papel-3/60 rounded-lg text-cinza text-center text-xs font-medium">
                       Nenhum item adicionado. Clique no botão acima para escolher produtos.
                     </div>
                   ) : (
@@ -1682,9 +1682,9 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                       const estoqueItem = item.produtoId ? faltaEstoquePorProduto.get(item.produtoId) : undefined;
 
                       return (
-                        <div key={idx} className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="flex-1 min-w-[200px]">
+                        <div key={idx} className="p-3 bg-papel-2 rounded-md border border-linha space-y-2">
+                          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                            <div className="col-span-2 sm:flex-1 sm:min-w-[200px]">
                               <select
                                 value={item.produtoId}
                                 onChange={(e) => {
@@ -1701,7 +1701,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                                   }
                                   setItensForm(updated);
                                 }}
-                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs cursor-pointer font-medium"
+                                className="w-full bg-papel border border-linha rounded px-2 py-1 text-xs cursor-pointer font-medium"
                               >
                                 <option value="">-- Selecione o Produto --</option>
                                 {produtosFiltradosPorTabela.map(p => (
@@ -1717,8 +1717,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                               const opcoes = opcoesVendaItem(fatorItem(item.unidadesPorFardo), prod?.tipo_acondicionamento);
                               const atual = modoItem(item);
                               return (
-                                <div className="w-40">
-                                  <label className="text-[10px] text-slate-400 block -mb-0.5">Vender por</label>
+                                <div className="col-span-2 sm:col-span-1 sm:w-40">
+                                  <label className="text-[10px] text-cinza block -mb-0.5">Vender por</label>
                                   <select
                                     value={atual}
                                     onChange={(e) => {
@@ -1728,7 +1728,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                                       setItensForm(updated);
                                     }}
                                     disabled={opcoes.length < 2}
-                                    className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs cursor-pointer font-semibold text-slate-700 disabled:bg-slate-100 disabled:cursor-default"
+                                    className="w-full bg-papel border border-linha rounded px-2 py-1 text-xs cursor-pointer font-semibold text-tinta-2 disabled:bg-papel-3/60 disabled:cursor-default"
                                     title={opcoes.length < 2 ? 'A tabela de preço vende este produto só desta forma' : 'Caixa/fardo ou unidade'}
                                   >
                                     {opcoes.map(o => <option key={o.modo} value={o.modo}>{o.rotulo}</option>)}
@@ -1737,8 +1737,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                               );
                             })()}
 
-                            <div className="w-24">
-                              <label className="text-[10px] text-slate-400 block -mb-0.5">
+                            <div className="sm:w-24">
+                              <label className="text-[10px] text-cinza block -mb-0.5">
                                 {modoItem(item) === 'FARDO' ? 'Qtd (Caixas)' : 'Qtd (Unid.)'}
                               </label>
                               <CampoNumero
@@ -1751,12 +1751,12 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                                   updated[idx] = { ...updated[idx], quantidade: Math.max(0, n) };
                                   setItensForm(updated);
                                 }}
-                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-center font-bold"
+                                className="w-full bg-papel border border-linha rounded px-2 py-1 text-center font-bold"
                               />
                             </div>
 
-                            <div className="w-28">
-                              <label className="text-[10px] text-slate-400 block -mb-0.5">
+                            <div className="sm:w-28">
+                              <label className="text-[10px] text-cinza block -mb-0.5">
                                 {modoItem(item) === 'FARDO' ? 'Preço Caixa' : 'Preço Unitário'}
                               </label>
                               <CampoNumero
@@ -1772,16 +1772,16 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                                   updated[idx] = { ...updated[idx], precoUnitario: n };
                                   setItensForm(updated);
                                 }}
-                                className={`w-full border border-slate-200 rounded px-2 py-1 text-center font-mono font-bold ${modoCliente ? 'bg-slate-100 text-slate-700' : 'bg-white'}`}
+                                className={`w-full border border-linha rounded px-2 py-1 text-center tabular-nums font-bold ${modoCliente ? 'bg-papel-3/60 text-tinta-2' : 'bg-papel'}`}
                               />
                             </div>
 
-                            <div className="w-32 text-right font-mono font-bold text-slate-900">
+                            <div className="sm:w-32 sm:text-right tabular-nums font-bold text-tinta max-sm:text-[15px] max-sm:self-center">
                               {(item.quantidade * item.precoUnitario).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                               {rcaIdForm && comissaoItem && !modoCliente && (
-                                <div className="text-[10px] font-sans font-medium text-indigo-700" title={`Regra aplicada: ${comissaoItem.regra}${comissaoItem.grupo ? ` • Grupo: ${comissaoItem.grupo}` : ''}`}>
+                                <div className="text-[10px] font-sans font-medium text-st-producao" title={`Regra aplicada: ${comissaoItem.regra}${comissaoItem.grupo ? ` • Grupo: ${comissaoItem.grupo}` : ''}`}>
                                   Comissão {comissaoItem.percentual}% • {formatarMoeda(comissaoItem.valor)}
-                                  <span className="block text-indigo-400">{rotuloRegraComissao(comissaoItem.regra)}</span>
+                                  <span className="block text-st-producao">{rotuloRegraComissao(comissaoItem.regra)}</span>
                                 </div>
                               )}
                             </div>
@@ -1790,7 +1790,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                               <button
                                 type="button"
                                 onClick={() => handleRemoveItem(idx)}
-                                className="p-1 hover:text-red-600 text-slate-400 transition-colors"
+                                className="justify-self-end inline-flex items-center justify-center w-10 h-10 sm:w-7 sm:h-7 rounded-md hover:text-st-vencido hover:bg-st-vencido-bg text-cinza transition-colors cursor-pointer"
+                                aria-label="Remover item"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1799,8 +1800,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
                           {/* ESTOQUE: avisa quanto falta (não bloqueia a venda) */}
                           {!modoCliente && estoqueItem && estoqueItem.falta > 0 && (
-                            <div className="p-2 bg-red-50 border border-red-300 rounded-md text-[11px] text-red-900 flex items-center gap-1.5 font-medium">
-                              <AlertCircle className="w-3.5 h-3.5 text-red-700 shrink-0" />
+                            <div className="p-2 bg-st-vencido-bg border border-st-vencido/30 rounded-md text-[11px] text-st-vencido flex items-center gap-1.5 font-medium">
+                              <AlertCircle className="w-3.5 h-3.5 text-st-vencido shrink-0" />
                               <span>
                                 <strong>Estoque não cobre:</strong> pedido {estoqueItem.pedido.toLocaleString('pt-BR')} pacotes • em estoque {estoqueItem.disponivel.toLocaleString('pt-BR')} • <strong>faltam {estoqueItem.falta.toLocaleString('pt-BR')} pacotes</strong>. Você pode seguir; a diferença precisará ser produzida.
                               </span>
@@ -1809,11 +1810,11 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
                           {/* AVISOS ESPECÍFICOS DE FALTA DE RECEITA E DE FALTA DE CUSTO */}
                           {faltaReceita && (
-                            <div className="p-2 bg-amber-100/90 border border-amber-300 rounded-md text-[11px] text-amber-900 flex flex-wrap items-center justify-between gap-2">
+                            <div className="p-2 bg-st-aguardando-bg/90 border border-ouro rounded-md text-[11px] text-st-aguardando flex flex-wrap items-center justify-between gap-2">
                               <div className="flex items-center gap-1.5 font-medium">
-                                <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                <AlertCircle className="w-3.5 h-3.5 text-st-aguardando shrink-0" />
                                 <span>
-                                  <strong>⚠️ Sem Receita / Ficha Técnica:</strong> Este produto não tem fórmula de matéria-prima vinculada. A fábrica não saberá quais insumos baixar do estoque ao produzir.
+                                  <strong>Sem Receita / Ficha Técnica:</strong> Este produto não tem fórmula de matéria-prima vinculada. A fábrica não saberá quais insumos baixar do estoque ao produzir.
                                 </span>
                               </div>
                               <button
@@ -1822,7 +1823,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                                   setModalNovo(false);
                                   onNavigate?.('produtos_receita');
                                 }}
-                                className="px-2 py-0.5 rounded bg-amber-700 hover:bg-amber-800 text-white font-bold text-[10px] cursor-pointer transition-colors shadow-2xs"
+                                className="px-2 py-0.5 rounded bg-ouro-escuro hover:bg-ouro-escuro text-white font-bold text-[10px] cursor-pointer transition-colors shadow-2xs"
                               >
                                 Configurar Receita
                               </button>
@@ -1830,11 +1831,11 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                           )}
 
                           {faltaCusto && (
-                            <div className="p-2 bg-orange-100/90 border border-orange-300 rounded-md text-[11px] text-orange-900 flex flex-wrap items-center justify-between gap-2">
+                            <div className="p-2 bg-st-aguardando-bg/90 border border-ouro rounded-md text-[11px] text-st-aguardando flex flex-wrap items-center justify-between gap-2">
                               <div className="flex items-center gap-1.5 font-medium">
-                                <AlertCircle className="w-3.5 h-3.5 text-orange-700 shrink-0" />
+                                <AlertCircle className="w-3.5 h-3.5 text-st-aguardando shrink-0" />
                                 <span>
-                                  <strong>⚠️ Sem Custo de Produção:</strong> Custo industrial não apurado (vincule uma receita com matérias-primas e informe o custo operacional no cadastro do produto). O produto pode ser orçado pelo preço informado, mas o CMV e a margem bruta ficarão zerados.
+                                  <strong>Sem Custo de Produção:</strong> Custo industrial não apurado (vincule uma receita com matérias-primas e informe o custo operacional no cadastro do produto). O produto pode ser orçado pelo preço informado, mas o CMV e a margem bruta ficarão zerados.
                                 </span>
                               </div>
                               <button
@@ -1843,7 +1844,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                                   setModalNovo(false);
                                   onNavigate?.('produtos_estoque_cadastro');
                                 }}
-                                className="px-2 py-0.5 rounded bg-orange-700 hover:bg-orange-800 text-white font-bold text-[10px] cursor-pointer transition-colors shadow-2xs"
+                                className="px-2 py-0.5 rounded bg-ouro-escuro hover:bg-ouro-escuro text-white font-bold text-[10px] cursor-pointer transition-colors shadow-2xs"
                               >
                                 Ver Custo no Produto
                               </button>
@@ -1873,45 +1874,45 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                 return (
                   <>
                   {rcaIdForm && itensForm.length > 0 && !modoCliente && (
-                    <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <span className="font-bold text-indigo-900">
+                    <div className="p-3 bg-st-producao-bg border border-st-producao/30 rounded-md flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="font-bold text-st-producao">
                         Comissão estimada do RCA ({rotuloRegraComissao(comissaoForm.regra)}):
                       </span>
-                      <span className="font-mono font-black text-indigo-900">
+                      <span className="tabular-nums font-extrabold text-st-producao">
                         {formatarMoeda(comissaoForm.valor)}
-                        <span className="font-sans font-medium text-indigo-600 ml-1">({comissaoForm.percentual_efetivo}% efetivo sobre {formatarMoeda(comissaoForm.base)})</span>
+                        <span className="font-sans font-medium text-st-producao ml-1">({comissaoForm.percentual_efetivo}% efetivo sobre {formatarMoeda(comissaoForm.base)})</span>
                       </span>
-                      <span className="w-full text-[10px] text-indigo-500">Vira conta a pagar ao RCA quando o pedido for faturado (base = valor faturado).</span>
+                      <span className="w-full text-[10px] text-st-producao">Vira conta a pagar ao RCA quando o pedido for faturado (base = valor faturado).</span>
                     </div>
                   )}
-                  <div className="p-3 bg-slate-900 text-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs border border-slate-800">
+                  <div className="p-3 bg-eno-900 text-cinza-claro rounded-md flex flex-wrap items-center justify-between gap-2 text-xs border border-eno-800">
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="font-bold text-white uppercase text-[10px] tracking-wider">Status do Pedido:</span>
-                      <span className={clienteIdForm ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
-                        {clienteIdForm ? '✓ Cliente OK' : '❌ Falta Cliente'}
+                      <span className={clienteIdForm ? 'text-ouro-claro font-bold' : 'text-st-vencido font-bold'}>
+                        {clienteIdForm ? '✓ Cliente OK' : 'Falta Cliente'}
                       </span>
                       {!modoPortal && (
-                      <span className={temAlgumaFaltaReceita ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
-                        {temAlgumaFaltaReceita ? '⚠️ Receita Pendente' : '✓ Receita OK'}
+                      <span className={temAlgumaFaltaReceita ? 'text-st-aguardando font-bold' : 'text-ouro-claro font-bold'}>
+                        {temAlgumaFaltaReceita ? 'Receita Pendente' : '✓ Receita OK'}
                       </span>
                       )}
                       {!modoPortal && (
-                      <span className={temAlgumaFaltaCusto ? 'text-orange-400 font-bold' : 'text-emerald-400 font-bold'}>
-                        {temAlgumaFaltaCusto ? '⚠️ Custo Pendente' : '✓ Custo OK'}
+                      <span className={temAlgumaFaltaCusto ? 'text-st-aguardando font-bold' : 'text-ouro-claro font-bold'}>
+                        {temAlgumaFaltaCusto ? 'Custo Pendente' : '✓ Custo OK'}
                       </span>
                       )}
                       {!modoCliente && (
-                      <span className={temFaltaEstoque ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}>
-                        {temFaltaEstoque ? '⚠️ Estoque Insuficiente' : '✓ Estoque OK'}
+                      <span className={temFaltaEstoque ? 'text-st-vencido font-bold' : 'text-ouro-claro font-bold'}>
+                        {temFaltaEstoque ? 'Estoque Insuficiente' : '✓ Estoque OK'}
                       </span>
                       )}
                       {modoCliente && (
-                        <span className={itensForm.length > 0 ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                        <span className={itensForm.length > 0 ? 'text-ouro-claro font-bold' : 'text-st-aguardando font-bold'}>
                           {itensForm.length > 0 ? `✓ ${itensForm.length} ${itensForm.length === 1 ? 'item' : 'itens'}` : 'Adicione itens'}
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] text-slate-400 italic">
+                    <p className="text-[10px] text-cinza italic">
                       {modoPortal
                         ? 'Ao salvar, o pedido fica aguardando a aprovação da fábrica.'
                         : temAlgumaFaltaReceita || temAlgumaFaltaCusto
@@ -1924,21 +1925,21 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
               })()}
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">{modoCliente ? 'Observações (entrega, horário, contato...)' : 'Observações da Proposta Comercial'}</label>
+                <label className="block font-bold text-tinta-2 mb-1">{modoCliente ? 'Observações (entrega, horário, contato...)' : 'Observações da Proposta Comercial'}</label>
                 <textarea
                   rows={2}
                   value={observacoesForm}
                   onChange={(e) => setObservacoesForm(e.target.value)}
                   placeholder="Ex: Tabela especial negociada, frete CIF programado para entrega semanal..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 font-medium focus:outline-none focus:border-emerald-700"
+                  className="w-full bg-papel-2 border border-linha rounded-lg p-2.5 text-tinta font-medium focus:outline-none focus:border-eno-700"
                 />
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-end gap-2">
+              <div className="pt-3 border-t border-linha flex flex-wrap items-center justify-end gap-2 max-sm:sticky max-sm:-bottom-4 max-sm:z-10 max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:pb-4 max-sm:bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
                 {modoCliente && (
-                  <div className="mr-auto">
-                    <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Total do pedido</span>
-                    <span className="block text-xl font-black tracking-tight tabular-nums text-emerald-900">
+                  <div className="mr-auto max-sm:w-full">
+                    <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-cinza">Total do pedido</span>
+                    <span className="block text-xl font-extrabold tracking-tight tabular-nums text-eno-800">
                       {formatarMoeda(itensForm.reduce((acc, it) => acc + (Number(it.quantidade) || 0) * (Number(it.precoUnitario) || 0), 0))}
                     </span>
                   </div>
@@ -1946,13 +1947,13 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                 <button
                   type="button"
                   onClick={() => setModalNovo(false)}
-                  className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-papel-3/60 hover:bg-linha text-tinta-2 font-bold transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-emerald-900 hover:bg-emerald-950 text-white font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  className="px-5 py-2 rounded-lg bg-eno-900 hover:bg-eno-950 text-white font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Save className="w-4 h-4" />
                   <span>{modoCliente ? (pedidoEmEdicao ? 'Salvar alterações' : 'Enviar pedido') : modoPortal ? `Enviar ${subtipoForm} p/ aprovação` : `Salvar ${subtipoForm}`}</span>
@@ -1965,23 +1966,17 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
       {/* 6. MODAL VISUALIZADOR DE DOCUMENTO COMERCIAL (PRÉVIA OFICIAL ANTES DE EXPORTAR) */}
       {modalDetalhes && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/80 backdrop-blur-xs p-2 sm:p-4 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-6xl xl:max-w-7xl bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-700 flex flex-col my-auto h-[calc(100vh-1.5rem)] sm:h-[calc(100vh-2.5rem)]">
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/80 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-6xl xl:max-w-7xl bg-eno-900 rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-eno-800 flex flex-col sm:my-auto h-[100dvh] sm:h-[calc(100vh-2.5rem)]">
             
             {/* 1. TOPO: TÍTULO DO VISUALIZADOR E CONTROLES DE ZOOM */}
-            <div className="bg-slate-950 text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-                  <Eye className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-black text-sm text-white flex items-center gap-2">
-                    <span>Visualizador de Documento Comercial</span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800">
-                      Prévia Oficial
-                    </span>
+            <div className="bg-eno-900 text-white px-4 sm:px-5 py-2 sm:py-3 flex items-center justify-between gap-3 border-b border-eno-800 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="min-w-0">
+                  <h3 className="font-extrabold text-sm text-white truncate">
+                    {modalDetalhes.numero_pedido} <span className="font-normal text-eno-100/70">· prévia do documento</span>
                   </h3>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-eno-100/70 max-sm:hidden">
                     Confira a formatação da folha, cabeçalhos, produtos e totais antes de exportar em PDF ou PNG.
                   </p>
                 </div>
@@ -1992,7 +1987,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
                 <button
                   onClick={() => setModalDetalhes(null)}
-                  className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-eno-800 text-eno-100 hover:text-white transition-colors cursor-pointer"
                   title="Fechar visualizador"
                 >
                   <X className="w-5 h-5" />
@@ -2001,21 +1996,21 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
             </div>
 
             {/* 2. BARRA DE CONFIGURAÇÃO RÁPIDA: NOME DO DOCUMENTO & FARDO/UNITÁRIO */}
-            <div className="bg-slate-900 px-5 py-2.5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 shrink-0 text-xs">
+            <div className="bg-eno-900 px-4 sm:px-5 py-2.5 flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2 sm:gap-3 border-b border-eno-800 shrink-0 text-xs">
               
               {/* Escolha do Nome do Documento */}
               <div className={`flex-wrap items-center gap-2 ${modoCliente ? 'hidden' : 'flex'}`}>
-                <span className="font-bold text-[11px] uppercase tracking-wider text-slate-400">
+                <span className="font-bold text-[10.5px] uppercase tracking-[0.12em] text-eno-100/70 max-sm:w-full">
                   Nome do Documento:
                 </span>
-                <div className="inline-flex flex-wrap rounded-lg bg-slate-800 p-0.5 border border-slate-700">
+                <div className="flex sm:inline-flex w-full sm:w-auto rounded-md bg-eno-950/60 p-0.5 max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-10">
                   <button
                     type="button"
                     onClick={() => setTipoDocumentoVisualizacao('Orçamento')}
                     className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
                       tipoDocumentoVisualizacao === 'Orçamento'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-eno-700 text-white'
+                        : 'text-eno-100/80 hover:text-white'
                     }`}
                   >
                     Orçamento
@@ -2025,8 +2020,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                     onClick={() => setTipoDocumentoVisualizacao('Pedido Sugestivo')}
                     className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
                       tipoDocumentoVisualizacao === 'Pedido Sugestivo'
-                        ? 'bg-amber-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-eno-700 text-white'
+                        : 'text-eno-100/80 hover:text-white'
                     }`}
                   >
                     Pedido Sugestivo
@@ -2036,8 +2031,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                     onClick={() => setTipoDocumentoVisualizacao('Pedido')}
                     className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
                       tipoDocumentoVisualizacao === 'Pedido'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-eno-700 text-white'
+                        : 'text-eno-100/80 hover:text-white'
                     }`}
                   >
                     Pedido de Venda
@@ -2046,19 +2041,19 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
               </div>
 
               {/* Escolha de Unitário vs Fardo */}
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-[11px] uppercase tracking-wider text-slate-400">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold text-[10.5px] uppercase tracking-[0.12em] text-eno-100/70 max-sm:w-full">
                   Tabela de Valores:
                 </span>
-                <div className="inline-flex flex-wrap rounded-lg bg-slate-800 p-0.5 border border-slate-700">
+                <div className="flex sm:inline-flex w-full sm:w-auto rounded-md bg-eno-950/60 p-0.5 max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-10">
                   <button
                     type="button"
                     onClick={() => setModoExibicao('FARDO')}
                     disabled={modoObrigatorioDocumento === 'UNITARIO'}
                     className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-30 ${
                       modoExibicao === 'FARDO'
-                        ? 'bg-emerald-700 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-eno-700 text-white'
+                        : 'text-eno-100/80 hover:text-white'
                     }`}
                     title="Exibir quantidades e preços calculados por Fardo / Embalagem agrupada"
                   >
@@ -2071,8 +2066,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                     disabled={modoObrigatorioDocumento === 'FARDO'}
                     className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-30 ${
                       modoExibicao === 'UNITARIO'
-                        ? 'bg-emerald-700 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-eno-700 text-white'
+                        : 'text-eno-100/80 hover:text-white'
                     }`}
                     title="Exibir quantidades e preços calculados por Unidade / Kg individual"
                   >
@@ -2085,15 +2080,15 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
             </div>
 
             {/* 3. PRÉVIA A4: é o próprio PDF que será baixado */}
-            <div className="flex-1 min-h-0 bg-slate-800/80 p-2 sm:p-4 flex">
+            <div className="flex-1 min-h-0 bg-eno-800/80 p-2 sm:p-4 flex">
               {pdfPreviewUrl ? (
                 <iframe
                   src={`${pdfPreviewUrl}#zoom=page-fit&navpanes=0`}
                   title="Prévia A4 do documento"
-                  className="flex-1 w-full rounded-md bg-white"
+                  className="flex-1 w-full rounded-md bg-papel"
                 />
               ) : (
-                <div className="flex-1 flex items-center justify-center text-slate-300 text-xs font-bold">
+                <div className="flex-1 flex items-center justify-center text-cinza-claro text-xs font-bold">
                   Gerando prévia A4...
                 </div>
               )}
@@ -2128,7 +2123,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                   <div className="grid grid-cols-1 sm:grid-cols-[1.5fr_1fr_1fr] px-6 sm:px-8 py-4 gap-y-3 border-b border-[#e6e1d2]">
                     <div className="pr-4">
                       <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6e7470]">Cliente</div>
-                      <div className="text-[15px] font-black text-[#171e1a] mt-0.5 leading-snug">{modalDetalhes.cliente_nome}</div>
+                      <div className="text-[15px] font-extrabold text-[#171e1a] mt-0.5 leading-snug">{modalDetalhes.cliente_nome}</div>
                       <div className="text-[11px] text-[#6e7470] mt-0.5 tabular-nums">
                         {[modalDetalhes.cliente_cnpj_cpf && `CNPJ/CPF ${modalDetalhes.cliente_cnpj_cpf}`, modalDetalhes.cliente_cidade_uf].filter(Boolean).join(' · ')}
                       </div>
@@ -2182,13 +2177,13 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                               </td>
                               <td className="py-2.5 px-3 text-[11px] text-[#6e7470]">{valores.apresentacao}</td>
                               <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                                <span className="text-[13px] font-black tabular-nums">{valores.quantidade.toLocaleString('pt-BR')}</span>
+                                <span className="text-[13px] font-extrabold tabular-nums">{valores.quantidade.toLocaleString('pt-BR')}</span>
                                 <span className="text-[10px] text-[#6e7470] ml-1">{valores.unidadeRotulo}</span>
                               </td>
                               <td className="py-2.5 px-3 text-right text-[12px] tabular-nums whitespace-nowrap">
                                 {formatarMoeda(valores.preco)}
                               </td>
-                              <td className="py-2.5 pl-3 pr-4 text-right text-[14px] font-black tabular-nums text-[#064e3b] whitespace-nowrap">
+                              <td className="py-2.5 pl-3 pr-4 text-right text-[14px] font-extrabold tabular-nums text-[#064e3b] whitespace-nowrap">
                                 {formatarMoeda(valores.subtotal)}
                               </td>
                             </tr>
@@ -2202,7 +2197,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                   {modalDetalhes.observacoes && (
                     <div className="px-6 sm:px-8 pt-4">
                       <div className="w-10 h-[2px] bg-[#c9a24a] mb-2" />
-                      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#064e3b] mb-1">Observações</div>
+                      <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#064e3b] mb-1">Observações</div>
                       <p className="text-[11px] leading-relaxed whitespace-pre-line">{modalDetalhes.observacoes}</p>
                     </div>
                   )}
@@ -2214,11 +2209,11 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                     <div className="flex items-center gap-6 px-4 py-3 bg-[#f3ead3] border-l-[3px] border-[#c9a24a]">
                       <div>
                         <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6e7470]">Itens</div>
-                        <div className="text-[15px] font-black tabular-nums">{modalDetalhes.itens.length}</div>
+                        <div className="text-[15px] font-extrabold tabular-nums">{modalDetalhes.itens.length}</div>
                       </div>
                       <div>
                         <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6e7470]">Peso total</div>
-                        <div className="text-[15px] font-black tabular-nums">
+                        <div className="text-[15px] font-extrabold tabular-nums">
                           {modalDetalhes.peso_total_kg.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg
                         </div>
                       </div>
@@ -2226,7 +2221,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                     <div className="relative px-5 py-3 rounded-md bg-[linear-gradient(100deg,#042013,#0b3d24)] text-right overflow-hidden min-w-[230px]">
                       <div className="absolute inset-x-0 top-0 h-[2px] bg-[linear-gradient(90deg,#9c7a2e,#e2c27a,#9c7a2e)]" />
                       <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#c9a24a]">Valor total</div>
-                      <div className="text-[26px] font-black tracking-tight tabular-nums text-white leading-tight">
+                      <div className="text-[26px] font-extrabold tracking-tight tabular-nums text-white leading-tight">
                         {formatarMoeda(modalDetalhes.valor_total)}
                       </div>
                     </div>
@@ -2254,54 +2249,54 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
             </div>
 
             {/* 4. BARRA DE EXPORTAÇÃO INFERIOR */}
-            <div className="p-3.5 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="p-3 sm:p-3.5 bg-eno-900 border-t border-eno-800 flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2 sm:gap-3 shrink-0">
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 max-sm:[&>button]:min-h-10 max-sm:[&>button]:justify-center">
                 {/* Exportar PNG */}
                 <button
                   onClick={() => exportarPNG(modalDetalhes)}
                   disabled={gerandoExportacao}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-eno-800 hover:bg-eno-700 text-white font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
                   title="Exportar imagem PNG de alta resolução para enviar no WhatsApp"
                 >
                   <ImageIcon className="w-4 h-4" />
-                  <span>{gerandoExportacao ? 'Gerando...' : 'Exportar PNG (WhatsApp)'}</span>
+                  <span>{gerandoExportacao ? 'Gerando...' : 'PNG (WhatsApp)'}</span>
                 </button>
 
                 {/* Exportar PDF */}
                 <button
                   onClick={() => exportarPDF(modalDetalhes)}
                   disabled={gerandoExportacao}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-eno-800 hover:bg-eno-700 text-white font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
                   title="Exportar documento PDF oficial formatado em folha A4"
                 >
                   <FileDown className="w-4 h-4" />
-                  <span>{gerandoExportacao ? 'Gerando...' : 'Exportar PDF (A4)'}</span>
+                  <span>{gerandoExportacao ? 'Gerando...' : 'PDF (A4)'}</span>
                 </button>
 
                 {/* Exportar Excel */}
                 <button
                   onClick={() => exportarExcel(modalDetalhes)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-eno-800 hover:bg-eno-700 text-white font-bold text-xs transition-colors cursor-pointer"
                   title="Exportar planilha formatada para Excel (.csv)"
                 >
                   <FileSpreadsheet className="w-4 h-4" />
-                  <span>Exportar Excel</span>
+                  <span>Excel</span>
                 </button>
 
                 {/* Imprimir */}
                 <button
                   onClick={() => window.print()}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs transition-colors cursor-pointer border border-slate-700"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-eno-800 hover:bg-eno-700 text-white font-bold text-xs transition-colors cursor-pointer"
                   title="Imprimir documento"
                 >
-                  <Printer className="w-4 h-4 text-slate-400" />
+                  <Printer className="w-4 h-4" />
                   <span>Imprimir</span>
                 </button>
               </div>
 
               {/* Botão de Enviar Direto para Em Produção (só admin, só etapa de vendas) */}
               {modoPortal ? (
-                <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${COR_ETAPA[modalDetalhes.etapa]}`}>
+                <span className={`px-3 py-1.5 rounded-md text-xs font-bold border text-center ${COR_ETAPA[modalDetalhes.etapa]}`}>
                   {ROTULO_ETAPA[modalDetalhes.etapa]}
                 </span>
               ) : (
@@ -2310,10 +2305,10 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                   handleAprovarParaProducao(modalDetalhes.id, modalDetalhes.numero_pedido);
                   setModalDetalhes(null);
                 }}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-xs cursor-pointer transition-all hover:scale-102"
+                className="flex items-center justify-center gap-1.5 px-4 py-2 max-sm:min-h-11 rounded-md bg-ouro hover:bg-ouro-claro text-eno-950 font-extrabold text-xs cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-white"
               >
                 <Check className="w-4 h-4 stroke-[3]" />
-                <span>Confirmar & Mandar p/ Produção</span>
+                <span>Aprovar e mandar para produção</span>
               </button>
               )}
             </div>

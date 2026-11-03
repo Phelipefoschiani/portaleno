@@ -79,6 +79,11 @@ import {
   planejarAcessoPortal,
   aplicarAcessoPortal,
 } from './AcessoPortalSecao';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { CampoBusca, SeletorFiltro } from '../ui/BarraFiltros';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
+import { FormularioCadastro } from './FormularioCadastro';
 
 /**
  * Grupos de Produto para comissão = lista de categorias de produto (cadastro de produtos: botão + / gerenciar),
@@ -158,6 +163,8 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
   const selectedRca = useMemo(() => rcas.find(r => r.id === selectedRcaId) || null, [rcas, selectedRcaId]);
   const setSelectedRca = (r: RCA | null) => setSelectedRcaId(r ? r.id : null);
   const [isEditing, setIsEditing] = useState(false);
+  // Celular: abre o detalhe só depois de tocar num representante
+  const [detalheMovel, setDetalheMovel] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   
   const [copiedPix, setCopiedPix] = useState(false);
@@ -661,261 +668,150 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
     }
   };
 
+  const ativosRca = rcas.filter(r => r.status === 'Ativo').length;
+  const cancelarEdicao = () => { setIsEditing(false); setIsCreating(false); };
+  // Celular: lista OU detalhe (no computador os dois lado a lado)
+  const mostrandoDetalheMovel = detalheMovel || isEditing;
+
   return (
-    <div className="h-full w-full flex flex-col bg-slate-50 text-slate-800 overflow-hidden select-none">
-      
+    <div className="h-full w-full min-h-0 flex flex-col bg-papel-2 text-tinta overflow-hidden">
+
       {/* CABEÇALHO */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-700 text-white shadow-sm">
-            <Users className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-slate-900 tracking-tight">Cadastro de RCA / Representantes Comerciais</h1>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300">
-                {rcas.length} Cadastrados
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 font-medium">Gestão de representantes, comissões flexíveis por produto/cliente e carteira vinculada</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {selectedRca && !isEditing && (
-            <button
-              onClick={() => handleExcluirRca(selectedRca)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-red-50 text-red-600 text-sm font-bold border border-red-200 transition-colors cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Excluir</span>
-            </button>
-          )}
-
-          {selectedRca && !isEditing && (
-            <button
-              onClick={() => handleEditarRca(selectedRca)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold border border-slate-300 transition-colors cursor-pointer"
-            >
-              <Edit2 className="w-4 h-4 text-slate-600" />
-              <span>Editar Cadastro</span>
-            </button>
-          )}
-
-          {!isEditing && (
-            <button
-              onClick={handleNovoRca}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold shadow-sm transition-colors cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Novo RCA</span>
-            </button>
-          )}
-        </div>
+      <div className={`mx-auto w-full max-w-[1700px] ${mostrandoDetalheMovel ? 'hidden md:block' : ''}`}>
+        <CabecalhoPagina
+          titulo="Representantes"
+          resumo={rcas.length === 0 ? 'Nenhum representante cadastrado' : `${rcas.length} ${rcas.length === 1 ? 'representante' : 'representantes'} · ${ativosRca} ${ativosRca === 1 ? 'ativo' : 'ativos'}`}
+          acoes={
+            !isEditing ? (
+              <BotaoPrimario onClick={handleNovoRca} className="w-full sm:w-auto h-10 sm:h-9">
+                <Plus className="w-4 h-4" /> Novo representante
+              </BotaoPrimario>
+            ) : undefined
+          }
+        />
       </div>
 
       {/* PAINÉIS PRINCIPAIS */}
-      <div className="flex-1 flex overflow-hidden">
-        
-        {/* LISTA LATERAL DE RCAs */}
-        <div className="w-[360px] lg:w-[400px] bg-white border-r border-slate-200 flex flex-col h-full shrink-0">
-          
-          <div className="p-3.5 border-b border-slate-200 space-y-2.5 bg-slate-50/70">
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar por Nome, Código, Região..."
-                className="w-full pl-9 pr-3.5 py-2 bg-white rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 font-medium"
-              />
-              {busca && (
-                <button
-                  onClick={() => setBusca('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+      <div className="flex-1 min-h-0 flex overflow-hidden mx-auto w-full max-w-[1700px] md:px-6 md:pb-6 md:gap-4">
 
+        {/* LISTA DE RCAs (lateral no computador) */}
+        <div className={`${mostrandoDetalheMovel ? 'hidden md:flex' : 'flex'} w-full md:w-[330px] lg:w-[370px] md:bg-papel md:border md:border-linha md:rounded-md flex-col min-h-0 shrink-0 overflow-hidden`}>
+
+          <div className="px-4 md:px-3 pb-3 md:pt-3 md:border-b md:border-linha space-y-2">
+            <CampoBusca valor={busca} onChange={setBusca} placeholder="Buscar nome, código ou região" className="[&_input]:h-10 sm:[&_input]:h-8" />
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] font-bold uppercase text-slate-500 mb-0.5 block">Status</label>
-                <select
-                  value={filtroStatus}
-                  onChange={(e) => setFiltroStatus(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600"
-                >
-                  <option value="TODOS">Todos os Status</option>
-                  <option value="Ativo">Ativos</option>
-                  <option value="Inativo">Inativos</option>
-                  <option value="Em Férias">Em Férias</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold uppercase text-slate-500 mb-0.5 block">Região</label>
-                <select
-                  value={filtroRegiao}
-                  onChange={(e) => setFiltroRegiao(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600"
-                >
-                  <option value="TODAS">Todas as Regiões</option>
-                  {regioesOptions.map(reg => (
-                    <option key={reg} value={reg}>{reg}</option>
-                  ))}
-                </select>
-              </div>
+              <SeletorFiltro value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} aria-label="Situação" className="w-full h-10 sm:h-8">
+                <option value="TODOS">Todas as situações</option>
+                <option value="Ativo">Ativos</option>
+                <option value="Inativo">Inativos</option>
+                <option value="Em Férias">Em férias</option>
+              </SeletorFiltro>
+              <SeletorFiltro value={filtroRegiao} onChange={(e) => setFiltroRegiao(e.target.value)} aria-label="Região" className="w-full h-10 sm:h-8">
+                <option value="TODAS">Todas as regiões</option>
+                {regioesOptions.map(reg => (
+                  <option key={reg} value={reg}>{reg}</option>
+                ))}
+              </SeletorFiltro>
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 p-2 space-y-1">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-6 md:p-0">
             {rcasFiltrados.length === 0 ? (
-              <div className="p-8 text-center text-slate-400">
-                <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                <p className="text-sm font-semibold">Nenhum RCA encontrado</p>
+              <div className="bg-papel border border-linha rounded-md md:border-0">
+                {rcas.length === 0 ? (
+                  <EstadoVazio
+                    titulo="Nenhum representante cadastrado"
+                    texto="Cadastre os RCAs para vincular a carteira de clientes, a tabela de preço e a regra de comissão."
+                    acao={<BotaoPrimario onClick={handleNovoRca} className="h-10 sm:h-9"><Plus className="w-4 h-4" /> Novo representante</BotaoPrimario>}
+                  />
+                ) : (
+                  <EstadoVazio titulo="Nenhum representante com esses filtros" texto="Confira a busca, a situação e a região." />
+                )}
               </div>
             ) : (
-              rcasFiltrados.map((rca) => {
+              <ul className="bg-papel border border-linha rounded-md md:border-0 md:rounded-none">
+              {rcasFiltrados.map((rca) => {
                 const isSelected = selectedRca?.id === rca.id && !isEditing;
                 const totalClientes = clientesDisponiveis.filter(c => c.vendedor_id === rca.id).length;
                 return (
-                  <div
-                    key={rca.id}
+                  <li key={rca.id} className="border-b border-linha last:border-b-0">
+                  <button
+                    type="button"
                     onClick={() => {
                       setSelectedRca(rca);
                       setIsEditing(false);
                       setIsCreating(false);
+                      setDetalheMovel(true);
                     }}
-                    className={`
-                      p-3 rounded-xl cursor-pointer transition-all border text-left
-                      ${isSelected 
-                        ? 'bg-emerald-50/90 border-emerald-600/60 shadow-xs ring-1 ring-emerald-500/20' 
-                        : 'bg-white border-slate-200/80 hover:bg-slate-50 hover:border-slate-300'
-                      }
-                    `}
+                    aria-current={isSelected ? 'true' : undefined}
+                    className={`relative w-full text-left px-3.5 py-3 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ouro ${
+                      isSelected ? 'md:bg-papel-3' : 'hover:bg-papel-3/50'
+                    }`}
                   >
+                    {isSelected && <span className="hidden md:block absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-ouro" aria-hidden />}
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-900 text-emerald-300 font-mono text-[10px] font-black tracking-wider">
-                          {rca.codigo_rca}
-                        </span>
-                        <span className={`
-                          text-[10px] font-bold px-2 py-0.5 rounded-full border
-                          ${rca.status === 'Ativo' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-100 text-slate-600 border-slate-300'}
-                        `}>
-                          {rca.status}
-                        </span>
+                      <div className="min-w-0">
+                        <div className="text-[11.5px] text-cinza tabular-nums">{rca.codigo_rca} · {rca.regiao_atuacao || `${rca.endereco.municipio}/${rca.endereco.uf}`}</div>
+                        <div className="text-[14px] font-bold text-tinta leading-snug truncate">{rca.nome_fantasia || rca.nome_completo}</div>
                       </div>
-                      <span className="text-[11px] font-black text-emerald-700">
-                        {rca.comissao_padrao_percentual}% base
-                      </span>
+                      <StatusChip tom={rca.status === 'Ativo' ? 'pago' : rca.status === 'Em Férias' ? 'aguardando' : 'vencido'} className="shrink-0">{rca.status}</StatusChip>
                     </div>
-
-                    <h3 className="text-sm font-black text-slate-900 mt-1.5 line-clamp-1 leading-snug">
-                      {rca.nome_completo}
-                    </h3>
-
-                    {rca.nome_fantasia && (
-                      <p className="text-xs font-semibold text-slate-500 line-clamp-1">
-                        {rca.nome_fantasia}
-                      </p>
-                    )}
-
-                    <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-                      <span className="flex items-center gap-1 line-clamp-1 max-w-[180px]">
-                        <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
-                        {rca.regiao_atuacao || `${rca.endereco.municipio}/${rca.endereco.uf}`}
-                      </span>
-                      <span className="flex items-center gap-1 font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md text-[10px]">
-                        <Briefcase className="w-3 h-3 text-slate-500" />
-                        {totalClientes} {totalClientes === 1 ? 'Cliente' : 'Clientes'}
-                      </span>
+                    <div className="mt-1 flex items-center justify-between text-[12px] text-tinta-2 tabular-nums">
+                      <span>{totalClientes} {totalClientes === 1 ? 'cliente' : 'clientes'}</span>
+                      <span className="text-cinza">comissão base <strong className="text-tinta font-semibold">{rca.comissao_padrao_percentual}%</strong></span>
                     </div>
-                  </div>
+                  </button>
+                  </li>
                 );
-              })
+              })}
+              </ul>
             )}
           </div>
         </div>
 
         {/* PAINEL DIREITO */}
-        <div className="flex-1 bg-slate-50 overflow-y-auto p-4 sm:p-6">
-          
+        <div className={`${mostrandoDetalheMovel ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 min-h-0 flex-col ${isEditing ? '' : 'overflow-y-auto px-4 pb-6 md:p-0'}`}>
+
           {/* FORMULÁRIO (CRIAR / EDITAR) */}
           {isEditing ? (
-            <div className="max-w-4xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8">
-              <div className="flex items-center justify-between pb-5 mb-6 border-b border-slate-200">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => {
-                      setIsEditing(false);
-                      setIsCreating(false);
-                    }}
-                    className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </button>
-                  <div>
-                    <h2 className="text-lg font-black text-slate-900">
-                      {isCreating ? 'Cadastrar Novo Representante Comercial (RCA)' : `Editar RCA - ${formData.codigo_rca}`}
-                    </h2>
-                    <p className="text-xs text-slate-500 font-medium">Configure comissões por grupo de produto, por cliente e carteira</p>
-                  </div>
-                </div>
+            <FormularioCadastro
+              onSubmit={handleSalvar}
+              onCancelar={cancelarEdicao}
+              titulo={isCreating ? 'Novo representante' : (formData.nome_fantasia || formData.nome_completo || `Editar ${formData.codigo_rca}`)}
+              subtitulo={isCreating ? 'Identificação, comissão, carteira, PIX e região' : `Editar ${formData.codigo_rca}`}
+              rotuloSalvar={isCreating ? 'Cadastrar representante' : 'Salvar alterações'}
+              salvando={salvandoRca}
+              className="md:bg-papel md:border md:border-linha md:rounded-md"
+            >
+              <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4 sm:p-6">
+              <div className="max-w-4xl mx-auto space-y-6 text-left">
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsEditing(false);
-                      setIsCreating(false);
-                    }}
-                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSalvar}
-                    className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>{salvandoRca ? 'Salvando...' : 'Salvar RCA'}</span>
-                  </button>
-                </div>
-              </div>
-
-              <form onSubmit={handleSalvar} className="space-y-6 text-left">
-                
                 {/* 1. DADOS DE IDENTIFICAÇÃO */}
                 <div>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-emerald-800 flex items-center gap-2 mb-3">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-eno-800 flex items-center gap-2 mb-3">
                     <User className="w-4 h-4" />
                     1. Identificação do RCA
                   </h3>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Código RCA</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Código RCA</label>
                       <input
                         type="text"
                         value={formData.codigo_rca || ''}
                         onChange={(e) => setFormData({ ...formData, codigo_rca: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel-2 border border-linha-forte rounded-md px-3 py-2 text-xs tabular-nums font-bold text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder="RCA-001"
                         required
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Tipo de Pessoa</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Tipo de Pessoa</label>
                       <select
                         value={formData.tipo_pessoa || 'PF'}
                         onChange={(e) => setFormData({ ...formData, tipo_pessoa: e.target.value as 'PF' | 'PJ' })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs font-bold text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                       >
                         <option value="PF">Pessoa Física (PF)</option>
                         <option value="PJ">Pessoa Jurídica (PJ / Representação)</option>
@@ -923,11 +819,11 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Status do Contrato</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Status do Contrato</label>
                       <select
                         value={formData.status || 'Ativo'}
                         onChange={(e) => setFormData({ ...formData, status: e.target.value as 'Ativo' | 'Inativo' | 'Em Férias' })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs font-bold text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                       >
                         <option value="Ativo">Ativo (Operando)</option>
                         <option value="Inativo">Inativo</option>
@@ -938,26 +834,26 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">
                         {formData.tipo_pessoa === 'PJ' ? 'Razão Social *' : 'Nome Completo *'}
                       </label>
                       <input
                         type="text"
                         value={formData.nome_completo || ''}
                         onChange={(e) => setFormData({ ...formData, nome_completo: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs font-bold text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder={formData.tipo_pessoa === 'PJ' ? 'Ex: Silva Representações Comerciais Ltda' : 'Ex: Marcos Silva'}
                         required
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Nome Fantasia / Nome Comercial</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Nome Fantasia / Nome Comercial</label>
                       <input
                         type="text"
                         value={formData.nome_fantasia || ''}
                         onChange={(e) => setFormData({ ...formData, nome_fantasia: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder="Ex: Silva Representações"
                       />
                     </div>
@@ -965,39 +861,39 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">
                         {formData.tipo_pessoa === 'PJ' ? 'CNPJ *' : 'CPF *'}
                       </label>
                       <input
                         type="text"
                         value={formData.cpf_cnpj || ''}
                         onChange={(e) => setFormData({ ...formData, cpf_cnpj: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs tabular-nums font-bold text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder={formData.tipo_pessoa === 'PJ' ? '00.000.000/0001-00' : '000.000.000-00'}
                         required
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">
                         {formData.tipo_pessoa === 'PJ' ? 'Inscrição Estadual (IE)' : 'RG / Órgão Emissor'}
                       </label>
                       <input
                         type="text"
                         value={formData.rg_ie || ''}
                         onChange={(e) => setFormData({ ...formData, rg_ie: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs tabular-nums text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder="Ex: 908.123.456-78"
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Data de Início / Contrato</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Data de Início / Contrato</label>
                       <input
                         type="text"
                         value={formData.data_admissao_contrato || ''}
                         onChange={(e) => setFormData({ ...formData, data_admissao_contrato: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder="DD/MM/AAAA"
                       />
                     </div>
@@ -1005,34 +901,34 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Telefone Fixo</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Telefone Fixo</label>
                       <input
                         type="text"
                         value={formData.telefone || ''}
                         onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs tabular-nums text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder="(43) 3524-0000"
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">WhatsApp / Celular</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">WhatsApp / Celular</label>
                       <input
                         type="text"
                         value={formData.whatsapp || ''}
                         onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs tabular-nums text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder="(43) 99888-0000"
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">E-mail Comercial</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">E-mail Comercial</label>
                       <input
                         type="email"
                         value={formData.email || ''}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder="rca@exemplo.com.br"
                       />
                     </div>
@@ -1053,30 +949,30 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                 />
 
                 {/* 2. SISTEMA DE COMISSÕES FLEXÍVEIS (ANTI-DUPLICIDADE) */}
-                <div className="pt-4 border-t border-slate-200">
+                <div className="pt-4 border-t border-linha">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-emerald-800 flex items-center gap-2">
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-eno-800 flex items-center gap-2">
                       <Percent className="w-4 h-4" />
                       2. Configuração de Comissões (Gestão pelo Administrador)
                     </h3>
-                    <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                    <span className="flex items-center gap-1 text-[11px] font-bold text-eno-700 bg-eno-50 px-2.5 py-1 rounded-full border border-linha-forte">
                       <ShieldCheck className="w-3.5 h-3.5" />
                       Anti-Duplicidade Ativa
                     </span>
                   </div>
 
                   {/* Banner Explicativo de Anti-Duplicidade */}
-                  <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-amber-900 text-xs mb-4 flex items-start gap-2.5">
-                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="p-3 bg-st-aguardando-bg/70 border border-st-aguardando/30 rounded-md text-st-aguardando text-xs mb-4 flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-st-aguardando shrink-0 mt-0.5" />
                     <div>
                       <span className="font-bold">Regra de Resolução & Prioridade Única:</span> Escolha <strong>Pela venda</strong> (um % sobre o total) ou <strong>Por produto</strong> (um % para cada produto; produto sem regra usa o % padrão). Um item <strong>nunca recebe duas comissões</strong>. Nos modelos avançados vale a regra mais específica:
-                      <span className="font-mono font-bold text-amber-800 ml-1">1º Cliente &gt; 2º Grupo de Produto &gt; 3º Padrão</span>.
+                      <span className="tabular-nums font-bold text-st-aguardando ml-1">1º Cliente &gt; 2º Grupo de Produto &gt; 3º Padrão</span>.
                     </div>
                   </div>
 
                   {/* Modelo de comissão: Pela venda | Por produto em destaque; os demais ficam em "avançados" */}
                   <div className="mb-4">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 block mb-2">Como o RCA ganha comissão</span>
+                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-cinza block mb-2">Como o RCA ganha comissão</span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {([
                         { valor: 'geral' as ModeloComissao, titulo: 'Pela venda', desc: '% sobre o total da venda', Icone: DollarSign },
@@ -1089,20 +985,20 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                             type="button"
                             onClick={() => setFormData({ ...formData, modelo_comissao: valor })}
                             aria-pressed={ativo}
-                            className={`text-left rounded-xl px-4 py-3 border-2 transition-all duration-200 flex items-center gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ${
+                            className={`text-left rounded-md px-4 py-3 border-2 transition-all duration-200 flex items-center gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-eno-600 ${
                               ativo
-                                ? 'border-emerald-700 bg-gradient-to-br from-emerald-800 to-emerald-950 text-white shadow-[0_10px_30px_-12px_rgba(6,78,59,0.8)]'
-                                : 'border-slate-200 bg-white text-slate-800 hover:border-emerald-400'
+                                ? 'border-eno-700 bg-gradient-to-br from-eno-800 to-eno-950 text-white shadow-[0_10px_30px_-12px_rgba(6,78,59,0.8)]'
+                                : 'border-linha bg-papel text-tinta hover:border-linha-forte'
                             }`}
                           >
-                            <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${ativo ? 'bg-white/15 text-emerald-100' : 'bg-emerald-50 text-emerald-700'}`}>
+                            <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${ativo ? 'bg-papel/15 text-eno-100' : 'bg-eno-50 text-eno-700'}`}>
                               <Icone className="w-4 h-4" />
                             </span>
                             <span className="min-w-0">
-                              <span className="block text-sm font-black tracking-tight">{titulo}</span>
-                              <span className={`block text-[11px] ${ativo ? 'text-emerald-100/80' : 'text-slate-500'}`}>{desc}</span>
+                              <span className="block text-sm font-extrabold tracking-tight">{titulo}</span>
+                              <span className={`block text-[11px] ${ativo ? 'text-eno-100/80' : 'text-cinza'}`}>{desc}</span>
                             </span>
-                            {ativo && <CheckCircle2 className="w-4 h-4 ml-auto shrink-0 text-emerald-300" />}
+                            {ativo && <CheckCircle2 className="w-4 h-4 ml-auto shrink-0 text-eno-600" />}
                           </button>
                         );
                       })}
@@ -1111,7 +1007,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                       type="button"
                       onClick={() => setMostrarModelosAvancados(v => !v)}
                       aria-expanded={mostrarModelosAvancados}
-                      className="mt-2 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1"
+                      className="mt-2 text-[11px] font-bold text-eno-800 hover:text-eno-950 flex items-center gap-1"
                     >
                       {mostrarModelosAvancados ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                       Modelos avançados (por grupo, por cliente, misto)
@@ -1131,7 +1027,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                               onClick={() => setFormData({ ...formData, modelo_comissao: op.valor })}
                               aria-pressed={ativo}
                               className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
-                                ativo ? 'bg-emerald-800 text-white border-emerald-800' : 'bg-white text-slate-700 border-slate-300 hover:border-emerald-500'
+                                ativo ? 'bg-eno-800 text-white border-eno-800' : 'bg-papel text-tinta-2 border-linha-forte hover:border-eno-600'
                               }`}
                             >
                               {op.titulo}
@@ -1144,7 +1040,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="sm:col-span-2">
-                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">
                         {(formData.modelo_comissao || 'geral') === 'geral' ? 'Comissão sobre o total da venda (%)' : 'Comissão padrão — itens sem regra própria (%)'}
                       </label>
                       <div className="relative max-w-[12rem]">
@@ -1153,14 +1049,14 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           min={0}
                           value={formData.comissao_padrao_percentual ?? 3.5}
                           onChange={(n) => setFormData({ ...formData, comissao_padrao_percentual: n })}
-                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                          className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs tabular-nums font-bold text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-cinza">%</span>
                       </div>
                     </div>
 
                     <div className="sm:col-span-2">
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Vencimento da comissão (dia do mês seguinte ao faturamento)</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Vencimento da comissão (dia do mês seguinte ao faturamento)</label>
                       <div className="flex items-center gap-2">
                         <CampoNumero
                           inteiro
@@ -1169,18 +1065,18 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           vazioComo={DIA_VENCIMENTO_COMISSAO_PADRAO}
                           value={formData.dia_vencimento_comissao ?? DIA_VENCIMENTO_COMISSAO_PADRAO}
                           onChange={(n) => setFormData({ ...formData, dia_vencimento_comissao: n })}
-                          className="w-24 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                          className="w-24 bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs tabular-nums font-bold text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         />
-                        <span className="text-[11px] text-slate-500">Ao faturar o pedido, a comissão vira conta a pagar ao RCA com este vencimento e a chave PIX cadastrada.</span>
+                        <span className="text-[11px] text-cinza">Ao faturar o pedido, a comissão vira conta a pagar ao RCA com este vencimento e a chave PIX cadastrada.</span>
                       </div>
                     </div>
 
                     <div className="sm:col-span-2">
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Tabela de preço padrão (clientes cadastrados pelo RCA)</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Tabela de preço padrão (clientes cadastrados pelo RCA)</label>
                       <select
                         value={formData.tabela_preco_padrao_id || ''}
                         onChange={(e) => setFormData({ ...formData, tabela_preco_padrao_id: e.target.value })}
-                        className="w-full max-w-sm bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full max-w-sm bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs font-bold text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                       >
                         <option value="">-- Sem tabela padrão --</option>
                         {carregarTabelasPreco().filter(t => t.status !== 'ARQUIVADA' || t.id === formData.tabela_preco_padrao_id).map(t => (
@@ -1192,13 +1088,13 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
                   {/* Subseção: Comissão por Produto */}
                   {formData.modelo_comissao === 'por_produto' && (
-                    <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="mt-4 p-4 bg-papel-2 rounded-md border border-linha">
                       <div className="flex items-center justify-between mb-2 gap-2">
-                        <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <Package className="w-3.5 h-3.5 text-emerald-600" />
+                        <h4 className="text-xs font-bold text-tinta flex items-center gap-1.5">
+                          <Package className="w-3.5 h-3.5 text-eno-600" />
                           Comissão por Produto
                         </h4>
-                        <span className="text-[10px] text-slate-500 font-medium text-right">
+                        <span className="text-[10px] text-cinza font-medium text-right">
                           Produto sem regra: {Number(formData.comissao_padrao_percentual ?? 0)}% (padrão)
                         </span>
                       </div>
@@ -1206,11 +1102,11 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                       {(formData.comissoes_por_produto || []).length > 0 ? (
                         <div className="space-y-1.5 mb-3">
                           {formData.comissoes_por_produto?.map(cp => (
-                            <div key={cp.produto_id} className="flex items-center justify-between gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200 text-xs">
-                              <span className="font-semibold text-slate-800 min-w-0 truncate">
+                            <div key={cp.produto_id} className="flex items-center justify-between gap-2 bg-papel px-3 py-2 rounded-lg border border-linha text-xs">
+                              <span className="font-semibold text-tinta min-w-0 truncate">
                                 {cp.produto_nome}
                                 {!produtosCadastrados.some(p => p.id === String(cp.produto_id)) && (
-                                  <span className="ml-2 text-[10px] font-bold text-red-600">produto não encontrado no cadastro</span>
+                                  <span className="ml-2 text-[10px] font-bold text-st-vencido">produto não encontrado no cadastro</span>
                                 )}
                               </span>
                               <div className="flex items-center gap-2 shrink-0">
@@ -1221,14 +1117,14 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                                     value={cp.percentual}
                                     onChange={(n) => handleAlterarPercentualProduto(cp.produto_id, n)}
                                     aria-label={`Comissão de ${cp.produto_nome} (%)`}
-                                    className="w-full bg-emerald-50 border border-emerald-200 rounded px-2 py-1 text-xs font-mono font-bold text-emerald-800 tabular-nums"
+                                    className="w-full bg-eno-50 border border-linha-forte rounded px-2 py-1 text-xs tabular-nums font-bold text-eno-800 tabular-nums"
                                   />
-                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-emerald-600">%</span>
+                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-eno-600">%</span>
                                 </div>
                                 <button
                                   type="button"
                                   onClick={() => handleRemoverComissaoProduto(cp.produto_id)}
-                                  className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                                  className="text-st-vencido hover:text-st-vencido p-1 rounded hover:bg-st-vencido-bg"
                                   aria-label={`Remover regra de ${cp.produto_nome}`}
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -1238,14 +1134,14 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-400 italic mb-3">Nenhum produto com % próprio: todos usam o % padrão até você adicionar.</p>
+                        <p className="text-xs text-cinza italic mb-3">Nenhum produto com % próprio: todos usam o % padrão até você adicionar.</p>
                       )}
 
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                         <select
                           value={novoProdutoId}
                           onChange={(e) => setNovoProdutoId(e.target.value)}
-                          className="flex-1 min-w-0 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-medium"
+                          className="flex-1 min-w-0 bg-papel border border-linha-forte rounded-lg px-2.5 py-1.5 text-xs text-tinta font-medium"
                         >
                           <option value="">{produtosCadastrados.length === 0 ? 'Nenhum produto cadastrado' : 'Selecione o produto…'}</option>
                           {produtosCadastrados.map(p => (
@@ -1261,16 +1157,16 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                               min={0}
                               value={novoProdutoPercentual}
                               onChange={(n) => setNovoProdutoPercentual(n)}
-                              className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-slate-900"
+                              className="w-full bg-papel border border-linha-forte rounded-lg px-2 py-1.5 text-xs tabular-nums font-bold text-tinta"
                               placeholder="%"
                             />
-                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-cinza">%</span>
                           </div>
                           <button
                             type="button"
                             onClick={handleAdicionarComissaoProduto}
                             disabled={!novoProdutoId}
-                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold flex items-center gap-1"
+                            className="px-3 py-1.5 bg-eno-700 hover:bg-eno-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold flex items-center gap-1"
                           >
                             <Plus className="w-3.5 h-3.5" />
                             <span>Adicionar</span>
@@ -1282,34 +1178,34 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
                   {/* Subseção A: Comissões por Grupo de Produto */}
                   {(formData.modelo_comissao === 'por_grupo' || formData.modelo_comissao === 'misto') && (
-                    <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="mt-4 p-4 bg-papel-2 rounded-md border border-linha">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <Package className="w-3.5 h-3.5 text-emerald-600" />
+                        <h4 className="text-xs font-bold text-tinta flex items-center gap-1.5">
+                          <Package className="w-3.5 h-3.5 text-eno-600" />
                           Comissões por Grupo de Produto
                         </h4>
-                        <span className="text-[10px] text-slate-500 font-medium">Prevalece sobre a comissão geral</span>
+                        <span className="text-[10px] text-cinza font-medium">Prevalece sobre a comissão geral</span>
                       </div>
 
                       {/* Tabela de Grupos Configurados */}
                       {(formData.comissoes_por_grupo || []).length > 0 ? (
                         <div className="space-y-1.5 mb-3">
                           {formData.comissoes_por_grupo?.map((cg) => (
-                            <div key={cg.id} className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-200 text-xs">
-                              <span className="font-semibold text-slate-800">
+                            <div key={cg.id} className="flex items-center justify-between bg-papel px-3 py-2 rounded-lg border border-linha text-xs">
+                              <span className="font-semibold text-tinta">
                                 {cg.grupo_nome}
                                 {!gruposProduto.some(g => g.id === cg.grupo_id || g.nome === cg.grupo_nome) && (
-                                  <span className="ml-2 text-[10px] font-bold text-red-600">não corresponde a nenhuma categoria de produto — não será aplicada</span>
+                                  <span className="ml-2 text-[10px] font-bold text-st-vencido">não corresponde a nenhuma categoria de produto — não será aplicada</span>
                                 )}
                               </span>
                               <div className="flex items-center gap-3">
-                                <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                <span className="tabular-nums font-bold text-eno-700 bg-eno-50 px-2 py-0.5 rounded border border-linha-forte">
                                   {cg.percentual}%
                                 </span>
                                 <button
                                   type="button"
                                   onClick={() => handleRemoverComissaoGrupo(cg.id)}
-                                  className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                                  className="text-st-vencido hover:text-st-vencido p-1 rounded hover:bg-st-vencido-bg"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -1318,7 +1214,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-400 italic mb-3">Nenhum grupo específico adicionado. Use os campos abaixo para configurar.</p>
+                        <p className="text-xs text-cinza italic mb-3">Nenhum grupo específico adicionado. Use os campos abaixo para configurar.</p>
                       )}
 
                       {/* Adicionar Grupo */}
@@ -1326,7 +1222,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                         <select
                           value={novoGrupoId || gruposProduto[0]?.id || ''}
                           onChange={(e) => setNovoGrupoId(e.target.value)}
-                          className="flex-1 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-medium"
+                          className="flex-1 bg-papel border border-linha-forte rounded-lg px-2.5 py-1.5 text-xs text-tinta font-medium"
                         >
                           {gruposProduto.length === 0 && <option value="">Nenhuma categoria de produto cadastrada</option>}
                           {gruposProduto.map(g => (
@@ -1339,15 +1235,15 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                             min={0}
                             value={novoGrupoPercentual}
                             onChange={(n) => setNovoGrupoPercentual(n)}
-                            className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-slate-900"
+                            className="w-full bg-papel border border-linha-forte rounded-lg px-2 py-1.5 text-xs tabular-nums font-bold text-tinta"
                             placeholder="%"
                           />
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-cinza">%</span>
                         </div>
                         <button
                           type="button"
                           onClick={handleAdicionarComissaoGrupo}
-                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold flex items-center gap-1"
+                          className="px-3 py-1.5 bg-eno-700 hover:bg-eno-800 text-white rounded-lg text-xs font-bold flex items-center gap-1"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Adicionar</span>
@@ -1358,34 +1254,34 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
                   {/* Subseção B: Comissões por Cliente */}
                   {(formData.modelo_comissao === 'por_cliente' || formData.modelo_comissao === 'misto') && (
-                    <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="mt-4 p-4 bg-papel-2 rounded-md border border-linha">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <h4 className="text-xs font-bold text-tinta flex items-center gap-1.5">
+                          <Building2 className="w-3.5 h-3.5 text-eno-600" />
                           Comissões por Cliente Específico
                         </h4>
-                        <span className="text-[10px] text-amber-700 font-bold bg-amber-100/60 px-2 py-0.5 rounded">Prioridade Máxima</span>
+                        <span className="text-[10px] text-st-aguardando font-bold bg-st-aguardando-bg/60 px-2 py-0.5 rounded">Prioridade Máxima</span>
                       </div>
 
                       {/* Tabela de Clientes Configurados */}
                       {(formData.comissoes_por_cliente || []).length > 0 ? (
                         <div className="space-y-1.5 mb-3">
                           {formData.comissoes_por_cliente?.map((cc) => (
-                            <div key={cc.id} className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-200 text-xs">
+                            <div key={cc.id} className="flex items-center justify-between bg-papel px-3 py-2 rounded-lg border border-linha text-xs">
                               <div>
-                                <span className="font-semibold text-slate-800">{cc.cliente_nome}</span>
+                                <span className="font-semibold text-tinta">{cc.cliente_nome}</span>
                                 {cc.cliente_cidade && (
-                                  <span className="text-[11px] text-slate-400 ml-2">({cc.cliente_cidade})</span>
+                                  <span className="text-[11px] text-cinza ml-2">({cc.cliente_cidade})</span>
                                 )}
                               </div>
                               <div className="flex items-center gap-3">
-                                <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                <span className="tabular-nums font-bold text-eno-700 bg-eno-50 px-2 py-0.5 rounded border border-linha-forte">
                                   {cc.percentual}%
                                 </span>
                                 <button
                                   type="button"
                                   onClick={() => handleRemoverComissaoCliente(cc.id)}
-                                  className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                                  className="text-st-vencido hover:text-st-vencido p-1 rounded hover:bg-st-vencido-bg"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -1394,7 +1290,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-400 italic mb-3">Nenhum cliente específico com comissão diferenciada.</p>
+                        <p className="text-xs text-cinza italic mb-3">Nenhum cliente específico com comissão diferenciada.</p>
                       )}
 
                       {/* Adicionar Cliente */}
@@ -1402,7 +1298,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                         <select
                           value={novoClienteId}
                           onChange={(e) => setNovoClienteId(e.target.value)}
-                          className="flex-1 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-medium"
+                          className="flex-1 bg-papel border border-linha-forte rounded-lg px-2.5 py-1.5 text-xs text-tinta font-medium"
                         >
                           {clientesDisponiveis.map(c => (
                             <option key={c.id} value={c.id}>{c.razao_social} ({c.municipio}/{c.uf})</option>
@@ -1414,15 +1310,15 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                             min={0}
                             value={novoClientePercentual}
                             onChange={(n) => setNovoClientePercentual(n)}
-                            className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-slate-900"
+                            className="w-full bg-papel border border-linha-forte rounded-lg px-2 py-1.5 text-xs tabular-nums font-bold text-tinta"
                             placeholder="%"
                           />
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-cinza">%</span>
                         </div>
                         <button
                           type="button"
                           onClick={handleAdicionarComissaoCliente}
-                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold flex items-center gap-1"
+                          className="px-3 py-1.5 bg-eno-700 hover:bg-eno-800 text-white rounded-lg text-xs font-bold flex items-center gap-1"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Adicionar</span>
@@ -1433,13 +1329,13 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                 </div>
 
                 {/* 3. VINCULAR CLIENTES À CARTEIRA */}
-                <div className="pt-4 border-t border-slate-200">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-emerald-800 flex items-center gap-2 mb-3">
+                <div className="pt-4 border-t border-linha">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-eno-800 flex items-center gap-2 mb-3">
                     <Briefcase className="w-4 h-4" />
                     3. Clientes Vinculados à Carteira deste RCA
                   </h3>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-2 bg-papel-2 rounded-md border border-linha">
                     {clientesDisponiveis.map((cli) => {
                       const isVinculado = (formData.clientes_vinculados_ids || []).includes(cli.id);
                       return (
@@ -1448,17 +1344,17 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           onClick={() => handleToggleClienteVinculado(cli.id)}
                           className={`
                             p-2.5 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-all
-                            ${isVinculado ? 'bg-emerald-50 border-emerald-500 text-slate-900 font-semibold shadow-xs' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}
+                            ${isVinculado ? 'bg-eno-50 border-eno-600 text-tinta font-semibold ' : 'bg-papel border-linha text-tinta-2 hover:bg-papel-2'}
                           `}
                         >
                           <div>
                             <p className="line-clamp-1">{cli.razao_social}</p>
-                            <p className="text-[10px] text-slate-400 font-normal">{cli.municipio}/{cli.uf} • {cli.cpf_cnpj}</p>
+                            <p className="text-[10px] text-cinza font-normal">{cli.municipio}/{cli.uf} • {cli.cpf_cnpj}</p>
                             {!isVinculado && cli.vendedor_id && cli.vendedor_id !== selectedRca?.id && (
-                              <p className="text-[10px] text-amber-600 font-semibold">Vinculado a outro RCA (será transferido)</p>
+                              <p className="text-[10px] text-st-aguardando font-semibold">Vinculado a outro RCA (será transferido)</p>
                             )}
                           </div>
-                          <div className={`w-5 h-5 rounded-md flex items-center justify-center border shrink-0 ${isVinculado ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 bg-white'}`}>
+                          <div className={`w-5 h-5 rounded-md flex items-center justify-center border shrink-0 ${isVinculado ? 'bg-eno-600 border-eno-600 text-white' : 'border-linha-forte bg-papel'}`}>
                             {isVinculado && <Check className="w-3.5 h-3.5" />}
                           </div>
                         </div>
@@ -1468,19 +1364,19 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                 </div>
 
                 {/* 4. DADOS BANCÁRIOS & CHAVE PIX */}
-                <div className="pt-4 border-t border-slate-200">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-emerald-800 flex items-center gap-2 mb-3">
+                <div className="pt-4 border-t border-linha">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-eno-800 flex items-center gap-2 mb-3">
                     <CreditCard className="w-4 h-4" />
                     4. Dados Financeiros & Repasse de Comissão (PIX)
                   </h3>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Tipo da Chave PIX</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Tipo da Chave PIX</label>
                       <select
                         value={formData.tipo_chave_pix || 'CPF'}
                         onChange={(e) => setFormData({ ...formData, tipo_chave_pix: e.target.value as any })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs font-bold text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                       >
                         <option value="CPF">CPF</option>
                         <option value="CNPJ">CNPJ</option>
@@ -1491,12 +1387,12 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                     </div>
 
                     <div className="sm:col-span-2">
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Chave PIX *</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Chave PIX *</label>
                       <input
                         type="text"
                         value={formData.chave_pix || ''}
                         onChange={(e) => setFormData({ ...formData, chave_pix: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs tabular-nums font-bold text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder="Informe a Chave PIX"
                         required
                       />
@@ -1505,34 +1401,34 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Banco</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Banco</label>
                       <input
                         type="text"
                         value={formData.banco_nome || ''}
                         onChange={(e) => setFormData({ ...formData, banco_nome: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder="Ex: Banco Itaú"
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Agência</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Agência</label>
                       <input
                         type="text"
                         value={formData.agencia || ''}
                         onChange={(e) => setFormData({ ...formData, agencia: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs tabular-nums text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder="Ex: 0412"
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Conta Corrente</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Conta Corrente</label>
                       <input
                         type="text"
                         value={formData.conta || ''}
                         onChange={(e) => setFormData({ ...formData, conta: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs tabular-nums text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder="Ex: 29.340-1"
                       />
                     </div>
@@ -1540,31 +1436,31 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                 </div>
 
                 {/* 5. ENDEREÇO & REGIÃO */}
-                <div className="pt-4 border-t border-slate-200">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-emerald-800 flex items-center gap-2 mb-3">
+                <div className="pt-4 border-t border-linha">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-eno-800 flex items-center gap-2 mb-3">
                     <MapPin className="w-4 h-4" />
                     5. Endereço & Região Comercial
                   </h3>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Região de Atuação</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Região de Atuação</label>
                       <input
                         type="text"
                         value={formData.regiao_atuacao || ''}
                         onChange={(e) => setFormData({ ...formData, regiao_atuacao: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs font-semibold text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder="Ex: Norte Pioneiro / PR"
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Cidades Principais</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Cidades Principais</label>
                       <input
                         type="text"
                         value={formData.cidades_principais || ''}
                         onChange={(e) => setFormData({ ...formData, cidades_principais: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder="Ex: Jacarezinho, Cambará, Ourinhos"
                       />
                     </div>
@@ -1572,7 +1468,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">CEP</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">CEP</label>
                       <input
                         type="text"
                         value={formData.endereco?.cep || ''}
@@ -1580,12 +1476,12 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           ...formData, 
                           endereco: { ...(formData.endereco || { logradouro: '', numero: '', bairro: '', municipio: '', uf: 'PR' }), cep: e.target.value } 
                         })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs tabular-nums text-tinta"
                         placeholder="00000-000"
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Logradouro / Rua</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Logradouro / Rua</label>
                       <input
                         type="text"
                         value={formData.endereco?.logradouro || ''}
@@ -1593,7 +1489,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           ...formData, 
                           endereco: { ...(formData.endereco || { cep: '', numero: '', bairro: '', municipio: '', uf: 'PR' }), logradouro: e.target.value } 
                         })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs text-tinta"
                         placeholder="Ex: Rua Paraná"
                       />
                     </div>
@@ -1601,7 +1497,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Número</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Número</label>
                       <input
                         type="text"
                         value={formData.endereco?.numero || ''}
@@ -1609,19 +1505,19 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           ...formData, 
                           endereco: { ...(formData.endereco || { cep: '', logradouro: '', bairro: '', municipio: '', uf: 'PR' }), numero: e.target.value } 
                         })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs text-tinta"
                         placeholder="120"
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Estado (UF)</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Estado (UF)</label>
                       <select
                         value={formData.endereco?.uf || 'PR'}
                         onChange={(e) => setFormData({ 
                           ...formData, 
                           endereco: { ...(formData.endereco || { cep: '', logradouro: '', numero: '', bairro: '', municipio: '' }), uf: e.target.value } 
                         })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs font-bold text-tinta"
                       >
                         <option value="PR">Paraná (PR)</option>
                         <option value="SP">São Paulo (SP)</option>
@@ -1630,7 +1526,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Município</label>
+                      <label className="text-xs font-bold text-tinta-2 block mb-1">Município</label>
                       <input
                         type="text"
                         value={formData.endereco?.municipio || ''}
@@ -1638,84 +1534,83 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           ...formData, 
                           endereco: { ...(formData.endereco || { cep: '', logradouro: '', numero: '', bairro: '', municipio: '' }), municipio: e.target.value } 
                         })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs text-tinta"
                         placeholder="Jacarezinho"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-slate-200 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsEditing(false);
-                      setIsCreating(false);
-                    }}
-                    className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-md transition-colors cursor-pointer"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>Salvar Representante</span>
-                  </button>
-                </div>
-              </form>
-            </div>
+              </div>
+              </div>
+            </FormularioCadastro>
           ) : selectedRca ? (
             
             /* VISUALIZAÇÃO DOS DETALHES DO RCA */
-            <div className="max-w-5xl mx-auto space-y-6">
+            <div className="w-full max-w-5xl mx-auto space-y-5">
+              <div className="flex items-center gap-2 pt-1 md:pt-0">
+                <button
+                  type="button"
+                  onClick={() => setDetalheMovel(false)}
+                  className="md:hidden inline-flex items-center gap-1.5 h-10 -ml-1 px-1 text-[13px] font-semibold text-eno-700 cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" /> Representantes
+                </button>
+                <div className="ml-auto flex items-center gap-2">
+                  <BotaoSecundario onClick={() => handleEditarRca(selectedRca)} className="h-10 sm:h-9">
+                    <Edit2 className="w-4 h-4" /> Editar
+                  </BotaoSecundario>
+                  <BotaoSecundario onClick={() => handleExcluirRca(selectedRca)} className="h-10 sm:h-9 hover:!text-st-vencido hover:!bg-st-vencido-bg" aria-label="Excluir representante">
+                    <Trash2 className="w-4 h-4" /> <span className="hidden sm:inline">Excluir</span>
+                  </BotaoSecundario>
+                </div>
+              </div>
               
               {/* CARTÃO SUPERIOR: PERFIL DO RCA */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs text-left">
+              <div className="bg-papel rounded-md border border-linha p-6  text-left">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1.5">
-                      <span className="px-2.5 py-1 rounded-md bg-slate-900 text-emerald-300 font-mono text-xs font-black tracking-wider">
+                      <span className="px-2.5 py-1 rounded-md bg-eno-900 text-eno-600 tabular-nums text-xs font-extrabold tracking-wider">
                         {selectedRca.codigo_rca}
                       </span>
                       <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
-                        selectedRca.status === 'Ativo' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-100 text-slate-600 border-slate-300'
+                        selectedRca.status === 'Ativo' ? 'bg-eno-100 text-eno-800 border-linha-forte' : 'bg-papel-2 text-tinta-2 border-linha-forte'
                       }`}>
                         {selectedRca.status}
                       </span>
-                      <span className="text-xs text-slate-400 font-medium">
+                      <span className="text-xs text-cinza font-medium">
                         Desde {selectedRca.data_admissao_contrato}
                       </span>
                     </div>
 
-                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                    <h2 className="text-2xl font-extrabold text-tinta tracking-tight">
                       {selectedRca.nome_completo}
                     </h2>
 
                     {selectedRca.nome_fantasia && (
-                      <p className="text-sm font-semibold text-emerald-800">
+                      <p className="text-sm font-semibold text-eno-800">
                         {selectedRca.nome_fantasia}
                       </p>
                     )}
 
-                    <div className="flex flex-wrap items-center gap-y-2 gap-x-4 mt-3 text-xs text-slate-600 font-medium">
-                      <span className="font-mono bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                    <div className="flex flex-wrap items-center gap-y-2 gap-x-4 mt-3 text-xs text-tinta-2 font-medium">
+                      <span className="tabular-nums bg-papel-2 px-2 py-0.5 rounded border border-linha">
                         {selectedRca.tipo_pessoa === 'PJ' ? 'CNPJ' : 'CPF'}: {selectedRca.cpf_cnpj}
                       </span>
                       <span className="flex items-center gap-1">
-                        <Phone className="w-3.5 h-3.5 text-slate-400" />
+                        <Phone className="w-3.5 h-3.5 text-cinza" />
                         {selectedRca.whatsapp || selectedRca.telefone}
                       </span>
                       <span className="flex items-center gap-1">
-                        <Mail className="w-3.5 h-3.5 text-slate-400" />
+                        <Mail className="w-3.5 h-3.5 text-cinza" />
                         {selectedRca.email}
                       </span>
                       <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black border ${
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
                           acessoDoSelecionado
-                            ? acessoDoSelecionado.ativo ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-100 text-slate-600 border-slate-300'
-                            : 'bg-amber-100 text-amber-900 border-amber-300'
+                            ? acessoDoSelecionado.ativo ? 'bg-eno-100 text-eno-800 border-linha-forte' : 'bg-papel-2 text-tinta-2 border-linha-forte'
+                            : 'bg-st-aguardando-bg text-st-aguardando border-st-aguardando/30'
                         }`}
                         title={acessoDoSelecionado ? `Login do portal: ${acessoDoSelecionado.usuario}` : 'Edite o RCA para criar o login do portal'}
                       >
@@ -1725,32 +1620,32 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           : 'Sem acesso ao portal'}
                       </span>
                       <span className="flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                        <MapPin className="w-3.5 h-3.5 text-eno-600" />
                         {selectedRca.regiao_atuacao || `${selectedRca.endereco.municipio}/${selectedRca.endereco.uf}`}
                       </span>
                     </div>
                   </div>
 
                   {/* BOX PIX COM CÓPIA RÁPIDA */}
-                  <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-4 sm:w-80 shrink-0 text-left">
+                  <div className="bg-eno-50/80 border border-linha-forte rounded-md p-4 sm:w-80 shrink-0 text-left">
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
-                        <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-eno-800 flex items-center gap-1">
+                        <CreditCard className="w-3.5 h-3.5 text-eno-600" />
                         Chave PIX Cadastrada ({selectedRca.tipo_chave_pix})
                       </span>
                     </div>
-                    <p className="font-mono text-xs font-black text-slate-900 break-all select-all">
+                    <p className="tabular-nums text-xs font-extrabold text-tinta break-all select-all">
                       {selectedRca.chave_pix}
                     </p>
-                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-emerald-200/60">
-                      <span className="text-[10px] text-slate-500 font-medium">
+                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-linha-forte/60">
+                      <span className="text-[10px] text-cinza font-medium">
                         {selectedRca.banco_nome ? `${selectedRca.banco_nome} • Ag: ${selectedRca.agencia}` : 'PIX Direto'}
                       </span>
                       <button
                         onClick={() => handleCopiarPix(selectedRca.chave_pix)}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold shadow-2xs transition-all cursor-pointer"
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-eno-700 hover:bg-eno-800 text-white text-[11px] font-bold  transition-all cursor-pointer"
                       >
-                        {copiedPix ? <Check className="w-3 h-3 text-emerald-200" /> : <Copy className="w-3 h-3" />}
+                        {copiedPix ? <Check className="w-3 h-3 text-eno-100" /> : <Copy className="w-3 h-3" />}
                         <span>{copiedPix ? 'Copiado!' : 'Copiar PIX'}</span>
                       </button>
                     </div>
@@ -1760,132 +1655,132 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
               {/* 4 CARDS DE INDICADORES (SEM METAS) */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-left">
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-                  <span className="text-[11px] font-bold uppercase text-slate-400 block mb-1">Modelo de Comissão</span>
-                  <p className="text-base font-black text-slate-900 flex items-center gap-1.5">
-                    <Percent className="w-4 h-4 text-emerald-600" />
+                <div className="bg-papel p-4 rounded-md border border-linha ">
+                  <span className="text-[11px] font-bold uppercase text-cinza block mb-1">Modelo de Comissão</span>
+                  <p className="text-base font-extrabold text-tinta flex items-center gap-1.5">
+                    <Percent className="w-4 h-4 text-eno-600" />
                     {getNomeModeloComissao(selectedRca.modelo_comissao)}
                   </p>
-                  <span className="text-[11px] text-slate-500 font-medium">Taxa base: {selectedRca.comissao_padrao_percentual}%</span>
+                  <span className="text-[11px] text-cinza font-medium">Taxa base: {selectedRca.comissao_padrao_percentual}%</span>
                 </div>
 
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-                  <span className="text-[11px] font-bold uppercase text-slate-400 block mb-1">Total Faturado</span>
-                  <p className="text-lg font-black text-slate-900 font-mono">
+                <div className="bg-papel p-4 rounded-md border border-linha ">
+                  <span className="text-[11px] font-bold uppercase text-cinza block mb-1">Total Faturado</span>
+                  <p className="text-lg font-extrabold text-tinta tabular-nums">
                     R$ {statsRca.totalFaturado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
-                  <span className="text-[11px] text-emerald-600 font-bold">{vendasDoRca.length} Pedidos Faturados</span>
+                  <span className="text-[11px] text-eno-600 font-bold">{vendasDoRca.length} Pedidos Faturados</span>
                 </div>
 
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-                  <span className="text-[11px] font-bold uppercase text-slate-400 block mb-1">Comissões Pagas (PIX)</span>
-                  <p className="text-lg font-black text-emerald-700 font-mono">
+                <div className="bg-papel p-4 rounded-md border border-linha ">
+                  <span className="text-[11px] font-bold uppercase text-cinza block mb-1">Comissões Pagas (PIX)</span>
+                  <p className="text-lg font-extrabold text-eno-700 tabular-nums">
                     R$ {statsRca.comissaoPaga.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
-                  <span className="text-[11px] text-slate-500 font-medium">Repassadas com sucesso</span>
+                  <span className="text-[11px] text-cinza font-medium">Repassadas com sucesso</span>
                 </div>
 
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-                  <span className="text-[11px] font-bold uppercase text-slate-400 block mb-1">Comissões a Pagar</span>
-                  <p className="text-lg font-black text-amber-700 font-mono">
+                <div className="bg-papel p-4 rounded-md border border-linha ">
+                  <span className="text-[11px] font-bold uppercase text-cinza block mb-1">Comissões a Pagar</span>
+                  <p className="text-lg font-extrabold text-st-aguardando tabular-nums">
                     R$ {statsRca.comissaoPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
-                  <span className="text-[11px] text-amber-600 font-bold">Liberadas / Pendentes</span>
+                  <span className="text-[11px] text-st-aguardando font-bold">Liberadas / Pendentes</span>
                 </div>
               </div>
 
               {/* REGRAS ATIVAS DE COMISSÃO (ANTI-DUPLICIDADE) */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs text-left">
-                <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200">
+              <div className="bg-papel rounded-md border border-linha p-6  text-left">
+                <div className="flex items-center justify-between pb-3 mb-4 border-b border-linha">
                   <div className="flex items-center gap-2">
-                    <Percent className="w-5 h-5 text-emerald-700" />
+                    <Percent className="w-5 h-5 text-eno-700" />
                     <div>
-                      <h3 className="text-sm font-black text-slate-900">Grade de Comissões do RCA</h3>
-                      <p className="text-[11px] text-slate-500">Regras configuradas pelo administrador com garantia anti-duplicidade de comissão</p>
+                      <h3 className="text-sm font-extrabold text-tinta">Grade de Comissões do RCA</h3>
+                      <p className="text-[11px] text-cinza">Regras configuradas pelo administrador com garantia anti-duplicidade de comissão</p>
                     </div>
                   </div>
-                  <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200">
+                  <span className="px-3 py-1 rounded-full bg-papel-2 text-tinta-2 text-xs font-bold border border-linha">
                     Modo: {getNomeModeloComissao(selectedRca.modelo_comissao)}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Regra Geral */}
-                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                    <span className="text-[10px] font-bold uppercase text-slate-500 block mb-1">1. Taxa Geral Padrão</span>
-                    <p className="text-xl font-black text-slate-900 font-mono">{selectedRca.comissao_padrao_percentual}%</p>
-                    <p className="text-[11px] text-slate-500 mt-1">Aplicada quando não houver regra específica de grupo ou cliente.</p>
+                  <div className="bg-papel-2 p-3.5 rounded-md border border-linha">
+                    <span className="text-[10px] font-bold uppercase text-cinza block mb-1">1. Taxa Geral Padrão</span>
+                    <p className="text-xl font-extrabold text-tinta tabular-nums">{selectedRca.comissao_padrao_percentual}%</p>
+                    <p className="text-[11px] text-cinza mt-1">Aplicada quando não houver regra específica de grupo ou cliente.</p>
                   </div>
 
                   {/* Regras por Produto (modelo 'por_produto' substitui o card de grupo) */}
                   {selectedRca.modelo_comissao === 'por_produto' ? (
-                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                    <span className="text-[10px] font-bold uppercase text-emerald-800 block mb-1">2. Por Produto ({selectedRca.comissoes_por_produto?.length || 0})</span>
+                  <div className="bg-papel-2 p-3.5 rounded-md border border-linha">
+                    <span className="text-[10px] font-bold uppercase text-eno-800 block mb-1">2. Por Produto ({selectedRca.comissoes_por_produto?.length || 0})</span>
                     {selectedRca.comissoes_por_produto && selectedRca.comissoes_por_produto.length > 0 ? (
                       <div className="space-y-1.5 mt-2 max-h-40 overflow-y-auto">
                         {selectedRca.comissoes_por_produto.map(cp => (
-                          <div key={cp.produto_id} className="flex items-center justify-between text-xs bg-white p-1.5 rounded border border-slate-200">
-                            <span className="line-clamp-1 text-slate-700 font-medium">{cp.produto_nome}</span>
-                            <span className="font-mono font-bold text-emerald-700 ml-2 tabular-nums">{cp.percentual}%</span>
+                          <div key={cp.produto_id} className="flex items-center justify-between text-xs bg-papel p-1.5 rounded border border-linha">
+                            <span className="line-clamp-1 text-tinta-2 font-medium">{cp.produto_nome}</span>
+                            <span className="tabular-nums font-bold text-eno-700 ml-2 tabular-nums">{cp.percentual}%</span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-400 italic mt-2">Nenhum produto com % próprio: todos usam a taxa padrão.</p>
+                      <p className="text-xs text-cinza italic mt-2">Nenhum produto com % próprio: todos usam a taxa padrão.</p>
                     )}
                   </div>
                   ) : (
-                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                    <span className="text-[10px] font-bold uppercase text-emerald-800 block mb-1">2. Por Grupo de Produto ({selectedRca.comissoes_por_grupo?.length || 0})</span>
+                  <div className="bg-papel-2 p-3.5 rounded-md border border-linha">
+                    <span className="text-[10px] font-bold uppercase text-eno-800 block mb-1">2. Por Grupo de Produto ({selectedRca.comissoes_por_grupo?.length || 0})</span>
                     {selectedRca.comissoes_por_grupo && selectedRca.comissoes_por_grupo.length > 0 ? (
                       <div className="space-y-1.5 mt-2">
                         {selectedRca.comissoes_por_grupo.map(cg => (
-                          <div key={cg.id} className="flex items-center justify-between text-xs bg-white p-1.5 rounded border border-slate-200">
-                            <span className="line-clamp-1 text-slate-700 font-medium">{cg.grupo_nome}</span>
-                            <span className="font-mono font-bold text-emerald-700 ml-2">{cg.percentual}%</span>
+                          <div key={cg.id} className="flex items-center justify-between text-xs bg-papel p-1.5 rounded border border-linha">
+                            <span className="line-clamp-1 text-tinta-2 font-medium">{cg.grupo_nome}</span>
+                            <span className="tabular-nums font-bold text-eno-700 ml-2">{cg.percentual}%</span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-400 italic mt-2">Nenhuma taxa de grupo customizada.</p>
+                      <p className="text-xs text-cinza italic mt-2">Nenhuma taxa de grupo customizada.</p>
                     )}
                   </div>
                   )}
 
                   {/* Regras por Cliente */}
-                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                    <span className="text-[10px] font-bold uppercase text-amber-800 block mb-1">3. Por Cliente Específico ({selectedRca.comissoes_por_cliente?.length || 0})</span>
+                  <div className="bg-papel-2 p-3.5 rounded-md border border-linha">
+                    <span className="text-[10px] font-bold uppercase text-st-aguardando block mb-1">3. Por Cliente Específico ({selectedRca.comissoes_por_cliente?.length || 0})</span>
                     {selectedRca.comissoes_por_cliente && selectedRca.comissoes_por_cliente.length > 0 ? (
                       <div className="space-y-1.5 mt-2">
                         {selectedRca.comissoes_por_cliente.map(cc => (
-                          <div key={cc.id} className="flex items-center justify-between text-xs bg-white p-1.5 rounded border border-slate-200">
-                            <span className="line-clamp-1 text-slate-700 font-medium">{cc.cliente_nome}</span>
-                            <span className="font-mono font-bold text-amber-700 ml-2">{cc.percentual}%</span>
+                          <div key={cc.id} className="flex items-center justify-between text-xs bg-papel p-1.5 rounded border border-linha">
+                            <span className="line-clamp-1 text-tinta-2 font-medium">{cc.cliente_nome}</span>
+                            <span className="tabular-nums font-bold text-st-aguardando ml-2">{cc.percentual}%</span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-400 italic mt-2">Nenhuma taxa individual de cliente.</p>
+                      <p className="text-xs text-cinza italic mt-2">Nenhuma taxa individual de cliente.</p>
                     )}
                   </div>
                 </div>
               </div>
 
               {/* SEÇÃO DE CLIENTES VINCULADOS (CARTEIRA DO RCA) */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs text-left">
-                <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200">
+              <div className="bg-papel rounded-md border border-linha p-6  text-left">
+                <div className="flex items-center justify-between pb-3 mb-4 border-b border-linha">
                   <div className="flex items-center gap-2">
-                    <Building2 className="w-5 h-5 text-emerald-700" />
+                    <Building2 className="w-5 h-5 text-eno-700" />
                     <div>
-                      <h3 className="text-base font-black text-slate-900">Carteira de Clientes Vinculados ({clientesDoRca.length})</h3>
-                      <p className="text-xs text-slate-500">Clique em qualquer cliente para ver detalhes cadastrais, compras e navegar para a ficha completa</p>
+                      <h3 className="text-base font-extrabold text-tinta">Carteira de Clientes Vinculados ({clientesDoRca.length})</h3>
+                      <p className="text-xs text-cinza">Clique em qualquer cliente para ver detalhes cadastrais, compras e navegar para a ficha completa</p>
                     </div>
                   </div>
                 </div>
 
                 {clientesDoRca.length === 0 ? (
-                  <div className="p-8 text-center text-slate-400">
-                    <Building2 className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                  <div className="p-8 text-center text-cinza">
+                    <Building2 className="w-8 h-8 mx-auto mb-2 text-cinza-claro" />
                     <p className="text-sm font-semibold">Nenhum cliente vinculado a este RCA</p>
                     <p className="text-xs mt-1">Edite o cadastro para vincular clientes à carteira.</p>
                   </div>
@@ -1896,45 +1791,45 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                         <div
                           key={cli.id}
                           onClick={() => setClienteModal(cli)}
-                          className="p-4 rounded-xl border border-slate-200/90 bg-white hover:bg-emerald-50/40 hover:border-emerald-500/50 transition-all cursor-pointer shadow-2xs group"
+                          className="p-4 rounded-md border border-linha/90 bg-papel hover:bg-eno-50/40 hover:border-eno-600/50 transition-all cursor-pointer  group"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <h4 className="text-sm font-black text-slate-900 group-hover:text-emerald-800 transition-colors line-clamp-1">
+                              <h4 className="text-sm font-extrabold text-tinta group-hover:text-eno-800 transition-colors line-clamp-1">
                                 {cli.razao_social}
                               </h4>
                               {cli.nome_fantasia && (
-                                <p className="text-xs font-medium text-slate-500 line-clamp-1">{cli.nome_fantasia}</p>
+                                <p className="text-xs font-medium text-cinza line-clamp-1">{cli.nome_fantasia}</p>
                               )}
                             </div>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-eno-100 text-eno-800 border border-linha-forte shrink-0">
                               {cli.status}
                             </span>
                           </div>
 
-                          <div className="mt-2.5 grid grid-cols-3 gap-2 text-left bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                          <div className="mt-2.5 grid grid-cols-3 gap-2 text-left bg-papel-2 p-2.5 rounded-lg border border-linha">
                             <div>
-                              <span className="text-[10px] text-slate-400 font-bold block uppercase">Compras</span>
-                              <span className="text-xs font-black text-slate-800">{cli.qtd_compras} pedidos</span>
+                              <span className="text-[10px] text-cinza font-bold block uppercase">Compras</span>
+                              <span className="text-xs font-extrabold text-tinta">{cli.qtd_compras} pedidos</span>
                             </div>
                             <div>
-                              <span className="text-[10px] text-slate-400 font-bold block uppercase">Total Faturado</span>
-                              <span className="text-xs font-black text-emerald-700 font-mono">
+                              <span className="text-[10px] text-cinza font-bold block uppercase">Total Faturado</span>
+                              <span className="text-xs font-extrabold text-eno-700 tabular-nums">
                                 R$ {(cli.valor_total_compras / 1000).toFixed(1)}k
                               </span>
                             </div>
                             <div>
-                              <span className="text-[10px] text-slate-400 font-bold block uppercase">Última Compra</span>
-                              <span className="text-xs font-semibold text-slate-700">{cli.ultima_compra_data}</span>
+                              <span className="text-[10px] text-cinza font-bold block uppercase">Última Compra</span>
+                              <span className="text-xs font-semibold text-tinta-2">{cli.ultima_compra_data}</span>
                             </div>
                           </div>
 
-                          <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                            <span className="text-slate-500 flex items-center gap-1">
-                              <MapPin className="w-3 h-3 text-slate-400" />
+                          <div className="mt-2.5 pt-2 border-t border-linha flex items-center justify-between text-[11px]">
+                            <span className="text-cinza flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-cinza" />
                               {cli.municipio}/{cli.uf}
                             </span>
-                            <span className="text-emerald-700 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                            <span className="text-eno-700 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                               <span>Ver detalhes</span>
                               <ExternalLink className="w-3 h-3" />
                             </span>
@@ -1947,11 +1842,11 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
               </div>
 
               {/* GRÁFICO HISTÓRICO DE VENDAS & COMISSÕES (SEM METAS) */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs text-left">
-                <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200">
+              <div className="bg-papel rounded-md border border-linha p-6  text-left">
+                <div className="flex items-center justify-between pb-3 mb-4 border-b border-linha">
                   <div>
-                    <h3 className="text-base font-black text-slate-900">Evolução de Vendas & Comissões (Últimos 6 Meses)</h3>
-                    <p className="text-xs text-slate-500">Comparativo mensal de faturamento líquido gerado e comissões repassadas</p>
+                    <h3 className="text-base font-extrabold text-tinta">Evolução de Vendas & Comissões (Últimos 6 Meses)</h3>
+                    <p className="text-xs text-cinza">Comparativo mensal de faturamento líquido gerado e comissões repassadas</p>
                   </div>
                 </div>
 
@@ -1978,18 +1873,18 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
               </div>
 
               {/* EXTRATO DE VENDAS & LIQUIDAÇÃO PIX */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs text-left">
-                <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200">
+              <div className="bg-papel rounded-md border border-linha p-6  text-left">
+                <div className="flex items-center justify-between pb-3 mb-4 border-b border-linha">
                   <div>
-                    <h3 className="text-base font-black text-slate-900">Extrato de Vendas & Liquidação de Comissões</h3>
-                    <p className="text-xs text-slate-500">Pedidos faturados, regra aplicada e status real do título de comissão no Contas a Pagar</p>
+                    <h3 className="text-base font-extrabold text-tinta">Extrato de Vendas & Liquidação de Comissões</h3>
+                    <p className="text-xs text-cinza">Pedidos faturados, regra aplicada e status real do título de comissão no Contas a Pagar</p>
                   </div>
                 </div>
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-bold uppercase text-[10px]">
+                      <tr className="border-b border-linha bg-papel-2 text-tinta-2 font-bold uppercase text-[10px]">
                         <th className="py-2.5 px-3">Pedido</th>
                         <th className="py-2.5 px-3">Data</th>
                         <th className="py-2.5 px-3">Cliente / Cidade</th>
@@ -2001,62 +1896,62 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                         <th className="py-2.5 px-3 text-right">Ação</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-linha">
                       {vendasDoRca.map((v) => {
                         const isPago = v.status_comissao === 'Pago (PIX)';
                         return (
-                          <tr key={v.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="py-3 px-3 font-mono font-bold text-slate-900">{v.numero_pedido}</td>
-                            <td className="py-3 px-3 text-slate-600">{formatarDataBR(v.data)}</td>
+                          <tr key={v.id} className="hover:bg-papel-2/80 transition-colors">
+                            <td className="py-3 px-3 tabular-nums font-bold text-tinta">{v.numero_pedido}</td>
+                            <td className="py-3 px-3 text-tinta-2">{formatarDataBR(v.data)}</td>
                             <td className="py-3 px-3">
-                              <p className="font-bold text-slate-800 line-clamp-1">{v.cliente_nome}</p>
-                              <p className="text-[10px] text-slate-400">{v.cliente_cidade}</p>
+                              <p className="font-bold text-tinta line-clamp-1">{v.cliente_nome}</p>
+                              <p className="text-[10px] text-cinza">{v.cliente_cidade}</p>
                             </td>
                             <td className="py-3 px-3">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                                v.tipo_regra_aplicada === 'Por Cliente' ? 'bg-amber-50 text-amber-800 border-amber-200' :
-                                v.tipo_regra_aplicada === 'Por Grupo' ? 'bg-blue-50 text-blue-800 border-blue-200' :
-                                v.tipo_regra_aplicada === 'Por Produto' ? 'bg-teal-50 text-teal-800 border-teal-200' :
-                                v.tipo_regra_aplicada === 'Mista' ? 'bg-purple-50 text-purple-800 border-purple-200' :
-                                'bg-slate-100 text-slate-700 border-slate-200'
+                                v.tipo_regra_aplicada === 'Por Cliente' ? 'bg-st-aguardando-bg text-st-aguardando border-st-aguardando/30' :
+                                v.tipo_regra_aplicada === 'Por Grupo' ? 'bg-papel-2 text-tinta-2 border-linha-forte' :
+                                v.tipo_regra_aplicada === 'Por Produto' ? 'bg-papel-2 text-tinta-2 border-linha-forte' :
+                                v.tipo_regra_aplicada === 'Mista' ? 'bg-papel-2 text-tinta-2 border-linha-forte' :
+                                'bg-papel-2 text-tinta-2 border-linha'
                               }`}>
                                 {rotuloRegraComissao(v.tipo_regra_aplicada)}
                               </span>
                             </td>
-                            <td className="py-3 px-3 text-right font-mono text-slate-900 font-bold">
+                            <td className="py-3 px-3 text-right tabular-nums text-tinta font-bold">
                               R$ {v.valor_faturado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </td>
-                            <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700">
+                            <td className="py-3 px-3 text-right tabular-nums font-bold text-eno-700">
                               {v.percentual_comissao}%
                             </td>
-                            <td className="py-3 px-3 text-right font-mono font-black text-emerald-800">
+                            <td className="py-3 px-3 text-right tabular-nums font-extrabold text-eno-800">
                               R$ {v.valor_comissao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </td>
                             <td className="py-3 px-3 text-center">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                isPago ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
-                                v.titulo_status === 'VENCIDO' ? 'bg-red-100 text-red-800 border-red-300' :
-                                'bg-amber-100 text-amber-800 border-amber-300'
+                                isPago ? 'bg-eno-100 text-eno-800 border-linha-forte' :
+                                v.titulo_status === 'VENCIDO' ? 'bg-st-vencido-bg text-st-vencido border-st-vencido/30' :
+                                'bg-st-aguardando-bg text-st-aguardando border-st-aguardando/30'
                               }`}>
                                 {v.titulo_pagar_id
                                   ? (isPago ? 'Pago (PIX)' : v.titulo_status === 'VENCIDO' ? 'Vencido' : 'A pagar')
                                   : (isPago ? 'Pago (PIX)' : 'Sem título')}
                               </span>
                               {v.titulo_pagar_id && !isPago && v.titulo_vencimento && (
-                                <span className="block text-[10px] text-slate-400 mt-0.5">vence {formatarDataBR(v.titulo_vencimento)}</span>
+                                <span className="block text-[10px] text-cinza mt-0.5">vence {formatarDataBR(v.titulo_vencimento)}</span>
                               )}
                             </td>
                             <td className="py-3 px-3 text-right">
                               {!isPago && (
                                 <button
                                   onClick={() => handleLiquidadoPix(v.id)}
-                                  className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[10px] font-bold transition-all shadow-2xs cursor-pointer"
+                                  className="px-2.5 py-1 bg-eno-700 hover:bg-eno-800 text-white rounded-lg text-[10px] font-bold transition-all  cursor-pointer"
                                 >
                                   Pagar PIX
                                 </button>
                               )}
                               {isPago && (
-                                <span className="text-[10px] text-slate-400 font-medium">{formatarDataBR(v.data_pagamento_pix)}</span>
+                                <span className="text-[10px] text-cinza font-medium">{formatarDataBR(v.data_pagamento_pix)}</span>
                               )}
                             </td>
                           </tr>
@@ -2069,10 +1964,8 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
             </div>
           ) : (
-            <div className="p-12 text-center text-slate-400">
-              <Users className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-              <h3 className="text-base font-bold text-slate-600">Nenhum RCA selecionado</h3>
-              <p className="text-xs text-slate-400 mt-1">Selecione um representante na lista ao lado para visualizar os detalhes.</p>
+            <div className="w-full bg-papel border border-linha rounded-md">
+              <EstadoVazio titulo="Nenhum representante selecionado" texto="Escolha um representante na lista para ver carteira, comissões e extrato." />
             </div>
           )}
 
@@ -2082,26 +1975,26 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
       {/* MODAL DE DETALHES DO CLIENTE VINCULADO (AMPLO E HORIZONTAL) */}
       {clienteModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-4xl sm:max-w-5xl w-full p-6 text-left my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] overflow-y-auto flex flex-col animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-eno-900/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
+          <div className="bg-papel rounded-md border border-linha  max-w-4xl sm:max-w-5xl w-full p-6 text-left my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] overflow-y-auto flex flex-col animate-in fade-in zoom-in-95 duration-150">
             
-            <div className="flex items-start justify-between pb-4 border-b border-slate-200">
+            <div className="flex items-start justify-between pb-4 border-b border-linha">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+                <div className="w-12 h-12 rounded-md bg-eno-100 text-eno-800 flex items-center justify-center font-bold">
                   <Building2 className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-slate-900 leading-tight">
+                  <h3 className="text-lg font-extrabold text-tinta leading-tight">
                     {clienteModal.razao_social}
                   </h3>
                   {clienteModal.nome_fantasia && (
-                    <p className="text-xs font-semibold text-emerald-700">{clienteModal.nome_fantasia}</p>
+                    <p className="text-xs font-semibold text-eno-700">{clienteModal.nome_fantasia}</p>
                   )}
                 </div>
               </div>
               <button
                 onClick={() => setClienteModal(null)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer transition-colors"
+                className="p-2 rounded-md text-cinza hover:text-tinta-2 hover:bg-papel-2 cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2112,29 +2005,29 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
               
               {/* Coluna 1: Dados Cadastrais */}
               <div className="space-y-3">
-                <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px] block">
+                <span className="font-bold text-tinta uppercase tracking-wider text-[11px] block">
                   Identificação & Contato
                 </span>
-                <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div className="grid grid-cols-2 gap-3 bg-papel-2 p-4 rounded-md border border-linha">
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">CNPJ / CPF</span>
-                    <span className="font-mono font-bold text-slate-800">{clienteModal.cpf_cnpj}</span>
+                    <span className="text-[10px] font-bold text-cinza uppercase block">CNPJ / CPF</span>
+                    <span className="tabular-nums font-bold text-tinta">{clienteModal.cpf_cnpj}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Cidade / UF</span>
-                    <span className="font-semibold text-slate-800">{clienteModal.municipio} / {clienteModal.uf}</span>
+                    <span className="text-[10px] font-bold text-cinza uppercase block">Cidade / UF</span>
+                    <span className="font-semibold text-tinta">{clienteModal.municipio} / {clienteModal.uf}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Telefone</span>
-                    <span className="text-slate-700 font-medium">{clienteModal.telefone}</span>
+                    <span className="text-[10px] font-bold text-cinza uppercase block">Telefone</span>
+                    <span className="text-tinta-2 font-medium">{clienteModal.telefone}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">E-mail</span>
-                    <span className="text-slate-700 font-medium line-clamp-1">{clienteModal.email}</span>
+                    <span className="text-[10px] font-bold text-cinza uppercase block">E-mail</span>
+                    <span className="text-tinta-2 font-medium line-clamp-1">{clienteModal.email}</span>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between text-xs bg-papel-2 p-3 rounded-md border border-linha">
                   <span><strong>Tabela de Preço:</strong> {clienteModal.tabela_preco_nome}</span>
                   <span><strong>Prazo Comercial:</strong> {clienteModal.prazo_pagamento_nome}</span>
                 </div>
@@ -2142,43 +2035,43 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
 
               {/* Coluna 2: Indicadores de Performance & Última Compra */}
               <div className="space-y-3">
-                <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px] block">
+                <span className="font-bold text-tinta uppercase tracking-wider text-[11px] block">
                   Performance Comercial
                 </span>
 
                 <div className="grid grid-cols-3 gap-2.5 text-center">
-                  <div className="bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200/80">
-                    <span className="text-[10px] font-bold text-emerald-800 uppercase block">Pedidos</span>
-                    <span className="text-base font-black text-emerald-950">{clienteModal.qtd_compras}</span>
+                  <div className="bg-eno-50/70 p-3 rounded-md border border-linha-forte/80">
+                    <span className="text-[10px] font-bold text-eno-800 uppercase block">Pedidos</span>
+                    <span className="text-base font-extrabold text-eno-950">{clienteModal.qtd_compras}</span>
                   </div>
-                  <div className="bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200/80">
-                    <span className="text-[10px] font-bold text-emerald-800 uppercase block">Volume Total</span>
-                    <span className="text-base font-black text-emerald-950 font-mono">
+                  <div className="bg-eno-50/70 p-3 rounded-md border border-linha-forte/80">
+                    <span className="text-[10px] font-bold text-eno-800 uppercase block">Volume Total</span>
+                    <span className="text-base font-extrabold text-eno-950 tabular-nums">
                       R$ {(clienteModal.valor_total_compras / 1000).toFixed(1)}k
                     </span>
                   </div>
-                  <div className="bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200/80">
-                    <span className="text-[10px] font-bold text-emerald-800 uppercase block">Ticket Médio</span>
-                    <span className="text-base font-black text-emerald-950 font-mono">
+                  <div className="bg-eno-50/70 p-3 rounded-md border border-linha-forte/80">
+                    <span className="text-[10px] font-bold text-eno-800 uppercase block">Ticket Médio</span>
+                    <span className="text-base font-extrabold text-eno-950 tabular-nums">
                       R$ {(clienteModal.ticket_medio / 1000).toFixed(1)}k
                     </span>
                   </div>
                 </div>
 
                 {/* Detalhes da Última Compra */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                <div className="p-4 bg-papel-2 rounded-md border border-linha space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-600 uppercase flex items-center gap-1.5">
-                      <ShoppingBag className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-[11px] font-bold text-tinta-2 uppercase flex items-center gap-1.5">
+                      <ShoppingBag className="w-3.5 h-3.5 text-eno-600" />
                       Última Compra Registrada
                     </span>
-                    <span className="font-mono text-xs font-bold text-slate-800 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                    <span className="tabular-nums text-xs font-bold text-tinta bg-papel px-2 py-0.5 rounded-md border border-linha">
                       {clienteModal.ultima_compra_pedido}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs pt-1">
-                    <span className="text-slate-500 font-medium">Data: {clienteModal.ultima_compra_data}</span>
-                    <span className="font-mono font-black text-emerald-800 text-base">
+                    <span className="text-cinza font-medium">Data: {clienteModal.ultima_compra_data}</span>
+                    <span className="tabular-nums font-extrabold text-eno-800 text-base">
                       R$ {clienteModal.ultima_compra_valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
@@ -2187,11 +2080,11 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
             </div>
 
             {/* BOTÕES DE AÇÃO */}
-            <div className="mt-6 pt-4 border-t border-slate-200 flex items-center justify-between gap-3">
+            <div className="mt-6 pt-4 border-t border-linha flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={() => setClienteModal(null)}
-                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                className="px-4 py-2.5 rounded-md bg-papel-2 hover:bg-papel-3 text-tinta-2 text-xs font-bold transition-colors cursor-pointer"
               >
                 Fechar
               </button>
@@ -2205,7 +2098,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                     onNavigateToCliente(id);
                   }
                 }}
-                className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black shadow-md transition-all cursor-pointer"
+                className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-md bg-eno-700 hover:bg-eno-800 text-white text-xs font-extrabold  transition-all cursor-pointer"
               >
                 <span>Ir para Cadastro do Cliente</span>
                 <ExternalLink className="w-4 h-4" />

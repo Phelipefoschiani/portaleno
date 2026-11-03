@@ -35,6 +35,11 @@ import {
 } from '../../data/cadastrosData';
 import { carregarClientes } from '../../data/clientesData';
 import { formatarDataBR } from '../../lib/datas';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
+import { ModalCadastro, BotaoLinha, BotaoCartao, campoCadastro, rotuloCadastro } from './FormularioCadastro';
+import { ListaCadastro, LinkLinha } from './ListaCadastro';
 import {
   baixarBackup,
   lerArquivoBackup,
@@ -119,7 +124,7 @@ export function UsuariosAcessos() {
 
   if (!sessao || sessao.perfil !== 'ADMIN') {
     return (
-      <div className="flex-1 flex items-center justify-center text-sm font-bold text-red-600">
+      <div className="flex-1 flex items-center justify-center text-sm font-bold text-st-vencido">
         Acesso restrito a administradores.
       </div>
     );
@@ -252,226 +257,187 @@ export function UsuariosAcessos() {
 
   const rotuloPerfil = (p: PerfilUsuario) => PERFIS_USUARIO.find(x => x.id === p)?.rotulo || p;
   const precisaVinculo = PERFIS_COM_VINCULO.includes(form.perfil);
-  const inputCls = 'w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20';
+
+  const ativosUsu = usuarios.filter(u => u.ativo).length;
 
   return (
-    <div className="flex-1 w-full h-full flex flex-col bg-white rounded-2xl border border-emerald-950/15 shadow-[0_10px_35px_rgba(0,0,0,0.06)] overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-3.5 border-b border-slate-200 bg-slate-50/80">
-        <div className="flex items-center gap-3.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-900 text-white shadow-sm">
-            <ShieldCheck className="w-5 h-5 text-emerald-300" />
-          </div>
-          <div>
-            <h2 className="text-lg font-black text-slate-900">Usuários e Acessos</h2>
-            <p className="text-xs text-slate-500">Logins do sistema, perfis de acesso e vínculo com agricultor, RCA, cliente ou cadastro provisório. Login de RCA e cliente também pode ser criado no próprio cadastro.</p>
-          </div>
-        </div>
-        <button
-          onClick={abrirNovo}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold shadow-sm transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Novo Usuário</span>
-        </button>
+    <div className="flex-1 w-full min-h-0 h-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
+      <div className="mx-auto w-full max-w-[1700px]">
+        <CabecalhoPagina
+          titulo="Usuários e acessos"
+          resumo={`${usuarios.length} ${usuarios.length === 1 ? 'login' : 'logins'} · ${ativosUsu} ${ativosUsu === 1 ? 'ativo' : 'ativos'} · login de RCA e cliente também pode ser criado no próprio cadastro`}
+          acoes={
+            <BotaoPrimario onClick={abrirNovo} className="w-full sm:w-auto h-10 sm:h-9">
+              <Plus className="w-4 h-4" /> Novo usuário
+            </BotaoPrimario>
+          }
+        />
       </div>
 
-      {(erro && !modal) && (
-        <div className="mx-6 mt-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700">
-          <AlertCircle className="h-4 w-4 shrink-0" /><span>{erro}</span>
-        </div>
-      )}
-      {aviso && (
-        <div className="mx-6 mt-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 text-xs font-semibold text-emerald-800">
-          <CheckCircle2 className="h-4 w-4 shrink-0" /><span>{aviso}</span>
-        </div>
-      )}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px] px-4 sm:px-6 pb-6 space-y-4">
+          {(erro && !modal) && (
+            <div role="alert" className="flex items-start gap-2 rounded-md bg-st-vencido-bg px-3 py-2.5 text-[13px] font-semibold text-st-vencido">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" /><span>{erro}</span>
+            </div>
+          )}
+          {aviso && (
+            <div role="status" className="flex items-start gap-2 rounded-md bg-st-pago-bg px-3 py-2.5 text-[13px] font-semibold text-st-pago">
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" /><span>{aviso}</span>
+            </div>
+          )}
 
-      <div className="flex-1 overflow-auto p-6">
-        <table className="w-full text-left text-sm border-collapse">
-          <thead>
-            <tr className="bg-[#022013] text-emerald-200 text-[11px] font-extrabold uppercase tracking-wider">
-              <th className="py-3 px-4">Usuário</th>
-              <th className="py-3 px-4">Perfil</th>
-              <th className="py-3 px-4">Vínculo</th>
-              <th className="py-3 px-4">Status</th>
-              <th className="py-3 px-4">Criado em</th>
-              <th className="py-3 px-4 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {usuarios.length === 0 && (
-              <tr><td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">Nenhum usuário cadastrado.</td></tr>
-            )}
-            {usuarios.map(u => (
-              <tr key={u.id} className="hover:bg-slate-50">
-                <td className="py-3 px-4">
-                  <div className="font-extrabold text-slate-900">{u.nome}</div>
-                  <div className="text-xs font-mono text-slate-500">{u.usuario}{u.id === sessao.usuario_id ? ' (você)' : ''}</div>
-                </td>
-                <td className="py-3 px-4 text-xs font-bold text-slate-700">{rotuloPerfil(u.perfil)}</td>
-                <td className="py-3 px-4 text-xs text-slate-600">{rotuloVinculo(u)}</td>
-                <td className="py-3 px-4">
-                  {u.ativo ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
-                      <CheckCircle2 className="w-3 h-3" /> Ativo
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-black bg-slate-100 text-slate-600 border border-slate-300">
-                      <XCircle className="w-3 h-3" /> Inativo
-                    </span>
-                  )}
-                </td>
-                <td className="py-3 px-4 text-xs font-mono text-slate-500">{formatarDataBR(u.criado_em)}</td>
-                <td className="py-3 px-4">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <button onClick={() => abrirEdicao(u)} title="Editar perfil e vínculo" className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 cursor-pointer">
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => abrirSenha(u)} title="Redefinir senha" className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer">
-                      <KeyRound className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => alternarAtivo(u)} disabled={salvando} className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer">
-                      {u.ativo ? 'Desativar' : 'Ativar'}
-                    </button>
-                    <button onClick={() => handleExcluir(u)} title="Excluir usuário" className="p-2 rounded-xl hover:bg-red-50 text-slate-400 hover:text-red-600 cursor-pointer">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          {usuarios.length === 0 ? (
+            <div className="bg-papel border border-linha rounded-md">
+              <EstadoVazio titulo="Nenhum usuário cadastrado" texto="Crie os logins de quem acessa o sistema e os portais." />
+            </div>
+          ) : (
+            <ListaCadastro<UsuarioSistema>
+              itens={usuarios}
+              chave={u => u.id}
+              cartao={u => ({
+                sobre: rotuloPerfil(u.perfil),
+                titulo: <>{u.nome || u.usuario}{u.id === sessao.usuario_id && <span className="text-[12px] font-semibold text-cinza"> (você)</span>}</>,
+                subtitulo: u.usuario,
+                status: <StatusChip tom={u.ativo ? 'pago' : 'neutro'}>{u.ativo ? 'Ativo' : 'Inativo'}</StatusChip>,
+                detalhes: [PERFIS_COM_VINCULO.includes(u.perfil) ? `Vínculo: ${rotuloVinculo(u)}` : null, `Criado em ${formatarDataBR(u.criado_em)}`],
+              })}
+              acoesCartao={u => (
+                <>
+                  <BotaoCartao onClick={() => abrirEdicao(u)} className="flex-1"><Edit2 className="w-3.5 h-3.5" /> Editar</BotaoCartao>
+                  <BotaoCartao onClick={() => abrirSenha(u)} className="flex-1"><KeyRound className="w-3.5 h-3.5" /> Senha</BotaoCartao>
+                  <BotaoCartao onClick={() => alternarAtivo(u)} className="flex-1">{u.ativo ? 'Desativar' : 'Ativar'}</BotaoCartao>
+                  <BotaoCartao perigo onClick={() => handleExcluir(u)} rotulo={`Excluir ${u.usuario}`} className="w-10 !px-0"><Trash2 className="w-4 h-4" /></BotaoCartao>
+                </>
+              )}
+              colunas={[
+                {
+                  titulo: 'Usuário',
+                  render: u => (
+                    <>
+                      <div className="font-semibold text-tinta">{u.nome || u.usuario}</div>
+                      <div className="text-[11.5px] text-cinza">{u.usuario}{u.id === sessao.usuario_id ? ' (você)' : ''}</div>
+                    </>
+                  ),
+                },
+                { titulo: 'Perfil', render: u => rotuloPerfil(u.perfil) },
+                { titulo: 'Vínculo', render: u => <span className={rotuloVinculo(u) === 'Sem vínculo' || rotuloVinculo(u) === 'Vínculo removido' ? 'text-st-aguardando font-semibold' : ''}>{rotuloVinculo(u)}</span> },
+                { titulo: 'Situação', render: u => <StatusChip tom={u.ativo ? 'pago' : 'neutro'}>{u.ativo ? 'Ativo' : 'Inativo'}</StatusChip> },
+                { titulo: 'Criado em', className: 'tabular-nums whitespace-nowrap text-cinza', render: u => formatarDataBR(u.criado_em) },
+              ]}
+              acoesLinha={u => (
+                <>
+                  <BotaoLinha rotulo="Editar perfil e vínculo" onClick={() => abrirEdicao(u)}><Edit2 className="w-4 h-4" /></BotaoLinha>
+                  <BotaoLinha rotulo="Redefinir senha" onClick={() => abrirSenha(u)}><KeyRound className="w-4 h-4" /></BotaoLinha>
+                  <LinkLinha onClick={() => alternarAtivo(u)}>{u.ativo ? 'Desativar' : 'Ativar'}</LinkLinha>
+                  <BotaoLinha perigo rotulo="Excluir usuário" onClick={() => handleExcluir(u)}><Trash2 className="w-4 h-4" /></BotaoLinha>
+                </>
+              )}
+            />
+          )}
 
-        {/* BACKUP DOS DADOS (somente ADMIN) */}
-        <div className={`mt-6 rounded-2xl border p-5 ${lembreteBackup ? 'border-amber-300 bg-amber-50/60' : 'border-slate-200 bg-slate-50/60'}`}>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shrink-0">
-                <DatabaseBackup className="w-5 h-5 text-emerald-300" />
-              </div>
-              <div>
-                <h3 className="font-black text-slate-900">Backup dos Dados</h3>
-                <p className="text-xs text-slate-600 max-w-xl">
-                  Os dados ficam apenas neste navegador. Baixe um arquivo de backup regularmente para não perder nada
+          {/* BACKUP DOS DADOS (somente ADMIN) */}
+          <section className={`rounded-md border bg-papel overflow-hidden ${lembreteBackup ? 'border-st-aguardando/40' : 'border-linha'}`}>
+            <div className={`h-[3px] ${lembreteBackup ? 'bg-st-aguardando' : 'filete-ouro'}`} aria-hidden />
+            <div className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-[17px] font-bold tracking-[-0.01em] text-tinta">Backup dos dados</h2>
+                <p className="mt-1 text-[13px] text-tinta-2 max-w-2xl">
+                  Os dados ficam apenas neste navegador. Baixe um arquivo de backup com frequência para não perder nada
                   (limpeza do navegador, troca de computador). Usuários e senhas não entram no backup.
                 </p>
-                <p className="text-xs mt-1.5 font-bold text-slate-700">
-                  Último backup: {ultimoBackup ? `${formatarDataBR(ultimoBackup)}${diasBackup !== null ? ` (${diasBackup === 0 ? 'hoje' : diasBackup === 1 ? 'há 1 dia' : `há ${diasBackup} dias`})` : ''}` : 'nunca feito neste navegador'}
+                <p className="mt-2 text-[13px] text-cinza tabular-nums">
+                  Último backup: <strong className="text-tinta font-semibold">{ultimoBackup ? `${formatarDataBR(ultimoBackup)}${diasBackup !== null ? ` (${diasBackup === 0 ? 'hoje' : diasBackup === 1 ? 'há 1 dia' : `há ${diasBackup} dias`})` : ''}` : 'nunca feito neste navegador'}</strong>
                 </p>
                 {lembreteBackup && (
-                  <p className="text-xs mt-1 font-bold text-amber-700 flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5" />
+                  <p className="mt-1 text-[13px] font-semibold text-st-aguardando flex items-start gap-1.5">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                     {ultimoBackup ? `Já se passaram mais de ${DIAS_LEMBRETE_BACKUP} dias desde o último backup. Faça um novo agora.` : 'Recomendado: faça o primeiro backup agora.'}
                   </p>
                 )}
               </div>
+              <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                <BotaoPrimario onClick={handleBaixarBackup} className="h-11 sm:h-9">
+                  <Download className="w-4 h-4" /> Baixar backup
+                </BotaoPrimario>
+                <input ref={inputBackupRef} type="file" accept="application/json,.json" className="hidden" onChange={handleRestaurarBackup} />
+                <BotaoSecundario onClick={() => inputBackupRef.current?.click()} disabled={restaurando} className="h-11 sm:h-9">
+                  <Upload className="w-4 h-4" /> {restaurando ? 'Lendo arquivo…' : 'Restaurar backup'}
+                </BotaoSecundario>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={handleBaixarBackup}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                <span>Baixar backup</span>
-              </button>
-              <input ref={inputBackupRef} type="file" accept="application/json,.json" className="hidden" onChange={handleRestaurarBackup} />
-              <button
-                onClick={() => inputBackupRef.current?.click()}
-                disabled={restaurando}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs font-bold cursor-pointer disabled:opacity-60"
-              >
-                <Upload className="w-4 h-4" />
-                <span>{restaurando ? 'Lendo arquivo...' : 'Restaurar backup'}</span>
-              </button>
-            </div>
-          </div>
+          </section>
         </div>
       </div>
 
       {modal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <form onSubmit={handleSalvar} className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden">
-            <div className="bg-[#022013] text-white px-5 py-3.5 flex items-center justify-between">
-              <h3 className="font-black">
-                {modal.modo === 'novo' ? 'Novo Usuário' : modal.modo === 'editar' ? `Editar ${modal.usuario?.usuario}` : `Redefinir senha de ${modal.usuario?.usuario}`}
-              </h3>
-              <button type="button" onClick={() => setModal(null)} className="p-1 rounded-lg hover:bg-white/10 cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+        <ModalCadastro
+          onSubmit={handleSalvar}
+          onFechar={() => setModal(null)}
+          titulo={modal.modo === 'novo' ? 'Novo usuário' : modal.modo === 'editar' ? `Editar ${modal.usuario?.usuario}` : 'Redefinir senha'}
+          subtitulo={modal.modo === 'senha' ? modal.usuario?.usuario : 'Login, perfil de acesso e vínculo com o cadastro'}
+          rotuloSalvar="Salvar"
+          salvando={salvando}
+          largura="max-w-lg"
+        >
+          <div className="space-y-3.5">
+            {erro && (
+              <div role="alert" className="flex items-start gap-2 rounded-md bg-st-vencido-bg px-3 py-2.5 text-[13px] font-semibold text-st-vencido">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" /><span>{erro}</span>
+              </div>
+            )}
 
-            <div className="p-5 space-y-3">
-              {erro && (
-                <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700">
-                  <AlertCircle className="h-4 w-4 shrink-0" /><span>{erro}</span>
-                </div>
-              )}
-
-              {modal.modo !== 'senha' && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Usuário ou e-mail (login) *</label>
-                      <input className={inputCls} value={form.usuario} onChange={e => setForm({ ...form, usuario: e.target.value })} autoComplete="off" required />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Nome</label>
-                      <input className={inputCls} value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} />
-                    </div>
+            {modal.modo !== 'senha' && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={rotuloCadastro}>Usuário ou e-mail (login) *</label>
+                    <input className={campoCadastro} value={form.usuario} onChange={e => setForm({ ...form, usuario: e.target.value })} autoComplete="off" autoCapitalize="none" required />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Perfil de acesso *</label>
-                    <select className={inputCls} value={form.perfil} onChange={e => setForm({ ...form, perfil: e.target.value as PerfilUsuario, vinculo_id: '' })}>
-                      {PERFIS_USUARIO.map(p => <option key={p.id} value={p.id}>{p.rotulo}</option>)}
+                    <label className={rotuloCadastro}>Nome</label>
+                    <input className={campoCadastro} value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} />
+                  </div>
+                </div>
+                <div>
+                  <label className={rotuloCadastro}>Perfil de acesso *</label>
+                  <select className={`${campoCadastro} cursor-pointer`} value={form.perfil} onChange={e => setForm({ ...form, perfil: e.target.value as PerfilUsuario, vinculo_id: '' })}>
+                    {PERFIS_USUARIO.map(p => <option key={p.id} value={p.id}>{p.rotulo}</option>)}
+                  </select>
+                </div>
+                {precisaVinculo && (
+                  <div>
+                    <label className={rotuloCadastro}>{ROTULO_VINCULO[form.perfil] || 'Vínculo'}</label>
+                    <select className={`${campoCadastro} cursor-pointer`} value={form.vinculo_id} onChange={e => setForm({ ...form, vinculo_id: e.target.value })}>
+                      <option value="">Sem vínculo (o portal não mostrará dados)</option>
+                      {(opcoesVinculo[form.perfil] || []).map(o => <option key={o.id} value={o.id}>{o.rotulo}</option>)}
                     </select>
+                    {(opcoesVinculo[form.perfil] || []).length === 0 && (
+                      <p className="text-[12px] text-st-aguardando mt-1">Nenhum cadastro disponível. Cadastre primeiro em Cadastros.</p>
+                    )}
                   </div>
-                  {precisaVinculo && (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        {ROTULO_VINCULO[form.perfil] || 'Vínculo'}
-                      </label>
-                      <select className={inputCls} value={form.vinculo_id} onChange={e => setForm({ ...form, vinculo_id: e.target.value })}>
-                        <option value="">Sem vínculo (o portal não mostrará dados)</option>
-                        {(opcoesVinculo[form.perfil] || []).map(o => <option key={o.id} value={o.id}>{o.rotulo}</option>)}
-                      </select>
-                      {(opcoesVinculo[form.perfil] || []).length === 0 && (
-                        <p className="text-[11px] text-amber-600 mt-1">Nenhum cadastro disponível. Cadastre primeiro em Cadastros.</p>
-                      )}
-                    </div>
-                  )}
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                    <input type="checkbox" checked={form.ativo} onChange={e => setForm({ ...form, ativo: e.target.checked })} />
-                    Usuário ativo
-                  </label>
-                </>
-              )}
+                )}
+                <label className="inline-flex items-center gap-2 min-h-10 text-[13px] font-semibold text-tinta cursor-pointer">
+                  <input type="checkbox" checked={form.ativo} onChange={e => setForm({ ...form, ativo: e.target.checked })} className="w-4 h-4 accent-eno-700" />
+                  Usuário ativo
+                </label>
+              </>
+            )}
 
-              {(modal.modo === 'novo' || modal.modo === 'senha') && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">{modal.modo === 'senha' ? 'Nova senha *' : 'Senha *'}</label>
-                    <input type="password" className={inputCls} value={form.senha} onChange={e => setForm({ ...form, senha: e.target.value })} autoComplete="new-password" placeholder={`Mín. ${SENHA_MINIMA} caracteres`} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Confirmar senha *</label>
-                    <input type="password" className={inputCls} value={form.confirmacao} onChange={e => setForm({ ...form, confirmacao: e.target.value })} autoComplete="new-password" />
-                  </div>
+            {(modal.modo === 'novo' || modal.modo === 'senha') && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={rotuloCadastro}>{modal.modo === 'senha' ? 'Nova senha *' : 'Senha *'}</label>
+                  <input type="password" className={campoCadastro} value={form.senha} onChange={e => setForm({ ...form, senha: e.target.value })} autoComplete="new-password" placeholder={`Mínimo de ${SENHA_MINIMA} caracteres`} />
                 </div>
-              )}
-            </div>
-
-            <div className="px-5 py-3.5 border-t border-slate-200 flex justify-end gap-2">
-              <button type="button" onClick={() => setModal(null)} className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer">
-                Cancelar
-              </button>
-              <button type="submit" disabled={salvando} className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-extrabold flex items-center gap-2 cursor-pointer disabled:opacity-60">
-                <Save className="w-4 h-4" />
-                <span>{salvando ? 'Salvando...' : 'Salvar'}</span>
-              </button>
-            </div>
-          </form>
-        </div>
+                <div>
+                  <label className={rotuloCadastro}>Confirmar senha *</label>
+                  <input type="password" className={campoCadastro} value={form.confirmacao} onChange={e => setForm({ ...form, confirmacao: e.target.value })} autoComplete="new-password" />
+                </div>
+              </div>
+            )}
+          </div>
+        </ModalCadastro>
       )}
     </div>
   );

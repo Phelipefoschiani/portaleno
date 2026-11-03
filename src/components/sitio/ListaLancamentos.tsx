@@ -28,11 +28,11 @@ function rotuloLinha(d: DespesaSitio): string {
 export function ListaLancamentos({ itens, vazio }: { itens: DespesaSitio[]; vazio: string }) {
   const [aberto, setAberto] = useState<DespesaSitio | null>(null);
 
-  if (itens.length === 0) return <p className="py-8 text-center text-sm text-slate-500">{vazio}</p>;
+  if (itens.length === 0) return <p className="py-8 text-center text-sm text-cinza">{vazio}</p>;
 
   return (
     <>
-      <ul className="divide-y divide-slate-100">
+      <ul className="divide-y divide-linha">
         {itens.map(d => {
           const mov = movimentoDe(d);
           const selo = SELO[mov];
@@ -45,22 +45,22 @@ export function ListaLancamentos({ itens, vazio }: { itens: DespesaSitio[]; vazi
                 className="w-full text-left px-4 sm:px-5 py-3.5 flex items-center gap-3 hover:bg-emerald-50/50 transition-colors cursor-pointer"
               >
                 <div className="w-12 shrink-0 text-center">
-                  <div className="text-lg font-black leading-none tabular-nums text-slate-900">{formatarDataBR(d.data).slice(0, 2)}</div>
-                  <div className="text-[10px] font-bold uppercase text-slate-400 tabular-nums">{formatarDataBR(d.data).slice(3, 5)}</div>
+                  <div className="text-lg font-black leading-none tabular-nums text-tinta">{formatarDataBR(d.data).slice(0, 2)}</div>
+                  <div className="text-[10px] font-bold uppercase text-cinza-claro tabular-nums">{formatarDataBR(d.data).slice(3, 5)}</div>
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className={`px-2 py-0.5 rounded-md text-[11px] font-extrabold ${selo.cls}`}>{selo.rotulo}</span>
-                    <span className="text-[11px] font-bold text-slate-500">{rotuloLinha(d)}</span>
+                    <span className="text-[11px] font-bold text-cinza">{rotuloLinha(d)}</span>
                     {d.situacao === 'A_PAGAR' && (
                       <span className="px-2 py-0.5 rounded-md text-[11px] font-extrabold bg-red-50 text-red-700">
                         A pagar{d.vencimento ? ` · ${formatarDataBR(d.vencimento).slice(0, 5)}` : ''}
                       </span>
                     )}
                   </div>
-                  <div className="mt-0.5 text-sm font-bold text-slate-900 truncate">{d.nomeDespesa}</div>
+                  <div className="mt-0.5 text-sm font-bold text-tinta truncate">{d.nomeDespesa}</div>
                   {(d.maquinaTrator && d.maquinaTrator !== 'Geral' && mov !== 'COMPRA') || d.responsavel ? (
-                    <div className="text-xs text-slate-500 truncate">
+                    <div className="text-xs text-cinza truncate">
                       {[mov !== 'COMPRA' && d.maquinaTrator !== 'Geral' ? d.maquinaTrator : '', d.responsavel].filter(Boolean).join(' · ')}
                     </div>
                   ) : null}
@@ -69,12 +69,12 @@ export function ListaLancamentos({ itens, vazio }: { itens: DespesaSitio[]; vazi
                   {consumo ? (
                     <>
                       <div className="text-sm font-black tabular-nums text-sky-800">−{fmtNum(d.quantidade)} L</div>
-                      <div className="text-[11px] text-slate-400 tabular-nums">custo {moeda(d.valorTotal)}</div>
+                      <div className="text-[11px] text-cinza-claro tabular-nums">custo {moeda(d.valorTotal)}</div>
                     </>
                   ) : (
                     <>
-                      <div className="text-sm font-black tabular-nums text-slate-900">{moeda(d.valorTotal)}</div>
-                      {d.unidade === 'L' && <div className="text-[11px] text-slate-400 tabular-nums">{fmtNum(d.quantidade)} L</div>}
+                      <div className="text-sm font-black tabular-nums text-tinta">{moeda(d.valorTotal)}</div>
+                      {d.unidade === 'L' && <div className="text-[11px] text-cinza-claro tabular-nums">{fmtNum(d.quantidade)} L</div>}
                     </>
                   )}
                 </div>
@@ -91,9 +91,9 @@ export function ListaLancamentos({ itens, vazio }: { itens: DespesaSitio[]; vazi
 function Linha({ k, v }: { k: string; v?: React.ReactNode }) {
   if (v === undefined || v === null || v === '') return null;
   return (
-    <div className="flex justify-between gap-4 py-2 border-b border-slate-100 last:border-0">
-      <dt className="text-xs font-bold uppercase tracking-wider text-slate-400">{k}</dt>
-      <dd className="text-sm font-semibold text-slate-900 text-right tabular-nums">{v}</dd>
+    <div className="flex justify-between gap-4 py-2 border-b border-linha last:border-0">
+      <dt className="text-xs font-bold uppercase tracking-wider text-cinza-claro">{k}</dt>
+      <dd className="text-sm font-semibold text-tinta text-right tabular-nums">{v}</dd>
     </div>
   );
 }
@@ -111,9 +111,9 @@ export function DetalheLancamento({ d, onFechar }: { d: DespesaSitio; onFechar: 
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[#021a10]/75" onClick={onFechar}>
       <div
         onClick={e => e.stopPropagation()}
-        className="w-full sm:max-w-md max-h-[90dvh] overflow-y-auto bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl"
+        className="w-full sm:max-w-md max-h-[90dvh] overflow-y-auto bg-papel rounded-t-3xl sm:rounded-3xl shadow-2xl"
       >
-        <div className="sticky top-0 bg-[#022013] text-white px-5 py-4 flex items-start justify-between gap-3">
+        <div className="sticky top-0 bg-eno-900 text-white px-5 py-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-emerald-300">{SELO[mov].rotulo}</div>
             <h3 className="text-lg font-black leading-tight">{d.nomeDespesa}</h3>
@@ -123,8 +123,8 @@ export function DetalheLancamento({ d, onFechar }: { d: DespesaSitio; onFechar: 
           </button>
         </div>
         <div className="px-5 py-4">
-          <div className="text-3xl font-black tracking-tight tabular-nums text-slate-900">{moeda(d.valorTotal)}</div>
-          {mov === 'ABASTECIMENTO' && <p className="text-xs text-slate-500 mt-1">Custo pelo preço médio do tanque. Não gera lançamento no financeiro (já entrou na compra).</p>}
+          <div className="text-3xl font-black tracking-tight tabular-nums text-tinta">{moeda(d.valorTotal)}</div>
+          {mov === 'ABASTECIMENTO' && <p className="text-xs text-cinza mt-1">Custo pelo preço médio do tanque. Não gera lançamento no financeiro (já entrou na compra).</p>}
           <dl className="mt-3">
             <Linha k="Data" v={formatarDataBR(d.data)} />
             <Linha k="Categoria" v={ROTULO_CATEGORIA[categoriaDe(d)]} />
@@ -140,19 +140,19 @@ export function DetalheLancamento({ d, onFechar }: { d: DespesaSitio; onFechar: 
             <Linha k="Observação" v={d.observacao || nota?.observacoes} />
           </dl>
           {nota?.numero && (
-            <div className="mt-4 rounded-2xl bg-slate-50 border border-slate-200 p-4">
-              <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-500">
+            <div className="mt-4 rounded-2xl bg-papel-2 border border-linha p-4">
+              <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-cinza">
                 <FileText className="w-4 h-4" /> Nota fiscal
               </div>
-              <div className="mt-1 text-sm font-bold text-slate-900">
+              <div className="mt-1 text-sm font-bold text-tinta">
                 NF {nota.numero}
                 {nota.serie ? ` · série ${nota.serie}` : ''}
               </div>
-              {nota.chaveAcesso && <div className="mt-1 text-[11px] font-mono text-slate-500 break-all">{nota.chaveAcesso}</div>}
+              {nota.chaveAcesso && <div className="mt-1 text-[11px] tabular-nums text-cinza break-all">{nota.chaveAcesso}</div>}
               {Array.isArray(nota.itens) && nota.itens.length > 0 && (
                 <ul className="mt-2 space-y-1">
                   {nota.itens.map((it, i) => (
-                    <li key={i} className="flex justify-between gap-3 text-xs text-slate-700">
+                    <li key={i} className="flex justify-between gap-3 text-xs text-tinta-2">
                       <span className="truncate">{it.descricao}</span>
                       <span className="tabular-nums font-bold shrink-0">{moeda(it.total)}</span>
                     </li>

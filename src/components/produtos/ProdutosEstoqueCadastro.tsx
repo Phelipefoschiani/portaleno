@@ -1,27 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CampoNumero } from '../ui/CampoNumero';
-import {
-  Package,
-  Plus,
-  Search,
-  CheckCircle2,
-  AlertTriangle,
-  TrendingDown,
-  Layers,
-  Building2,
-  DollarSign,
-  Edit2,
-  Eye,
-  Trash2,
-  X,
-  Save,
-  Check,
-  FlaskConical,
-  Boxes,
-  Percent,
-  Calculator,
-  ArrowRight
-} from 'lucide-react';
+import { Plus, Edit2, Trash2, Save } from 'lucide-react';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, CampoBusca, SeletorFiltro } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { StatusChip, TomStatus } from '../ui/StatusChip';
+import { CardNumero } from '../ui/CardNumero';
+import { EstadoVazio } from '../ui/EstadoVazio';
+import { ModalFolha, Secao, Campo, form, BotaoIcone, BotaoCartao, Aviso, FaixaTotal, FaixaNumerosProdutos, TabelaResponsiva } from './kitProdutos';
 import {
   ProdutoEstoque,
   ReceitaIndustrial,
@@ -365,752 +351,602 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
     }
   };
 
+  const unidadeSaldo = (item: ProdutoEstoque) => {
+    const emb = String(item.tipo_embalagem || '');
+    return emb.startsWith('Big Bag') ? 'bags' : emb.includes('Caixa') ? 'caixas' : emb.includes('Fardo') ? 'fardos' : emb.startsWith('Saco') ? 'sacos' : 'pacotes';
+  };
+  const situacao = (item: ProdutoEstoque): { tom: TomStatus; rotulo: string } =>
+    item.status === 'EM_ESTOQUE'
+      ? { tom: 'pago', rotulo: 'Normal' }
+      : item.status === 'CRITICO'
+      ? { tom: 'vencido', rotulo: 'Crítico' }
+      : { tom: 'aguardando', rotulo: 'Estoque baixo' };
+  const acondTexto = (item: ProdutoEstoque) => {
+    const acondQtd = item.unidades_por_acondicionamento || 1;
+    const acondTipo = item.tipo_acondicionamento || (item.tipo_embalagem.includes('Fardo') ? 'Fardo' : item.tipo_embalagem.includes('Caixa') ? 'Caixa' : 'Saco');
+    return `${acondTipo} ${acondQtd > 1 ? `c/ ${acondQtd} un` : 'avulso'}`;
+  };
+  const faixaPreco = (r: NonNullable<ReturnType<typeof resumoTabelas>>) =>
+    r.min === r.max ? formatarMoeda(r.min) : `${formatarMoeda(r.min)} – ${formatarMoeda(r.max)}`;
+  const ton = (kg: number) => (kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+
+  const semNenhum = produtos.length === 0;
+  const recSelecionada = receitas.find(r => r.id === formData.receita_id);
+
   return (
-    <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-hidden">
-      
-      {/* 1. NAVEGAÇÃO DE PRODUTOS */}
+    <div className="relative h-full w-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
+      {/* Abas antigas: só fora do shell */}
       <ProdutosNavTabs activeTab="produtos_estoque_cadastro" onNavigate={onNavigate} />
 
-      {/* 2. CABEÇALHO COMPACTO & MINIMALISTA */}
-      <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Produtos Acabados (Estoque & Cadastro)</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
-                {metricas.totalItens} produtos
-              </span>
-            </h1>
-          </div>
-
-          <button
-            onClick={handleAbrirNovo}
-            className="
-              flex items-center gap-2 px-4 py-2 rounded-xl
-              bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs
-              shadow-xs transition-all cursor-pointer
-            "
-          >
-            <Plus className="w-4 h-4" />
-            <span>Novo Produto Acabado</span>
-          </button>
-        </div>
-
-        {/* STAT BAR MINIMALISTA EM LINHA */}
-        <div className="flex flex-wrap items-center gap-6 pt-3 mt-3 border-t border-slate-100 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Estoque Físico Total:</span>
-            <span className="font-mono font-bold text-slate-900 text-sm">
-              {(metricas.volumeTotalKg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Toneladas
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Valor em Estoque (a custo):</span>
-            <span className="font-mono font-bold text-slate-900">
-              {metricas.valorPatrimonial.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Abaixo do Mínimo:</span>
-            <span className={`font-mono font-bold ${metricas.criticos > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
-              {metricas.criticos} itens
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. BARRA DE BUSCA E FILTROS */}
-      <div className="bg-[#f1f5f2] px-6 py-2.5 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="flex-1 min-w-[260px] max-w-sm relative">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por Código, Produto ou Galpão..."
-            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-700 font-medium"
-          />
-        </div>
-
-        <select
-          value={filtroCategoria}
-          onChange={(e) => setFiltroCategoria(e.target.value)}
-          className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 cursor-pointer focus:outline-none"
-        >
-          <option value="TODAS">Todas as Categorias</option>
-          {categorias.map(c => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* 4. TABELA LIMPA */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/90 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
-                <th className="py-3 px-5">Código / Produto</th>
-                <th className="py-3 px-3">Categoria</th>
-                <th className="py-3 px-3">Acondicionamento</th>
-                <th className="py-3 px-3 text-right">Custo Total</th>
-                <th className="py-3 px-4 text-right">Preço nas Tabelas</th>
-                <th className="py-3 px-4">Saldo Estoque</th>
-                <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-5 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {produtosFiltrados.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
-                    Nenhum produto encontrado.
-                  </td>
-                </tr>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px]">
+          <CabecalhoPagina
+            titulo="Produtos acabados"
+            resumo={
+              semNenhum ? (
+                'Nenhum produto cadastrado'
               ) : (
-                produtosFiltrados.map((item) => {
-                  const custoTotalUnit = item.custo_total || item.custo_materia_prima || 0;
-                  const resumo = resumoTabelas(item);
-                  const acondQtd = item.unidades_por_acondicionamento || 1;
-                  const acondTipo = item.tipo_acondicionamento || (item.tipo_embalagem.includes('Fardo') ? 'Fardo' : item.tipo_embalagem.includes('Caixa') ? 'Caixa' : 'Saco');
+                <>
+                  {metricas.totalItens} {metricas.totalItens === 1 ? 'produto' : 'produtos'}
+                  {metricas.criticos > 0 && (
+                    <span className="font-semibold text-st-aguardando"> · {metricas.criticos} abaixo do mínimo</span>
+                  )}
+                </>
+              )
+            }
+            acoes={
+              semNenhum ? undefined : (
+                <BotaoPrimario onClick={handleAbrirNovo} className="w-full sm:w-auto h-11 sm:h-9">
+                  <Plus className="w-4 h-4" />
+                  Novo produto
+                </BotaoPrimario>
+              )
+            }
+          />
 
-                  return (
-                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-5">
-                        <div className="font-bold text-slate-900">{item.nome}</div>
-                        <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
-                          <span>{item.codigo}</span>
-                          <span>•</span>
-                          <span>{item.tipo_embalagem}</span>
-                          {item.receita_nome && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 text-[10px] font-semibold border border-emerald-200">
-                              <FlaskConical className="w-2.5 h-2.5" />
-                              <span className="truncate max-w-[140px]">{item.receita_nome}</span>
-                            </span>
-                          )}
-                        </div>
-                        {(() => {
-                          const consumo = consumoPorPacoteDaReceita(receitas.find(r => r.id === item.receita_id));
-                          if (consumo.length === 0) return null;
-                          return (
-                            <div className="text-[10px] text-slate-500 mt-0.5 leading-snug">
-                              <span className="font-semibold text-slate-600">Consome por pacote:</span>{' '}
-                              {consumo.map(c => `${c.quantidade_por_pacote.toLocaleString('pt-BR', { maximumFractionDigits: 4 })} ${c.unidade_medida} ${c.materia_prima_nome}`).join(' · ')}
+          {!semNenhum && (
+            <div className="px-4 sm:px-6 pb-4">
+              <FaixaNumerosProdutos colunas={3}>
+                <CardNumero
+                  destaque
+                  rotulo="Valor em estoque (a custo)"
+                  unidade="R$"
+                  unidadeAntes
+                  valor={metricas.valorPatrimonial.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  detalhe="Saldo × custo total de cada produto"
+                />
+                <CardNumero rotulo="Estoque físico" valor={ton(metricas.volumeTotalKg)} unidade="t" detalhe={`${metricas.volumeTotalKg.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`} />
+                <CardNumero
+                  rotulo="Abaixo do mínimo"
+                  valor={metricas.criticos}
+                  unidade={metricas.criticos === 1 ? 'item' : 'itens'}
+                  detalhe={metricas.criticos > 0 ? 'Repor estoque' : 'Tudo acima do mínimo'}
+                  alerta={metricas.criticos > 0 ? 'aguardando' : undefined}
+                />
+              </FaixaNumerosProdutos>
+            </div>
+          )}
+
+          {!semNenhum && (
+            <BarraFiltros>
+              <CampoBusca valor={busca} onChange={setBusca} placeholder="Buscar produto, código ou galpão" className="w-full md:w-80" />
+              <SeletorFiltro value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)} aria-label="Categoria" className="w-full md:w-auto">
+                <option value="TODAS">Todas as categorias</option>
+                {categorias.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </SeletorFiltro>
+            </BarraFiltros>
+          )}
+
+          <div className="px-4 sm:px-6 pb-8">
+            {produtosFiltrados.length === 0 ? (
+              <div className="bg-papel border border-linha rounded-md">
+                {semNenhum ? (
+                  <EstadoVazio
+                    titulo="Nenhum produto acabado"
+                    texto="O produto nasce de uma receita com matéria-prima. Cadastre o produto, a embalagem de envio e o preço em cada tabela."
+                    acao={
+                      <BotaoPrimario onClick={handleAbrirNovo}>
+                        <Plus className="w-4 h-4" />
+                        Novo produto
+                      </BotaoPrimario>
+                    }
+                  />
+                ) : (
+                  <EstadoVazio
+                    titulo="Nenhum produto com esses filtros"
+                    texto="Mude a busca ou a categoria para ver os outros produtos."
+                    acao={
+                      <BotaoSecundario onClick={() => { setBusca(''); setFiltroCategoria('TODAS'); }}>Limpar filtros</BotaoSecundario>
+                    }
+                  />
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Celular: cartões */}
+                <ul className="sm:hidden bg-papel border border-linha rounded-md">
+                  {produtosFiltrados.map(item => {
+                    const resumo = resumoTabelas(item);
+                    const st = situacao(item);
+                    const custo = item.custo_total || item.custo_materia_prima || 0;
+                    return (
+                      <li key={item.id} className="px-3.5 py-3 border-b border-linha last:border-b-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[14px] font-bold text-tinta leading-snug">{item.nome}</div>
+                            <div className="text-[11.5px] text-cinza tabular-nums truncate">
+                              {item.codigo} · {item.categoria} · {acondTexto(item)}
                             </div>
-                          );
-                        })()}
-                      </td>
-
-                      <td className="py-3.5 px-3 font-medium text-slate-700">
-                        {item.categoria}
-                      </td>
-
-                      <td className="py-3.5 px-3">
-                        <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-800 font-bold text-[11px] border border-slate-200">
-                          {acondTipo} {acondQtd > 1 ? `c/ ${acondQtd} un` : 'Avulso'}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-3 text-right font-mono font-bold text-slate-700">
-                        {custoTotalUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        {item.impostos_valor !== undefined && item.impostos_valor > 0 && (
-                          <div className="text-[10px] text-slate-400 font-normal">
-                            (+{item.impostos_valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} imp.)
                           </div>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4 text-right">
-                        {!resumo ? (
-                          <span className="text-[11px] font-semibold text-amber-700">sem preço em tabela</span>
-                        ) : (
-                          <>
-                            <div className="font-mono font-bold tabular-nums text-slate-900">
-                              {resumo.min === resumo.max
-                                ? formatarMoeda(resumo.min)
-                                : `${formatarMoeda(resumo.min)} – ${formatarMoeda(resumo.max)}`}
-                            </div>
-                            <div className="text-[10px] text-slate-500">
-                              em {resumo.qtd} {resumo.qtd === 1 ? 'tabela' : 'tabelas'}
-                              {resumo.negativas > 0 && (
-                                <span className="ml-1 font-bold text-red-700">• margem negativa em {resumo.negativas}</span>
-                              )}
-                            </div>
-                          </>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4 font-mono">
-                        <div className="font-bold text-slate-900">
-                          {item.estoque_atual_sacos.toLocaleString('pt-BR')} {(() => {
-                            const emb = String(item.tipo_embalagem || '');
-                            return emb.startsWith('Big Bag') ? 'bags' : emb.includes('Caixa') ? 'caixas' : emb.includes('Fardo') ? 'fardos' : emb.startsWith('Saco') ? 'sacos' : 'pacotes';
-                          })()}
+                          <StatusChip tom={st.tom} className="shrink-0">{st.rotulo}</StatusChip>
                         </div>
-                        <div className="text-[10px] text-slate-400">
-                          {(item.estoque_atual_kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Ton
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-3">
-                        {item.status === 'EM_ESTOQUE' ? (
-                          <div className="flex items-center gap-1.5 text-emerald-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                            <span className="font-medium text-xs">Normal</span>
+                        <div className="mt-2 flex items-end justify-between gap-3">
+                          <div className="text-[12px] text-cinza tabular-nums">
+                            <span className="font-semibold text-tinta-2">
+                              {item.estoque_atual_sacos.toLocaleString('pt-BR')} {unidadeSaldo(item)}
+                            </span>{' '}
+                            · {ton(item.estoque_atual_kg)} t
+                            <div>custo {formatarMoeda(custo)}</div>
                           </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-amber-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            <span className="font-medium text-xs">Estoque Baixo</span>
+                          <div className="text-right min-w-0">
+                            {resumo ? (
+                              <>
+                                <div className="text-[16px] font-extrabold tracking-[-0.01em] tabular-nums text-tinta">{faixaPreco(resumo)}</div>
+                                <div className={`text-[11px] tabular-nums ${resumo.negativas > 0 ? 'font-semibold text-st-vencido' : 'text-cinza'}`}>
+                                  {resumo.negativas > 0 ? `margem negativa em ${resumo.negativas}` : `em ${resumo.qtd} ${resumo.qtd === 1 ? 'tabela' : 'tabelas'}`}
+                                </div>
+                              </>
+                            ) : (
+                              <StatusChip tom="aguardando">Sem preço em tabela</StatusChip>
+                            )}
                           </div>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleAbrirEdicao(item)}
-                            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-                            title="Editar Produto"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleExcluir(item.id)}
-                            className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
                         </div>
-                      </td>
+                        <div className="flex gap-2 mt-2.5">
+                          <BotaoCartao onClick={() => handleAbrirEdicao(item)}>
+                            <Edit2 className="w-3.5 h-3.5" /> Editar
+                          </BotaoCartao>
+                          <BotaoIcone rotulo={`Excluir ${item.nome}`} perigo onClick={() => handleExcluir(item.id)} className="border border-linha-forte">
+                            <Trash2 className="w-4 h-4" />
+                          </BotaoIcone>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                {/* Computador: tabela densa */}
+                <TabelaDados className="hidden sm:block">
+                  <thead className={tabela.thead}>
+                    <tr>
+                      <Th>Produto</Th>
+                      <Th>Categoria</Th>
+                      <Th>Envio</Th>
+                      <Th numero>Custo</Th>
+                      <Th numero>Preço nas tabelas</Th>
+                      <Th numero>Saldo</Th>
+                      <Th>Situação</Th>
+                      <Th className="text-right">Ações</Th>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  </thead>
+                  <tbody>
+                    {produtosFiltrados.map(item => {
+                      const custoTotalUnit = item.custo_total || item.custo_materia_prima || 0;
+                      const resumo = resumoTabelas(item);
+                      const st = situacao(item);
+                      const consumo = consumoPorPacoteDaReceita(receitas.find(r => r.id === item.receita_id));
+                      return (
+                        <tr key={item.id} className={`${tabela.tr} group`}>
+                          <Td className="max-w-[420px]">
+                            <button type="button" onClick={() => handleAbrirEdicao(item)} className="text-left font-semibold text-tinta group-hover:text-eno-700 cursor-pointer">
+                              {item.nome}
+                            </button>
+                            <div className="text-[11.5px] text-cinza tabular-nums">
+                              {item.codigo} · {item.tipo_embalagem}
+                              {item.receita_nome && <> · receita {item.receita_nome}</>}
+                            </div>
+                            {consumo.length > 0 && (
+                              <div className="text-[11px] text-cinza-claro leading-snug truncate" title={consumo.map(c => `${c.quantidade_por_pacote.toLocaleString('pt-BR', { maximumFractionDigits: 4 })} ${c.unidade_medida} ${c.materia_prima_nome}`).join(' · ')}>
+                                Por pacote: {consumo.map(c => `${c.quantidade_por_pacote.toLocaleString('pt-BR', { maximumFractionDigits: 4 })} ${c.unidade_medida} ${c.materia_prima_nome}`).join(' · ')}
+                              </div>
+                            )}
+                          </Td>
+                          <Td>{item.categoria}</Td>
+                          <Td className="whitespace-nowrap">{acondTexto(item)}</Td>
+                          <Td numero>
+                            <div className="font-semibold text-tinta">{formatarMoeda(custoTotalUnit)}</div>
+                            {item.impostos_valor !== undefined && item.impostos_valor > 0 && (
+                              <div className="text-[11px] text-cinza">+{formatarMoeda(item.impostos_valor)} imp.</div>
+                            )}
+                          </Td>
+                          <Td numero>
+                            {!resumo ? (
+                              <StatusChip tom="aguardando">Sem preço em tabela</StatusChip>
+                            ) : (
+                              <>
+                                <div className="font-bold text-tinta text-[13.5px]">{faixaPreco(resumo)}</div>
+                                <div className="text-[11px] text-cinza">
+                                  em {resumo.qtd} {resumo.qtd === 1 ? 'tabela' : 'tabelas'}
+                                  {resumo.negativas > 0 && <span className="ml-1 font-semibold text-st-vencido">· margem negativa em {resumo.negativas}</span>}
+                                </div>
+                              </>
+                            )}
+                          </Td>
+                          <Td numero>
+                            <div className="font-semibold text-tinta">
+                              {item.estoque_atual_sacos.toLocaleString('pt-BR')} {unidadeSaldo(item)}
+                            </div>
+                            <div className="text-[11px] text-cinza">{ton(item.estoque_atual_kg)} t</div>
+                          </Td>
+                          <Td>
+                            <StatusChip tom={st.tom}>{st.rotulo}</StatusChip>
+                          </Td>
+                          <Td className="text-right">
+                            <div className="inline-flex items-center gap-0.5">
+                              <BotaoIcone rotulo="Editar produto" onClick={() => handleAbrirEdicao(item)}>
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </BotaoIcone>
+                              <BotaoIcone rotulo="Excluir produto" perigo onClick={() => handleExcluir(item.id)}>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </BotaoIcone>
+                            </div>
+                          </Td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </TabelaDados>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* 5. MODAL NOVO / EDITAR PRODUTO */}
+      {/* MODAL NOVO / EDITAR PRODUTO */}
       {modalAberto && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <Package className="w-5 h-5 text-emerald-400" />
-                <div>
-                  <h3 className="font-bold text-sm sm:text-base text-white">
-                    {modoEdicao ? `Editar Produto: ${formData.nome}` : 'Cadastrar Novo Produto Acabado'}
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Vincule a receita de produção, configure caixa/fardo, impostos e o preço em cada tabela de preço.
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setModalAberto(false)} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSalvar} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
-              
-              {/* 1. VÍNCULO COM A RECEITA DE PRODUÇÃO (PUXA PROPORÇÃO E CUSTO AUTOMATICAMENTE) */}
-              <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/80 pb-2">
-                  <span className="font-bold text-emerald-950 uppercase tracking-wider text-xs flex items-center gap-1.5">
-                    <FlaskConical className="w-4 h-4 text-emerald-700" />
-                    <span>1. Receita de Produção Vinculada (Proporção & Insumos)</span>
-                  </span>
-                  <span className="text-[11px] text-emerald-800 font-semibold">
-                    Calcula automaticamente o custo dos insumos a partir da matéria-prima
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                  <div className="sm:col-span-8">
-                    <label className="block font-bold text-slate-800 mb-1">
-                      Selecione a Receita Base *
-                    </label>
-                    <select
-                      value={formData.receita_id}
-                      onChange={(e) => handleSelecionarReceita(e.target.value)}
-                      className="w-full bg-white border border-emerald-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-700 cursor-pointer shadow-2xs"
-                    >
-                      <option value="" disabled>-- Selecione a receita do produto --</option>
-                      {receitas.map((rec) => {
-                        const semMp = (rec.materias_primas || []).length === 0;
-                        return (
-                          <option key={rec.id} value={rec.id} disabled={semMp}>
-                            {rec.codigo} - {rec.nome || rec.produto_nome} ({rec.rendimento_pacotes} pacotes de {rec.peso_por_pacote_kg || 25}kg){semMp ? ' — sem matéria-prima' : ''}
-                          </option>
-                        );
-                      })}
-                    </select>
-                    {!receitas.some(r => (r.materias_primas || []).length > 0) && (
-                      <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 font-semibold text-[11px] space-y-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                          <span>
-                            Para cadastrar um produto é preciso ter uma receita com ao menos 1 matéria-prima.
-                            {receitas.length === 0 ? ' Nenhuma receita cadastrada.' : ' Nenhuma receita tem matéria-prima.'}
-                          </span>
-                        </div>
-                        {onNavigate && (
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => { setModalAberto(false); onNavigate('produtos_materia_prima'); }}
-                              className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 hover:bg-amber-100 font-bold cursor-pointer"
-                            >
-                              Cadastrar Matéria-Prima →
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setModalAberto(false); onNavigate('produtos_receita'); }}
-                              className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 hover:bg-amber-100 font-bold cursor-pointer"
-                            >
-                              Cadastrar Receita →
-                            </button>
-                          </div>
-                        )}
+        <ModalFolha
+          titulo={modoEdicao ? `Editar ${formData.nome || 'produto'}` : 'Novo produto acabado'}
+          subtitulo="Receita de produção, embalagem de envio, custos e o preço em cada tabela."
+          onFechar={() => setModalAberto(false)}
+          onSubmit={handleSalvar}
+          largura="sm:max-w-5xl"
+          corpoClassName="space-y-4"
+          rodape={
+            <>
+              <BotaoSecundario onClick={() => setModalAberto(false)}>Cancelar</BotaoSecundario>
+              <BotaoPrimario type="submit">
+                <Save className="w-4 h-4" />
+                Salvar produto
+              </BotaoPrimario>
+            </>
+          }
+        >
+          {/* 1. RECEITA */}
+          <Secao numero="1" titulo="Receita de produção" contexto="O custo dos insumos vem da receita: custo da receita ÷ unidades que ela rende.">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
+              <Campo rotulo="Receita base *" className="sm:col-span-8">
+                <select value={formData.receita_id} onChange={(e) => handleSelecionarReceita(e.target.value)} className={form.select}>
+                  <option value="" disabled>Selecione a receita do produto</option>
+                  {receitas.map((rec) => {
+                    const semMp = (rec.materias_primas || []).length === 0;
+                    return (
+                      <option key={rec.id} value={rec.id} disabled={semMp}>
+                        {rec.codigo} - {rec.nome || rec.produto_nome} ({rec.rendimento_pacotes} pacotes de {rec.peso_por_pacote_kg || 25}kg){semMp ? ' — sem matéria-prima' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+                {!receitas.some(r => (r.materias_primas || []).length > 0) && (
+                  <Aviso tom="aguardando" className="mt-2 space-y-2">
+                    <p>
+                      Para cadastrar um produto é preciso ter uma receita com ao menos 1 matéria-prima.
+                      {receitas.length === 0 ? ' Nenhuma receita cadastrada.' : ' Nenhuma receita tem matéria-prima.'}
+                    </p>
+                    {onNavigate && (
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={() => { setModalAberto(false); onNavigate('produtos_materia_prima'); }} className="h-10 sm:h-8 px-3 rounded-md border border-st-aguardando/30 bg-papel font-semibold cursor-pointer">
+                          Cadastrar matéria-prima
+                        </button>
+                        <button type="button" onClick={() => { setModalAberto(false); onNavigate('produtos_receita'); }} className="h-10 sm:h-8 px-3 rounded-md border border-st-aguardando/30 bg-papel font-semibold cursor-pointer">
+                          Cadastrar receita
+                        </button>
                       </div>
                     )}
-                  </div>
+                  </Aviso>
+                )}
+              </Campo>
 
-                  <div className="sm:col-span-4 bg-white p-2.5 rounded-xl border border-emerald-200 text-center">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-                      Custo Insumos (por Unidade)
-                    </span>
-                    <span className="font-mono text-base font-black text-emerald-950">
-                      {calculosFormulario.custoMp.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </span>
-                    {(() => {
-                      const recSel = receitas.find(r => r.id === formData.receita_id);
-                      if (!recSel) return <span className="text-[10px] text-slate-400 block font-mono">por pacote/unidade</span>;
-                      const totalRec = recSel.custo_total_materias_primas || (recSel.materias_primas || []).reduce((acc, m) => acc + (m.custo_total || 0), 0);
-                      const rend = recSel.rendimento_pacotes || 1;
-                      const un = formData.unidades_por_acondicionamento || 1;
-                      return (
-                        <>
-                          <span className="text-[10px] text-emerald-800 font-mono block mt-0.5 font-bold">
-                            {totalRec.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} ÷ {rend} un
-                          </span>
-                          {un > 1 && (
-                            <span className="text-[10px] text-slate-600 font-mono block font-bold">
-                              {(calculosFormulario.custoMp * un).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} /{formData.tipo_acondicionamento} ({un} un)
-                            </span>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                {/* Detalhamento das Proporções da Receita Vinculada (TUDO EM LINHAS DE UMA TABELA) */}
+              <div className="sm:col-span-4 rounded-md bg-eno-50 border border-eno-100 px-3.5 py-2.5">
+                <div className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-cinza">Custo dos insumos por unidade</div>
+                <div className="mt-1 text-[22px] font-extrabold tracking-[-0.02em] tabular-nums text-tinta">{formatarMoeda(calculosFormulario.custoMp)}</div>
                 {(() => {
-                  const recSelecionada = receitas.find(r => r.id === formData.receita_id);
-                  if (!recSelecionada || !recSelecionada.materias_primas || recSelecionada.materias_primas.length === 0) return null;
-                  const totalRec = recSelecionada.custo_total_materias_primas || recSelecionada.materias_primas.reduce((acc, m) => acc + (m.custo_total || 0), 0);
+                  if (!recSelecionada) return <div className="text-[11.5px] text-cinza">escolha a receita</div>;
+                  const totalRec = recSelecionada.custo_total_materias_primas || (recSelecionada.materias_primas || []).reduce((acc, m) => acc + (m.custo_total || 0), 0);
                   const rend = recSelecionada.rendimento_pacotes || 1;
-
+                  const un = formData.unidades_por_acondicionamento || 1;
                   return (
-                    <div className="mt-3 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
-                      <div className="bg-slate-100/90 px-3.5 py-2 border-b border-slate-200 text-[11px] font-bold text-slate-800 flex flex-wrap items-center justify-between gap-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 font-mono text-[10px] font-black border border-emerald-300">
-                            Custo da Receita ÷ {rend} un
-                          </span>
-                          <span>Composição de Insumos da Receita ({rend} {recSelecionada.tipo_embalagem || 'pacotes'} de {recSelecionada.peso_por_pacote_kg || 1}kg)</span>
-                        </div>
-                        <span className="text-emerald-900 font-mono text-[11px] font-bold">
-                          {totalRec.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} ÷ {rend} = {calculosFormulario.custoMp.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} /un
-                        </span>
-                      </div>
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
-                            <th className="py-2 px-3">Matéria-Prima</th>
-                            <th className="py-2 px-3 text-right">Qtd na Receita</th>
-                            <th className="py-2 px-3 text-right">Divisão por Unidade</th>
-                            <th className="py-2 px-3 text-right">Custo na Receita</th>
-                            <th className="py-2 px-3 text-right">Custo por Unidade</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 font-mono">
-                          {recSelecionada.materias_primas.map((mp, i) => {
-                            const propUnitaria = (mp.quantidade / rend);
-                            const custoTotalMp = mp.custo_total || (mp.quantidade * (mp.custo_unitario || 0));
-                            const custoUnInsumo = (custoTotalMp / rend);
-                            return (
-                              <tr key={i} className="hover:bg-slate-50/70">
-                                <td className="py-2 px-3 font-sans font-bold text-slate-800">{mp.materia_prima_nome}</td>
-                                <td className="py-2 px-3 text-right text-slate-600">{mp.quantidade.toLocaleString('pt-BR')} {mp.unidade_medida}</td>
-                                <td className="py-2 px-3 text-right font-bold text-emerald-900">
-                                  {propUnitaria < 0.1 ? propUnitaria.toFixed(3) : propUnitaria.toFixed(2)} {mp.unidade_medida}
-                                </td>
-                                <td className="py-2 px-3 text-right text-slate-500">
-                                  {custoTotalMp.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                </td>
-                                <td className="py-2 px-3 text-right font-black text-emerald-950 bg-emerald-50/30">
-                                  {custoUnInsumo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                    <div className="text-[11.5px] text-cinza tabular-nums">
+                      {formatarMoeda(totalRec)} ÷ {rend} un
+                      {un > 1 && <> · {formatarMoeda(calculosFormulario.custoMp * un)} por {formData.tipo_acondicionamento.toLowerCase()} ({un} un)</>}
                     </div>
                   );
                 })()}
               </div>
+            </div>
 
-              {/* 2. IDENTIFICAÇÃO DO PRODUTO & CATEGORIA */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <span className="font-bold text-slate-800 uppercase tracking-wider text-xs block">
-                  2. Identificação Comercial do Produto
-                </span>
-
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                  <div className="sm:col-span-6">
-                    <label className="block font-bold text-slate-700 mb-1">Nome Comercial do Produto *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.nome}
-                      onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                      placeholder="Ex: Mandioca Gourmet Palito Congelada (Pacote 1kg)"
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-bold text-slate-800 focus:outline-none focus:border-emerald-700 shadow-2xs"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-3">
-                    <label className="block font-bold text-slate-700 mb-1">Código Interno *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.codigo}
-                      onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 focus:outline-none focus:border-emerald-700 shadow-2xs"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-3">
-                    <label className="block font-bold text-slate-700 mb-1">Categoria *</label>
-                    <CategoriaProdutoCampo
-                      value={formData.categoria}
-                      onChange={(categoria) => setFormData(prev => ({ ...prev, categoria }))}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. ACONDICIONAMENTO (FARDO OU CAIXA E QUANTOS QUE VAI) */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
-                  <span className="font-bold text-slate-800 uppercase tracking-wider text-xs flex items-center gap-1.5">
-                    <Boxes className="w-4 h-4 text-emerald-700" />
-                    <span>3. Acondicionamento de Envio (Fardo ou Caixa)</span>
-                  </span>
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    Define como o produto é despachado e cobrado no pedido
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Acondicionamento *</label>
-                    <select
-                      value={formData.tipo_acondicionamento}
-                      onChange={(e) => setFormData({ ...formData, tipo_acondicionamento: e.target.value as any })}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-800 font-bold focus:outline-none focus:border-emerald-700 cursor-pointer shadow-2xs"
-                    >
-                      <option value="Caixa">Caixa</option>
-                      <option value="Fardo">Fardo</option>
-                      <option value="Saco">Saco</option>
-                      <option value="Avulso">Avulso / Granel</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-emerald-950 mb-1">Quantos que vai (Qtd) *</label>
-                    <CampoNumero
-                      inteiro
-                      required
-                      min={1}
-                      value={formData.unidades_por_acondicionamento}
-                      onChange={(n) => setFormData({ ...formData, unidades_por_acondicionamento: n })}
-                      placeholder="Ex: 10 ou 12"
-                      className="w-full bg-white border-2 border-emerald-500 rounded-xl px-3 py-2 font-mono font-black text-center text-emerald-950 text-sm focus:outline-none focus:border-emerald-700 shadow-xs"
-                    />
-                    <span className="text-[10px] text-emerald-800 font-semibold block text-center mt-0.5">
-                      unidades por {formData.tipo_acondicionamento.toLowerCase()}
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Peso de cada unidade (kg)</label>
-                    <CampoNumero
-                      step="any"
-                      min={0}
-                      value={formData.peso_unitario_kg}
-                      onChange={(n) => setFormData({ ...formData, peso_unitario_kg: n })}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 text-center focus:outline-none focus:border-emerald-700 shadow-2xs"
-                    />
-                    <span className="text-[10px] text-slate-500 block text-center mt-0.5">
-                      {derivarTipoEmbalagem(formData.peso_unitario_kg)} • {(formData.peso_unitario_kg * formData.unidades_por_acondicionamento).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg por {formData.tipo_acondicionamento.toLowerCase()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 4. CUSTOS, IMPOSTOS SOBRE O PRODUTO E FORMAÇÃO DE PREÇO */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <span className="font-bold text-slate-800 uppercase tracking-wider text-xs block">
-                  4. Custos & Impostos
-                </span>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Custo Insumos (R$)</label>
-                    <CampoNumero
-                      step="0.01"
-                      min={0}
-                      value={formData.custo_materia_prima}
-                      onChange={(n) => setFormData({ ...formData, custo_materia_prima: n })}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 text-right focus:outline-none focus:border-emerald-700 shadow-2xs"
-                    />
-                    <span className="text-[10px] text-slate-400 block text-right mt-0.5">da receita</span>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Custos Operacionais (R$)</label>
-                    <CampoNumero
-                      step="0.01"
-                      min={0}
-                      value={formData.custo_operacional}
-                      onChange={(n) => setFormData({ ...formData, custo_operacional: n })}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 text-right focus:outline-none focus:border-emerald-700 shadow-2xs"
-                    />
-                    <span className="text-[10px] text-slate-400 block text-right mt-0.5">energia/mão de obra</span>
-                  </div>
-
-                  <div className="bg-emerald-950 p-3 rounded-xl text-white flex flex-col justify-center text-right shadow-xs">
-                    <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">
-                      Custo Total s/ Impostos
-                    </span>
-                    <span className="font-mono text-base font-black text-lime-300">
-                      {(formData.custo_materia_prima + formData.custo_operacional).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </span>
-                  </div>
-                </div>
-
-                {/* SEÇÃO DE IMPOSTOS DINÂMICOS - SOLICITADO PELO USUÁRIO */}
-                <div className="p-3 bg-white/40 border border-slate-200 rounded-2xl space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                    <div className="flex items-center gap-1.5">
-                      <Percent className="w-4 h-4 text-emerald-700" />
-                      <span className="text-[11px] font-black text-slate-700 uppercase tracking-wide">
-                        Impostos e Taxas sobre o Produto
+            {(() => {
+              if (!recSelecionada || !recSelecionada.materias_primas || recSelecionada.materias_primas.length === 0) return null;
+              const totalRec = recSelecionada.custo_total_materias_primas || recSelecionada.materias_primas.reduce((acc, m) => acc + (m.custo_total || 0), 0);
+              const rend = recSelecionada.rendimento_pacotes || 1;
+              return (
+                <TabelaResponsiva
+                  colunas={[
+                    { rotulo: 'Matéria-prima' },
+                    { rotulo: 'Na receita', numero: true },
+                    { rotulo: 'Por unidade', numero: true },
+                    { rotulo: 'Custo na receita', numero: true },
+                    { rotulo: 'Custo por unidade', numero: true },
+                  ]}
+                  linhas={recSelecionada.materias_primas.map((mp, i) => {
+                    const propUnitaria = mp.quantidade / rend;
+                    const custoTotalMp = mp.custo_total || (mp.quantidade * (mp.custo_unitario || 0));
+                    return {
+                      chave: i,
+                      celulas: [
+                        mp.materia_prima_nome,
+                        `${mp.quantidade.toLocaleString('pt-BR')} ${mp.unidade_medida}`,
+                        `${propUnitaria.toLocaleString('pt-BR', { minimumFractionDigits: propUnitaria < 0.1 ? 3 : 2, maximumFractionDigits: propUnitaria < 0.1 ? 3 : 2 })} ${mp.unidade_medida}`,
+                        formatarMoeda(custoTotalMp),
+                        <span className="font-bold text-tinta">{formatarMoeda(custoTotalMp / rend)}</span>,
+                      ],
+                    };
+                  })}
+                  rodape={
+                    <div className="flex flex-wrap justify-between gap-2 tabular-nums">
+                      <span className="text-cinza">
+                        {rend} {recSelecionada.tipo_embalagem || 'pacotes'} de {recSelecionada.peso_por_pacote_kg || 1} kg
+                      </span>
+                      <span className="font-semibold text-tinta">
+                        {formatarMoeda(totalRec)} ÷ {rend} = {formatarMoeda(calculosFormulario.custoMp)} por unidade
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleAdicionarImposto}
-                      className="text-[10px] bg-emerald-800 hover:bg-emerald-950 text-white px-2.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer shadow-2xs"
-                    >
-                      + Adicionar Imposto
-                    </button>
-                  </div>
-
-                  {formData.impostos.length === 0 ? (
-                    <div className="py-4 text-center text-[10px] text-slate-400 italic">
-                      Nenhum imposto configurado para este produto.
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {formData.impostos.map((imp) => (
-                        <div key={imp.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end bg-white p-2.5 rounded-xl border border-slate-100 shadow-3xs">
-                          <div className="sm:col-span-3">
-                            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5">Nome do Imposto</label>
-                            <input
-                              type="text"
-                              value={imp.nome}
-                              onChange={(e) => handleAtualizarImposto(imp.id, 'nome', e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
-                            />
-                          </div>
-                          <div className="sm:col-span-2">
-                            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5">Base de Calc.</label>
-                            <select
-                              value={imp.base}
-                              onChange={(e) => handleAtualizarImposto(imp.id, 'base', e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-1.5 text-[11px] font-medium text-slate-700 focus:outline-none focus:border-emerald-600 cursor-pointer"
-                            >
-                              <option value="Venda">Preço da tabela</option>
-                              <option value="Custo">Custo Prod.</option>
-                              <option value="Fixo">Valor Fixo</option>
-                            </select>
-                          </div>
-                          <div className="sm:col-span-2">
-                            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5">Tipo</label>
-                            <select
-                              value={imp.tipo}
-                              onChange={(e) => handleAtualizarImposto(imp.id, 'tipo', e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-1.5 text-[11px] font-medium text-slate-700 focus:outline-none focus:border-emerald-600 cursor-pointer"
-                            >
-                              <option value="Porcentagem">% Porcentagem</option>
-                              <option value="Valor">$ Valor Real</option>
-                            </select>
-                          </div>
-                          <div className="sm:col-span-2">
-                            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5">Valor / Alíquota</label>
-                            <CampoNumero
-                              step="any"
-                              min={0}
-                              value={imp.valor}
-                              onChange={(n) => handleAtualizarImposto(imp.id, 'valor', n)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-mono font-bold text-right text-emerald-950 focus:outline-none focus:border-emerald-600"
-                            />
-                          </div>
-                          <div className="sm:col-span-2 text-right px-1">
-                            <div className="text-[9px] font-bold text-slate-400 uppercase">Impacto Un.</div>
-                            {imp.base === 'Venda' ? (
-                              <div className="text-[11px] font-mono font-black text-amber-800 leading-tight">
-                                {imp.tipo === 'Porcentagem'
-                                  ? `${(Number(imp.valor) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`
-                                  : formatarMoeda(Number(imp.valor) || 0)}
-                                <span className="block text-[9px] font-sans font-semibold text-slate-500">
-                                  {imp.tipo === 'Porcentagem' ? 'sobre o preço da tabela' : 'por venda (na margem)'}
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="text-[11px] font-mono font-black text-emerald-800">
-                                {(() => {
-                                  const baseCusto = formData.custo_materia_prima + formData.custo_operacional;
-                                  const baseCalc = imp.base === 'Custo' ? baseCusto : 0;
-                                  const res = imp.tipo === 'Porcentagem' ? (baseCalc * (imp.valor || 0)) / 100 : (imp.valor || 0);
-                                  return formatarMoeda(res);
-                                })()}
-                                <span className="block text-[9px] font-sans font-semibold text-slate-500">no custo</span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="sm:col-span-1 text-center pb-1">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoverImposto(imp.id)}
-                              className="p-1.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer"
-                              title="Remover imposto"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                </div>
-
-                <div className="bg-emerald-900 p-4 rounded-2xl text-white flex items-center justify-between shadow-md">
-                  <div>
-                    <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">
-                      Custo Final Industrial (Insumos + Operacional + Impostos de Custo)
-                    </span>
-                    <span className="font-mono text-xl font-black text-lime-300">
-                      {calculosFormulario.custoTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-emerald-300 font-bold uppercase block">Por {formData.tipo_acondicionamento}</span>
-                    <span className="font-mono text-sm font-bold text-emerald-100">
-                      {(calculosFormulario.custoTotal * formData.unidades_por_acondicionamento).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </span>
-                  </div>
-                </div>
-
-                <p className="text-[10px] text-slate-500">
-                  O produto não tem preço próprio: o preço de venda é definido em cada tabela de preço, logo abaixo.
-                </p>
-              </div>
-
-              {/* 4.1 PREÇOS NAS TABELAS DE PREÇO */}
-              <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-3">
-                <span className="font-bold text-slate-800 uppercase tracking-wider text-xs block">
-                  5. Preços nas tabelas
-                </span>
-                <PrecosProdutoTabelas
-                  custoUnitario={calculosFormulario.custoTotal}
-                  impostos={formData.impostos}
-                  unidades={formData.unidades_por_acondicionamento || 1}
-                  tipoAcondicionamento={formData.tipo_acondicionamento}
-                  valor={precosTabelas}
-                  onChange={setPrecosTabelas}
+                  }
                 />
+              );
+            })()}
+          </Secao>
+
+          {/* 2. IDENTIFICAÇÃO */}
+          <Secao numero="2" titulo="Identificação">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+              <Campo rotulo="Nome comercial *" className="sm:col-span-6">
+                <input
+                  type="text"
+                  required
+                  value={formData.nome}
+                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                  placeholder="Ex: Mandioca Gourmet Palito Congelada (Pacote 1kg)"
+                  className={form.campo}
+                />
+              </Campo>
+              <Campo rotulo="Código interno *" className="sm:col-span-3">
+                <input
+                  type="text"
+                  required
+                  value={formData.codigo}
+                  onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
+                  className={`${form.campo} tabular-nums`}
+                />
+              </Campo>
+              <Campo rotulo="Categoria *" className="sm:col-span-3">
+                <CategoriaProdutoCampo value={formData.categoria} onChange={(categoria) => setFormData(prev => ({ ...prev, categoria }))} />
+              </Campo>
+            </div>
+          </Secao>
+
+          {/* 3. ACONDICIONAMENTO */}
+          <Secao numero="3" titulo="Embalagem de envio" contexto="Como o produto é despachado e cobrado no pedido.">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Campo rotulo="Acondicionamento *">
+                <select
+                  value={formData.tipo_acondicionamento}
+                  onChange={(e) => setFormData({ ...formData, tipo_acondicionamento: e.target.value as any })}
+                  className={form.select}
+                >
+                  <option value="Caixa">Caixa</option>
+                  <option value="Fardo">Fardo</option>
+                  <option value="Saco">Saco</option>
+                  <option value="Avulso">Avulso / Granel</option>
+                </select>
+              </Campo>
+              <Campo rotulo="Unidades em cada um *" ajuda={`unidades por ${formData.tipo_acondicionamento.toLowerCase()}`}>
+                <CampoNumero
+                  inteiro
+                  required
+                  min={1}
+                  value={formData.unidades_por_acondicionamento}
+                  onChange={(n) => setFormData({ ...formData, unidades_por_acondicionamento: n })}
+                  placeholder="Ex: 10 ou 12"
+                  className={form.campoNumero}
+                />
+              </Campo>
+              <Campo
+                rotulo="Peso de cada unidade (kg)"
+                ajuda={`${derivarTipoEmbalagem(formData.peso_unitario_kg)} · ${(formData.peso_unitario_kg * formData.unidades_por_acondicionamento).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg por ${formData.tipo_acondicionamento.toLowerCase()}`}
+              >
+                <CampoNumero
+                  step="any"
+                  min={0}
+                  value={formData.peso_unitario_kg}
+                  onChange={(n) => setFormData({ ...formData, peso_unitario_kg: n })}
+                  className={form.campoNumero}
+                />
+              </Campo>
+            </div>
+          </Secao>
+
+          {/* 4. CUSTOS E IMPOSTOS */}
+          <Secao
+            numero="4"
+            titulo="Custos e impostos"
+            contexto="O produto não tem preço próprio: o preço de venda fica em cada tabela, logo abaixo."
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Campo rotulo="Custo dos insumos (R$)" ajuda="da receita">
+                <CampoNumero
+                  step="0.01"
+                  min={0}
+                  value={formData.custo_materia_prima}
+                  onChange={(n) => setFormData({ ...formData, custo_materia_prima: n })}
+                  className={form.campoNumero}
+                />
+              </Campo>
+              <Campo rotulo="Custos operacionais (R$)" ajuda="energia, mão de obra">
+                <CampoNumero
+                  step="0.01"
+                  min={0}
+                  value={formData.custo_operacional}
+                  onChange={(n) => setFormData({ ...formData, custo_operacional: n })}
+                  className={form.campoNumero}
+                />
+              </Campo>
+              <div className="rounded-md bg-papel-2 border border-linha px-3.5 py-2.5 text-right">
+                <div className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-cinza">Custo sem impostos</div>
+                <div className="mt-1 text-[20px] font-extrabold tracking-[-0.02em] tabular-nums text-tinta">
+                  {formatarMoeda(formData.custo_materia_prima + formData.custo_operacional)}
+                </div>
               </div>
+            </div>
 
-              {/* 5. ESTOQUE E LOCALIZAÇÃO NO GALPÃO */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Saldo Atual ({formData.tipo_acondicionamento}s)
-                  </label>
-                  <CampoNumero
-                    inteiro
-                    min={0}
-                    value={formData.estoque_atual_sacos}
-                    onChange={(n) => setFormData({ ...formData, estoque_atual_sacos: n })}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-bold font-mono text-center text-slate-800 focus:outline-none focus:border-emerald-700 shadow-2xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Estoque Mínimo Alerta (kg)</label>
-                  <CampoNumero
-                    min={0}
-                    value={formData.estoque_minimo_kg}
-                    onChange={(n) => setFormData({ ...formData, estoque_minimo_kg: n })}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-800 text-center focus:outline-none focus:border-emerald-700 shadow-2xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Localização no Galpão</label>
-                  <input
-                    type="text"
-                    value={formData.localizacao_galpao}
-                    onChange={(e) => setFormData({ ...formData, localizacao_galpao: e.target.value })}
-                    placeholder="Ex: Galpão C - Setor Congelados"
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 shadow-2xs"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+            {/* Impostos */}
+            <div className="rounded-md border border-linha">
+              <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-linha bg-papel-2">
+                <span className="text-[12.5px] font-bold text-tinta">
+                  Impostos e taxas
+                  {formData.impostos.length > 0 && <span className="ml-1.5 font-normal text-cinza tabular-nums">{formData.impostos.length}</span>}
+                </span>
                 <button
                   type="button"
-                  onClick={() => setModalAberto(false)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors cursor-pointer text-xs"
+                  onClick={handleAdicionarImposto}
+                  className="inline-flex items-center gap-1 h-10 sm:h-8 px-3 rounded-md border border-linha-forte bg-papel text-[12.5px] font-semibold text-eno-700 hover:bg-papel-3 cursor-pointer"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs hover:shadow text-xs"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Salvar Produto Acabado</span>
+                  <Plus className="w-3.5 h-3.5" /> Adicionar imposto
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
 
+              {formData.impostos.length === 0 ? (
+                <p className="px-3 py-4 text-[12.5px] text-cinza">Nenhum imposto neste produto. ICMS, PIS e similares entram aqui.</p>
+              ) : (
+                <ul>
+                  {formData.impostos.map((imp, n) => (
+                    <li key={imp.id} className="grid grid-cols-2 sm:grid-cols-12 gap-x-2 gap-y-3 items-end px-3 py-3 border-b border-linha last:border-b-0">
+                      <div className="col-span-2 flex items-center justify-between sm:hidden">
+                        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-cinza">Imposto {n + 1}</span>
+                        <BotaoIcone rotulo="Remover imposto" perigo onClick={() => handleRemoverImposto(imp.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </BotaoIcone>
+                      </div>
+                      <Campo rotulo="Nome" className="col-span-2 sm:col-span-3">
+                        <input type="text" value={imp.nome} onChange={(e) => handleAtualizarImposto(imp.id, 'nome', e.target.value)} className={form.campo} />
+                      </Campo>
+                      <Campo rotulo="Base de cálculo" className="col-span-2 sm:col-span-2">
+                        <select value={imp.base} onChange={(e) => handleAtualizarImposto(imp.id, 'base', e.target.value)} className={form.select}>
+                          <option value="Venda">Preço da tabela</option>
+                          <option value="Custo">Custo prod.</option>
+                          <option value="Fixo">Valor fixo</option>
+                        </select>
+                      </Campo>
+                      <Campo rotulo="Tipo" className="col-span-2 sm:col-span-2">
+                        <select value={imp.tipo} onChange={(e) => handleAtualizarImposto(imp.id, 'tipo', e.target.value)} className={form.select}>
+                          <option value="Porcentagem">% Porcentagem</option>
+                          <option value="Valor">R$ Valor</option>
+                        </select>
+                      </Campo>
+                      <Campo rotulo="Valor / alíquota" className="sm:col-span-2">
+                        <CampoNumero step="any" min={0} value={imp.valor} onChange={(n) => handleAtualizarImposto(imp.id, 'valor', n)} className={form.campoNumero} />
+                      </Campo>
+                      <div className="sm:col-span-2 text-right pb-1 tabular-nums">
+                        <div className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-cinza">Impacto</div>
+                        {imp.base === 'Venda' ? (
+                          <div className="text-[13px] font-bold text-st-aguardando leading-tight">
+                            {imp.tipo === 'Porcentagem'
+                              ? `${(Number(imp.valor) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`
+                              : formatarMoeda(Number(imp.valor) || 0)}
+                            <span className="block text-[11px] font-normal text-cinza">
+                              {imp.tipo === 'Porcentagem' ? 'sobre o preço da tabela' : 'por venda (na margem)'}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="text-[13px] font-bold text-tinta leading-tight">
+                            {(() => {
+                              const baseCusto = formData.custo_materia_prima + formData.custo_operacional;
+                              const baseCalc = imp.base === 'Custo' ? baseCusto : 0;
+                              const res = imp.tipo === 'Porcentagem' ? (baseCalc * (imp.valor || 0)) / 100 : (imp.valor || 0);
+                              return formatarMoeda(res);
+                            })()}
+                            <span className="block text-[11px] font-normal text-cinza">no custo</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="hidden sm:flex sm:col-span-1 justify-end pb-0.5">
+                        <BotaoIcone rotulo="Remover imposto" perigo onClick={() => handleRemoverImposto(imp.id)}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </BotaoIcone>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <FaixaTotal
+              rotulo="Custo final industrial"
+              valor={formatarMoeda(calculosFormulario.custoTotal)}
+              detalhe="Insumos + operacional + impostos de custo, por unidade"
+              lado={
+                <>
+                  <div className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-white/55">Por {formData.tipo_acondicionamento.toLowerCase()}</div>
+                  <div className="mt-1 text-[16px] font-bold">{formatarMoeda(calculosFormulario.custoTotal * formData.unidades_por_acondicionamento)}</div>
+                </>
+              }
+            />
+          </Secao>
+
+          {/* 5. PREÇOS NAS TABELAS */}
+          <Secao numero="5" titulo="Preços nas tabelas" contexto="Em branco = o produto não é vendido naquela tabela.">
+            <PrecosProdutoTabelas
+              custoUnitario={calculosFormulario.custoTotal}
+              impostos={formData.impostos}
+              unidades={formData.unidades_por_acondicionamento || 1}
+              tipoAcondicionamento={formData.tipo_acondicionamento}
+              valor={precosTabelas}
+              onChange={setPrecosTabelas}
+            />
+          </Secao>
+
+          {/* 6. ESTOQUE */}
+          <Secao numero="6" titulo="Estoque e localização">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Campo rotulo={`Saldo atual (${formData.tipo_acondicionamento.toLowerCase()}s)`}>
+                <CampoNumero inteiro min={0} value={formData.estoque_atual_sacos} onChange={(n) => setFormData({ ...formData, estoque_atual_sacos: n })} className={form.campoNumero} />
+              </Campo>
+              <Campo rotulo="Estoque mínimo (kg)" ajuda="Abaixo disso o produto aparece como estoque baixo">
+                <CampoNumero min={0} value={formData.estoque_minimo_kg} onChange={(n) => setFormData({ ...formData, estoque_minimo_kg: n })} className={form.campoNumero} />
+              </Campo>
+              <Campo rotulo="Localização no galpão">
+                <input
+                  type="text"
+                  value={formData.localizacao_galpao}
+                  onChange={(e) => setFormData({ ...formData, localizacao_galpao: e.target.value })}
+                  placeholder="Ex: Galpão C - Setor Congelados"
+                  className={form.campo}
+                />
+              </Campo>
+            </div>
+          </Secao>
+        </ModalFolha>
+      )}
     </div>
   );
 }

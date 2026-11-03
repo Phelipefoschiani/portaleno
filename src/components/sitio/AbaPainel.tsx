@@ -38,7 +38,7 @@ export function AbaPainel({ estado, mes, aplicar, irPara }: PropsAba) {
   return (
     <div className="space-y-5">
       {/* Faixa principal: gasto do mês + tanques */}
-      <section className="relative overflow-hidden rounded-3xl bg-[#022013] text-white">
+      <section className="relative overflow-hidden rounded-3xl bg-eno-900 text-white">
         <div className="pointer-events-none absolute -left-20 -top-24 w-80 h-80 rounded-full bg-emerald-500/20 blur-3xl" />
         <div className="pointer-events-none absolute right-0 bottom-0 w-80 h-64 rounded-full bg-amber-500/10 blur-3xl" />
         <div
@@ -90,27 +90,27 @@ export function AbaPainel({ estado, mes, aplicar, irPara }: PropsAba) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Gasto por categoria */}
-        <section className="rounded-3xl bg-white border border-slate-200 p-5">
+        <section className="rounded-3xl bg-papel border border-linha p-5">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-lg font-black tracking-tight text-slate-900">Por categoria</h2>
+            <h2 className="text-lg font-black tracking-tight text-tinta">Por categoria</h2>
             <button type="button" onClick={() => irPara?.('DESPESAS')} className="text-xs font-bold text-emerald-800 hover:underline flex items-center gap-1 cursor-pointer">
               Despesas <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
           {porCategoria.length === 0 ? (
-            <p className="py-6 text-sm text-slate-500">Nenhum gasto lançado em {rotuloMes(mes)}.</p>
+            <p className="py-6 text-sm text-cinza">Nenhum gasto lançado em {rotuloMes(mes)}.</p>
           ) : (
             <ul className="mt-4 space-y-3">
               {porCategoria.map(c => (
                 <li key={c.categoria}>
                   <div className="flex justify-between text-sm">
-                    <span className="font-bold text-slate-700">{ROTULO_CATEGORIA[c.categoria]}</span>
-                    <span className="font-black tabular-nums text-slate-900">
+                    <span className="font-bold text-tinta-2">{ROTULO_CATEGORIA[c.categoria]}</span>
+                    <span className="font-black tabular-nums text-tinta">
                       {moeda(c.valor)}
-                      <span className="ml-2 text-xs font-bold text-slate-400">{totalMes > 0 ? Math.round((c.valor / totalMes) * 100) : 0}%</span>
+                      <span className="ml-2 text-xs font-bold text-cinza-claro">{totalMes > 0 ? Math.round((c.valor / totalMes) * 100) : 0}%</span>
                     </span>
                   </div>
-                  <div className="mt-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                  <div className="mt-1 h-2 rounded-full bg-papel-3 overflow-hidden">
                     <div
                       className={`h-full rounded-full ${c.categoria.startsWith('COMBUSTIVEL') ? 'bg-gradient-to-r from-amber-500 to-amber-400' : 'bg-gradient-to-r from-emerald-700 to-emerald-500'}`}
                       style={{ width: `${maiorCat > 0 ? (c.valor / maiorCat) * 100 : 0}%` }}
@@ -123,15 +123,15 @@ export function AbaPainel({ estado, mes, aplicar, irPara }: PropsAba) {
         </section>
 
         {/* Horas por máquina */}
-        <section className="rounded-3xl bg-white border border-slate-200 p-5">
+        <section className="rounded-3xl bg-papel border border-linha p-5">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-lg font-black tracking-tight text-slate-900">Horas por máquina</h2>
+            <h2 className="text-lg font-black tracking-tight text-tinta">Horas por máquina</h2>
             <button type="button" onClick={() => irPara?.('HORAS')} className="text-xs font-bold text-emerald-800 hover:underline flex items-center gap-1 cursor-pointer">
               Horas <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
           {metricas.length === 0 ? (
-            <p className="py-6 text-sm text-slate-500">
+            <p className="py-6 text-sm text-cinza">
               Nenhuma máquina cadastrada.{' '}
               <button type="button" onClick={() => irPara?.('MAQUINAS')} className="font-bold text-emerald-800 underline cursor-pointer">
                 Cadastrar
@@ -146,13 +146,13 @@ export function AbaPainel({ estado, mes, aplicar, irPara }: PropsAba) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex justify-between gap-2 text-sm">
-                      <span className="font-bold text-slate-800 truncate">{m.maquina.nome}</span>
-                      <span className="font-black tabular-nums text-slate-900 shrink-0">{fmtNum(m.horasMes, 1)} h</span>
+                      <span className="font-bold text-tinta truncate">{m.maquina.nome}</span>
+                      <span className="font-black tabular-nums text-tinta shrink-0">{fmtNum(m.horasMes, 1)} h</span>
                     </div>
-                    <div className="mt-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="mt-1 h-1.5 rounded-full bg-papel-3 overflow-hidden">
                       <div className="h-full rounded-full bg-emerald-600" style={{ width: `${maiorHoras > 0 ? (m.horasMes / maiorHoras) * 100 : 0}%` }} />
                     </div>
-                    <div className="mt-1 text-[11px] text-slate-500 tabular-nums">
+                    <div className="mt-1 text-[11px] text-cinza tabular-nums">
                       {m.maquina.medidor === 'HODOMETRO'
                         ? m.kmPorLitro !== null
                           ? `${fmtNum(m.kmPorLitro, 1)} km/L`
@@ -171,11 +171,11 @@ export function AbaPainel({ estado, mes, aplicar, irPara }: PropsAba) {
       </div>
 
       {/* Últimos lançamentos */}
-      <section className="rounded-3xl bg-white border border-slate-200 overflow-hidden">
+      <section className="rounded-3xl bg-papel border border-linha overflow-hidden">
         <div className="px-4 sm:px-5 py-4">
-          <h2 className="text-lg font-black tracking-tight text-slate-900">Últimos lançamentos</h2>
+          <h2 className="text-lg font-black tracking-tight text-tinta">Últimos lançamentos</h2>
         </div>
-        <div className="border-t border-slate-100">
+        <div className="border-t border-linha">
           <ListaLancamentos itens={doMes.slice(0, 8)} vazio={`Nada lançado em ${rotuloMes(mes)}.`} />
         </div>
       </section>

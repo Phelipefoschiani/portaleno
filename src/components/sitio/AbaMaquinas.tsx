@@ -96,10 +96,10 @@ function FormMaquina({
       <Campo rotulo={f.medidor === 'HODOMETRO' ? 'Hodômetro inicial (km)' : 'Horímetro inicial (h)'} dica="Leitura do painel no dia do cadastro">
         <input inputMode="decimal" type="number" step="any" min="0" className={inputCls} value={f.leituraInicial} onChange={e => setF({ ...f, leituraInicial: e.target.value })} />
       </Campo>
-      <label className="flex items-center gap-3 min-h-12 px-4 rounded-xl bg-white border border-slate-200 cursor-pointer">
+      <label className="flex items-center gap-3 min-h-12 px-4 rounded-xl bg-papel border border-linha cursor-pointer">
         <input type="checkbox" className="w-5 h-5 accent-emerald-700" checked={f.ativo} onChange={e => setF({ ...f, ativo: e.target.checked })} />
-        <span className="text-sm font-bold text-slate-800">Máquina ativa</span>
-        <span className="text-xs text-slate-500 ml-auto">inativa some dos formulários</span>
+        <span className="text-sm font-bold text-tinta">Máquina ativa</span>
+        <span className="text-xs text-cinza ml-auto">inativa some dos formulários</span>
       </label>
       <ErroBox erro={erro} />
     </Folha>
@@ -116,34 +116,34 @@ export function AbaMaquinas({ estado, mes, aplicar }: PropsAba) {
       <BotaoAcao onClick={() => setEditando('NOVA')} icone={<Plus className="w-5 h-5" />} titulo="Cadastrar máquina" sub="Trator, caminhonete, roçadeira, implemento" />
 
       {ordenadas.length === 0 ? (
-        <div className="rounded-3xl bg-white border border-slate-200 p-8 text-center text-sm text-slate-500">
+        <div className="rounded-3xl bg-papel border border-linha p-8 text-center text-sm text-cinza">
           Nenhuma máquina ainda. Cadastre o trator e os outros veículos para controlar combustível e horas por máquina.
         </div>
       ) : (
-        <ul className="rounded-3xl bg-white border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+        <ul className="rounded-3xl bg-papel border border-linha divide-y divide-linha overflow-hidden">
           {ordenadas.map(({ maquina: m, leituraAtual, horasTotal }) => (
             <li key={m.id} className={`px-4 sm:px-5 py-4 flex items-center gap-3 ${m.ativo ? '' : 'opacity-60'}`}>
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${m.ativo ? 'bg-emerald-900 text-emerald-200' : 'bg-slate-200 text-slate-500'}`}>
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${m.ativo ? 'bg-emerald-900 text-emerald-200' : 'bg-linha text-cinza'}`}>
                 <IconeMaquina tipo={m.tipo} className="w-6 h-6" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="font-black text-slate-900 truncate">{m.nome}</div>
-                <div className="text-xs text-slate-500">
+                <div className="font-black text-tinta truncate">{m.nome}</div>
+                <div className="text-xs text-cinza">
                   {ROTULO_TIPO_MAQUINA[m.tipo]} · {ROTULO_COMBUSTIVEL[m.combustivel]}
                   {m.ativo ? '' : ' · inativa'}
                 </div>
               </div>
               <div className="text-right shrink-0 hidden sm:block">
-                <div className="font-black tabular-nums text-slate-900">
+                <div className="font-black tabular-nums text-tinta">
                   {fmtNum(leituraAtual, 1)} {m.medidor === 'HODOMETRO' ? 'km' : 'h'}
                 </div>
-                <div className="text-[11px] text-slate-400 tabular-nums">{fmtNum(horasTotal, 1)} h apontadas</div>
+                <div className="text-[11px] text-cinza-claro tabular-nums">{fmtNum(horasTotal, 1)} h apontadas</div>
               </div>
               <button
                 type="button"
                 onClick={() => setEditando(m)}
                 aria-label={`Editar ${m.nome}`}
-                className="w-11 h-11 shrink-0 rounded-xl border border-slate-200 text-slate-600 hover:bg-emerald-50 hover:text-emerald-800 flex items-center justify-center cursor-pointer"
+                className="w-11 h-11 shrink-0 rounded-xl border border-linha text-tinta-2 hover:bg-emerald-50 hover:text-emerald-800 flex items-center justify-center cursor-pointer"
               >
                 <Pencil className="w-4 h-4" />
               </button>

@@ -205,7 +205,7 @@ export function FormAbastecimento({
   if (ativas.length === 0) {
     return (
       <Folha titulo="Abastecer máquina" icone={<Tractor className="w-6 h-6" />} onFechar={onFechar} onSubmit={e => { e.preventDefault(); onFechar(); }} rotuloConfirmar="Entendi">
-        <p className="text-sm text-slate-600">Cadastre antes a máquina na aba <strong>Máquinas</strong> (trator, caminhonete, roçadeira…).</p>
+        <p className="text-sm text-tinta-2">Cadastre antes a máquina na aba <strong>Máquinas</strong> (trator, caminhonete, roçadeira…).</p>
       </Folha>
     );
   }
@@ -393,7 +393,7 @@ export function AbaCombustivel({ estado, mes, aplicar }: PropsAba) {
 
   return (
     <div className="space-y-5">
-      <section className="relative overflow-hidden rounded-3xl bg-[#022013] text-white p-5 sm:p-6">
+      <section className="relative overflow-hidden rounded-3xl bg-eno-900 text-white p-5 sm:p-6">
         <div className="pointer-events-none absolute -left-16 -bottom-24 w-72 h-72 rounded-full bg-amber-500/15 blur-3xl" />
         <div className="pointer-events-none absolute right-0 -top-20 w-72 h-72 rounded-full bg-emerald-400/15 blur-3xl" />
         <div className="relative flex items-start justify-between gap-3">
@@ -425,11 +425,11 @@ export function AbaCombustivel({ estado, mes, aplicar }: PropsAba) {
         <BotaoAcao onClick={() => setModal('POSTO')} tom="claro" icone={<MapPin className="w-5 h-5" />} titulo="Abasteceu no posto" sub="Fora do tanque, vira despesa" />
       </div>
 
-      <section className="rounded-3xl bg-white border border-slate-200 overflow-hidden">
+      <section className="rounded-3xl bg-papel border border-linha overflow-hidden">
         <div className="px-4 sm:px-5 pt-4 pb-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-lg font-black tracking-tight text-slate-900">Movimento de {rotuloMes(mes)}</h2>
-            <div className="text-xs text-slate-500 tabular-nums">
+            <h2 className="text-lg font-black tracking-tight text-tinta">Movimento de {rotuloMes(mes)}</h2>
+            <div className="text-xs text-cinza tabular-nums">
               entrou <strong className="text-emerald-800">{fmtNum(resumo.compradoL, 0)} L</strong> ({moeda(resumo.compradoR$)}) · saiu{' '}
               <strong className="text-sky-800">{fmtNum(resumo.consumidoL, 0)} L</strong> · posto{' '}
               <strong className="text-orange-700">{fmtNum(resumo.postoL, 0)} L</strong> ({moeda(resumo.postoR$)})
@@ -448,7 +448,7 @@ export function AbaCombustivel({ estado, mes, aplicar }: PropsAba) {
             />
           </div>
         </div>
-        <div className="border-t border-slate-100">
+        <div className="border-t border-linha">
           <ListaLancamentos itens={lista} vazio="Nenhum movimento de combustível neste mês." />
         </div>
       </section>

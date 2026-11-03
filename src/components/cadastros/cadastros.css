@@ -1,0 +1,23 @@
+/* Formulários de cadastro no celular: área de toque de 44px e texto de 16px
+   (evita o zoom automático do iPhone ao focar o campo). */
+@media (max-width: 639px) {
+  .form-cadastro input:not([type='checkbox']):not([type='radio']):not([type='color']):not([type='file']):not([type='range']),
+  .form-cadastro select {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .form-cadastro textarea {
+    font-size: 16px;
+  }
+  /* Grades de campos viram uma coluna; nada de colunas espremidas */
+  .form-cadastro .grid:not(.manter-colunas) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .form-cadastro .grid:not(.manter-colunas) > * {
+    grid-column: auto;
+  }
+  /* Tabelas dentro do formulário rolam só por dentro */
+  .form-cadastro table {
+    font-size: 13px;
+  }
+}

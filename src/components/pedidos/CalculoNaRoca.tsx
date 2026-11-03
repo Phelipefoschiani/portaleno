@@ -43,6 +43,12 @@ import { CampoAnexoComprovante, ArquivoComprovante, ModalComprovantes, useExtrat
 import { Agricultor } from '../../data/mockStore';
 import { carregarAgricultores, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
 import { hojeISO, paraISO, formatarDataBR, somarDias } from '../../lib/datas';
+import { EMPRESA } from '../../lib/empresa';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, CampoBusca, Segmentado, SeletorFiltro } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
 
 interface Props {
   onNavigate?: (pageId: string) => void;
@@ -479,13 +485,13 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(16);
       doc.setTextColor(verdeEscuro[0], verdeEscuro[1], verdeEscuro[2]);
-      doc.text('GRUPO ENO AGROINDUSTRIAL', 14, 20);
+      doc.text(EMPRESA.razao.toUpperCase(), 14, 20);
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       doc.setTextColor(cinzaTexto[0], cinzaTexto[1], cinzaTexto[2]);
       doc.text('Indústria & Comércio de Féculas e Farinhas de Mandioca', 14, 25);
-      doc.text('CNPJ: 14.882.301/0001-92 • Rodovia PR-218, KM 14 • Paranavaí - PR', 14, 29);
+      doc.text(`CNPJ: ${EMPRESA.cnpj} • ${EMPRESA.endereco} • ${EMPRESA.telefone}`, 14, 29);
 
       // Caixa do Ticket
       doc.setFont('helvetica', 'bold');
@@ -594,7 +600,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(10);
           doc.setTextColor(verdeEscuro[0], verdeEscuro[1], verdeEscuro[2]);
-          doc.text(`GRUPO ENO AGROINDUSTRIAL - Romaneio ${ticketModal.numero_ticket} (Continuação)`, 14, 20);
+          doc.text(`${EMPRESA.razao.toUpperCase()} - Romaneio ${ticketModal.numero_ticket} (Continuação)`, 14, 20);
           currentY = 26;
           desenharCabecalhoTabela(currentY);
           currentY += 6;
@@ -637,7 +643,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(10);
         doc.setTextColor(verdeEscuro[0], verdeEscuro[1], verdeEscuro[2]);
-        doc.text(`GRUPO ENO AGROINDUSTRIAL - Romaneio ${ticketModal.numero_ticket} (Totais)`, 14, 20);
+        doc.text(`${EMPRESA.razao.toUpperCase()} - Romaneio ${ticketModal.numero_ticket} (Totais)`, 14, 20);
         currentY = 26;
       } else {
         currentY += 4;
@@ -694,7 +700,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       doc.setFontSize(8);
       doc.setTextColor(pretoTexto[0], pretoTexto[1], pretoTexto[2]);
       doc.text(ticketModal.fornecedor_nome, 57.5, assinaturasY + 4, { align: 'center' });
-      doc.text(ticketModal.pesador_responsavel || 'Grupo ENO Agroindustrial', 152.5, assinaturasY + 4, { align: 'center' });
+      doc.text(ticketModal.pesador_responsavel || EMPRESA.razao, 152.5, assinaturasY + 4, { align: 'center' });
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7);
@@ -760,325 +766,262 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
     };
   }, [calculosFiltrados]);
 
+  const abrirDefinirPagamento = (item: CalculoNaRoca) => {
+    setModalPagamento(item);
+    setDataPagamentoOuVenc(new Date().toLocaleDateString('pt-BR'));
+    setVencimentoSaldo(somarDias(hojeISO(), 30));
+    setObsPagamento('');
+    setAnexoPagamento(null);
+  };
+
+  // Situação de pagamento (mesma regra de antes; só a apresentação mudou)
+  const situacaoPagamento = (item: CalculoNaRoca, grande = false) => {
+    const status = extratoPorId.get(item.id)?.status;
+    if (item.situacao_pagamento !== 'PENDENTE_DEFINICAO' && status === 'PAGO') {
+      return <StatusChip tom="pago">{item.situacao_pagamento === 'JA_PAGO' ? 'Pago no ato' : 'Pago'}</StatusChip>;
+    }
+    if (item.situacao_pagamento !== 'PENDENTE_DEFINICAO' && status === 'VENCIDO') {
+      return <StatusChip tom="vencido">Vencido</StatusChip>;
+    }
+    if (item.situacao_pagamento === 'JA_PAGO') return <StatusChip tom="pago">Pago no ato</StatusChip>;
+    if (item.situacao_pagamento === 'A_PAGAR') return <StatusChip tom="producao">A pagar (programado)</StatusChip>;
+    if (item.situacao_pagamento === 'ADIANTAMENTO_PARCIAL') return <StatusChip tom="producao">Adiantamento parcial</StatusChip>;
+    return (
+      <button
+        type="button"
+        onClick={() => abrirDefinirPagamento(item)}
+        className={`inline-flex items-center justify-center gap-1 rounded-[5px] bg-st-aguardando-bg text-st-aguardando font-semibold hover:brightness-95 cursor-pointer transition focus-visible:outline-2 focus-visible:outline-ouro ${
+          grande ? 'h-10 px-3 text-[12.5px] w-full' : 'h-7 px-2.5 text-[12px]'
+        }`}
+        title="Definir se já pagou ou se é a pagar"
+      >
+        <AlertCircle className="w-3.5 h-3.5" />
+        Definir pagamento
+      </button>
+    );
+  };
+
+  const kgBR = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 });
+  const filtroDataAtivo = filtroMes !== 'TODOS' || filtroAno !== 'TODOS';
+
   return (
-    <div className="flex-1 w-full h-full flex flex-col bg-slate-50 overflow-hidden text-slate-800">
-      
-      {/* 1. TOPO DA PÁGINA */}
-      <div className="px-6 py-4 bg-white border-b border-slate-200 shrink-0 flex flex-wrap items-center justify-between gap-4 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-emerald-950 text-emerald-400 flex items-center justify-center shadow-sm border border-emerald-800">
-            <Tractor className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-              Cálculo na Roça
-            </h2>
-          </div>
-        </div>
+    <div className="flex-1 w-full h-full flex flex-col bg-papel-2 overflow-hidden text-tinta">
 
-        {/* Botão de Nova Pesagem */}
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={abrirModalNovo}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white text-xs sm:text-sm font-bold shadow-md hover:shadow-lg transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nova Pesagem</span>
-          </button>
-        </div>
-      </div>
+      <div className="mx-auto w-full max-w-[1700px] shrink-0">
+        <CabecalhoPagina
+          titulo="Cálculo na roça"
+          resumo={
+            metricas.totalPesagens === 0 ? (
+              'Nenhuma pesagem no período.'
+            ) : (
+              <>
+                {metricas.totalPesagens} {metricas.totalPesagens === 1 ? 'pesagem' : 'pesagens'} · {(metricas.pesoTotalKg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} t · {metricas.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                {metricas.pendentes > 0 && (
+                  <span className="text-st-aguardando font-semibold"> · {metricas.pendentes} sem pagamento definido</span>
+                )}
+              </>
+            )
+          }
+          acoes={
+            <BotaoPrimario onClick={abrirModalNovo} className="w-full sm:w-auto h-10 sm:h-9">
+              <Plus className="w-4 h-4" />
+              Nova pesagem
+            </BotaoPrimario>
+          }
+        />
 
-      {/* AVISO DE SUCESSO / FEEDBACK */}
-      {mensagemAviso && (
-        <div className="mx-6 mt-3 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs font-semibold flex items-center justify-between shadow-xs animate-fadeIn shrink-0">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0" />
-            <span>{mensagemAviso}</span>
+        {mensagemAviso && (
+          <div className="mx-4 sm:mx-6 mb-3 pl-3 pr-1 py-1 bg-st-pago-bg rounded-md text-st-pago text-[12.5px] font-semibold flex items-center justify-between gap-2 animate-fadeIn">
+            <div className="flex items-center gap-2 min-w-0">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{mensagemAviso}</span>
+            </div>
+            <button onClick={() => setMensagemAviso(null)} className="inline-flex items-center justify-center w-10 h-10 shrink-0 rounded-md hover:bg-st-pago/10 cursor-pointer" aria-label="Fechar aviso">
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <button onClick={() => setMensagemAviso(null)} className="text-emerald-800 hover:text-emerald-950 p-1 cursor-pointer">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+        )}
 
-      {/* 2. CARDS DE RESUMO DE MÉTRICAS (SEM O CARD DE SACOS PESADOS CONFORME SOLICITADO) */}
-      <div className="px-6 pt-4 pb-2 grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
-        {/* Pesagens */}
-        <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
-            <FileText className="w-4.5 h-4.5" />
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Pesagens</span>
-            <strong className="text-base font-black text-slate-900">{metricas.totalPesagens}</strong>
-          </div>
-        </div>
-
-        {/* Peso Total (Roça) */}
-        <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-lime-100 text-lime-800 flex items-center justify-center font-bold">
-            <Scale className="w-4.5 h-4.5" />
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Peso Total (Roça)</span>
-            <strong className="text-base font-black text-slate-900 font-mono">
-              {(metricas.pesoTotalKg / 1000).toFixed(2)} Ton{' '}
-              <span className="text-[11px] font-normal text-slate-500">
-                ({metricas.pesoTotalKg.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg)
-              </span>
-            </strong>
-          </div>
-        </div>
-
-        {/* Total Comprado */}
-        <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-900 flex items-center justify-center font-bold">
-            <DollarSign className="w-4.5 h-4.5" />
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Comprado</span>
-            <strong className="text-base font-black text-emerald-900 font-mono">
-              {metricas.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </strong>
-          </div>
-        </div>
-
-        {/* Definir Pagamento */}
-        <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 shadow-xs flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
-            <Clock className="w-4.5 h-4.5" />
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block">Definir Pagamento</span>
-            <strong className="text-base font-black text-amber-950 font-mono">
-              {metricas.pendentes} {metricas.pendentes === 1 ? 'pendente' : 'pendentes'}
-            </strong>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. BARRA DE BUSCA E FILTROS DE MÊS E ANO */}
-      <div className="px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="relative flex-1 min-w-[240px] max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por agricultor, lote ou local..."
-            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-700 shadow-xs"
-          />
-        </div>
-
-        {/* Filtros de Mês e Ano */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Seletor de Mês */}
-          <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-slate-200 text-xs shadow-xs">
-            <Calendar className="w-4 h-4 text-emerald-800 shrink-0" />
-            <span className="text-[11px] font-bold text-slate-400 uppercase">Mês:</span>
-            <select
-              value={filtroMes}
-              onChange={(e) => setFiltroMes(e.target.value)}
-              className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer"
-            >
-              <option value="TODOS">Todos os Meses</option>
-              <option value="1">Janeiro (01)</option>
-              <option value="2">Fevereiro (02)</option>
-              <option value="3">Março (03)</option>
-              <option value="4">Abril (04)</option>
-              <option value="5">Maio (05)</option>
-              <option value="6">Junho (06)</option>
-              <option value="7">Julho (07)</option>
-              <option value="8">Agosto (08)</option>
-              <option value="9">Setembro (09)</option>
-              <option value="10">Outubro (10)</option>
-              <option value="11">Novembro (11)</option>
-              <option value="12">Dezembro (12)</option>
-            </select>
-          </div>
-
-          {/* Seletor de Ano */}
-          <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-slate-200 text-xs shadow-xs">
-            <span className="text-[11px] font-bold text-slate-400 uppercase">Ano:</span>
-            <select
-              value={filtroAno}
-              onChange={(e) => setFiltroAno(e.target.value)}
-              className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer"
-            >
-              <option value="TODOS">Todos os Anos</option>
+        <BarraFiltros>
+          <CampoBusca valor={busca} onChange={setBusca} placeholder="Buscar agricultor, lote ou local" className="w-full md:w-80" />
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <SeletorFiltro value={filtroMes} onChange={(e) => setFiltroMes(e.target.value)} aria-label="Mês" className="flex-1 md:flex-none">
+              <option value="TODOS">Todos os meses</option>
+              <option value="1">Janeiro</option>
+              <option value="2">Fevereiro</option>
+              <option value="3">Março</option>
+              <option value="4">Abril</option>
+              <option value="5">Maio</option>
+              <option value="6">Junho</option>
+              <option value="7">Julho</option>
+              <option value="8">Agosto</option>
+              <option value="9">Setembro</option>
+              <option value="10">Outubro</option>
+              <option value="11">Novembro</option>
+              <option value="12">Dezembro</option>
+            </SeletorFiltro>
+            <SeletorFiltro value={filtroAno} onChange={(e) => setFiltroAno(e.target.value)} aria-label="Ano" className="flex-1 md:flex-none">
+              <option value="TODOS">Todos os anos</option>
               {anosDisponiveis.map(ano => (
                 <option key={ano} value={ano.toString()}>{ano}</option>
               ))}
-            </select>
+            </SeletorFiltro>
+            {filtroDataAtivo && (
+              <BotaoSecundario
+                onClick={() => {
+                  setFiltroMes('TODOS');
+                  setFiltroAno('TODOS');
+                }}
+                className="h-8 px-2.5 shrink-0"
+                title="Limpar filtro de mês e ano"
+              >
+                Limpar
+              </BotaoSecundario>
+            )}
           </div>
-
-          {/* Limpar Filtros de Data */}
-          {(filtroMes !== 'TODOS' || filtroAno !== 'TODOS') && (
-            <button
-              onClick={() => {
-                setFiltroMes('TODOS');
-                setFiltroAno('TODOS');
-              }}
-              className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-700 text-xs font-bold transition-colors cursor-pointer"
-              title="Limpar filtro de mês e ano"
-            >
-              Limpar Filtro
-            </button>
-          )}
-        </div>
+        </BarraFiltros>
       </div>
 
-      {/* 4. TABELA DE PESAGENS NA ROÇA (COM COLUNAS EXATAS SOLICITADAS) */}
-      <div className="flex-1 overflow-auto px-6 pb-6">
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
-              <tr>
-                <th className="py-3.5 px-4">Lote</th>
-                <th className="py-3.5 px-4">Data</th>
-                <th className="py-3.5 px-4">Agricultor</th>
-                <th className="py-3.5 px-4 text-right">Preço Pago kg</th>
-                <th className="py-3.5 px-3 text-center">Sacos</th>
-                <th className="py-3.5 px-4 text-right">Peso Líquido</th>
-                <th className="py-3.5 px-4 text-right">Total</th>
-                <th className="py-3.5 px-4 text-center">Situação de Pagamento</th>
-                <th className="py-3.5 px-4 text-center">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {calculosFiltrados.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
-                    <Tractor className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                    <p className="font-bold text-slate-600 text-sm">Nenhuma pesagem na roça encontrada.</p>
-                    <p className="text-xs text-slate-400 mt-0.5">Clique em "+ Nova Pesagem de Mandioca" para lançar a pesagem saco por saco.</p>
-                  </td>
-                </tr>
-              ) : (
-                calculosFiltrados.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                    {/* Lote */}
-                    <td className="py-3 px-4 font-mono font-bold text-slate-900">
-                      <span className="p-1 px-2 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs">
-                        {item.numero_ticket}
-                      </span>
-                    </td>
-
-                    {/* Data */}
-                    <td className="py-3 px-4 font-bold text-slate-800">
-                      {formatarDataBR(item.data)}
-                    </td>
-
-                    {/* Agricultor */}
-                    <td className="py-3 px-4">
-                      <div className="font-bold text-slate-900">{item.fornecedor_nome}</div>
-                      {item.fornecedor_propriedade && (
-                        <div className="text-[11px] text-emerald-700 font-semibold">{item.fornecedor_propriedade}</div>
-                      )}
-                      <div className="text-[10px] text-slate-400 font-mono">{item.fornecedor_cidade_uf}</div>
-                    </td>
-
-                    {/* Preço Pago kg */}
-                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-700">
-                      R$ {item.preco_por_kg.toFixed(2)}/kg
-                    </td>
-
-                    {/* Sacos */}
-                    <td className="py-3 px-3 text-center">
-                      <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-200 font-mono font-bold">
-                        {item.total_sacos} scs
-                      </span>
-                    </td>
-
-                    {/* Peso líquido (bruto - desconto) */}
-                    <td className="py-3 px-4 text-right font-mono">
-                      <div className="font-bold text-slate-900">
-                        {item.peso_total_kg.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg
-                      </div>
-                      {pesosDoCalculo(item).desconto > 0 && (
-                        <div className="text-[10px] text-amber-700" title={descricaoDesconto(item)}>
-                          bruto {pesosDoCalculo(item).bruto.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} − {pesosDoCalculo(item).desconto.toLocaleString('pt-BR', { maximumFractionDigits: 3 })}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px] px-4 sm:px-6 pb-6">
+          {calculosFiltrados.length === 0 ? (
+            <div className="bg-papel border border-linha rounded-md">
+              <EstadoVazio
+                titulo={calculos.length === 0 ? 'Nenhuma pesagem lançada' : 'Nada encontrado'}
+                texto={
+                  calculos.length === 0
+                    ? 'Lance a pesagem da mandioca saco por saco na roça; o valor do agricultor sai do peso líquido × preço por kg.'
+                    : 'Troque o mês/ano ou limpe a busca.'
+                }
+                acao={calculos.length === 0 ? <BotaoPrimario onClick={abrirModalNovo}><Plus className="w-4 h-4" />Nova pesagem</BotaoPrimario> : undefined}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Celular: cartões */}
+              <ul className="sm:hidden bg-papel border border-linha rounded-md">
+                {calculosFiltrados.map(item => {
+                  const pesos = pesosDoCalculo(item);
+                  return (
+                    <li key={item.id} className="px-3.5 py-3 border-b border-linha last:border-b-0">
+                      <button type="button" onClick={() => setTicketModal(item)} className="w-full text-left">
+                        <div className="text-[11.5px] text-cinza tabular-nums">
+                          {item.numero_ticket} · {formatarDataBR(item.data)} · {item.total_sacos} sacos
                         </div>
-                      )}
-                    </td>
-
-                    {/* Total */}
-                    <td className="py-3 px-4 text-right font-mono font-black text-emerald-950 text-sm">
-                      {item.valor_total_estimado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </td>
-
-                    {/* Situação de Pagamento */}
-                    <td className="py-3 px-4 text-center">
-                      {item.situacao_pagamento !== 'PENDENTE_DEFINICAO' && extratoPorId.get(item.id)?.status === 'PAGO' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px] border border-emerald-300">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-700" />
-                          <span>{item.situacao_pagamento === 'JA_PAGO' ? 'Já Pago no Ato' : 'Pago'}</span>
-                        </span>
-                      ) : item.situacao_pagamento !== 'PENDENTE_DEFINICAO' && extratoPorId.get(item.id)?.status === 'VENCIDO' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-bold text-[11px] border border-red-300">
-                          <AlertCircle className="w-3 h-3" />
-                          <span>Vencido</span>
-                        </span>
-                      ) : item.situacao_pagamento === 'JA_PAGO' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px] border border-emerald-300">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-700" />
-                          <span>Já Pago no Ato</span>
-                        </span>
-                      ) : item.situacao_pagamento === 'A_PAGAR' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 font-bold text-[11px] border border-blue-300">
-                          <Clock className="w-3 h-3 text-blue-700" />
-                          <span>A Pagar (Programado)</span>
-                        </span>
-                      ) : item.situacao_pagamento === 'ADIANTAMENTO_PARCIAL' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-100 text-purple-800 font-bold text-[11px] border border-purple-300">
-                          <span>Adiantamento Parcial</span>
-                        </span>
-                      ) : (
+                        <div className="text-[14px] font-bold text-tinta truncate">{item.fornecedor_nome}</div>
+                        <div className="text-[11.5px] text-cinza truncate">
+                          {[item.fornecedor_propriedade, item.fornecedor_cidade_uf].filter(Boolean).join(' · ')}
+                        </div>
+                        <div className="flex items-end justify-between mt-2">
+                          <span className="text-[11.5px] text-cinza tabular-nums">
+                            {kgBR(item.peso_total_kg)} kg × R$ {item.preco_por_kg.toFixed(2)}
+                            {pesos.desconto > 0 && <span className="text-st-aguardando"> (−{kgBR(pesos.desconto)})</span>}
+                          </span>
+                          <span className="text-[17px] font-extrabold tracking-[-0.01em] tabular-nums text-tinta">
+                            {item.valor_total_estimado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </span>
+                        </div>
+                      </button>
+                      <div className="flex items-center gap-2 mt-2.5">
+                        <div className="flex-1 min-w-0 [&>span]:h-10 [&>span]:w-full [&>span]:justify-center">{situacaoPagamento(item, true)}</div>
                         <button
-                          onClick={() => {
-                            setModalPagamento(item);
-                            setDataPagamentoOuVenc(new Date().toLocaleDateString('pt-BR'));
-                            setVencimentoSaldo(somarDias(hojeISO(), 30));
-                            setObsPagamento('');
-                            setAnexoPagamento(null);
-                          }}
-                          className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-xs cursor-pointer transition-colors"
-                          title="Clique para definir se já pagou ou se é a pagar"
-                        >
-                          <AlertCircle className="w-3 h-3" />
-                          <span>Definir Pagamento</span>
-                        </button>
-                      )}
-                    </td>
-
-                    {/* Ações (Apenas o botão do olhinho para visualizar) */}
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
+                          type="button"
                           onClick={() => setComprovantesDe(item)}
-                          className={`p-1.5 rounded-lg transition-colors cursor-pointer shadow-xs border ${
-                            comComprovante.has(item.id)
-                              ? 'bg-slate-900 hover:bg-slate-800 text-white border-slate-900'
-                              : 'bg-white hover:bg-slate-100 text-slate-400 border-slate-200'
+                          className={`w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-md border ${
+                            comComprovante.has(item.id) ? 'bg-eno-800 text-white border-eno-800' : 'border-linha-forte text-tinta-2'
                           }`}
-                          title={comComprovante.has(item.id) ? 'Ver / baixar comprovante de pagamento' : 'Anexar comprovante de pagamento'}
+                          aria-label={comComprovante.has(item.id) ? 'Ver comprovante de pagamento' : 'Anexar comprovante de pagamento'}
                         >
                           <FileCheck className="w-4 h-4" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => setTicketModal(item)}
-                          className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition-colors cursor-pointer border border-emerald-200 shadow-xs"
-                          title="Visualizar Romaneio / Ticket de Pesagem"
+                          className="w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-md border border-linha-forte text-tinta-2"
+                          aria-label={`Ver ticket ${item.numero_ticket}`}
                         >
-                          <Eye className="w-4 h-4 text-emerald-800" />
+                          <Eye className="w-4 h-4" />
                         </button>
                       </div>
-                    </td>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {/* A partir de sm: tabela densa */}
+              <TabelaDados className="hidden sm:block">
+                <thead className={tabela.thead}>
+                  <tr>
+                    <Th>Ticket</Th>
+                    <Th>Data</Th>
+                    <Th>Agricultor</Th>
+                    <Th numero>Preço/kg</Th>
+                    <Th numero>Sacos</Th>
+                    <Th numero>Peso líquido</Th>
+                    <Th numero>Total</Th>
+                    <Th>Pagamento</Th>
+                    <Th className="text-right">Ações</Th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {calculosFiltrados.map(item => {
+                    const pesos = pesosDoCalculo(item);
+                    return (
+                      <tr key={item.id} className={tabela.tr}>
+                        <Td className="font-semibold text-tinta tabular-nums whitespace-nowrap">{item.numero_ticket}</Td>
+                        <Td className="tabular-nums whitespace-nowrap">{formatarDataBR(item.data)}</Td>
+                        <Td className="max-w-[260px]">
+                          <div className="font-semibold text-tinta truncate">{item.fornecedor_nome}</div>
+                          <div className="text-[11.5px] text-cinza truncate">
+                            {[item.fornecedor_propriedade, item.fornecedor_cidade_uf].filter(Boolean).join(' · ')}
+                          </div>
+                        </Td>
+                        <Td numero>R$ {item.preco_por_kg.toFixed(2)}</Td>
+                        <Td numero>{item.total_sacos}</Td>
+                        <Td numero>
+                          <div className="font-semibold text-tinta">{kgBR(item.peso_total_kg)} kg</div>
+                          {pesos.desconto > 0 && (
+                            <div className="text-[11px] text-st-aguardando" title={descricaoDesconto(item)}>
+                              bruto {pesos.bruto.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} − {pesos.desconto.toLocaleString('pt-BR', { maximumFractionDigits: 3 })}
+                            </div>
+                          )}
+                        </Td>
+                        <Td numero>
+                          <span className="font-bold text-tinta text-[13.5px]">
+                            {item.valor_total_estimado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </span>
+                        </Td>
+                        <Td className="whitespace-nowrap">{situacaoPagamento(item)}</Td>
+                        <Td className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setComprovantesDe(item)}
+                              className={`inline-flex items-center justify-center h-7 w-7 rounded-[5px] transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro ${
+                                comComprovante.has(item.id) ? 'bg-eno-800 hover:bg-eno-900 text-white' : 'text-cinza hover:bg-papel-3 hover:text-tinta-2'
+                              }`}
+                              title={comComprovante.has(item.id) ? 'Ver / baixar comprovante de pagamento' : 'Anexar comprovante de pagamento'}
+                              aria-label="Comprovante de pagamento"
+                            >
+                              <FileCheck className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setTicketModal(item)}
+                              className="inline-flex items-center gap-1 h-7 px-2 rounded-[5px] text-tinta-2 hover:bg-papel-3 text-[12px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                              title="Ver romaneio / ticket de pesagem"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> Ticket
+                            </button>
+                          </div>
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </TabelaDados>
+            </>
+          )}
         </div>
       </div>
 
@@ -1086,52 +1029,52 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       {/* 5. MODAL NOVA PESAGEM DE MANDIOCA (AGRICULTOR, DATA, LOCAL AUTO, LISTA)    */}
       {/* ========================================================================= */}
       {modalNovo && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-5xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Topo do Modal */}
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-700 flex items-center justify-center text-emerald-400">
+                <div className="w-10 h-10 rounded-md bg-eno-950 border border-eno-700 flex items-center justify-center text-ouro-claro">
                   <Tractor className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="font-bold text-sm sm:text-base text-white">
                     Nova Pesagem de Mandioca na Roça (Saco a Saco)
                   </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Lançamento de pesagem individual na colheita • Grupo ENO Agroindustrial
+                  <p className="text-[11px] text-cinza">
+                    Lançamento de pesagem individual na colheita • {EMPRESA.razao}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setModalNovo(false)}
-                className="p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-eno-800 text-eno-100 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Conteúdo do Formulário */}
-            <form onSubmit={handleSalvarCalculo} className="p-6 overflow-y-auto space-y-5 text-xs flex-1">
+            <form onSubmit={handleSalvarCalculo} className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs flex-1">
               
               {/* DADOS DO AGRICULTOR, DATA E LOCAL AUTOMÁTICO */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px] block flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-emerald-700" />
+              <div className="p-4 rounded-md bg-papel-2 border border-linha space-y-3">
+                <span className="font-bold text-tinta uppercase tracking-wider text-[11px] block flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-eno-700" />
                   1. Dados do Agricultor & Negociação
                 </span>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {/* Agricultor (Apenas Agricultor) */}
                   <div className="sm:col-span-2">
-                    <label className="block font-bold text-slate-700 mb-1">
+                    <label className="block font-bold text-tinta-2 mb-1">
                       Agricultor (Produtor Rural) *
                     </label>
                     <select
                       value={parceiroId}
                       onChange={(e) => setParceiroId(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-bold focus:outline-none focus:border-emerald-700 cursor-pointer shadow-xs"
+                      className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 text-tinta font-bold focus:outline-none focus:border-eno-700 cursor-pointer shadow-xs"
                     >
                       {agricultores.map(a => (
                         <option key={a.id} value={a.id}>
@@ -1143,48 +1086,48 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
 
                   {/* Data da Pesagem (Apenas Data - Horário retirado) */}
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Data da Pesagem *</label>
+                    <label className="block font-bold text-tinta-2 mb-1">Data da Pesagem *</label>
                     <input
                       type="text"
                       required
                       value={dataPesagem}
                       onChange={(e) => setDataPesagem(e.target.value)}
                       placeholder="DD/MM/AAAA"
-                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold text-slate-800 focus:outline-none focus:border-emerald-700 shadow-xs"
+                      className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 tabular-nums font-bold text-tinta focus:outline-none focus:border-eno-700 shadow-xs"
                     />
                   </div>
 
                   {/* Local da Roça (Automático da Propriedade do Agricultor) */}
                   <div className="sm:col-span-2">
-                    <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                    <label className="block font-bold text-tinta-2 mb-1 flex items-center justify-between">
                       <span className="flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-emerald-700" />
+                        <MapPin className="w-3.5 h-3.5 text-eno-700" />
                         Local da Pesagem (Propriedade do Agricultor)
                       </span>
-                      <span className="text-[10px] text-emerald-700 font-bold uppercase bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      <span className="text-[10px] text-eno-700 font-bold uppercase bg-eno-50 px-2 py-0.5 rounded border border-eno-100">
                         Automático
                       </span>
                     </label>
-                    <div className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium flex items-center gap-2">
-                      <span className="font-bold text-emerald-950">{localAutomatico}</span>
+                    <div className="w-full bg-papel-3/60 border border-linha rounded-lg px-3 py-2 text-tinta font-medium flex items-center gap-2">
+                      <span className="font-bold text-eno-800">{localAutomatico}</span>
                     </div>
                   </div>
 
                   {/* Preço por KG */}
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Preço Pago (R$/KG) *</label>
+                    <label className="block font-bold text-tinta-2 mb-1">Preço Pago (R$/KG) *</label>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">R$</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-cinza font-bold">R$</span>
                       <input
                         type="text"
                         required
                         value={precoPorKg}
                         onChange={(e) => setPrecoPorKg(e.target.value)}
                         placeholder="0.62"
-                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700 shadow-xs"
+                        className="w-full pl-9 pr-3 py-2 bg-papel border border-linha-forte rounded-lg tabular-nums font-bold text-tinta focus:outline-none focus:border-eno-700 shadow-xs"
                       />
                     </div>
-                    <span className="text-[10px] text-slate-500 font-mono mt-0.5 block">
+                    <span className="text-[10px] text-cinza tabular-nums mt-0.5 block">
                       = R$ {( (parseFloat(precoPorKg.replace(',', '.')) || 0) * 1000 ).toFixed(2)} por Tonelada
                     </span>
                   </div>
@@ -1192,16 +1135,16 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
               </div>
 
               {/* ÁREA DE LANÇAMENTO SACO A SACO (COM LISTA, EDIÇÃO E EXCLUSÃO) */}
-              <div className="p-4 rounded-2xl bg-white border-2 border-emerald-900/20 space-y-4 shadow-xs">
-                <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-100">
+              <div className="p-4 rounded-md bg-papel border-2 border-eno-700/20 space-y-4 shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-linha">
                   <div className="flex items-center gap-2">
-                    <Scale className="w-4.5 h-4.5 text-emerald-800" />
+                    <Scale className="w-4.5 h-4.5 text-eno-800" />
                     <div>
-                      <h4 className="font-black text-sm text-slate-900 uppercase tracking-wide">
+                      <h4 className="font-extrabold text-sm text-tinta uppercase tracking-wide">
                         2. Lançamento dos Pesos Saco a Saco
                       </h4>
-                      <p className="text-[11px] text-slate-500 font-medium">
-                        Até 3 casas decimais (ex: 50.850 kg). Digite o peso e aperte <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-[10px] text-slate-700">ENTER</kbd> para inserir.
+                      <p className="text-[11px] text-cinza font-medium">
+                        Até 3 casas decimais (ex: 50.850 kg). Digite o peso e aperte <kbd className="px-1.5 py-0.5 bg-papel-3/60 border border-linha-forte rounded tabular-nums text-[10px] text-tinta-2">ENTER</kbd> para inserir.
                       </p>
                     </div>
                   </div>
@@ -1210,7 +1153,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                     <button
                       type="button"
                       onClick={() => handleAdicionarLotePadrao(50.0, 5)}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-900 text-xs font-bold transition-colors cursor-pointer border border-emerald-200"
+                      className="px-3 py-1.5 rounded-lg bg-eno-50 hover:bg-eno-100 text-eno-800 text-xs font-bold transition-colors cursor-pointer border border-eno-100"
                       title="Adiciona 5 sacos em torno de 50kg para agilizar"
                     >
                       + 5 Sacos Rápidos (~50kg)
@@ -1220,7 +1163,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                       <button
                         type="button"
                         onClick={handleLimparSacos}
-                        className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-700 text-xs font-bold transition-colors cursor-pointer"
+                        className="px-3 py-1.5 rounded-lg bg-papel-3/60 hover:bg-st-vencido-bg text-tinta-2 hover:text-st-vencido text-xs font-bold transition-colors cursor-pointer"
                       >
                         Limpar Todos
                       </button>
@@ -1229,9 +1172,9 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                 </div>
 
                 {/* Input de Pesagem (até 3 casas após a vírgula) */}
-                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                <div className="flex items-center gap-3 p-3 bg-papel-2 rounded-md border border-linha">
                   <div className="flex-1 max-w-sm">
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    <label className="block text-[11px] font-bold text-tinta-2 mb-1">
                       Peso do Saco #{sacosForm.length + 1} (em KG - até 3 casas decimais):
                     </label>
                     <div className="relative">
@@ -1250,9 +1193,9 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                           }
                         }}
                         placeholder="Ex: 51.345"
-                        className="w-full px-3.5 py-2 rounded-xl border-2 border-emerald-800 bg-white font-mono font-black text-slate-900 text-base focus:outline-none focus:ring-2 focus:ring-emerald-700/20 shadow-xs"
+                        className="w-full px-3.5 py-2 rounded-md border-2 border-eno-700 bg-papel tabular-nums font-extrabold text-tinta text-base focus:outline-none focus:ring-2 focus:ring-eno-700/20 shadow-xs"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono font-bold text-xs text-slate-400">
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 tabular-nums font-bold text-xs text-cinza">
                         KG
                       </span>
                     </div>
@@ -1261,18 +1204,18 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                   <button
                     type="button"
                     onClick={() => handleAdicionarSaco()}
-                    className="mt-5 px-5 py-2.5 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm transition-all"
+                    className="mt-5 px-5 py-2.5 rounded-md bg-eno-900 hover:bg-eno-950 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm transition-all"
                   >
                     <Plus className="w-4 h-4" />
                     <span>+ Adicionar Saco #{sacosForm.length + 1}</span>
                   </button>
 
-                  <span className="mt-5 text-slate-400 text-xs hidden sm:inline">ou pressione <strong>ENTER</strong></span>
+                  <span className="mt-5 text-cinza text-xs hidden sm:inline">ou pressione <strong>ENTER</strong></span>
                 </div>
 
                 {/* RELAÇÃO DE SACOS EM MODO LISTA COM EDITAR E EXCLUIR */}
-                <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
-                  <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                <div className="rounded-md border border-linha overflow-hidden bg-papel">
+                  <div className="bg-papel-3/60 px-4 py-2 border-b border-linha flex items-center justify-between text-[11px] font-bold text-tinta-2 uppercase tracking-wider">
                     <div className="w-20">Saco</div>
                     <div className="w-32 text-right">Peso (kg)</div>
                     <div className="w-32 text-right">Preço Pago (kg)</div>
@@ -1280,12 +1223,12 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                     <div className="w-24 text-center">Ações</div>
                   </div>
 
-                  <div className="max-h-[240px] overflow-y-auto divide-y divide-slate-100">
+                  <div className="max-h-[240px] overflow-y-auto divide-y divide-linha">
                     {sacosForm.length === 0 ? (
-                      <div className="p-8 text-center bg-slate-50 text-slate-400">
-                        <Scale className="w-8 h-8 mx-auto text-slate-300 mb-1.5" />
-                        <p className="font-bold text-slate-600">Nenhum saco adicionado ainda.</p>
-                        <p className="text-[11px] text-slate-400">Digite o peso acima para ir montando a lista saco por saco.</p>
+                      <div className="p-8 text-center bg-papel-2 text-cinza">
+                        <Scale className="w-8 h-8 mx-auto text-cinza-claro mb-1.5" />
+                        <p className="font-bold text-tinta-2">Nenhum saco adicionado ainda.</p>
+                        <p className="text-[11px] text-cinza">Digite o peso acima para ir montando a lista saco por saco.</p>
                       </div>
                     ) : (
                       sacosForm.map((saco) => {
@@ -1297,18 +1240,18 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                           <div
                             key={saco.numero}
                             className={`px-4 py-2 flex items-center justify-between transition-colors ${
-                              emEdicao ? 'bg-amber-50/80' : 'hover:bg-slate-50/80'
+                              emEdicao ? 'bg-st-aguardando-bg/80' : 'hover:bg-papel-2/80'
                             }`}
                           >
                             {/* Número do Saco */}
-                            <div className="w-20 font-bold text-slate-900 font-mono flex items-center gap-1.5">
-                              <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-xs">
+                            <div className="w-20 font-bold text-tinta tabular-nums flex items-center gap-1.5">
+                              <span className="px-2 py-0.5 rounded bg-papel-3/60 border border-linha text-xs">
                                 Saco {saco.numero}
                               </span>
                             </div>
 
                             {/* Peso (kg) com edição inline */}
-                            <div className="w-32 text-right font-mono font-bold">
+                            <div className="w-32 text-right tabular-nums font-bold">
                               {emEdicao ? (
                                 <div className="flex items-center justify-end gap-1">
                                   <input
@@ -1323,25 +1266,25 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                                         handleCancelarEdicaoSaco();
                                       }
                                     }}
-                                    className="w-20 px-2 py-1 bg-white border-2 border-amber-500 rounded text-right font-bold text-xs"
+                                    className="w-20 px-2 py-1 bg-papel border-2 border-ouro rounded text-right font-bold text-xs"
                                     autoFocus
                                   />
-                                  <span className="text-[10px] text-slate-400">kg</span>
+                                  <span className="text-[10px] text-cinza">kg</span>
                                 </div>
                               ) : (
-                                <span className="text-slate-900 text-xs">
+                                <span className="text-tinta text-xs">
                                   {saco.peso_kg.toFixed(3).replace('.', ',')} kg
                                 </span>
                               )}
                             </div>
 
                             {/* Preço Pago kg */}
-                            <div className="w-32 text-right font-mono text-slate-600 text-xs">
+                            <div className="w-32 text-right tabular-nums text-tinta-2 text-xs">
                               R$ {precoKg.toFixed(2)}/kg
                             </div>
 
                             {/* Valor do Saco */}
-                            <div className="w-32 text-right font-mono font-bold text-emerald-900 text-xs">
+                            <div className="w-32 text-right tabular-nums font-bold text-eno-800 text-xs">
                               R$ {valorSaco.toFixed(2).replace('.', ',')}
                             </div>
 
@@ -1352,7 +1295,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                                   <button
                                     type="button"
                                     onClick={() => handleSalvarEdicaoSaco(saco.numero)}
-                                    className="p-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                                    className="p-1 rounded bg-eno-600 hover:bg-eno-700 text-white cursor-pointer"
                                     title="Confirmar alteração"
                                   >
                                     <Check className="w-3.5 h-3.5" />
@@ -1360,7 +1303,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                                   <button
                                     type="button"
                                     onClick={handleCancelarEdicaoSaco}
-                                    className="p-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 cursor-pointer"
+                                    className="p-1 rounded bg-linha hover:bg-linha-forte text-tinta-2 cursor-pointer"
                                     title="Cancelar"
                                   >
                                     <X className="w-3.5 h-3.5" />
@@ -1371,7 +1314,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                                   <button
                                     type="button"
                                     onClick={() => handleIniciarEdicaoSaco(saco.numero, saco.peso_kg)}
-                                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-800 transition-colors cursor-pointer"
+                                    className="p-1.5 rounded-lg bg-papel-3/60 hover:bg-st-aguardando-bg text-tinta-2 hover:text-st-aguardando transition-colors cursor-pointer"
                                     title="Editar o peso deste saco"
                                   >
                                     <Pencil className="w-3.5 h-3.5" />
@@ -1379,7 +1322,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                                   <button
                                     type="button"
                                     onClick={() => handleRemoverSaco(saco.numero)}
-                                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-700 transition-colors cursor-pointer"
+                                    className="p-1.5 rounded-lg bg-papel-3/60 hover:bg-st-vencido-bg text-tinta-2 hover:text-st-vencido transition-colors cursor-pointer"
                                     title="Deletar este saco"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -1395,12 +1338,12 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                 </div>
 
                 {/* DESCONTO NA PESAGEM (CASCA / TERRA / IMPUREZA / TARA) */}
-                <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-                  <div className="sm:col-span-4 text-[11px] font-bold text-amber-900 uppercase tracking-wider">
+                <div className="p-3 rounded-md bg-st-aguardando-bg/70 border border-ouro-claro/60 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                  <div className="sm:col-span-4 text-[11px] font-bold text-st-aguardando uppercase tracking-wider">
                     Desconto na pesagem (opcional) — o valor é calculado sobre o peso líquido
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-amber-900 mb-1">% de desconto</label>
+                    <label className="block text-[11px] font-bold text-st-aguardando mb-1">% de desconto</label>
                     <div className="relative">
                       <input
                         type="text"
@@ -1408,13 +1351,13 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                         value={descontoPctInput}
                         onChange={(e) => setDescontoPctInput(e.target.value)}
                         placeholder="Ex: 3"
-                        className="w-full pl-3 pr-7 py-2 bg-white border border-amber-300 rounded-lg font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-600"
+                        className="w-full pl-3 pr-7 py-2 bg-papel border border-ouro rounded-lg tabular-nums font-bold text-tinta focus:outline-none focus:border-ouro"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-700 font-bold">%</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-st-aguardando font-bold">%</span>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-amber-900 mb-1">Tara / desconto em kg</label>
+                    <label className="block text-[11px] font-bold text-st-aguardando mb-1">Tara / desconto em kg</label>
                     <div className="relative">
                       <input
                         type="text"
@@ -1422,20 +1365,20 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                         value={descontoTaraInput}
                         onChange={(e) => setDescontoTaraInput(e.target.value)}
                         placeholder="Ex: 15"
-                        className="w-full pl-3 pr-8 py-2 bg-white border border-amber-300 rounded-lg font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-600"
+                        className="w-full pl-3 pr-8 py-2 bg-papel border border-ouro rounded-lg tabular-nums font-bold text-tinta focus:outline-none focus:border-ouro"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-700 font-bold text-[10px]">KG</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-st-aguardando font-bold text-[10px]">KG</span>
                     </div>
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-bold text-amber-900 mb-1">Motivo</label>
+                    <label className="block text-[11px] font-bold text-st-aguardando mb-1">Motivo</label>
                     <input
                       type="text"
                       value={motivoDesconto}
                       onChange={(e) => setMotivoDesconto(e.target.value)}
                       placeholder="Ex: casca, terra, impureza, tara dos sacos"
                       list="motivos-desconto-roca"
-                      className="w-full bg-white border border-amber-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-amber-600"
+                      className="w-full bg-papel border border-ouro rounded-lg px-3 py-2 text-tinta focus:outline-none focus:border-ouro"
                     />
                     <datalist id="motivos-desconto-roca">
                       <option value="Casca" />
@@ -1448,56 +1391,56 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                 </div>
 
                 {/* PAINEL DE TOTAIS EM TEMPO REAL */}
-                <div className="p-4 rounded-2xl bg-emerald-950 text-white flex flex-wrap items-center justify-between gap-4 shadow-sm">
+                <div className="p-4 rounded-md bg-eno-950 text-white flex flex-wrap items-center justify-between gap-4 shadow-sm">
                   <div className="flex items-center gap-6">
                     <div>
-                      <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">Total de Sacos:</span>
-                      <strong className="text-lg font-black font-mono text-white">{totaisForm.totalSacos} sacos</strong>
+                      <span className="text-[10px] text-ouro-claro font-bold uppercase tracking-wider block">Total de Sacos:</span>
+                      <strong className="text-lg font-extrabold tabular-nums text-white">{totaisForm.totalSacos} sacos</strong>
                     </div>
 
-                    <div className="h-8 w-px bg-emerald-800" />
+                    <div className="h-8 w-px bg-eno-800" />
 
                     <div>
-                      <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">Peso Bruto:</span>
-                      <strong className="text-lg font-black font-mono text-white">
+                      <span className="text-[10px] text-ouro-claro font-bold uppercase tracking-wider block">Peso Bruto:</span>
+                      <strong className="text-lg font-extrabold tabular-nums text-white">
                         {totaisForm.pesoBruto.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg
                       </strong>
                     </div>
 
-                    <div className="h-8 w-px bg-emerald-800" />
+                    <div className="h-8 w-px bg-eno-800" />
 
                     <div>
-                      <span className="text-[10px] text-amber-300 font-bold uppercase tracking-wider block">Desconto:</span>
-                      <strong className="text-lg font-black font-mono text-amber-300">
+                      <span className="text-[10px] text-ouro-claro font-bold uppercase tracking-wider block">Desconto:</span>
+                      <strong className="text-lg font-extrabold tabular-nums text-ouro-claro">
                         - {totaisForm.desconto.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg
                       </strong>
                     </div>
 
-                    <div className="h-8 w-px bg-emerald-800" />
+                    <div className="h-8 w-px bg-eno-800" />
 
                     <div>
-                      <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">Peso Líquido:</span>
-                      <strong className="text-lg font-black font-mono text-white">
+                      <span className="text-[10px] text-ouro-claro font-bold uppercase tracking-wider block">Peso Líquido:</span>
+                      <strong className="text-lg font-extrabold tabular-nums text-white">
                         {totaisForm.pesoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg
-                        <span className="text-xs font-normal text-emerald-300 ml-1.5">
+                        <span className="text-xs font-normal text-ouro-claro ml-1.5">
                           ({(totaisForm.pesoTotal / 1000).toFixed(3)} Ton)
                         </span>
                       </strong>
                     </div>
 
-                    <div className="h-8 w-px bg-emerald-800 hidden sm:block" />
+                    <div className="h-8 w-px bg-eno-800 hidden sm:block" />
 
                     <div className="hidden sm:block">
-                      <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">Média por Saco:</span>
-                      <strong className="text-sm font-bold font-mono text-emerald-100">
+                      <span className="text-[10px] text-ouro-claro font-bold uppercase tracking-wider block">Média por Saco:</span>
+                      <strong className="text-sm font-bold tabular-nums text-eno-100">
                         {totaisForm.pesoMedio.toFixed(3).replace('.', ',')} kg/saco
                       </strong>
                     </div>
                   </div>
 
                   <div className="text-right">
-                    <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">Valor Total Estimado da Carga:</span>
-                    <strong className="text-xl font-black font-mono text-lime-400">
+                    <span className="text-[10px] text-ouro-claro font-bold uppercase tracking-wider block">Valor Total Estimado da Carga:</span>
+                    <strong className="text-xl font-extrabold tabular-nums text-ouro-claro">
                       {totaisForm.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </strong>
                   </div>
@@ -1506,22 +1449,22 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
 
               {/* OBSERVAÇÕES */}
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Observações da Carga na Roça (Opcional)</label>
+                <label className="block font-bold text-tinta-2 mb-1">Observações da Carga na Roça (Opcional)</label>
                 <input
                   type="text"
                   value={observacoes}
                   onChange={(e) => setObservacoes(e.target.value)}
                   placeholder="Ex: Mandioca fresca colhida hoje, descarrego direto no lavador..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-700"
+                  className="w-full bg-papel-2 border border-linha rounded-md px-3 py-2 text-xs text-tinta focus:outline-none focus:border-eno-700"
                 />
               </div>
 
               {/* Botões do Rodapé */}
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
+              <div className="pt-4 border-t border-linha flex items-center justify-between max-sm:sticky max-sm:-bottom-4 max-sm:z-10 max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:pb-4 max-sm:bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
                 <button
                   type="button"
                   onClick={() => setModalNovo(false)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                  className="px-5 py-2.5 rounded-md bg-papel-3/60 hover:bg-linha text-tinta-2 font-bold text-xs transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
@@ -1529,7 +1472,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                 <button
                   type="submit"
                   disabled={sacosForm.length === 0}
-                  className="px-6 py-2.5 rounded-xl bg-emerald-900 hover:bg-emerald-950 disabled:opacity-50 text-white font-bold text-xs transition-all flex items-center gap-2 cursor-pointer shadow-md"
+                  className="px-6 py-2.5 rounded-md bg-eno-900 hover:bg-eno-950 disabled:opacity-50 text-white font-bold text-xs transition-all flex items-center gap-2 cursor-pointer shadow-md"
                 >
                   <FileCheck className="w-4 h-4" />
                   <span>Salvar Pesagem & Gerar Pedido de Compra</span>
@@ -1544,18 +1487,18 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       {/* 6. MODAL VISUALIZAR FOLHA DE PESAGEM / TICKET (TAMANHO A4, MODO LISTA)    */}
       {/* ========================================================================= */}
       {ticketModal && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/75 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-4xl sm:max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/75 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-4xl sm:max-w-5xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Topo de Controles */}
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
               <div className="flex items-center gap-2.5">
-                <FileText className="w-5 h-5 text-emerald-400" />
+                <FileText className="w-5 h-5 text-ouro-claro" />
                 <div>
                   <h3 className="font-bold text-sm sm:text-base text-white">
                     Romaneio & Ticket da Roça - {ticketModal.numero_ticket}
                   </h3>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-cinza">
                     Formato Padrão A4 • Relação em Modo Lista com Pesos e Valores
                   </p>
                 </div>
@@ -1565,7 +1508,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                 <button
                   onClick={exportarPNG}
                   disabled={exportando}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-eno-700 hover:bg-eno-600 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
                   title="Baixar imagem PNG para envio por WhatsApp"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -1575,16 +1518,16 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                 <button
                   onClick={exportarPDF}
                   disabled={exportando}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white text-slate-900 hover:bg-slate-100 text-xs font-bold transition-colors cursor-pointer shadow-xs border border-slate-300"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-papel text-tinta hover:bg-papel-3/60 text-xs font-bold transition-colors cursor-pointer shadow-xs border border-linha-forte"
                   title="Baixar documento PDF oficial tamanho A4"
                 >
-                  <Printer className="w-3.5 h-3.5 text-emerald-800" />
+                  <Printer className="w-3.5 h-3.5 text-eno-800" />
                   <span>Exportar PDF (A4)</span>
                 </button>
 
                 <button
                   onClick={() => setTicketModal(null)}
-                  className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-eno-800 text-eno-100 hover:text-white transition-colors cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1592,7 +1535,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
             </div>
 
             {/* ÁREA DO DOCUMENTO FORMATADO EM TAMANHO A4 (794px x 1123px proporção) */}
-            <div className="p-6 overflow-y-auto flex-1 bg-slate-200 flex justify-center">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-linha flex justify-center">
               <div
                 ref={folhaTicketRef}
                 style={{
@@ -1603,19 +1546,19 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                   minHeight: '1000px',
                   boxSizing: 'border-box'
                 }}
-                className="p-8 sm:p-10 rounded-2xl shadow-xl border border-slate-300 space-y-5"
+                className="p-8 sm:p-10 rounded-md shadow-xl border border-linha-forte space-y-5"
               >
                 {/* CABEÇALHO DO TICKET */}
                 <div style={{ borderBottom: '2px solid #064e3b', paddingBottom: '16px' }} className="flex items-start justify-between">
                   <div>
                     <h1 style={{ color: '#064e3b', fontWeight: 900, fontSize: '22px', margin: 0 }}>
-                      GRUPO ENO AGROINDUSTRIAL
+                      {EMPRESA.razao.toUpperCase()}
                     </h1>
                     <p style={{ color: '#475569', fontSize: '12px', fontWeight: 600, margin: '2px 0 0 0' }}>
                       Indústria & Comércio de Féculas e Farinhas de Mandioca
                     </p>
                     <p style={{ color: '#64748b', fontSize: '11px', fontFamily: 'monospace', margin: '2px 0 0 0' }}>
-                      CNPJ: 14.882.301/0001-92 • Rodovia PR-218, KM 14 • Paranavaí - PR
+                      CNPJ: {EMPRESA.cnpj} • {EMPRESA.endereco} • {EMPRESA.telefone}
                     </p>
                   </div>
                   <div style={{ textAlign: 'right' }}>
@@ -1852,7 +1795,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                   </div>
                   <div style={{ borderTop: '1px solid #94a3b8', paddingTop: '8px' }}>
                     <strong style={{ color: '#0f172a', display: 'block' }}>{ticketModal.pesador_responsavel}</strong>
-                    <span style={{ color: '#64748b', fontSize: '10px' }}>Grupo ENO Agroindustrial (Balança/Campo)</span>
+                    <span style={{ color: '#64748b', fontSize: '10px' }}>{EMPRESA.razao} (Balança/Campo)</span>
                   </div>
                 </div>
               </div>
@@ -1865,49 +1808,49 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       {/* 7. MODAL DEFINIR PAGAMENTO                                                */}
       {/* ========================================================================= */}
       {modalPagamento && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-3xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Header */}
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-lg bg-ouro-escuro/20 text-st-aguardando border border-ouro/40 flex items-center justify-center font-bold">
                   <CreditCard className="w-4 h-4" />
                 </div>
                 <div>
                   <h3 className="font-bold text-sm sm:text-base text-white">
                     Definir Situação do Pagamento da Compra na Roça
                   </h3>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-cinza">
                     Lote {modalPagamento.numero_ticket} • Agricultor: {modalPagamento.fornecedor_nome}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setModalPagamento(null)}
-                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-eno-800 text-eno-100 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Conteúdo do Form */}
-            <form onSubmit={handleSalvarDefinicaoPagamento} className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+            <form onSubmit={handleSalvarDefinicaoPagamento} className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs flex-1">
               
               {/* Card de Resumo da Compra */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+              <div className="p-4 rounded-md bg-papel-2 border border-linha flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Agricultor</span>
-                  <div className="font-bold text-sm text-slate-900">{modalPagamento.fornecedor_nome}</div>
-                  <div className="text-[11px] text-slate-500">{modalPagamento.fornecedor_propriedade} • {modalPagamento.local_pesagem}</div>
+                  <span className="text-[10px] font-bold text-cinza uppercase">Agricultor</span>
+                  <div className="font-bold text-sm text-tinta">{modalPagamento.fornecedor_nome}</div>
+                  <div className="text-[11px] text-cinza">{modalPagamento.fornecedor_propriedade} • {modalPagamento.local_pesagem}</div>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Valor Total da Carga</span>
-                  <div className="text-lg font-black font-mono text-emerald-900">
+                  <span className="text-[10px] font-bold text-cinza uppercase">Valor Total da Carga</span>
+                  <div className="text-lg font-extrabold tabular-nums text-eno-800">
                     {modalPagamento.valor_total_estimado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono">
+                  <div className="text-[10px] text-cinza tabular-nums">
                     {modalPagamento.total_sacos} sacos • {modalPagamento.peso_total_kg.toLocaleString('pt-BR')} kg líquidos
                     {pesosDoCalculo(modalPagamento).desconto > 0 && ` (bruto ${pesosDoCalculo(modalPagamento).bruto.toLocaleString('pt-BR')} kg)`}
                   </div>
@@ -1916,55 +1859,55 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
 
               {/* Escolha do Tipo de Pagamento */}
               <div>
-                <label className="block font-bold text-slate-700 mb-2">Qual foi a situação desta negociação?</label>
+                <label className="block font-bold text-tinta-2 mb-2">Qual foi a situação desta negociação?</label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <label
                     onClick={() => setTipoPagamentoForm('JA_PAGO')}
-                    className={`p-3.5 rounded-xl border-2 cursor-pointer flex flex-col justify-between transition-all ${
+                    className={`p-3.5 rounded-md border-2 cursor-pointer flex flex-col justify-between transition-all ${
                       tipoPagamentoForm === 'JA_PAGO'
-                        ? 'border-emerald-600 bg-emerald-50 text-emerald-950 font-bold shadow-xs'
-                        : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700'
+                        ? 'border-eno-600 bg-eno-50 text-eno-800 font-bold shadow-xs'
+                        : 'border-linha hover:border-linha-forte bg-papel text-tinta-2'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-bold">1. Já Pago no Ato</span>
-                      <CheckCircle2 className={`w-4 h-4 ${tipoPagamentoForm === 'JA_PAGO' ? 'text-emerald-700' : 'text-slate-300'}`} />
+                      <CheckCircle2 className={`w-4 h-4 ${tipoPagamentoForm === 'JA_PAGO' ? 'text-eno-700' : 'text-cinza-claro'}`} />
                     </div>
-                    <p className="text-[10px] text-slate-500 font-normal">
+                    <p className="text-[10px] text-cinza font-normal">
                       Pago na hora (PIX/Dinheiro). Lança despesa quitada no financeiro.
                     </p>
                   </label>
 
                   <label
                     onClick={() => setTipoPagamentoForm('A_PAGAR')}
-                    className={`p-3.5 rounded-xl border-2 cursor-pointer flex flex-col justify-between transition-all ${
+                    className={`p-3.5 rounded-md border-2 cursor-pointer flex flex-col justify-between transition-all ${
                       tipoPagamentoForm === 'A_PAGAR'
-                        ? 'border-blue-600 bg-blue-50 text-blue-950 font-bold shadow-xs'
-                        : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700'
+                        ? 'border-st-producao/30 bg-st-producao-bg text-st-producao font-bold shadow-xs'
+                        : 'border-linha hover:border-linha-forte bg-papel text-tinta-2'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-bold">2. A Pagar (Programado)</span>
-                      <Clock className={`w-4 h-4 ${tipoPagamentoForm === 'A_PAGAR' ? 'text-blue-700' : 'text-slate-300'}`} />
+                      <Clock className={`w-4 h-4 ${tipoPagamentoForm === 'A_PAGAR' ? 'text-st-producao' : 'text-cinza-claro'}`} />
                     </div>
-                    <p className="text-[10px] text-slate-500 font-normal">
+                    <p className="text-[10px] text-cinza font-normal">
                       Acertar depois com o produtor. Lança título no Contas a Pagar.
                     </p>
                   </label>
 
                   <label
                     onClick={() => setTipoPagamentoForm('ADIANTAMENTO_PARCIAL')}
-                    className={`p-3.5 rounded-xl border-2 cursor-pointer flex flex-col justify-between transition-all ${
+                    className={`p-3.5 rounded-md border-2 cursor-pointer flex flex-col justify-between transition-all ${
                       tipoPagamentoForm === 'ADIANTAMENTO_PARCIAL'
-                        ? 'border-purple-600 bg-purple-50 text-purple-950 font-bold shadow-xs'
-                        : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700'
+                        ? 'border-st-producao/30 bg-st-producao-bg text-st-producao font-bold shadow-xs'
+                        : 'border-linha hover:border-linha-forte bg-papel text-tinta-2'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-bold">3. Adiantamento Parcial</span>
-                      <CreditCard className={`w-4 h-4 ${tipoPagamentoForm === 'ADIANTAMENTO_PARCIAL' ? 'text-purple-700' : 'text-slate-300'}`} />
+                      <CreditCard className={`w-4 h-4 ${tipoPagamentoForm === 'ADIANTAMENTO_PARCIAL' ? 'text-st-producao' : 'text-cinza-claro'}`} />
                     </div>
-                    <p className="text-[10px] text-slate-500 font-normal">
+                    <p className="text-[10px] text-cinza font-normal">
                       Pagou uma parte agora e o saldo restante fica a pagar no financeiro.
                     </p>
                   </label>
@@ -1972,11 +1915,11 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
               </div>
 
               {/* Detalhes conforme a escolha */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="p-4 rounded-md bg-papel-2 border border-linha grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 {tipoPagamentoForm === 'ADIANTAMENTO_PARCIAL' && (
-                  <div className="sm:col-span-2 grid grid-cols-2 gap-3 p-3 bg-purple-50/70 border border-purple-200 rounded-xl">
+                  <div className="sm:col-span-2 grid grid-cols-2 gap-3 p-3 bg-st-producao-bg/70 border border-st-producao/30 rounded-md">
                     <div>
-                      <label className="block font-bold text-purple-900 mb-1">Valor Pago no Ato (R$)</label>
+                      <label className="block font-bold text-st-producao mb-1">Valor Pago no Ato (R$)</label>
                       <input
                         type="number"
                         step="0.01"
@@ -1984,24 +1927,24 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                         value={valorAdiantado}
                         onChange={(e) => setValorAdiantado(e.target.value)}
                         placeholder="Ex: 500.00"
-                        className="w-full bg-white border border-purple-300 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none"
+                        className="w-full bg-papel border border-st-producao/30 rounded-lg px-3 py-2 tabular-nums font-bold text-tinta focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block font-bold text-purple-900 mb-1">Saldo Restante a Pagar</label>
-                      <div className="w-full bg-white border border-purple-200 rounded-lg px-3 py-2 font-mono font-black text-purple-950">
+                      <label className="block font-bold text-st-producao mb-1">Saldo Restante a Pagar</label>
+                      <div className="w-full bg-papel border border-st-producao/30 rounded-lg px-3 py-2 tabular-nums font-extrabold text-st-producao">
                         {Math.max(0, modalPagamento.valor_total_estimado - (parseFloat(valorAdiantado.replace(',', '.')) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </div>
                     </div>
                     {modalPagamento.valor_total_estimado - (parseFloat(valorAdiantado.replace(',', '.')) || 0) > 0.009 && (
                       <div className="col-span-2">
-                        <label className="block font-bold text-purple-900 mb-1">Vencimento do saldo</label>
+                        <label className="block font-bold text-st-producao mb-1">Vencimento do saldo</label>
                         <input
                           type="date"
                           required
                           value={vencimentoSaldo}
                           onChange={(e) => setVencimentoSaldo(e.target.value)}
-                          className="w-full bg-white border border-purple-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none"
+                          className="w-full bg-papel border border-st-producao/30 rounded-lg px-3 py-2 tabular-nums text-tinta focus:outline-none"
                         />
                       </div>
                     )}
@@ -2009,11 +1952,11 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                 )}
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Forma de Pagamento</label>
+                  <label className="block font-bold text-tinta-2 mb-1">Forma de Pagamento</label>
                   <select
                     value={formaPagamentoEscolhida}
                     onChange={(e) => setFormaPagamentoEscolhida(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 font-medium text-slate-800 focus:outline-none focus:border-emerald-700 cursor-pointer"
+                    className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 font-medium text-tinta focus:outline-none focus:border-eno-700 cursor-pointer"
                   >
                     <option value="PIX">PIX</option>
                     <option value="Dinheiro">Dinheiro</option>
@@ -2021,7 +1964,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
+                  <label className="block font-bold text-tinta-2 mb-1">
                     {tipoPagamentoForm === 'A_PAGAR' ? 'Data Prevista de Vencimento' : 'Data do Pagamento'}
                   </label>
                   <input
@@ -2029,28 +1972,28 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                     required
                     value={dataPagamentoOuVenc}
                     onChange={(e) => setDataPagamentoOuVenc(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
+                    className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 tabular-nums text-tinta focus:outline-none focus:border-eno-700"
                   />
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="block font-bold text-slate-700 mb-1">Conta Bancária de Origem</label>
+                  <label className="block font-bold text-tinta-2 mb-1">Conta Bancária de Origem</label>
                   <input
                     type="text"
                     value={contaBancaria}
                     onChange={(e) => setContaBancaria(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-emerald-700"
+                    className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 text-tinta focus:outline-none focus:border-eno-700"
                   />
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="block font-bold text-slate-700 mb-1">Observações do Acerto / Recibo</label>
+                  <label className="block font-bold text-tinta-2 mb-1">Observações do Acerto / Recibo</label>
                   <input
                     type="text"
                     value={obsPagamento}
                     onChange={(e) => setObsPagamento(e.target.value)}
                     placeholder="Ex: Comprovante enviado via WhatsApp para o produtor..."
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-emerald-700"
+                    className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 text-tinta focus:outline-none focus:border-eno-700"
                   />
                 </div>
 
@@ -2062,20 +2005,20 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
               </div>
 
               {/* Botões do Rodapé */}
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
+              <div className="pt-4 border-t border-linha flex items-center justify-between max-sm:sticky max-sm:-bottom-4 max-sm:z-10 max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:pb-4 max-sm:bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
                 <button
                   type="button"
                   onClick={() => setModalPagamento(null)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                  className="px-5 py-2.5 rounded-md bg-papel-3/60 hover:bg-linha text-tinta-2 font-bold text-xs transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
 
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs transition-all flex items-center gap-2 cursor-pointer shadow-md"
+                  className="px-6 py-2.5 rounded-md bg-eno-900 hover:bg-eno-950 text-white font-bold text-xs transition-all flex items-center gap-2 cursor-pointer shadow-md"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <CheckCircle2 className="w-4 h-4 text-ouro-claro" />
                   <span>Confirmar & Atualizar Financeiro</span>
                 </button>
               </div>

@@ -52,6 +52,14 @@ import {
   planejarAcessoPortal,
   aplicarAcessoPortal,
 } from './AcessoPortalSecao';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, Segmentado, CampoBusca } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
+import { Painel } from '../ui/Painel';
+import { CORES } from '../ui/tokens';
+import { FormularioCadastro, ChaveAtivo, BotaoLinha, BotaoCartao } from './FormularioCadastro';
 
 // Converte os pedidos de venda reais do cliente para a estrutura do histórico
 // rcaId (Portal do RCA): só os pedidos feitos por aquele RCA
@@ -142,9 +150,9 @@ function opcoesTabelasPreco(): { id: string; nome: string }[] {
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-slate-900 text-white px-3.5 py-2 rounded-xl shadow-xl border border-slate-800 text-xs">
-        <p className="font-semibold text-slate-300">{label}</p>
-        <p className="font-black text-emerald-400 font-mono text-sm mt-0.5">
+      <div className="bg-eno-900 text-white px-3 py-2 rounded-md text-xs">
+        <p className="font-semibold text-white/60">{label}</p>
+        <p className="font-extrabold text-white tabular-nums text-sm mt-0.5">
           R$ {Number(payload[0].value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
         </p>
       </div>
@@ -570,325 +578,222 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
     }));
   }, [comprasDoCliente]);
 
+  const ativosCount = clientes.filter(c => c.ativo).length;
+  const semTabelaCount = clientes.filter(c => c.ativo && !c.tabela_preco_id).length;
+
   return (
-    <div className="flex-1 w-full h-full flex flex-col bg-white rounded-2xl border border-emerald-950/15 shadow-[0_10px_35px_rgba(0,0,0,0.06)] overflow-hidden">
-      
+    <div className={`flex-1 w-full min-h-0 h-full flex flex-col text-tinta ${modoRca ? '' : 'bg-papel-2 overflow-hidden'}`}>
+
       {/* ========================================================================= */}
-      {/* VISTA 1: LISTAGEM DE CLIENTES (COM COLUNA HISTÓRICO ENTRE STATUS E AÇÕES)  */}
+      {/* VISTA 1: LISTA DE CLIENTES (cartões no celular, tabela densa a partir de sm) */}
       {/* ========================================================================= */}
       {modo === 'lista' && (
         <>
-          {/* CABEÇALHO DA LISTA */}
-          <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-3.5 border-b border-slate-200 bg-slate-50/80">
-            <div className="flex items-center gap-3.5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-900 text-white shadow-sm">
-                <Building2 className="w-5 h-5 text-emerald-300" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                    {modoRca ? 'Meus Clientes' : 'Clientes'}
-                  </h2>
-                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    {clientes.length} {modoRca ? 'na carteira' : 'Cadastrados'}
-                  </span>
+          <div className={modoRca ? '' : 'mx-auto w-full max-w-[1700px]'}>
+            <CabecalhoPagina
+              titulo={modoRca ? 'Meus clientes' : 'Clientes'}
+              resumo={
+                clientes.length === 0
+                  ? (modoRca ? 'Sua carteira ainda está vazia' : 'Nenhum cliente cadastrado')
+                  : <>
+                      {clientes.length} {clientes.length === 1 ? 'cliente' : 'clientes'} · {ativosCount} {ativosCount === 1 ? 'ativo' : 'ativos'}
+                      {semTabelaCount > 0 && <span className="text-st-aguardando font-semibold"> · {semTabelaCount} sem tabela de preço</span>}
+                    </>
+              }
+              className={modoRca ? '!px-0 !pt-0' : ''}
+              acoes={
+                clientes.length === 0 ? undefined : (
+                  <BotaoPrimario onClick={abrirFormularioNovo} className="w-full sm:w-auto h-10 sm:h-9">
+                    <Plus className="w-4 h-4" />
+                    {modoRca ? 'Adicionar cliente' : 'Novo cliente'}
+                  </BotaoPrimario>
+                )
+              }
+            />
+
+            {clientes.length > 0 && (
+              <BarraFiltros className={modoRca ? '!px-0' : ''}>
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                  <Segmentado<'TODOS' | 'PJ' | 'PF'>
+                    rotuloAria="Tipo de pessoa"
+                    valor={filtroTipo}
+                    onChange={setFiltroTipo}
+                    opcoes={[
+                      { valor: 'TODOS', rotulo: 'Todos' },
+                      { valor: 'PJ', rotulo: 'Empresas', contagem: clientes.filter(c => c.tipo_pessoa === 'PJ').length },
+                      { valor: 'PF', rotulo: 'Pessoas físicas', contagem: clientes.filter(c => c.tipo_pessoa === 'PF').length },
+                    ]}
+                  />
+                  <Segmentado<'TODOS' | 'ATIVOS' | 'INATIVOS'>
+                    rotuloAria="Situação"
+                    valor={filtroStatus}
+                    onChange={setFiltroStatus}
+                    opcoes={[
+                      { valor: 'TODOS', rotulo: 'Todas' },
+                      { valor: 'ATIVOS', rotulo: 'Ativos' },
+                      { valor: 'INATIVOS', rotulo: 'Inativos', contagem: clientes.length - ativosCount },
+                    ]}
+                  />
                 </div>
-              </div>
-            </div>
-
-            {/* Botão Novo Cliente */}
-            <button
-              onClick={abrirFormularioNovo}
-              className="
-                flex items-center gap-2 px-5 py-2.5 rounded-xl
-                bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950
-                text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow-md
-                transition-all cursor-pointer
-              "
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>{modoRca ? 'Adicionar Cliente' : 'Novo Cadastro de Cliente'}</span>
-            </button>
+                <CampoBusca
+                  valor={busca}
+                  onChange={setBusca}
+                  placeholder="Buscar nome, CNPJ/CPF ou cidade"
+                  className="w-full md:w-80 [&_input]:h-10 sm:[&_input]:h-8"
+                />
+              </BarraFiltros>
+            )}
           </div>
 
-          {/* BARRA DE BUSCA E FILTROS */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 border-b border-slate-100 bg-white">
-            <div className={`relative flex-1 max-w-md ${modoRca ? 'min-w-[220px]' : 'min-w-[280px]'}`}>
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar por Razão, Fantasia, CNPJ/CPF, Cidade..."
-                className="
-                  w-full pl-10 pr-4 py-2 text-xs sm:text-sm font-medium
-                  rounded-xl border border-slate-200 bg-slate-50/50
-                  focus:bg-white focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20
-                  transition-all
-                "
-              />
-            </div>
-
-            {/* Filtros rápidos */}
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
-                <button
-                  onClick={() => setFiltroTipo('TODOS')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${filtroTipo === 'TODOS' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
-                >
-                  Todos
-                </button>
-                <button
-                  onClick={() => setFiltroTipo('PJ')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${filtroTipo === 'PJ' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
-                >
-                  Pessoa Jurídica (PJ)
-                </button>
-                <button
-                  onClick={() => setFiltroTipo('PF')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${filtroTipo === 'PF' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
-                >
-                  Pessoa Física (PF)
-                </button>
-              </div>
-
-              <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
-                <button
-                  onClick={() => setFiltroStatus('TODOS')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${filtroStatus === 'TODOS' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
-                >
-                  Status: Todos
-                </button>
-                <button
-                  onClick={() => setFiltroStatus('ATIVOS')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${filtroStatus === 'ATIVOS' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
-                >
-                  Ativos
-                </button>
-                <button
-                  onClick={() => setFiltroStatus('INATIVOS')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${filtroStatus === 'INATIVOS' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
-                >
-                  Inativos
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* PORTAL DO RCA NO CELULAR: lista em cartões (sem rolagem lateral) */}
-          {modoRca && (
-            <div className="sm:hidden flex-1 overflow-y-auto divide-y divide-slate-100">
+          <div className={modoRca ? '' : 'flex-1 min-h-0 overflow-y-auto'}>
+            <div className={modoRca ? 'pb-4' : 'mx-auto w-full max-w-[1700px] px-4 sm:px-6 pb-6'}>
               {clientesFiltrados.length === 0 ? (
-                <div className="py-12 px-6 text-center text-sm text-slate-500">
-                  {clientes.length === 0 ? 'Sua carteira ainda está vazia. Toque em "Adicionar Cliente" para cadastrar o primeiro.' : 'Nenhum cliente com esses filtros.'}
+                <div className="bg-papel border border-linha rounded-md">
+                  {clientes.length === 0 ? (
+                    <EstadoVazio
+                      titulo={modoRca ? 'Sua carteira ainda está vazia' : 'Nenhum cliente cadastrado'}
+                      texto={modoRca
+                        ? 'Cadastre o primeiro cliente. Ele entra direto na sua carteira e a fábrica define a tabela de preço.'
+                        : 'Cadastre os clientes para vender, definir tabela de preço, prazo e representante.'}
+                      acao={
+                        <BotaoPrimario onClick={abrirFormularioNovo} className="h-10 sm:h-9">
+                          <Plus className="w-4 h-4" /> {modoRca ? 'Adicionar cliente' : 'Novo cliente'}
+                        </BotaoPrimario>
+                      }
+                    />
+                  ) : (
+                    <EstadoVazio
+                      titulo="Nenhum cliente com esses filtros"
+                      texto="Confira a busca ou volte para Todos."
+                      acao={<BotaoSecundario onClick={() => { setBusca(''); setFiltroTipo('TODOS'); setFiltroStatus('TODOS'); }}>Limpar filtros</BotaoSecundario>}
+                    />
+                  )}
                 </div>
-              ) : clientesFiltrados.map(cli => (
-                <div key={cli.id} className="px-4 py-3.5 flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-slate-900 text-sm truncate">{cli.razao_nome}</span>
-                      {!cli.ativo && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-800">Inativo</span>}
-                    </div>
-                    {cli.fantasia && <div className="text-[11px] text-slate-500 truncate">{cli.fantasia}</div>}
-                    <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">{cli.endereco.municipio}/{cli.endereco.uf} · {cli.telefone || 'sem telefone'}</div>
-                    <div className={`text-[11px] font-semibold mt-0.5 truncate ${cli.tabela_preco_id ? 'text-emerald-800' : 'text-amber-700'}`}>
-                      {cli.tabela_preco_id ? cli.tabela_preco_nome : 'Sem tabela (aguardando fábrica)'} · {cli.prazo_pagamento_nome}
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1.5 shrink-0">
-                    <button
-                      onClick={() => abrirFormularioEditar(cli)}
-                      className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1 active:bg-slate-100"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" /> Editar
-                    </button>
-                    <button
-                      onClick={() => abrirHistorico(cli)}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-1 active:bg-emerald-100"
-                    >
-                      <History className="w-3.5 h-3.5" /> Compras
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* TABELA DE CLIENTES */}
-          <div className={`flex-1 overflow-auto ${modoRca ? 'hidden sm:block' : ''}`}>
-            <table className="w-full text-left border-collapse">
-              <thead className="sticky top-0 bg-slate-100/90 backdrop-blur-md z-10 border-b border-slate-200 text-[11px] font-black uppercase tracking-wider text-slate-600">
-                <tr>
-                  <th className="py-3 px-6">Tipo</th>
-                  <th className="py-3 px-6">Cliente (Razão Social / Fantasia)</th>
-                  <th className="py-3 px-6">CPF / CNPJ & IE/RG</th>
-                  <th className="py-3 px-6">Contato</th>
-                  <th className="py-3 px-6">Cidade / UF</th>
-                  <th className="py-3 px-6">Representante & Tabela</th>
-                  <th className="py-3 px-6">Condição Comercial</th>
-                  <th className="py-3 px-6 text-center">Status</th>
-                  
-                  {/* COLUNA HISTÓRICO ENTRE STATUS E AÇÕES */}
-                  <th className="py-3 px-6 text-center">Histórico</th>
-                  
-                  <th className="py-3 px-6 text-right">Ações</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-                {clientesFiltrados.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="py-12 text-center text-slate-400">
-                      Nenhum cliente encontrado com os filtros selecionados.
-                    </td>
-                  </tr>
-                ) : (
-                  clientesFiltrados.map((cli) => (
-                    <tr 
-                      key={cli.id}
-                      className="hover:bg-emerald-50/40 transition-colors group"
-                    >
-                      {/* Tipo Pessoa */}
-                      <td className="py-3.5 px-6">
-                        <span className={`
-                          inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide
-                          ${cli.tipo_pessoa === 'PJ' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}
-                        `}>
-                          {cli.tipo_pessoa === 'PJ' ? <Building2 className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                          {cli.tipo_pessoa}
-                        </span>
-                      </td>
-
-                      {/* Nome e Fantasia */}
-                      <td className="py-3.5 px-6">
-                        <div className="font-bold text-slate-900 text-sm">
-                          {cli.razao_nome}
-                        </div>
-                        {cli.fantasia && (
-                          <div className="text-[11px] text-slate-500 font-normal">
-                            {cli.fantasia}
+              ) : (
+                <>
+                  {/* Celular: cartões */}
+                  <ul className="sm:hidden bg-papel border border-linha rounded-md">
+                    {clientesFiltrados.map(cli => (
+                      <li key={cli.id} className="px-3.5 py-3 border-b border-linha last:border-b-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[14px] font-bold text-tinta leading-snug line-clamp-2">{cli.razao_nome}</div>
+                            <div className="text-[11.5px] text-cinza truncate tabular-nums">
+                              {cli.fantasia ? `${cli.fantasia} · ` : ''}{cli.endereco.municipio}/{cli.endereco.uf}
+                            </div>
                           </div>
-                        )}
-                      </td>
-
-                      {/* Documentos */}
-                      <td className="py-3.5 px-6 font-mono text-[11px] text-slate-600">
-                        <div className="font-semibold text-slate-800">{cli.cpf_cnpj}</div>
-                        {cli.ie_rg && <div className="text-slate-400">IE/RG: {cli.ie_rg}</div>}
-                      </td>
-
-                      {/* Contato */}
-                      <td className="py-3.5 px-6">
-                        <div className="flex items-center gap-1 text-slate-800 font-semibold">
-                          <Phone className="w-3 h-3 text-emerald-700" />
-                          <span>{cli.telefone}</span>
+                          <StatusChip tom={cli.ativo ? 'pago' : 'vencido'} className="shrink-0">{cli.ativo ? 'Ativo' : 'Inativo'}</StatusChip>
                         </div>
-                        <div className="flex items-center gap-1 text-slate-500 text-[11px]">
-                          <Mail className="w-3 h-3 text-slate-400" />
-                          <span>{cli.email}</span>
+                        <div className="mt-1.5 text-[12px] text-tinta-2 tabular-nums truncate">
+                          {cli.prazo_pagamento_nome || 'Sem prazo'}{!modoRca && cli.vendedor_nome ? ` · ${cli.vendedor_nome}` : ''}
                         </div>
-                        {acessosClientes.has(cli.id) && (
-                          <div
-                            className={`mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-black border ${
-                              acessosClientes.get(cli.id)?.ativo ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'
-                            }`}
-                            title={`Login do Portal do Cliente: ${acessosClientes.get(cli.id)?.usuario}`}
-                          >
-                            <KeyRound className="w-3 h-3" />
-                            {acessosClientes.get(cli.id)?.ativo ? 'Acessa o portal' : 'Portal desativado'}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Cidade / UF */}
-                      <td className="py-3.5 px-6">
-                        <div className="font-semibold text-slate-800">
-                          {cli.endereco.municipio} - {cli.endereco.uf}
+                        <div className={`text-[12px] truncate ${cli.tabela_preco_id ? 'text-cinza' : 'text-st-aguardando font-semibold'}`}>
+                          {cli.tabela_preco_id ? cli.tabela_preco_nome : (modoRca ? 'Sem tabela (aguardando a fábrica)' : 'Sem tabela de preço')}
                         </div>
-                        <div className="text-slate-400 text-[11px]">
-                          {cli.endereco.bairro}
-                        </div>
-                      </td>
-
-                      {/* Representante & Tabela */}
-                      <td className="py-3.5 px-6">
-                        <div className="flex items-center gap-1.5 font-bold text-slate-800 text-xs">
-                          <UserCheck className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                          <span className="truncate max-w-[170px]">{cli.vendedor_nome || 'Não vinculado'}</span>
-                        </div>
-                        <div className={`flex items-center gap-1 text-[11px] font-semibold mt-0.5 ${cli.tabela_preco_id ? 'text-emerald-800' : 'text-amber-700'}`}>
-                          <Tag className={`w-3 h-3 shrink-0 ${cli.tabela_preco_id ? 'text-emerald-600' : 'text-amber-600'}`} />
-                          <span className="truncate max-w-[170px]">{cli.tabela_preco_id ? cli.tabela_preco_nome : 'Sem tabela — definir'}</span>
-                        </div>
-                      </td>
-
-                      {/* Condição Comercial */}
-                      <td className="py-3.5 px-6">
-                        <div className="font-bold text-slate-800">
-                          {cli.prazo_pagamento_nome}
-                        </div>
-                        <div className="text-[11px] text-emerald-800 font-medium">
-                          {cli.forma_pagamento_nome}
-                        </div>
-                      </td>
-
-                      {/* Status Ativo/Inativo */}
-                      <td className="py-3.5 px-6 text-center">
-                        <button
-                          onClick={() => alternarStatusCliente(cli.id)}
-                          className="cursor-pointer"
-                          title={cli.ativo ? 'Clique para Inativar' : 'Clique para Ativar'}
-                        >
-                          {cli.ativo ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              Ativo
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-300">
-                              <XCircle className="w-3 h-3 text-red-600" />
-                              Inativo
-                            </span>
+                        <div className="flex gap-2 mt-2.5">
+                          <BotaoCartao onClick={() => abrirHistorico(cli)} className="flex-1">
+                            <History className="w-3.5 h-3.5" /> Compras
+                          </BotaoCartao>
+                          <BotaoCartao onClick={() => abrirFormularioEditar(cli)} className="flex-1">
+                            <Edit2 className="w-3.5 h-3.5" /> Editar
+                          </BotaoCartao>
+                          {cli.telefone && (
+                            <a
+                              href={`tel:${soDigitos(cli.telefone)}`}
+                              className="inline-flex items-center justify-center w-10 h-10 rounded-md border border-linha-forte text-tinta-2 active:bg-papel-3"
+                              aria-label={`Ligar para ${cli.razao_nome}`}
+                            >
+                              <Phone className="w-4 h-4" />
+                            </a>
                           )}
-                        </button>
-                      </td>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
 
-                      {/* BOTÃO HISTÓRICO ENTRE STATUS E AÇÕES */}
-                      <td className="py-3.5 px-6 text-center">
-                        <button
-                          onClick={() => abrirHistorico(cli)}
-                          className="
-                            inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl
-                            bg-emerald-50 hover:bg-emerald-800 text-emerald-900 hover:text-white
-                            border border-emerald-200 hover:border-emerald-700
-                            font-bold text-xs shadow-2xs hover:shadow-sm
-                            transition-all cursor-pointer
-                          "
-                          title="Ver Histórico de Compras"
-                        >
-                          <History className="w-3.5 h-3.5" />
-                          <span>Histórico</span>
-                        </button>
-                      </td>
-
-                      {/* Ações (Editar) */}
-                      <td className="py-3.5 px-6 text-right">
-                        <button
-                          onClick={() => abrirFormularioEditar(cli)}
-                          className="
-                            p-2 rounded-lg text-slate-600 hover:text-emerald-900 hover:bg-emerald-100/60
-                            transition-colors cursor-pointer
-                          "
-                          title="Editar Cliente"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  {/* A partir de sm: tabela densa */}
+                  <TabelaDados className="hidden sm:block">
+                    <thead className={tabela.thead}>
+                      <tr>
+                        <Th>Cliente</Th>
+                        <Th>CNPJ / CPF</Th>
+                        <Th>Contato</Th>
+                        <Th>Cidade</Th>
+                        {!modoRca && <Th>Representante</Th>}
+                        <Th>Tabela e prazo</Th>
+                        <Th className="text-center">Situação</Th>
+                        <Th className="text-right">Ações</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clientesFiltrados.map(cli => {
+                        const acesso = acessosClientes.get(cli.id);
+                        return (
+                          <tr key={cli.id} className={tabela.tr}>
+                            <Td>
+                              <div className="font-semibold text-tinta">{cli.razao_nome}</div>
+                              <div className="text-[11.5px] text-cinza">
+                                {cli.tipo_pessoa === 'PJ' ? 'Empresa' : 'Pessoa física'}{cli.fantasia ? ` · ${cli.fantasia}` : ''}
+                              </div>
+                            </Td>
+                            <Td className="tabular-nums whitespace-nowrap">
+                              <div>{cli.cpf_cnpj}</div>
+                              {cli.ie_rg && <div className="text-[11.5px] text-cinza">IE/RG {cli.ie_rg}</div>}
+                            </Td>
+                            <Td>
+                              <div className="tabular-nums whitespace-nowrap">{cli.telefone || '—'}</div>
+                              <div className="text-[11.5px] text-cinza truncate max-w-[200px]">{cli.email}</div>
+                              {acesso && (
+                                <div className={`text-[11px] font-semibold ${acesso.ativo ? 'text-st-pago' : 'text-cinza'}`} title={`Login do Portal do Cliente: ${acesso.usuario}`}>
+                                  {acesso.ativo ? 'Acessa o portal' : 'Portal desativado'}
+                                </div>
+                              )}
+                            </Td>
+                            <Td>
+                              <div className="whitespace-nowrap">{cli.endereco.municipio}/{cli.endereco.uf}</div>
+                              <div className="text-[11.5px] text-cinza">{cli.endereco.bairro}</div>
+                            </Td>
+                            {!modoRca && (
+                              <Td>
+                                <div className="truncate max-w-[180px]">{cli.vendedor_nome || <span className="text-cinza">Sem representante</span>}</div>
+                              </Td>
+                            )}
+                            <Td>
+                              <div className={`truncate max-w-[200px] ${cli.tabela_preco_id ? 'text-tinta' : 'text-st-aguardando font-semibold'}`}>
+                                {cli.tabela_preco_id ? cli.tabela_preco_nome : 'Sem tabela — definir'}
+                              </div>
+                              <div className="text-[11.5px] text-cinza">{cli.prazo_pagamento_nome}{cli.forma_pagamento_nome ? ` · ${cli.forma_pagamento_nome}` : ''}</div>
+                            </Td>
+                            <Td className="text-center">
+                              <button
+                                type="button"
+                                onClick={() => alternarStatusCliente(cli.id)}
+                                className="cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-ouro"
+                                title={cli.ativo ? 'Clique para inativar' : 'Clique para ativar'}
+                              >
+                                <StatusChip tom={cli.ativo ? 'pago' : 'vencido'}>{cli.ativo ? 'Ativo' : 'Inativo'}</StatusChip>
+                              </button>
+                            </Td>
+                            <Td className="text-right whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => abrirHistorico(cli)}
+                                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md text-[12.5px] font-semibold text-eno-700 hover:bg-papel-3 hover:text-eno-900 cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                              >
+                                <History className="w-3.5 h-3.5" /> Compras
+                              </button>
+                              <BotaoLinha rotulo="Editar cliente" onClick={() => abrirFormularioEditar(cli)}>
+                                <Edit2 className="w-4 h-4" />
+                              </BotaoLinha>
+                            </Td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </TabelaDados>
+                </>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -897,92 +802,34 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
       {/* VISTA 2: FORMULÁRIO EM TELA CHEIA (SEM LIMITE DE CRÉDITO)                  */}
       {/* ========================================================================= */}
       {modo === 'formulario' && (
-        <form onSubmit={salvarCliente} className="flex-1 w-full h-full flex flex-col overflow-hidden">
-          
-          {/* CABEÇALHO DO FORMULÁRIO */}
-          <div className="flex flex-wrap items-center justify-between gap-4 px-4 sm:px-8 py-3.5 border-b border-slate-200 bg-slate-50/90">
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={() => setModo('lista')}
-                className="
-                  flex items-center gap-1.5 px-3.5 py-2 rounded-xl
-                  border border-slate-300 bg-white hover:bg-slate-100
-                  text-slate-700 font-bold text-xs transition-colors cursor-pointer shadow-sm
-                "
-                title="Voltar para a listagem"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Voltar</span>
-              </button>
+        <FormularioCadastro
+          onSubmit={salvarCliente}
+          onCancelar={() => setModo('lista')}
+          titulo={clienteSelecionado ? clienteSelecionado.razao_nome : (modoRca ? 'Adicionar cliente' : 'Novo cliente')}
+          subtitulo={clienteSelecionado ? 'Editar cadastro do cliente' : 'Dados fiscais, endereço de entrega e condição comercial'}
+          extra={<ChaveAtivo ativo={formData.ativo} onChange={v => setFormData({ ...formData, ativo: v })} rotulo="Cliente ativo" />}
+          rotuloSalvar={clienteSelecionado ? 'Salvar alterações' : 'Cadastrar cliente'}
+          salvando={salvandoCliente}
+        >
 
-              <div className="h-6 w-px bg-slate-200" />
-
-              <div>
-                <h3 className="text-base sm:text-lg font-black text-slate-900">
-                  {clienteSelecionado ? `Editar Cliente: ${clienteSelecionado.razao_nome}` : 'Novo Cadastro de Cliente'}
-                </h3>
-                <p className="text-xs text-slate-500 font-medium">
-                  Preencha os dados cadastrais, fiscais e endereço de entrega
-                </p>
-              </div>
-            </div>
-
-            {/* Ações Rápidas */}
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 cursor-pointer bg-white px-3.5 py-2 rounded-xl border border-slate-200 shadow-sm">
-                <input
-                  type="checkbox"
-                  checked={formData.ativo}
-                  onChange={(e) => setFormData({ ...formData, ativo: e.target.checked })}
-                  className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
-                />
-                <span className="text-xs font-bold text-slate-800">
-                  Cliente Ativo
-                </span>
-              </label>
-
-              <button
-                type="button"
-                onClick={() => setModo('lista')}
-                className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs sm:text-sm transition-all cursor-pointer"
-              >
-                Cancelar
-              </button>
-
-              <button
-                type="submit"
-                className="
-                  flex items-center gap-2 px-6 py-2 rounded-xl
-                  bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950
-                  text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow-md
-                  transition-all cursor-pointer
-                "
-              >
-                <Save className="w-4 h-4" />
-                <span>{clienteSelecionado ? 'Salvar Alterações' : 'Concluir Cadastro'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* CORPO DO FORMULÁRIO */}
-          <div className="flex-1 overflow-y-auto px-3 sm:px-8 py-4 sm:py-6 space-y-6 bg-slate-50/40">
+{/* CORPO DO FORMULÁRIO */}
+          <div className="flex-1 overflow-y-auto px-3 sm:px-8 py-4 sm:py-6 space-y-6 bg-papel-2/40">
             
             {/* SEÇÃO 1: CLASSIFICAÇÃO & DOCUMENTOS */}
-            <div className="p-4 sm:p-6 rounded-2xl bg-white border border-slate-200/90 shadow-sm space-y-5">
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2 text-emerald-950 font-black text-sm uppercase tracking-wide">
-                  <FileText className="w-4 h-4 text-emerald-700" />
+            <div className="p-4 sm:p-6 rounded-md bg-papel border border-linha/90  space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-linha">
+                <div className="flex items-center gap-2 text-eno-950 font-extrabold text-sm uppercase tracking-wide">
+                  <FileText className="w-4 h-4 text-eno-700" />
                   <span>1. Classificação e Documentos Oficiais</span>
                 </div>
 
                 {/* Alternador PF / PJ */}
-                <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+                <div className="flex items-center gap-2 bg-papel-2 p-1 rounded-md">
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, tipo_pessoa: 'PJ' })}
                     className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      formData.tipo_pessoa === 'PJ' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                      formData.tipo_pessoa === 'PJ' ? 'bg-eno-800 text-white ' : 'text-tinta-2 hover:text-tinta'
                     }`}
                   >
                     <Building2 className="w-3.5 h-3.5" />
@@ -992,7 +839,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     type="button"
                     onClick={() => setFormData({ ...formData, tipo_pessoa: 'PF' })}
                     className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      formData.tipo_pessoa === 'PF' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                      formData.tipo_pessoa === 'PF' ? 'bg-eno-800 text-white ' : 'text-tinta-2 hover:text-tinta'
                     }`}
                   >
                     <User className="w-3.5 h-3.5" />
@@ -1006,9 +853,8 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                 
                 {/* Razão Social / Nome Completo */}
                 <div className="sm:col-span-2 lg:col-span-3">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    {formData.tipo_pessoa === 'PJ' ? 'Razão Social' : 'Nome Completo'} <span className="text-red-500">*</span>
-                    <span className="text-[10px] text-slate-400 font-mono ml-1.5">(razao_nome)</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    {formData.tipo_pessoa === 'PJ' ? 'Razão Social' : 'Nome Completo'} <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1016,30 +862,28 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     value={formData.razao_nome}
                     onChange={(e) => setFormData({ ...formData, razao_nome: e.target.value })}
                     placeholder={formData.tipo_pessoa === 'PJ' ? 'Ex: Supermercados Alvorada Ltda' : 'Ex: Carlos Eduardo Nogueira'}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Nome Fantasia */}
                 <div className="sm:col-span-2 lg:col-span-3">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
                     Nome Fantasia
-                    <span className="text-[10px] text-slate-400 font-mono ml-1.5">(fantasia)</span>
                   </label>
                   <input
                     type="text"
                     value={formData.fantasia}
                     onChange={(e) => setFormData({ ...formData, fantasia: e.target.value })}
                     placeholder="Ex: Alvorada Supermercados"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* CPF / CNPJ */}
                 <div className="lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    {formData.tipo_pessoa === 'PJ' ? 'CNPJ' : 'CPF'} <span className="text-red-500">*</span>
-                    <span className="text-[10px] text-slate-400 font-mono ml-1.5">(cpf_cnpj)</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    {formData.tipo_pessoa === 'PJ' ? 'CNPJ' : 'CPF'} <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1047,30 +891,28 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     value={formData.cpf_cnpj}
                     onChange={(e) => setFormData({ ...formData, cpf_cnpj: e.target.value })}
                     placeholder={formData.tipo_pessoa === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00'}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono font-semibold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm tabular-nums font-semibold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Inscrição Estadual / RG */}
                 <div className="lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
                     {formData.tipo_pessoa === 'PJ' ? 'Inscrição Estadual (IE)' : 'RG'}
-                    <span className="text-[10px] text-slate-400 font-mono ml-1.5">(ie_rg)</span>
                   </label>
                   <input
                     type="text"
                     value={formData.ie_rg}
                     onChange={(e) => setFormData({ ...formData, ie_rg: e.target.value })}
                     placeholder="Ex: 254.991.002-1"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm tabular-nums focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Telefone */}
                 <div className="lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Telefone / WhatsApp <span className="text-red-500">*</span>
-                    <span className="text-[10px] text-slate-400 font-mono ml-1.5">(telefone)</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    Telefone / WhatsApp <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1078,15 +920,14 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     value={formData.telefone}
                     onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
                     placeholder="(00) 00000-0000"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* E-mail */}
                 <div className="sm:col-span-2 lg:col-span-6">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    E-mail Oficial (Contato, Pedidos e Envio de NF-e) <span className="text-red-500">*</span>
-                    <span className="text-[10px] text-slate-400 font-mono ml-1.5">(email)</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    E-mail Oficial (Contato, Pedidos e Envio de NF-e) <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="email"
@@ -1094,7 +935,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder="compras@empresa.com.br ou financeiro@empresa.com.br"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
@@ -1102,10 +943,10 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
             </div>
 
             {/* SEÇÃO 2: ENDEREÇO DE ENTREGA E COBRANÇA */}
-            <div className="p-4 sm:p-6 rounded-2xl bg-white border border-slate-200/90 shadow-sm space-y-5">
-              <div className="pb-3 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-emerald-950 font-black text-sm uppercase tracking-wide">
-                  <MapPin className="w-4 h-4 text-emerald-700" />
+            <div className="p-4 sm:p-6 rounded-md bg-papel border border-linha/90  space-y-5">
+              <div className="pb-3 border-b border-linha flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-eno-950 font-extrabold text-sm uppercase tracking-wide">
+                  <MapPin className="w-4 h-4 text-eno-700" />
                   <span>2. Endereço de Entrega & Faturamento</span>
                 </div>
               </div>
@@ -1115,8 +956,8 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                 
                 {/* CEP */}
                 <div className="sm:col-span-2 lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    CEP <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    CEP <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1124,14 +965,14 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     value={formData.cep}
                     onChange={(e) => setFormData({ ...formData, cep: e.target.value })}
                     placeholder="00000-000"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono font-semibold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm tabular-nums font-semibold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Logradouro */}
                 <div className="sm:col-span-2 md:col-span-4 lg:col-span-4">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Logradouro (Rua, Avenida, Rodovia) <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    Logradouro (Rua, Avenida, Rodovia) <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1139,14 +980,14 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     value={formData.logradouro}
                     onChange={(e) => setFormData({ ...formData, logradouro: e.target.value })}
                     placeholder="Ex: Av. Brasil ou Rodovia SP-340"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Número */}
                 <div className="sm:col-span-1 lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Número <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    Número <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1154,14 +995,14 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     value={formData.numero}
                     onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
                     placeholder="1540 ou S/N"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Bairro */}
                 <div className="sm:col-span-2 lg:col-span-3">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Bairro <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    Bairro <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1169,19 +1010,19 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     value={formData.bairro}
                     onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
                     placeholder="Ex: Centro ou Distrito Industrial"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* UF */}
                 <div className="sm:col-span-1 lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Estado (UF) <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    Estado (UF) <span className="text-st-vencido">*</span>
                   </label>
                   <select
                     value={formData.uf}
                     onChange={(e) => setFormData({ ...formData, uf: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-bold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel"
                   >
                     {['SP', 'MG', 'RJ', 'PR', 'SC', 'RS', 'GO', 'MS', 'MT', 'BA', 'ES', 'DF'].map(uf => (
                       <option key={uf} value={uf}>{uf}</option>
@@ -1191,8 +1032,8 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
 
                 {/* Município */}
                 <div className="sm:col-span-2 lg:col-span-3">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Município <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    Município <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1200,13 +1041,13 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     value={formData.municipio}
                     onChange={(e) => setFormData({ ...formData, municipio: e.target.value })}
                     placeholder="Ex: Mogi Guaçu"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Complemento */}
                 <div className="sm:col-span-2 md:col-span-4 lg:col-span-8">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
                     Complemento / Ponto de Referência / Instruções de Entrega
                   </label>
                   <input
@@ -1214,7 +1055,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     value={formData.complemento}
                     onChange={(e) => setFormData({ ...formData, complemento: e.target.value })}
                     placeholder="Galpão 02, Docas 4 a 6, Entrada pela portaria lateral"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
@@ -1222,31 +1063,30 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
             </div>
 
             {/* SEÇÃO 3: POLÍTICAS COMERCIAIS & CARTEIRA */}
-            <div className="p-4 sm:p-6 rounded-2xl bg-emerald-50/60 border border-emerald-200/80 shadow-sm space-y-5">
-              <div className="pb-3 border-b border-emerald-200/60 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-emerald-950 font-black text-sm uppercase tracking-wide">
-                  <CreditCard className="w-4 h-4 text-emerald-800" />
+            <div className="p-4 sm:p-6 rounded-md bg-eno-50/60 border border-linha-forte/80  space-y-5">
+              <div className="pb-3 border-b border-linha-forte/60 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-eno-950 font-extrabold text-sm uppercase tracking-wide">
+                  <CreditCard className="w-4 h-4 text-eno-800" />
                   <span>3. Condições Comerciais, Carteira & Tabela de Preço</span>
                 </div>
-                <span className="text-xs text-emerald-900/70 font-medium">
+                <span className="text-xs text-eno-900/70 font-medium">
                   Define o representante, tabela de preço e condições de faturamento padrão
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Vendedor / Representante */}
-                <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-sm flex flex-col justify-between">
+                <div className="bg-papel p-4 rounded-md border border-linha  flex flex-col justify-between">
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                    <label className="block text-xs font-bold text-tinta mb-1.5">
                       Representante Responsável (RCA)
-                      <span className="text-[10px] text-slate-400 font-mono ml-1.5">(vendedor_id)</span>
                     </label>
                     {modoRca ? (
                       (() => {
                         const eu = rcasCadastrados.find(r => r.id === rcaFixoId);
                         return (
-                          <div className="w-full px-3 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs sm:text-sm font-bold text-emerald-900 flex items-center gap-2">
-                            <UserCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                          <div className="w-full px-3 py-2.5 rounded-md border border-linha-forte bg-eno-50 text-xs sm:text-sm font-bold text-eno-900 flex items-center gap-2">
+                            <UserCheck className="w-4 h-4 text-eno-700 shrink-0" />
                             <span className="truncate">{eu ? `${eu.codigo_rca} · ${eu.nome_fantasia || eu.nome_completo}` : 'Você'}</span>
                           </div>
                         );
@@ -1255,7 +1095,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     <select
                       value={formData.vendedor_id}
                       onChange={(e) => setFormData({ ...formData, vendedor_id: e.target.value })}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                      className="w-full px-3 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel"
                     >
                       <option value="">Sem representante (venda direta)</option>
                       {rcasCadastrados.map(rca => (
@@ -1266,25 +1106,25 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     </select>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-2">
+                  <p className="text-[11px] text-cinza mt-2">
                     {modoRca ? 'Clientes cadastrados por você entram automaticamente na sua carteira' : 'Usuário com acesso comercial vinculado a este cliente'}
                   </p>
                 </div>
 
                 {/* Tabela de Preço */}
-                <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-sm flex flex-col justify-between">
+                <div className="bg-papel p-4 rounded-md border border-linha  flex flex-col justify-between">
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                      Tabela de Preço Vinculada {!modoRca && <span className="text-red-500">*</span>}
+                    <label className="block text-xs font-bold text-tinta mb-1.5">
+                      Tabela de Preço Vinculada {!modoRca && <span className="text-st-vencido">*</span>}
                     </label>
                     {modoRca ? (
                       // RCA não define tabela: a fábrica libera depois
                       (() => {
                         const nome = opcoesTabelasPreco().find(t => t.id === formData.tabela_preco_id)?.nome;
                         return nome ? (
-                          <div className="w-full px-3 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs sm:text-sm font-bold text-emerald-900">{nome}</div>
+                          <div className="w-full px-3 py-2.5 rounded-md border border-linha-forte bg-eno-50 text-xs sm:text-sm font-bold text-eno-900">{nome}</div>
                         ) : (
-                          <div className="w-full px-3 py-2.5 rounded-xl border border-amber-300 bg-amber-50 text-xs sm:text-sm font-bold text-amber-900">
+                          <div className="w-full px-3 py-2.5 rounded-md border border-st-aguardando/30 bg-st-aguardando-bg text-xs sm:text-sm font-bold text-st-aguardando">
                             Aguardando a fábrica definir a tabela
                           </div>
                         );
@@ -1293,7 +1133,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                       <select
                         value={formData.tabela_preco_id}
                         onChange={(e) => setFormData({ ...formData, tabela_preco_id: e.target.value })}
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                        className="w-full px-3 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel"
                       >
                         <option value="">-- Sem tabela definida --</option>
                         {opcoesTabelasPreco().map(tab => (
@@ -1304,7 +1144,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                       </select>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-2">
+                  <p className="text-[11px] text-cinza mt-2">
                     {modoRca
                       ? 'A tabela de preço é definida pela fábrica. Até lá, não é possível fazer pedido para este cliente.'
                       : 'Define os produtos e preços que o RCA e o cliente podem usar nos pedidos'}
@@ -1312,31 +1152,30 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                 </div>
 
                 {/* Forma de Pagamento */}
-                <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-sm flex flex-col justify-between">
+                <div className="bg-papel p-4 rounded-md border border-linha  flex flex-col justify-between">
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                      Forma de Pagamento Padrão <span className="text-red-500">*</span>
-                      <span className="text-[10px] text-slate-400 font-mono ml-1.5">(forma_pagamento_id)</span>
+                    <label className="block text-xs font-bold text-tinta mb-1.5">
+                      Forma de Pagamento Padrão <span className="text-st-vencido">*</span>
                     </label>
                     <select
                       value={formData.forma_pagamento_id}
                       onChange={(e) => setFormData({ ...formData, forma_pagamento_id: e.target.value })}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                      className="w-full px-3 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel"
                     >
                       {FORMAS_PAGAMENTO_OPTIONS.map(fp => (
                         <option key={fp.id} value={fp.id}>{fp.nome}</option>
                       ))}
                     </select>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-2">
+                  <p className="text-[11px] text-cinza mt-2">
                     Meio oficial de pagamento acordado comercialmente
                   </p>
                 </div>
 
                 {/* Prazo de Pagamento */}
-                <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-sm flex flex-col justify-between">
+                <div className="bg-papel p-4 rounded-md border border-linha  flex flex-col justify-between">
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                    <label className="block text-xs font-bold text-tinta mb-1.5">
                       Prazo de Pagamento (dias)
                     </label>
                     <div className="relative">
@@ -1347,15 +1186,15 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                         onChange={(e) => setFormData({ ...formData, prazo_dias: e.target.value.replace(/[^\d/ ,]/g, '') })}
                         onBlur={(e) => setFormData({ ...formData, prazo_dias: normalizarDias(e.target.value) })}
                         placeholder="Ex.: 28  ou  28/35/42"
-                        className="w-full pl-3 pr-12 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold tabular-nums focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                        className="w-full pl-3 pr-12 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-bold tabular-nums focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">dias</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-cinza">dias</span>
                     </div>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-2">
+                  <p className="text-[11px] text-cinza mt-2">
                     {(() => {
                       const fp = FORMAS_PAGAMENTO_OPTIONS.find(f => f.id === formData.forma_pagamento_id);
-                      return <>Fica: <b className="text-slate-700">{textoCondicao(fp?.nome || 'Boleto Bancário', formData.prazo_dias)}</b>. Vazio = à vista; use "/" para parcelas.</>;
+                      return <>Fica: <b className="text-tinta-2">{textoCondicao(fp?.nome || 'Boleto Bancário', formData.prazo_dias)}</b>. Vazio = à vista; use "/" para parcelas.</>;
                     })()}
                   </p>
                 </div>
@@ -1376,39 +1215,15 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                 permitirRemover
               />
             ) : modoRca ? (
-              <div className="flex items-start gap-2.5 p-3.5 rounded-2xl border border-slate-200 bg-white text-xs text-slate-600">
-                <KeyRound className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2.5 p-3.5 rounded-md border border-linha bg-papel text-xs text-tinta-2">
+                <KeyRound className="w-4 h-4 text-eno-700 shrink-0 mt-0.5" />
                 <span>O acesso do cliente ao Portal do Cliente (pedidos pela internet) é liberado pela fábrica. Peça ao administrador se o cliente quiser comprar direto.</span>
               </div>
             ) : null}
 
           </div>
 
-          {/* RODAPÉ DO FORMULÁRIO */}
-          <div className="flex items-center justify-between gap-2 px-4 sm:px-8 py-3.5 border-t border-slate-200 bg-white">
-            <button
-              type="button"
-              onClick={() => setModo('lista')}
-              className="px-5 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs sm:text-sm transition-all cursor-pointer"
-            >
-              Cancelar e Voltar
-            </button>
-
-            <button
-              type="submit"
-              className="
-                flex items-center gap-2 px-8 py-2.5 rounded-xl
-                bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950
-                text-white font-bold text-xs sm:text-sm shadow-md hover:shadow-lg
-                transition-all cursor-pointer
-              "
-            >
-              <Save className="w-4 h-4" />
-              <span>{clienteSelecionado ? 'Salvar Alterações do Cliente' : 'Cadastrar Cliente Oficial'}</span>
-            </button>
-          </div>
-
-        </form>
+          </FormularioCadastro>
       )}
 
       {/* ========================================================================= */}
@@ -1416,312 +1231,181 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
       {/* DE FATURAMENTO MENSAL E TABELA EM LINHAS EXPANSÍVEL AO CLIQUE)            */}
       {/* ========================================================================= */}
       {modo === 'historico' && clienteSelecionado && (
-        <div className="flex-1 w-full h-full flex flex-col overflow-hidden bg-slate-50/60">
-          
-          {/* CABEÇALHO LIMPO: SEM CNPJ NO TOPO E SEM SUBTÍTULOS TÉCNICOS */}
-          <div className="flex flex-wrap items-center justify-between gap-4 px-4 sm:px-8 py-4 border-b border-slate-200 bg-white">
-            <div className="flex items-center gap-4">
+        <div className={`flex-1 w-full min-h-0 flex flex-col ${modoRca ? '' : 'overflow-y-auto'}`}>
+          <div className={modoRca ? 'pb-4' : 'mx-auto w-full max-w-[1700px] pb-6'}>
+            <div className={`pt-3 ${modoRca ? '' : 'px-4 sm:px-6'}`}>
               <button
                 type="button"
                 onClick={() => setModo('lista')}
-                className="
-                  flex items-center gap-1.5 px-3.5 py-2 rounded-xl
-                  border border-slate-300 bg-white hover:bg-slate-100
-                  text-slate-700 font-bold text-xs transition-colors cursor-pointer shadow-sm
-                "
-                title="Voltar para Clientes"
+                className="inline-flex items-center gap-1.5 h-10 sm:h-8 -ml-1 px-1 text-[13px] font-semibold text-eno-700 hover:text-eno-900 cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro rounded"
               >
                 <ArrowLeft className="w-4 h-4" />
-                <span>Voltar para Clientes</span>
+                {modoRca ? 'Meus clientes' : 'Clientes'}
               </button>
-
-              <div className="h-7 w-px bg-slate-200" />
-
-              <div>
-                <h3 className="text-base sm:text-lg font-black text-slate-900">
-                  Histórico de Compras: {clienteSelecionado.razao_nome}
-                  {clienteSelecionado.fantasia && (
-                    <span className="text-sm font-semibold text-slate-500 ml-2 font-normal">
-                      ({clienteSelecionado.fantasia})
-                    </span>
-                  )}
-                </h3>
-              </div>
             </div>
+            <CabecalhoPagina
+              titulo={clienteSelecionado.fantasia || clienteSelecionado.razao_nome}
+              resumo={`Histórico de compras${clienteSelecionado.fantasia ? ` · ${clienteSelecionado.razao_nome}` : ''}`}
+              className={`!pt-1 ${modoRca ? '!px-0' : ''}`}
+              acoes={
+                <BotaoSecundario onClick={() => abrirFormularioEditar(clienteSelecionado)} className="h-10 sm:h-9">
+                  <Edit2 className="w-4 h-4" /> Editar cadastro
+                </BotaoSecundario>
+              }
+            />
 
-            {/* Total Comprado */}
-            <div className="text-right">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Total Comprado Acumulado
-              </span>
-              <span className="text-xl font-black text-emerald-900 font-mono">
-                R$ {totalComprado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-          </div>
-
-          {/* SEÇÃO SUPERIOR: CARDS DE RESUMO + GRÁFICO DE LINHAS MENSAL DO FATURAMENTO */}
-          <div className="px-8 py-5 border-b border-slate-200 bg-white">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-              
-              {/* 3 CARDS DE KPI (COLUNA ESQUERDA: 4 DE 12) */}
-              <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-3">
-                <div className="flex items-center gap-3.5 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="p-2.5 rounded-lg bg-emerald-100 text-emerald-800">
-                    <ShoppingBag className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-500 block">Pedidos Realizados</span>
-                    <span className="text-base font-black text-slate-900 font-mono">{comprasDoCliente.length} pedidos</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3.5 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="p-2.5 rounded-lg bg-indigo-100 text-indigo-800">
-                    <TrendingUp className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-500 block">Ticket Médio por Pedido</span>
-                    <span className="text-base font-black text-slate-900 font-mono">
-                      R$ {comprasDoCliente.length > 0 ? (totalComprado / comprasDoCliente.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '0,00'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3.5 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="p-2.5 rounded-lg bg-amber-100 text-amber-800">
-                    <Calendar className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-500 block">Última Compra Registrada</span>
-                    <span className="text-sm font-black text-slate-900">
-                      {comprasDoCliente.length > 0 ? comprasDoCliente[0].emitido_em : 'Nenhum pedido'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* GRÁFICO DE LINHAS MENSAL DO FATURAMENTO (COLUNA DIREITA: 8 DE 12) */}
-              <div className="lg:col-span-8 bg-slate-50/80 p-4 rounded-2xl border border-slate-200">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-emerald-700" />
-                    <span className="text-xs font-black uppercase tracking-wide text-slate-800">
-                      Faturamento Mensal do Cliente (R$)
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-medium">Últimos 6 Meses</span>
-                </div>
-
-                <div className="h-44 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={dadosGraficoMensal} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                      <XAxis 
-                        dataKey="mes" 
-                        tick={{ fontSize: 11, fill: '#64748b' }} 
-                        axisLine={{ stroke: '#cbd5e1' }}
-                        tickLine={false}
-                      />
-                      <YAxis 
-                        tick={{ fontSize: 10, fill: '#64748b' }} 
-                        axisLine={false}
-                        tickLine={false}
-                        tickFormatter={(val) => `R$ ${(val / 1000).toFixed(0)}k`}
-                      />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Line 
-                        type="monotone" 
-                        dataKey="faturamento" 
-                        stroke="#059669" 
-                        strokeWidth={3} 
-                        dot={{ r: 4, fill: '#059669', strokeWidth: 2, stroke: '#ffffff' }}
-                        activeDot={{ r: 6, fill: '#047857' }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          {/* LISTA EM LINHAS DOS PEDIDOS: CLIQUE ABRE MAIS INFORMAÇÕES DE PRODUTOS */}
-          <div className="flex-1 overflow-y-auto px-3 sm:px-8 py-4 sm:py-6">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              
-              <div className="px-6 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
-                    Pedidos de Venda ({comprasDoCliente.length})
-                  </h4>
-                  <p className="text-[11px] text-slate-400">
-                    Clique em qualquer linha para abrir e fechar os detalhes e lotes de produtos
-                  </p>
-                </div>
-              </div>
-
-              {comprasDoCliente.length === 0 ? (
-                <div className="py-16 text-center text-slate-400 text-xs font-medium">
-                  Nenhum pedido de venda registrado para este cliente.
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {/* Cabeçalho da Tabela em Linha (Sem Entregue e Sem Liquidado) */}
-                  <div className="grid grid-cols-12 gap-3 px-6 py-3.5 bg-slate-100/80 text-[11px] font-black uppercase tracking-wider text-slate-600 border-b border-slate-200">
-                    <div className="col-span-3">Pedido</div>
-                    <div className="col-span-2">Data de Emissão</div>
-                    <div className="col-span-2">Data de Entrega</div>
-                    <div className="col-span-3">Nota Fiscal (NF-e)</div>
-                    <div className="col-span-2 text-right">Valor Total</div>
-                  </div>
-
-                  {/* Linhas de Pedido */}
-                  {comprasDoCliente.map((compra) => {
-                    const expandido = pedidoExpandidoId === compra.id;
-
-                    return (
-                      <div key={compra.id} className="transition-colors border-b border-slate-100 last:border-b-0">
-                        
-                        {/* Linha principal clicável */}
-                        <div 
-                          onClick={() => toggleExpandirPedido(compra.id)}
-                          className={`
-                            grid grid-cols-12 gap-3 px-6 py-4 items-center cursor-pointer transition-all
-                            ${expandido ? 'bg-emerald-50/60' : 'hover:bg-slate-50/90'}
-                          `}
-                        >
-                          {/* Pedido & Chevron */}
-                          <div className="col-span-3 flex items-center gap-2.5">
-                            <button
-                              type="button"
-                              className="p-1 rounded-md text-slate-400 hover:text-emerald-800 hover:bg-emerald-100/60 transition-colors"
-                            >
-                              {expandido ? (
-                                <ChevronUp className="w-4 h-4 text-emerald-800 stroke-[2.5]" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4 text-slate-400" />
-                              )}
-                            </button>
-                            <span className="font-mono text-xs font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
-                              {compra.numero_pedido}
-                            </span>
-                          </div>
-
-                          {/* Emissão */}
-                          <div className="col-span-2 text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                            <span>{compra.emitido_em}</span>
-                          </div>
-
-                          {/* Entrega */}
-                          <div className="col-span-2 text-xs font-medium text-slate-600">
-                            {compra.data_entrega ? (
-                              <span>{compra.data_entrega}</span>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
-                          </div>
-
-                          {/* Nota Fiscal */}
-                          <div className="col-span-3 text-xs font-medium text-slate-700 flex items-center gap-1.5">
-                            {compra.nota_fiscal ? (
-                              <>
-                                <ReceiptText className="w-3.5 h-3.5 text-indigo-600" />
-                                <span className="font-mono font-bold text-indigo-950">
-                                  NF-e nº {compra.nota_fiscal.numero}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-slate-400">Pendente</span>
-                            )}
-                          </div>
-
-                          {/* Valor Total */}
-                          <div className="col-span-2 text-right">
-                            <span className="font-mono text-sm font-black text-emerald-900">
-                              R$ {compra.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Detalhes de Produtos Abertos Embaixo ao Clicar no Pedido */}
-                        {expandido && (
-                          <div className="px-8 py-5 bg-slate-50/70 border-t border-slate-200 space-y-4">
-                            
-                            {/* Chave de Acesso NF-e (se houver) */}
-                            {compra.nota_fiscal?.chave_acesso && (
-                              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-white rounded-xl border border-indigo-100 text-xs text-indigo-950 font-mono">
-                                <div className="flex items-center gap-2">
-                                  <FileCheck2 className="w-4 h-4 text-indigo-600" />
-                                  <span><strong>Chave NF-e:</strong> {compra.nota_fiscal.chave_acesso}</span>
-                                </div>
-                                <span className="text-[11px] text-slate-400">Série {compra.nota_fiscal.serie}</span>
-                              </div>
-                            )}
-
-                            {/* Produtos: Nome, Quantidade e Valor */}
-                            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
-                              <div className="px-5 py-3 bg-slate-100/80 border-b border-slate-200 flex items-center gap-2">
-                                <Package className="w-4 h-4 text-emerald-800" />
-                                <h5 className="text-xs font-black uppercase tracking-wider text-slate-800">
-                                  Produtos do Pedido ({compra.itens.length} {compra.itens.length === 1 ? 'item' : 'itens'})
-                                </h5>
-                              </div>
-
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-left text-xs border-collapse">
-                                  <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
-                                    <tr>
-                                      <th className="py-2.5 px-5">Produto</th>
-                                      <th className="py-2.5 px-4">Embalagem</th>
-                                      <th className="py-2.5 px-4 text-right">Quantidade</th>
-                                      <th className="py-2.5 px-4 text-right">Valor Unitário</th>
-                                      <th className="py-2.5 px-5 text-right">Valor Total</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
-                                    {compra.itens.map((item, idx) => (
-                                      <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                                        {/* Nome do Produto */}
-                                        <td className="py-3 px-5 font-bold text-slate-900">
-                                          {item.produto_nome}
-                                        </td>
-                                        {/* Embalagem */}
-                                        <td className="py-3 px-4 text-slate-500">
-                                          {item.tipo_embalagem}
-                                        </td>
-                                        {/* Quantidade */}
-                                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
-                                          {item.quantidade}
-                                        </td>
-                                        {/* Valor Unitário */}
-                                        <td className="py-3 px-4 text-right font-mono text-slate-600">
-                                          R$ {item.preco_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                        </td>
-                                        {/* Valor Total */}
-                                        <td className="py-3 px-5 text-right font-mono font-black text-slate-900">
-                                          R$ {item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-
-                          </div>
-                        )}
-
+            <div className={`space-y-4 ${modoRca ? '' : 'px-4 sm:px-6'}`}>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] items-stretch">
+                <section className="bg-papel border border-linha rounded-md overflow-hidden">
+                  <div className="h-[3px] filete-ouro" aria-hidden />
+                  <div className="grid grid-cols-2 gap-px bg-linha">
+                    <div className="col-span-2 bg-eno-50 px-4 py-4">
+                      <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza">Total comprado</div>
+                      <div className="mt-2 flex items-baseline gap-1 text-[30px] font-extrabold tracking-[-0.02em] leading-none tabular-nums text-tinta">
+                        <span className="text-[14px] font-semibold text-cinza">R$</span>
+                        {totalComprado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    </div>
+                    <div className="bg-papel px-4 py-3.5">
+                      <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza">Pedidos</div>
+                      <div className="mt-1.5 text-[21px] font-extrabold tabular-nums text-tinta">{comprasDoCliente.length}</div>
+                    </div>
+                    <div className="bg-papel px-4 py-3.5">
+                      <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza">Ticket médio</div>
+                      <div className="mt-1.5 text-[17px] font-extrabold tabular-nums text-tinta">
+                        {comprasDoCliente.length > 0 ? `R$ ${(totalComprado / comprasDoCliente.length).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                      </div>
+                    </div>
+                    <div className="col-span-2 bg-papel px-4 py-3">
+                      <span className="text-[12px] text-cinza">Última compra </span>
+                      <span className="text-[13px] font-semibold text-tinta tabular-nums">{comprasDoCliente.length > 0 ? comprasDoCliente[0].emitido_em : 'nenhuma ainda'}</span>
+                    </div>
+                  </div>
+                </section>
 
+                <Painel titulo="Faturamento mensal" contexto="últimos 6 meses">
+                  <div className="h-44 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={dadosGraficoMensal} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={CORES.linha} vertical={false} />
+                        <XAxis dataKey="mes" tick={{ fontSize: 11, fill: CORES.cinza }} axisLine={{ stroke: CORES.linha }} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10, fill: CORES.cinza }} axisLine={false} tickLine={false} width={48} tickFormatter={(val) => `${(val / 1000).toFixed(0)} mil`} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Line type="monotone" dataKey="faturamento" stroke={CORES.eno700} strokeWidth={2.5} dot={{ r: 3, fill: CORES.eno700, strokeWidth: 2, stroke: CORES.papel }} activeDot={{ r: 5, fill: CORES.ouroEscuro }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Painel>
+              </div>
+
+              {/* Pedidos: toque abre os produtos */}
+              <section className="bg-papel border border-linha rounded-md overflow-hidden">
+                <div className="flex items-baseline justify-between gap-3 px-4 pt-3.5 pb-3 border-b border-linha">
+                  <h2 className="text-[15px] font-bold tracking-[-0.01em] text-tinta">Pedidos de venda</h2>
+                  <span className="text-[12px] text-cinza tabular-nums">{comprasDoCliente.length} · toque para ver os produtos</span>
+                </div>
+
+                {comprasDoCliente.length === 0 ? (
+                  <EstadoVazio titulo="Nenhum pedido de venda ainda" texto="Os pedidos aprovados deste cliente aparecem aqui, com nota fiscal e produtos." />
+                ) : (
+                  <>
+                    <div className="hidden sm:grid grid-cols-12 gap-3 px-4 py-2 bg-papel-2 border-b border-linha-forte text-[10.5px] font-bold uppercase tracking-[0.12em] text-cinza">
+                      <div className="col-span-3">Pedido</div>
+                      <div className="col-span-2">Emissão</div>
+                      <div className="col-span-2">Entrega</div>
+                      <div className="col-span-3">Nota fiscal</div>
+                      <div className="col-span-2 text-right">Valor</div>
+                    </div>
+                    {comprasDoCliente.map((compra) => {
+                      const expandido = pedidoExpandidoId === compra.id;
+                      return (
+                        <div key={compra.id} className="border-b border-linha last:border-b-0">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpandirPedido(compra.id)}
+                            aria-expanded={expandido}
+                            className={`w-full text-left px-4 py-3 min-h-[52px] cursor-pointer transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ouro ${expandido ? 'bg-papel-3/60' : 'hover:bg-papel-3/40'}`}
+                          >
+                            {/* Celular */}
+                            <span className="sm:hidden flex items-start justify-between gap-3">
+                              <span className="min-w-0">
+                                <span className="flex items-center gap-1.5 text-[13px] font-bold text-tinta tabular-nums">
+                                  {expandido ? <ChevronUp className="w-4 h-4 text-eno-700" /> : <ChevronDown className="w-4 h-4 text-cinza" />}
+                                  {compra.numero_pedido}
+                                </span>
+                                <span className="block text-[11.5px] text-cinza tabular-nums">
+                                  {compra.emitido_em}{compra.nota_fiscal ? ` · NF-e ${compra.nota_fiscal.numero}` : ' · NF pendente'}
+                                </span>
+                              </span>
+                              <span className="text-[16px] font-extrabold tabular-nums text-tinta shrink-0">
+                                R$ {compra.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
+                            </span>
+                            {/* A partir de sm */}
+                            <span className="hidden sm:grid grid-cols-12 gap-3 items-center text-[13px]">
+                              <span className="col-span-3 flex items-center gap-2 font-semibold text-tinta tabular-nums">
+                                {expandido ? <ChevronUp className="w-4 h-4 text-eno-700" /> : <ChevronDown className="w-4 h-4 text-cinza" />}
+                                {compra.numero_pedido}
+                              </span>
+                              <span className="col-span-2 tabular-nums text-tinta-2">{compra.emitido_em}</span>
+                              <span className="col-span-2 tabular-nums text-tinta-2">{compra.data_entrega || <span className="text-cinza">—</span>}</span>
+                              <span className="col-span-3 tabular-nums text-tinta-2">{compra.nota_fiscal ? `NF-e nº ${compra.nota_fiscal.numero}` : <span className="text-cinza">Pendente</span>}</span>
+                              <span className="col-span-2 text-right font-extrabold tabular-nums text-tinta">R$ {compra.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            </span>
+                          </button>
+
+                          {expandido && (
+                            <div className="px-3 sm:px-6 py-4 bg-papel-2 border-t border-linha space-y-3">
+                              {compra.nota_fiscal?.chave_acesso && (
+                                <div className="text-[12px] text-tinta-2 tabular-nums break-all">
+                                  <span className="text-cinza">Chave NF-e </span>{compra.nota_fiscal.chave_acesso}
+                                  <span className="text-cinza"> · série {compra.nota_fiscal.serie}</span>
+                                </div>
+                              )}
+                              {/* Celular: itens em lista */}
+                              <ul className="sm:hidden bg-papel border border-linha rounded-md">
+                                {compra.itens.map((item, idx) => (
+                                  <li key={idx} className="px-3 py-2.5 border-b border-linha last:border-b-0 flex items-start justify-between gap-3">
+                                    <span className="min-w-0">
+                                      <span className="block text-[13px] font-semibold text-tinta">{item.produto_nome}</span>
+                                      <span className="block text-[11.5px] text-cinza tabular-nums">{item.quantidade} × {item.tipo_embalagem} · R$ {item.preco_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                    </span>
+                                    <span className="text-[13px] font-bold tabular-nums text-tinta shrink-0">R$ {item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                              <TabelaDados className="hidden sm:block">
+                                <thead className={tabela.thead}>
+                                  <tr>
+                                    <Th>Produto</Th>
+                                    <Th>Embalagem</Th>
+                                    <Th numero>Quantidade</Th>
+                                    <Th numero>Unitário</Th>
+                                    <Th numero>Total</Th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {compra.itens.map((item, idx) => (
+                                    <tr key={idx} className={tabela.tr}>
+                                      <Td className="font-semibold text-tinta">{item.produto_nome}</Td>
+                                      <Td>{item.tipo_embalagem}</Td>
+                                      <Td numero>{item.quantidade}</Td>
+                                      <Td numero>R$ {item.preco_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Td>
+                                      <Td numero className="font-bold text-tinta">R$ {item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </TabelaDados>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </section>
             </div>
           </div>
-
         </div>
       )}
 

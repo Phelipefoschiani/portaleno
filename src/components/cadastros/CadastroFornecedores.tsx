@@ -50,6 +50,14 @@ import { carregarMateriaPrima, salvarMateriaPrima, MateriaPrimaEstoque } from '.
 import { useListaPersistida } from '../../lib/useListaPersistida';
 import { formatarDataBR } from '../../lib/datas';
 import { mesReferenciaDe, ultimosMesesReferencia } from '../../lib/mesesReferencia';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, Segmentado, CampoBusca } from '../ui/BarraFiltros';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
+import { Painel } from '../ui/Painel';
+import { CORES } from '../ui/tokens';
+import { FormularioCadastro, ChaveAtivo, BotaoLinha, BotaoCartao } from './FormularioCadastro';
+import { ListaCadastro, LinkLinha } from './ListaCadastro';
 
 export interface ProdutoFornecidoItem {
   id: string;
@@ -207,9 +215,9 @@ function carregarFornecedoresCompletos(): Fornecedor[] {
 const CustomTooltipCompras = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-slate-900 text-white px-3.5 py-2 rounded-xl shadow-xl border border-slate-800 text-xs">
-        <p className="font-semibold text-slate-300">{label}</p>
-        <p className="font-black text-emerald-400 font-mono text-sm mt-0.5">
+      <div className="bg-eno-900 text-white px-3 py-2 rounded-md text-xs">
+        <p className="font-semibold text-white/60">{label}</p>
+        <p className="font-extrabold text-white tabular-nums text-sm mt-0.5">
           R$ {Number(payload[0].value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
         </p>
       </div>
@@ -587,355 +595,219 @@ export function CadastroFornecedores() {
     }));
   }, [comprasDoFornecedor]);
 
+  const ativosCount = fornecedores.filter(f => f.ativo).length;
+
   return (
-    <div className="flex-1 w-full h-full flex flex-col bg-white rounded-2xl border border-emerald-950/15 shadow-[0_10px_35px_rgba(0,0,0,0.06)] overflow-hidden">
-      
+    <div className="flex-1 w-full min-h-0 h-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
+
       {/* ========================================================= */}
       {/* 1. MODO: LISTAGEM DE FORNECEDORES                         */}
       {/* ========================================================= */}
       {modo === 'lista' && (
-        <div className="flex-1 flex flex-col h-full overflow-hidden">
-          
-          {/* CABEÇALHO DA LISTA (PADRÃO CLIENTES) */}
-          <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-3.5 border-b border-slate-200 bg-slate-50/80">
-            <div className="flex items-center gap-3.5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-900 text-white shadow-sm">
-                <Truck className="w-5 h-5 text-emerald-300" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                    Fornecedores
-                  </h2>
-                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    {fornecedores.length} Cadastrados
-                  </span>
+        <>
+          <div className="mx-auto w-full max-w-[1700px]">
+            <CabecalhoPagina
+              titulo="Fornecedores"
+              resumo={
+                fornecedores.length === 0
+                  ? 'Nenhum fornecedor cadastrado'
+                  : `${fornecedores.length} ${fornecedores.length === 1 ? 'fornecedor' : 'fornecedores'} · ${ativosCount} ${ativosCount === 1 ? 'ativo' : 'ativos'}`
+              }
+              acoes={
+                fornecedores.length === 0 ? undefined : (
+                  <BotaoPrimario onClick={abrirFormularioNovo} className="w-full sm:w-auto h-10 sm:h-9">
+                    <Plus className="w-4 h-4" /> Novo fornecedor
+                  </BotaoPrimario>
+                )
+              }
+            />
+            {fornecedores.length > 0 && (
+              <BarraFiltros>
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                  <Segmentado<'TODOS' | 'PJ' | 'PF'>
+                    rotuloAria="Tipo de pessoa"
+                    valor={filtroTipo}
+                    onChange={setFiltroTipo}
+                    opcoes={[
+                      { valor: 'TODOS', rotulo: 'Todos' },
+                      { valor: 'PJ', rotulo: 'Empresas', contagem: fornecedores.filter(f => f.tipo_pessoa === 'PJ').length },
+                      { valor: 'PF', rotulo: 'Pessoas físicas', contagem: fornecedores.filter(f => f.tipo_pessoa === 'PF').length },
+                    ]}
+                  />
+                  <Segmentado<'TODOS' | 'ATIVOS' | 'INATIVOS'>
+                    rotuloAria="Situação"
+                    valor={filtroStatus}
+                    onChange={setFiltroStatus}
+                    opcoes={[
+                      { valor: 'TODOS', rotulo: 'Todas' },
+                      { valor: 'ATIVOS', rotulo: 'Ativos' },
+                      { valor: 'INATIVOS', rotulo: 'Inativos', contagem: fornecedores.length - ativosCount },
+                    ]}
+                  />
                 </div>
-              </div>
-            </div>
-
-            {/* Botão Novo Fornecedor */}
-            <button
-              onClick={abrirFormularioNovo}
-              className="
-                flex items-center gap-2 px-5 py-2.5 rounded-xl
-                bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950
-                text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow-md
-                transition-all cursor-pointer
-              "
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Novo Cadastro de Fornecedor</span>
-            </button>
+                <CampoBusca valor={busca} onChange={setBusca} placeholder="Buscar nome, CNPJ/CPF ou cidade" className="w-full md:w-80 [&_input]:h-10 sm:[&_input]:h-8" />
+              </BarraFiltros>
+            )}
           </div>
 
-          {/* BARRA DE BUSCA E FILTROS */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 border-b border-slate-100 bg-white">
-            <div className="relative flex-1 min-w-[280px] max-w-md">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar por Razão, Fantasia, CNPJ/CPF, Cidade..."
-                className="
-                  w-full pl-10 pr-4 py-2 text-xs sm:text-sm font-medium
-                  rounded-xl border border-slate-200 bg-slate-50/50
-                  focus:bg-white focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20
-                  transition-all
-                "
-              />
-            </div>
-
-            {/* Filtros rápidos */}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
-                <button
-                  onClick={() => setFiltroTipo('TODOS')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${filtroTipo === 'TODOS' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
-                >
-                  Todos
-                </button>
-                <button
-                  onClick={() => setFiltroTipo('PJ')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${filtroTipo === 'PJ' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
-                >
-                  Pessoa Jurídica (PJ)
-                </button>
-                <button
-                  onClick={() => setFiltroTipo('PF')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${filtroTipo === 'PF' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
-                >
-                  Pessoa Física (PF)
-                </button>
-              </div>
-
-              <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
-                <button
-                  onClick={() => setFiltroStatus('TODOS')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${filtroStatus === 'TODOS' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
-                >
-                  Status: Todos
-                </button>
-                <button
-                  onClick={() => setFiltroStatus('ATIVOS')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${filtroStatus === 'ATIVOS' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
-                >
-                  Ativos
-                </button>
-                <button
-                  onClick={() => setFiltroStatus('INATIVOS')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${filtroStatus === 'INATIVOS' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
-                >
-                  Inativos
-                </button>
-              </div>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="mx-auto w-full max-w-[1700px] px-4 sm:px-6 pb-6">
+              {fornecedoresFiltrados.length === 0 ? (
+                <div className="bg-papel border border-linha rounded-md">
+                  {fornecedores.length === 0 ? (
+                    <EstadoVazio
+                      titulo="Nenhum fornecedor cadastrado"
+                      texto="Cadastre quem vende embalagens, insumos e serviços. Ao vincular as matérias-primas, as compras e o estoque já sabem de quem comprar."
+                      acao={<BotaoPrimario onClick={abrirFormularioNovo} className="h-10 sm:h-9"><Plus className="w-4 h-4" /> Novo fornecedor</BotaoPrimario>}
+                    />
+                  ) : (
+                    <EstadoVazio
+                      titulo="Nenhum fornecedor com esses filtros"
+                      texto="Confira a busca ou volte para Todos."
+                      acao={<BotaoSecundario onClick={() => { setBusca(''); setFiltroTipo('TODOS'); setFiltroStatus('TODOS'); }}>Limpar filtros</BotaoSecundario>}
+                    />
+                  )}
+                </div>
+              ) : (
+                <ListaCadastro<Fornecedor>
+                  itens={fornecedoresFiltrados}
+                  chave={f => f.id}
+                  cartao={f => ({
+                    titulo: f.razao_nome,
+                    subtitulo: `${f.fantasia ? `${f.fantasia} · ` : ''}${f.endereco.municipio}/${f.endereco.uf}`,
+                    status: <StatusChip tom={f.ativo ? 'pago' : 'vencido'}>{f.ativo ? 'Ativo' : 'Inativo'}</StatusChip>,
+                    detalhes: [f.cpf_cnpj, f.telefone || f.email],
+                  })}
+                  acoesCartao={f => (
+                    <>
+                      <BotaoCartao onClick={() => abrirHistorico(f)} className="flex-1"><History className="w-3.5 h-3.5" /> Compras</BotaoCartao>
+                      <BotaoCartao onClick={() => abrirFormularioEditar(f)} className="flex-1"><Edit2 className="w-3.5 h-3.5" /> Editar</BotaoCartao>
+                    </>
+                  )}
+                  colunas={[
+                    {
+                      titulo: 'Fornecedor',
+                      render: f => (
+                        <>
+                          <div className="font-semibold text-tinta">{f.razao_nome}</div>
+                          <div className="text-[11.5px] text-cinza">{f.tipo_pessoa === 'PJ' ? 'Empresa' : 'Pessoa física'}{f.fantasia ? ` · ${f.fantasia}` : ''}</div>
+                        </>
+                      ),
+                    },
+                    {
+                      titulo: 'CNPJ / CPF',
+                      className: 'tabular-nums whitespace-nowrap',
+                      render: f => (
+                        <>
+                          <div>{f.cpf_cnpj}</div>
+                          {f.ie_rg && <div className="text-[11.5px] text-cinza">IE/RG {f.ie_rg}</div>}
+                        </>
+                      ),
+                    },
+                    {
+                      titulo: 'Contato',
+                      render: f => (
+                        <>
+                          <div className="tabular-nums whitespace-nowrap">{f.telefone || '—'}</div>
+                          <div className="text-[11.5px] text-cinza truncate max-w-[220px]">{f.email}</div>
+                        </>
+                      ),
+                    },
+                    {
+                      titulo: 'Cidade',
+                      render: f => (
+                        <>
+                          <div className="whitespace-nowrap">{f.endereco.municipio}/{f.endereco.uf}</div>
+                          <div className="text-[11.5px] text-cinza">{f.endereco.bairro}</div>
+                        </>
+                      ),
+                    },
+                    {
+                      titulo: 'Situação',
+                      centro: true,
+                      render: f => (
+                        <button
+                          type="button"
+                          onClick={() => alternarStatusFornecedor(f.id)}
+                          className="cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-ouro"
+                          title={f.ativo ? 'Clique para inativar' : 'Clique para ativar'}
+                        >
+                          <StatusChip tom={f.ativo ? 'pago' : 'vencido'}>{f.ativo ? 'Ativo' : 'Inativo'}</StatusChip>
+                        </button>
+                      ),
+                    },
+                  ]}
+                  acoesLinha={f => (
+                    <>
+                      <LinkLinha onClick={() => abrirHistorico(f)} title="Compras e notas fiscais"><History className="w-3.5 h-3.5" /> Compras</LinkLinha>
+                      <BotaoLinha rotulo="Editar fornecedor" onClick={() => abrirFormularioEditar(f)}><Edit2 className="w-4 h-4" /></BotaoLinha>
+                    </>
+                  )}
+                />
+              )}
             </div>
           </div>
-
-          {/* TABELA DE FORNECEDORES */}
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-left border-collapse min-w-[1050px]">
-              <thead className="sticky top-0 bg-slate-100/90 backdrop-blur-md z-10 border-b border-slate-200 text-[11px] font-black uppercase tracking-wider text-slate-600">
-                <tr>
-                  <th className="py-3 px-6">Tipo</th>
-                  <th className="py-3 px-6">Fornecedor (Razão / Fantasia)</th>
-                  <th className="py-3 px-6">CNPJ / CPF</th>
-                  <th className="py-3 px-6">Contato</th>
-                  <th className="py-3 px-6">Cidade / UF</th>
-                  <th className="py-3 px-6 text-center">Status</th>
-                  <th className="py-3 px-6 text-center">Histórico</th>
-                  <th className="py-3 px-6 text-right">Ações</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-                {fornecedoresFiltrados.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
-                      Nenhum fornecedor encontrado com os filtros selecionados.
-                    </td>
-                  </tr>
-                ) : (
-                  fornecedoresFiltrados.map((forn) => (
-                    <tr 
-                      key={forn.id}
-                      className="hover:bg-emerald-50/40 transition-colors group"
-                    >
-                      {/* Tipo Pessoa */}
-                      <td className="py-3.5 px-6">
-                        <span className={`
-                          inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide
-                          ${forn.tipo_pessoa === 'PJ' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}
-                        `}>
-                          {forn.tipo_pessoa === 'PJ' ? <Building2 className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                          {forn.tipo_pessoa}
-                        </span>
-                      </td>
-
-                      {/* Nome e Fantasia */}
-                      <td className="py-3.5 px-6">
-                        <div className="font-bold text-slate-900 text-sm">
-                          {forn.razao_nome}
-                        </div>
-                        {forn.fantasia && (
-                          <div className="text-[11px] text-slate-500 font-normal">
-                            {forn.fantasia}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* CNPJ / CPF */}
-                      <td className="py-3.5 px-6 font-mono text-[11px] text-slate-600">
-                        <div className="font-semibold text-slate-800">{forn.cpf_cnpj}</div>
-                        {forn.ie_rg && <div className="text-slate-400">IE/RG: {forn.ie_rg}</div>}
-                      </td>
-
-                      {/* Contato */}
-                      <td className="py-3.5 px-6">
-                        <div className="flex items-center gap-1 text-slate-800 font-semibold">
-                          <Phone className="w-3 h-3 text-emerald-700" />
-                          <span>{forn.telefone}</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-slate-500 text-[11px]">
-                          <Mail className="w-3 h-3 text-slate-400" />
-                          <span className="truncate max-w-[170px]">{forn.email}</span>
-                        </div>
-                      </td>
-
-                      {/* Cidade / UF */}
-                      <td className="py-3.5 px-6">
-                        <div className="font-semibold text-slate-800">
-                          {forn.endereco.municipio} - {forn.endereco.uf}
-                        </div>
-                        <div className="text-slate-400 text-[11px]">
-                          {forn.endereco.bairro}
-                        </div>
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-6 text-center">
-                        <button
-                          onClick={() => alternarStatusFornecedor(forn.id)}
-                          className="cursor-pointer"
-                          title={forn.ativo ? 'Clique para Inativar' : 'Clique para Ativar'}
-                        >
-                          {forn.ativo ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              Ativo
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-300">
-                              <XCircle className="w-3 h-3 text-slate-400" />
-                              Inativo
-                            </span>
-                          )}
-                        </button>
-                      </td>
-
-                      {/* Histórico de Compras */}
-                      <td className="py-3.5 px-6 text-center">
-                        <button
-                          onClick={() => abrirHistorico(forn)}
-                          className="
-                            inline-flex items-center gap-1.5 px-3 py-1 rounded-xl
-                            bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200
-                            text-xs font-bold transition-all shadow-xs hover:shadow-sm cursor-pointer
-                          "
-                          title="Ver histórico de compras, pedidos e notas fiscais"
-                        >
-                          <History className="w-3.5 h-3.5 text-emerald-700" />
-                          <span>Histórico</span>
-                        </button>
-                      </td>
-
-                      {/* Ações */}
-                      <td className="py-3.5 px-6 text-right">
-                        <button
-                          onClick={() => abrirFormularioEditar(forn)}
-                          className="
-                            inline-flex items-center justify-center p-2 rounded-xl
-                            text-slate-600 hover:text-emerald-800 hover:bg-slate-100
-                            transition-all cursor-pointer
-                          "
-                          title="Editar cadastro do fornecedor"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        </>
       )}
 
       {/* ========================================================= */}
       {/* 2. MODO: HISTÓRICO DE COMPRAS E NOTAS FISCAIS DO FORNECEDOR */}
       {/* ========================================================= */}
       {modo === 'historico' && fornecedorSelecionado && (
-        <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50/50">
-          
-          {/* HEADER DO HISTÓRICO */}
-          <div className="p-4 sm:p-6 bg-white border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setModo('lista')}
-                className="p-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 transition-all cursor-pointer"
-                title="Voltar para a lista"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-black text-slate-900">
-                    {fornecedorSelecionado.razao_nome}
-                  </h2>
-                  <span className="text-xs px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
-                    Fornecedor
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  CNPJ: <span className="font-mono font-semibold text-slate-700">{fornecedorSelecionado.cpf_cnpj}</span> • 
-                  Cidade: <span className="font-semibold text-slate-700">{fornecedorSelecionado.endereco.municipio}/{fornecedorSelecionado.endereco.uf}</span>
-                </p>
-              </div>
-            </div>
-
-            {/* Total Histórico Comprado */}
-            <div className="flex items-center gap-4 bg-emerald-50/80 px-4 py-2.5 rounded-xl border border-emerald-200">
-              <div className="text-right">
-                <span className="block text-[10px] font-black uppercase text-emerald-800 tracking-wider">
-                  Total em Compras Realizadas
-                </span>
-                <span className="text-lg font-black text-emerald-950 font-mono">
-                  R$ {totalCompradoFornecedor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
+        <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
+          <div className="mx-auto w-full max-w-[1700px] pb-6">
+          <div className="px-4 sm:px-6 pt-3">
+            <button
+              type="button"
+              onClick={() => setModo('lista')}
+              className="inline-flex items-center gap-1.5 h-10 sm:h-8 -ml-1 px-1 text-[13px] font-semibold text-eno-700 hover:text-eno-900 cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro rounded"
+            >
+              <ArrowLeft className="w-4 h-4" /> Fornecedores
+            </button>
           </div>
+          <CabecalhoPagina
+            titulo={fornecedorSelecionado.fantasia || fornecedorSelecionado.razao_nome}
+            resumo={`${fornecedorSelecionado.cpf_cnpj} · ${fornecedorSelecionado.endereco.municipio}/${fornecedorSelecionado.endereco.uf} · R$ ${totalCompradoFornecedor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em compras`}
+            className="!pt-1"
+            acoes={
+              <BotaoSecundario onClick={() => abrirFormularioEditar(fornecedorSelecionado)} className="h-10 sm:h-9">
+                <Edit2 className="w-4 h-4" /> Editar cadastro
+              </BotaoSecundario>
+            }
+          />
 
-          {/* CONTEÚDO DO HISTÓRICO (COM SCROLL) */}
-          <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-6">
-            
+          {/* CONTEÚDO DO HISTÓRICO */}
+          <div className="px-4 sm:px-6 space-y-5">
+
             {/* GRÁFICO DE COMPRAS MENSAIS */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
-                  <TrendingUp className="w-4 h-4 text-emerald-700" />
-                  <span>Evolução Mensal de Compras (Gastos com este Fornecedor)</span>
-                </div>
-                <span className="text-xs text-slate-400 font-medium">Últimos 6 meses</span>
-              </div>
-
-              <div className="h-56 w-full pt-2">
+            <Painel titulo="Compras por mês" contexto="últimos 6 meses">
+              <div className="h-52 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={dadosGraficoMensal} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis 
-                      dataKey="mes" 
-                      tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }} 
-                      axisLine={{ stroke: '#cbd5e1' }}
-                      tickLine={false}
-                    />
-                    <YAxis 
-                      tick={{ fill: '#64748b', fontSize: 11 }} 
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(val) => `R$ ${(val / 1000).toFixed(0)}k`}
-                    />
+                  <LineChart data={dadosGraficoMensal} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CORES.linha} />
+                    <XAxis dataKey="mes" tick={{ fill: CORES.cinza, fontSize: 11 }} axisLine={{ stroke: CORES.linha }} tickLine={false} />
+                    <YAxis tick={{ fill: CORES.cinza, fontSize: 10 }} axisLine={false} tickLine={false} width={48} tickFormatter={(val) => `${(val / 1000).toFixed(0)} mil`} />
                     <Tooltip content={<CustomTooltipCompras />} />
-                    <Line 
-                      type="monotone" 
-                      dataKey="totalCompras" 
-                      stroke="#047857" 
-                      strokeWidth={3} 
-                      dot={{ r: 4, fill: '#047857', stroke: '#fff', strokeWidth: 2 }}
-                      activeDot={{ r: 6, fill: '#059669', stroke: '#fff', strokeWidth: 3 }}
-                    />
+                    <Line type="monotone" dataKey="totalCompras" stroke={CORES.eno700} strokeWidth={2.5} dot={{ r: 3, fill: CORES.eno700, stroke: CORES.papel, strokeWidth: 2 }} activeDot={{ r: 5, fill: CORES.ouroEscuro }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-            </div>
+            </Painel>
 
             {/* LISTAGEM EM LINHAS DE COMPRAS E NOTAS FISCAIS */}
             <div className="space-y-3">
               <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-2 text-slate-800 font-black text-sm">
-                  <ReceiptText className="w-4 h-4 text-emerald-800" />
+                <div className="flex items-center gap-2 text-tinta font-extrabold text-sm">
+                  <ReceiptText className="w-4 h-4 text-eno-800" />
                   <span>Pedidos de Compra & Notas Fiscais de Entrada</span>
                 </div>
-                <span className="text-xs font-semibold text-slate-500">
+                <span className="text-xs font-semibold text-cinza">
                   {comprasDoFornecedor.length} pedidos registrados
                 </span>
               </div>
 
               {comprasDoFornecedor.length === 0 ? (
-                <div className="p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400 text-sm">
+                <div className="p-8 text-center bg-papel rounded-md border border-linha text-cinza text-sm">
                   Nenhuma compra registrada para este fornecedor até o momento.
                 </div>
               ) : (
@@ -946,57 +818,57 @@ export function CadastroFornecedores() {
                     <div 
                       key={compra.id}
                       className={`
-                        bg-white rounded-2xl border transition-all overflow-hidden
-                        ${expandido ? 'border-emerald-500 shadow-md ring-1 ring-emerald-500/20' : 'border-slate-200/90 shadow-xs hover:border-emerald-300'}
+                        bg-papel rounded-md border transition-all overflow-hidden
+                        ${expandido ? 'border-eno-600  ring-1 ring-eno-600/20' : 'border-linha/90  hover:border-linha-forte'}
                       `}
                     >
                       {/* Linha Principal da Compra */}
                       <div 
                         onClick={() => toggleExpandirCompra(compra.id)}
-                        className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
+                        className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-papel-2/60 transition-colors"
                       >
                         {/* Identificação do Pedido e Datas */}
                         <div className="flex flex-wrap items-center gap-4 sm:gap-6">
                           <div>
-                            <span className="block text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                            <span className="block text-[10px] font-extrabold uppercase text-cinza tracking-wider">
                               Pedido de Compra
                             </span>
-                            <span className="text-sm font-black text-slate-900 font-mono">
+                            <span className="text-sm font-extrabold text-tinta tabular-nums">
                               {compra.numero_compra}
                             </span>
                           </div>
 
                           <div>
-                            <span className="block text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                            <span className="block text-[10px] font-extrabold uppercase text-cinza tracking-wider">
                               Emissão
                             </span>
-                            <span className="text-xs font-bold text-slate-700">
+                            <span className="text-xs font-bold text-tinta-2">
                               {compra.data_emissao}
                             </span>
                           </div>
 
                           <div>
-                            <span className="block text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                            <span className="block text-[10px] font-extrabold uppercase text-cinza tracking-wider">
                               Entrega
                             </span>
-                            <span className="text-xs font-bold text-slate-700">
+                            <span className="text-xs font-bold text-tinta-2">
                               {compra.data_entrega || 'Recebido'}
                             </span>
                           </div>
 
                           <div>
-                            <span className="block text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                            <span className="block text-[10px] font-extrabold uppercase text-cinza tracking-wider">
                               Nota Fiscal (NF-e)
                             </span>
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 font-mono bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/60">
-                              <FileCheck2 className="w-3 h-3 text-indigo-600" />
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-tinta-2 tabular-nums bg-papel-2 px-2 py-0.5 rounded-md border border-linha-forte/60">
+                              <FileCheck2 className="w-3 h-3 text-tinta-2" />
                               Nº {compra.numero_nota_fiscal}
                             </span>
                           </div>
                         </div>
 
                         {/* Valor, Botão de Ver NF e Ação de Expandir */}
-                        <div className="flex items-center justify-between md:justify-end gap-3 sm:gap-4 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100">
+                        <div className="flex items-center justify-between md:justify-end gap-3 sm:gap-4 border-t md:border-t-0 pt-3 md:pt-0 border-linha">
                           {/* Botão de Ver Nota Fiscal Anexa */}
                           <button
                             type="button"
@@ -1005,26 +877,26 @@ export function CadastroFornecedores() {
                               setCompraModalDanfe(compra);
                             }}
                             className="
-                              inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl
-                              bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200
-                              text-xs font-bold transition-all shadow-xs cursor-pointer
+                              inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md
+                              bg-papel-2 hover:bg-papel-2 text-tinta-2 border border-linha-forte
+                              text-xs font-bold transition-all  cursor-pointer
                             "
                             title="Visualizar DANFE e dados fiscais anexos"
                           >
-                            <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                            <Eye className="w-3.5 h-3.5 text-tinta-2" />
                             <span>Ver NF Anexa</span>
                           </button>
 
                           <div className="text-right">
-                            <span className="block text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                            <span className="block text-[10px] font-extrabold uppercase text-cinza tracking-wider">
                               Valor da Compra
                             </span>
-                            <span className="text-sm sm:text-base font-black text-slate-900 font-mono">
+                            <span className="text-sm sm:text-base font-extrabold text-tinta tabular-nums">
                               R$ {compra.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
 
-                          <div className="p-1 rounded-lg bg-slate-100 text-slate-600">
+                          <div className="p-1 rounded-lg bg-papel-2 text-tinta-2">
                             {expandido ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </div>
                         </div>
@@ -1032,20 +904,20 @@ export function CadastroFornecedores() {
 
                       {/* Seção Expandida com Itens / Matérias-Primas da Compra */}
                       {expandido && (
-                        <div className="border-t border-slate-200 bg-slate-50/70 p-4 sm:p-5 space-y-3 animate-fadeIn">
+                        <div className="border-t border-linha bg-papel-2/70 p-4 sm:p-5 space-y-3 animate-fadeIn">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                              <Package className="w-3.5 h-3.5 text-emerald-700" />
+                            <span className="text-xs font-bold text-tinta-2 uppercase tracking-wider flex items-center gap-1.5">
+                              <Package className="w-3.5 h-3.5 text-eno-700" />
                               Matérias-Primas e Insumos Recebidos nesta Compra
                             </span>
-                            <span className="text-[11px] text-slate-500 font-medium">
-                              Chave NF-e: <span className="font-mono">{compra.chave_acesso_nfe || 'Emitida eletronicamente'}</span>
+                            <span className="text-[11px] text-cinza font-medium">
+                              Chave NF-e: <span className="tabular-nums">{compra.chave_acesso_nfe || 'Emitida eletronicamente'}</span>
                             </span>
                           </div>
 
-                          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                          <div className="overflow-x-auto rounded-md border border-linha bg-papel">
                             <table className="w-full text-left text-xs border-collapse">
-                              <thead className="bg-slate-100/70 text-slate-600 font-bold uppercase text-[10px] border-b border-slate-200">
+                              <thead className="bg-papel-2/70 text-tinta-2 font-bold uppercase text-[10px] border-b border-linha">
                                 <tr>
                                   <th className="py-2.5 px-4">Código</th>
                                   <th className="py-2.5 px-4">Item / Matéria-Prima</th>
@@ -1055,21 +927,21 @@ export function CadastroFornecedores() {
                                   <th className="py-2.5 px-4 text-right">Valor Total</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-100">
+                              <tbody className="divide-y divide-linha">
                                 {compra.itens.map(item => (
-                                  <tr key={item.id} className="hover:bg-slate-50/50">
-                                    <td className="py-2.5 px-4 font-mono text-[11px] text-slate-500">{item.codigo}</td>
-                                    <td className="py-2.5 px-4 font-bold text-slate-800">{item.nome_produto}</td>
-                                    <td className="py-2.5 px-4 text-center font-mono font-semibold">{item.quantidade.toLocaleString('pt-BR')}</td>
+                                  <tr key={item.id} className="hover:bg-papel-2/50">
+                                    <td className="py-2.5 px-4 tabular-nums text-[11px] text-cinza">{item.codigo}</td>
+                                    <td className="py-2.5 px-4 font-bold text-tinta">{item.nome_produto}</td>
+                                    <td className="py-2.5 px-4 text-center tabular-nums font-semibold">{item.quantidade.toLocaleString('pt-BR')}</td>
                                     <td className="py-2.5 px-4 text-center">
-                                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold">
+                                      <span className="px-2 py-0.5 rounded bg-papel-2 text-tinta-2 text-[10px] font-bold">
                                         {item.unidade}
                                       </span>
                                     </td>
-                                    <td className="py-2.5 px-4 text-right font-mono text-slate-600">
+                                    <td className="py-2.5 px-4 text-right tabular-nums text-tinta-2">
                                       R$ {item.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                     </td>
-                                    <td className="py-2.5 px-4 text-right font-mono font-black text-slate-900">
+                                    <td className="py-2.5 px-4 text-right tabular-nums font-extrabold text-tinta">
                                       R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                     </td>
                                   </tr>
@@ -1086,6 +958,7 @@ export function CadastroFornecedores() {
             </div>
 
           </div>
+          </div>
         </div>
       )}
 
@@ -1093,70 +966,40 @@ export function CadastroFornecedores() {
       {/* 3. MODO: FORMULÁRIO DE CADASTRO / EDIÇÃO DE FORNECEDOR     */}
       {/* ========================================================= */}
       {modo === 'formulario' && (
-        <form onSubmit={salvarFornecedor} className="flex-1 flex flex-col h-full overflow-hidden">
+        <FormularioCadastro
+          onSubmit={salvarFornecedor}
+          onCancelar={() => setModo('lista')}
+          titulo={fornecedorSelecionado ? (fornecedorSelecionado.fantasia || fornecedorSelecionado.razao_nome) : 'Novo fornecedor'}
+          subtitulo={fornecedorSelecionado ? 'Editar cadastro do fornecedor' : 'Dados cadastrais, endereço e matérias-primas que ele fornece'}
+          extra={<ChaveAtivo ativo={formData.ativo} onChange={v => setFormData({ ...formData, ativo: v })} rotulo="Fornecedor ativo" />}
+          rotuloSalvar={fornecedorSelecionado ? 'Salvar alterações' : 'Cadastrar fornecedor'}
+        >
           
-          {/* TOPO DO FORMULÁRIO */}
-          <div className="p-4 sm:p-6 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setModo('lista')}
-                className="p-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 transition-all cursor-pointer"
-                title="Voltar sem salvar"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-              <div>
-                <h2 className="text-base sm:text-lg font-black text-slate-900">
-                  {fornecedorSelecionado ? 'Editar Fornecedor' : 'Cadastrar Novo Fornecedor'}
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Preencha os dados cadastrais, endereço e vincule às Matérias-Primas do estoque
-                </p>
-              </div>
-            </div>
-
-            {/* Status Ativo / Inativo no Formulário */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-600">Status:</span>
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, ativo: !formData.ativo })}
-                className={`
-                  px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5
-                  ${formData.ativo ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-slate-200 text-slate-600 border-slate-300'}
-                `}
-              >
-                {formData.ativo ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" /> : <XCircle className="w-3.5 h-3.5 text-slate-500" />}
-                <span>{formData.ativo ? 'Ativo' : 'Inativo'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* CORPO DO FORMULÁRIO COM SCROLL */}
-          <div className="flex-1 overflow-auto p-6 sm:p-8 space-y-8">
+          
+{/* CORPO DO FORMULÁRIO COM SCROLL */}
+          <div className="flex-1 overflow-auto px-3 py-4 sm:p-8 space-y-5 sm:space-y-8">
             
             {/* SEÇÃO 1: DADOS GERAIS & IDENTIFICAÇÃO */}
-            <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-5">
-              <div className="pb-3 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-slate-900 font-black text-sm uppercase tracking-wide">
-                  <Building2 className="w-4 h-4 text-emerald-800" />
+            <div className="p-4 sm:p-6 rounded-md bg-papel border border-linha  space-y-5">
+              <div className="pb-3 border-b border-linha flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-tinta font-extrabold text-sm uppercase tracking-wide">
+                  <Building2 className="w-4 h-4 text-eno-800" />
                   <span>1. Identificação e Documentos</span>
                 </div>
 
                 {/* Seleção PJ / PF */}
-                <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
+                <div className="flex items-center bg-papel-2 p-1 rounded-md text-xs font-bold text-tinta-2">
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, tipo_pessoa: 'PJ' })}
-                    className={`px-3 py-1 rounded-lg transition-all ${formData.tipo_pessoa === 'PJ' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
+                    className={`px-3 py-1 rounded-lg transition-all ${formData.tipo_pessoa === 'PJ' ? 'bg-papel text-eno-900 ' : 'hover:text-tinta'}`}
                   >
                     Pessoa Jurídica (PJ)
                   </button>
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, tipo_pessoa: 'PF' })}
-                    className={`px-3 py-1 rounded-lg transition-all ${formData.tipo_pessoa === 'PF' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
+                    className={`px-3 py-1 rounded-lg transition-all ${formData.tipo_pessoa === 'PF' ? 'bg-papel text-eno-900 ' : 'hover:text-tinta'}`}
                   >
                     Pessoa Física (PF)
                   </button>
@@ -1166,8 +1009,8 @@ export function CadastroFornecedores() {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
                 {/* Razão Social / Nome */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    {formData.tipo_pessoa === 'PJ' ? 'Razão Social' : 'Nome Completo'} <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    {formData.tipo_pessoa === 'PJ' ? 'Razão Social' : 'Nome Completo'} <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1175,13 +1018,13 @@ export function CadastroFornecedores() {
                     value={formData.razao_nome}
                     onChange={(e) => setFormData({ ...formData, razao_nome: e.target.value })}
                     placeholder={formData.tipo_pessoa === 'PJ' ? 'Ex: Paulínia Embalagens e Plásticos Ltda' : 'Ex: José Augusto Ferreira da Silva'}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Nome Fantasia */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
                     Nome Fantasia
                   </label>
                   <input
@@ -1189,14 +1032,14 @@ export function CadastroFornecedores() {
                     value={formData.fantasia}
                     onChange={(e) => setFormData({ ...formData, fantasia: e.target.value })}
                     placeholder="Ex: Paulínia Embalagens"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* CPF / CNPJ */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    {formData.tipo_pessoa === 'PJ' ? 'CNPJ' : 'CPF'} <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    {formData.tipo_pessoa === 'PJ' ? 'CNPJ' : 'CPF'} <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1204,13 +1047,13 @@ export function CadastroFornecedores() {
                     value={formData.cpf_cnpj}
                     onChange={(e) => setFormData({ ...formData, cpf_cnpj: e.target.value })}
                     placeholder={formData.tipo_pessoa === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00'}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm tabular-nums font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Inscrição Estadual / RG */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
                     {formData.tipo_pessoa === 'PJ' ? 'Inscrição Estadual (IE)' : 'RG'}
                   </label>
                   <input
@@ -1218,14 +1061,14 @@ export function CadastroFornecedores() {
                     value={formData.ie_rg}
                     onChange={(e) => setFormData({ ...formData, ie_rg: e.target.value })}
                     placeholder="Ex: 524.119.340.118"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm tabular-nums font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Telefone */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Telefone de Contato <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    Telefone de Contato <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1233,14 +1076,14 @@ export function CadastroFornecedores() {
                     value={formData.telefone}
                     onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
                     placeholder="(19) 3874-5000"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* E-mail Comercial */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    E-mail Comercial / Faturamento <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    E-mail Comercial / Faturamento <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="email"
@@ -1248,38 +1091,38 @@ export function CadastroFornecedores() {
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder="vendas@fornecedor.com.br"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
               </div>
             </div>
 
             {/* SEÇÃO 2: PRODUTOS FORNECIDOS & VÍNCULO COM MATÉRIA-PRIMA */}
-            <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-5">
-              <div className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="p-4 sm:p-6 rounded-md bg-papel border border-linha  space-y-5">
+              <div className="pb-3 border-b border-linha flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <div className="flex items-center gap-2 text-slate-900 font-black text-sm uppercase tracking-wide">
-                    <Boxes className="w-4 h-4 text-emerald-800" />
+                  <div className="flex items-center gap-2 text-tinta font-extrabold text-sm uppercase tracking-wide">
+                    <Boxes className="w-4 h-4 text-eno-800" />
                     <span>2. Matéria-Prima Vinculados</span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Vincula as matérias-primas deste fornecedor diretamente ao módulo de <span className="font-bold text-emerald-800">Matéria Prima (Estoque e Cadastro)</span>
+                  <p className="text-xs text-cinza mt-0.5">
+                    Vincula as matérias-primas deste fornecedor diretamente ao módulo de <span className="font-bold text-eno-800">Matéria Prima (Estoque e Cadastro)</span>
                   </p>
                 </div>
 
                 {/* Alternador de Modo de Inclusão */}
-                <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
+                <div className="flex items-center bg-papel-2 p-1 rounded-md text-xs font-bold text-tinta-2">
                   <button
                     type="button"
                     onClick={() => setModoInclusaoProduto('catalogo')}
-                    className={`px-3 py-1 rounded-lg transition-all ${modoInclusaoProduto === 'catalogo' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
+                    className={`px-3 py-1 rounded-lg transition-all ${modoInclusaoProduto === 'catalogo' ? 'bg-papel text-eno-900 ' : 'hover:text-tinta'}`}
                   >
                     Vincular do Catálogo
                   </button>
                   <button
                     type="button"
                     onClick={() => setModoInclusaoProduto('novo')}
-                    className={`px-3 py-1 rounded-lg transition-all ${modoInclusaoProduto === 'novo' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
+                    className={`px-3 py-1 rounded-lg transition-all ${modoInclusaoProduto === 'novo' ? 'bg-papel text-eno-900 ' : 'hover:text-tinta'}`}
                   >
                     + Novo Insumo / Produto
                   </button>
@@ -1288,8 +1131,8 @@ export function CadastroFornecedores() {
 
               {/* OPÇÃO A: SELECIONAR DO CATÁLOGO DE MATÉRIAS-PRIMAS EXISTENTES */}
               {modoInclusaoProduto === 'catalogo' ? (
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
-                  <span className="block text-xs font-bold text-slate-700">
+                <div className="p-4 rounded-md bg-papel-2 border border-linha/80 space-y-3">
+                  <span className="block text-xs font-bold text-tinta-2">
                     Selecione uma matéria-prima já cadastrada na empresa:
                   </span>
 
@@ -1298,7 +1141,7 @@ export function CadastroFornecedores() {
                       <select
                         value={materiaPrimaSelecionadaId}
                         onChange={(e) => setMateriaPrimaSelecionadaId(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                        className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel"
                       >
                         <option value="">-- Selecione uma Matéria-Prima / Insumo --</option>
                         {catalogoMateriasPrimas.map(mp => (
@@ -1315,15 +1158,15 @@ export function CadastroFornecedores() {
                         value={novoItemCodigoFornecedor}
                         onChange={(e) => setNovoItemCodigoFornecedor(e.target.value)}
                         placeholder="Cód. no Fornecedor (Opcional)"
-                        className="flex-1 px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono focus:outline-none focus:border-emerald-600 bg-white"
+                        className="flex-1 px-3 py-2 rounded-md border border-linha-forte text-xs tabular-nums focus:outline-none focus:border-eno-600 bg-papel"
                       />
                       <button
                         type="button"
                         onClick={adicionarDoCatalogo}
                         disabled={!materiaPrimaSelecionadaId}
                         className="
-                          px-4 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 disabled:opacity-40
-                          text-white font-bold text-xs transition-all cursor-pointer whitespace-nowrap shadow-xs
+                          px-4 py-2 rounded-md bg-eno-800 hover:bg-eno-900 disabled:opacity-40
+                          text-white font-bold text-xs transition-all cursor-pointer whitespace-nowrap 
                         "
                       >
                         + Vincular
@@ -1333,12 +1176,12 @@ export function CadastroFornecedores() {
                 </div>
               ) : (
                 /* OPÇÃO B: DIGITAR NOVA MATÉRIA-PRIMA E JÁ ENVIAR AO ESTOQUE */
-                <div className="p-4 rounded-xl bg-emerald-50/50 border border-emerald-200/90 space-y-4">
+                <div className="p-4 rounded-md bg-eno-50/50 border border-linha-forte/90 space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="block text-xs font-bold text-emerald-950">
+                    <span className="block text-xs font-bold text-eno-950">
                       Item fornecido que não é matéria-prima (serviço, peça, outros):
                     </span>
-                    <span className="text-[11px] font-semibold text-emerald-900">
+                    <span className="text-[11px] font-semibold text-eno-900">
                       Matéria-prima se cadastra em Produtos → Matéria-Prima e depois se vincula pelo catálogo.
                     </span>
                   </div>
@@ -1346,27 +1189,27 @@ export function CadastroFornecedores() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                     {/* Nome */}
                     <div className="sm:col-span-2">
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Nome da Matéria-Prima / Insumo <span className="text-red-500">*</span>
+                      <label className="block text-[11px] font-bold text-tinta-2 mb-1">
+                        Nome da Matéria-Prima / Insumo <span className="text-st-vencido">*</span>
                       </label>
                       <input
                         type="text"
                         value={novoItemNome}
                         onChange={(e) => setNovoItemNome(e.target.value)}
                         placeholder="Ex: Embalagem Alumínio 1kg, Farelo de Trigo..."
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:outline-none focus:border-emerald-600 bg-white"
+                        className="w-full px-3 py-2 rounded-md border border-linha-forte text-xs font-medium focus:outline-none focus:border-eno-600 bg-papel"
                       />
                     </div>
 
                     {/* Categoria */}
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      <label className="block text-[11px] font-bold text-tinta-2 mb-1">
                         Categoria
                       </label>
                       <select
                         value={novoItemCategoria}
                         onChange={(e) => setNovoItemCategoria(e.target.value as any)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:outline-none focus:border-emerald-600 bg-white"
+                        className="w-full px-3 py-2 rounded-md border border-linha-forte text-xs font-medium focus:outline-none focus:border-eno-600 bg-papel"
                       >
                         <option value="Matéria-Prima">Matéria-Prima</option>
                         <option value="Embalagens">Embalagens</option>
@@ -1378,13 +1221,13 @@ export function CadastroFornecedores() {
 
                     {/* Unidade */}
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      <label className="block text-[11px] font-bold text-tinta-2 mb-1">
                         Unidade de Medida
                       </label>
                       <select
                         value={novoItemUnidade}
                         onChange={(e) => setNovoItemUnidade(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:outline-none focus:border-emerald-600 bg-white"
+                        className="w-full px-3 py-2 rounded-md border border-linha-forte text-xs font-medium focus:outline-none focus:border-eno-600 bg-papel"
                       >
                         <option value="UN">Unidade (UN)</option>
                         <option value="KG">Quilo (KG)</option>
@@ -1404,7 +1247,7 @@ export function CadastroFornecedores() {
                         value={novoItemCodigoFornecedor}
                         onChange={(e) => setNovoItemCodigoFornecedor(e.target.value)}
                         placeholder="Código de Referência no Fornecedor (Opcional)"
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono focus:outline-none focus:border-emerald-600 bg-white"
+                        className="w-full px-3 py-2 rounded-md border border-linha-forte text-xs tabular-nums focus:outline-none focus:border-eno-600 bg-papel"
                       />
                     </div>
 
@@ -1413,8 +1256,8 @@ export function CadastroFornecedores() {
                       onClick={cadastrarNovoProdutoEIntegrar}
                       disabled={!novoItemNome.trim()}
                       className="
-                        px-5 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 disabled:opacity-40
-                        text-white font-bold text-xs transition-all cursor-pointer whitespace-nowrap shadow-xs flex items-center gap-1.5
+                        px-5 py-2 rounded-md bg-eno-800 hover:bg-eno-900 disabled:opacity-40
+                        text-white font-bold text-xs transition-all cursor-pointer whitespace-nowrap  flex items-center gap-1.5
                       "
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -1426,16 +1269,16 @@ export function CadastroFornecedores() {
 
               {/* LISTA DOS PRODUTOS / MATÉRIAS-PRIMAS VINCULADAS A ESTE FORNECEDOR */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                <div className="flex items-center justify-between text-xs font-bold text-tinta-2">
                   <span>Matéria-Prima Vinculados ({formData.produtos_fornecidos.length}):</span>
-                  <span className="text-[11px] text-slate-400 font-normal">
+                  <span className="text-[11px] text-cinza font-normal">
                     Disponíveis para pedidos de compra e controle de estoque
                   </span>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200 min-h-[90px] flex flex-wrap items-center gap-2">
+                <div className="p-3.5 rounded-md bg-papel-2/80 border border-linha min-h-[90px] flex flex-wrap items-center gap-2">
                   {formData.produtos_fornecidos.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic py-3">
+                    <p className="text-xs text-cinza italic py-3">
                       Nenhuma matéria-prima vinculada ainda. Selecione acima para ligar ao estoque e compras.
                     </p>
                   ) : (
@@ -1443,27 +1286,27 @@ export function CadastroFornecedores() {
                       <div
                         key={prod.id}
                         className="
-                          inline-flex items-center gap-2 px-3 py-2 rounded-xl
-                          bg-white text-slate-900 border border-slate-200 shadow-xs text-xs font-semibold
+                          inline-flex items-center gap-2 px-3 py-2 rounded-md
+                          bg-papel text-tinta border border-linha  text-xs font-semibold
                         "
                       >
-                        <Boxes className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                        <Boxes className="w-3.5 h-3.5 text-eno-700 shrink-0" />
                         
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-slate-900">{prod.nome}</span>
-                            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-bold">
+                            <span className="font-bold text-tinta">{prod.nome}</span>
+                            <span className="text-[10px] tabular-nums px-1.5 py-0.2 rounded bg-papel-2 text-tinta-2 font-bold">
                               {prod.unidade}
                             </span>
                           </div>
                           
-                          <div className="flex items-center gap-2 text-[10px] text-slate-500 font-normal mt-0.5">
-                            <span className="text-emerald-800 font-medium">Cat: {prod.categoria}</span>
+                          <div className="flex items-center gap-2 text-[10px] text-cinza font-normal mt-0.5">
+                            <span className="text-eno-800 font-medium">Cat: {prod.categoria}</span>
                             {prod.codigo_materia_prima && (
-                              <span className="text-slate-400 font-mono">Cód: {prod.codigo_materia_prima}</span>
+                              <span className="text-cinza tabular-nums">Cód: {prod.codigo_materia_prima}</span>
                             )}
                             {prod.integrado_materia_prima && (
-                              <span className="inline-flex items-center gap-0.5 text-emerald-700 font-bold bg-emerald-50 px-1 rounded">
+                              <span className="inline-flex items-center gap-0.5 text-eno-700 font-bold bg-eno-50 px-1 rounded">
                                 <Check className="w-2.5 h-2.5" />
                                 Estoque MP
                               </span>
@@ -1474,7 +1317,7 @@ export function CadastroFornecedores() {
                         <button
                           type="button"
                           onClick={() => removerProdutoLista(prod.id)}
-                          className="ml-2 text-slate-400 hover:text-red-500 transition-colors p-1 rounded-full hover:bg-slate-100 cursor-pointer"
+                          className="ml-2 text-cinza hover:text-st-vencido transition-colors p-1 rounded-full hover:bg-papel-2 cursor-pointer"
                           title="Desvincular produto"
                         >
                           <X className="w-3.5 h-3.5" />
@@ -1488,10 +1331,10 @@ export function CadastroFornecedores() {
             </div>
 
             {/* SEÇÃO 3: ENDEREÇO OPERACIONAL */}
-            <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-5">
-              <div className="pb-3 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-slate-900 font-black text-sm uppercase tracking-wide">
-                  <MapPin className="w-4 h-4 text-emerald-800" />
+            <div className="p-4 sm:p-6 rounded-md bg-papel border border-linha  space-y-5">
+              <div className="pb-3 border-b border-linha flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-tinta font-extrabold text-sm uppercase tracking-wide">
+                  <MapPin className="w-4 h-4 text-eno-800" />
                   <span>3. Endereço e Localização</span>
                 </div>
               </div>
@@ -1499,8 +1342,8 @@ export function CadastroFornecedores() {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
                 {/* CEP */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    CEP <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    CEP <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1508,14 +1351,14 @@ export function CadastroFornecedores() {
                     value={formData.cep}
                     onChange={(e) => setFormData({ ...formData, cep: e.target.value })}
                     placeholder="00000-000"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm tabular-nums font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Logradouro */}
                 <div className="sm:col-span-2 md:col-span-4">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Logradouro <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    Logradouro <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1523,14 +1366,14 @@ export function CadastroFornecedores() {
                     value={formData.logradouro}
                     onChange={(e) => setFormData({ ...formData, logradouro: e.target.value })}
                     placeholder="Ex: Av. José Paulino"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Número */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Número <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    Número <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1538,14 +1381,14 @@ export function CadastroFornecedores() {
                     value={formData.numero}
                     onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
                     placeholder="2400 ou S/N"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Bairro */}
                 <div className="sm:col-span-2 md:col-span-3">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Bairro <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    Bairro <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1553,19 +1396,19 @@ export function CadastroFornecedores() {
                     value={formData.bairro}
                     onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
                     placeholder="Ex: Distrito Industrial"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* UF */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Estado (UF) <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    Estado (UF) <span className="text-st-vencido">*</span>
                   </label>
                   <select
                     value={formData.uf}
                     onChange={(e) => setFormData({ ...formData, uf: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-bold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel"
                   >
                     {['SP', 'MG', 'PR', 'RJ', 'SC', 'RS', 'GO', 'MS', 'MT', 'BA', 'ES', 'DF'].map(uf => (
                       <option key={uf} value={uf}>{uf}</option>
@@ -1575,8 +1418,8 @@ export function CadastroFornecedores() {
 
                 {/* Município */}
                 <div className="sm:col-span-2 md:col-span-3">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Município <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
+                    Município <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1584,13 +1427,13 @@ export function CadastroFornecedores() {
                     value={formData.municipio}
                     onChange={(e) => setFormData({ ...formData, municipio: e.target.value })}
                     placeholder="Ex: Paulínia"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
 
                 {/* Complemento */}
                 <div className="sm:col-span-2 md:col-span-4 lg:col-span-8">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  <label className="block text-xs font-bold text-tinta-2 mb-1.5">
                     Complemento / Ponto de Referência
                   </label>
                   <input
@@ -1598,26 +1441,26 @@ export function CadastroFornecedores() {
                     value={formData.complemento}
                     onChange={(e) => setFormData({ ...formData, complemento: e.target.value })}
                     placeholder="Ex: Bloco A, Doca 2, Portaria Industrial"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
                 </div>
               </div>
             </div>
 
             {/* SEÇÃO: DADOS PARA PAGAMENTO (CHAVE PIX) */}
-            <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
-              <div className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                <div className="flex items-center gap-2 text-slate-900 font-black text-sm uppercase tracking-wide">
-                  <CreditCard className="w-4 h-4 text-emerald-800" />
+            <div className="p-4 sm:p-6 rounded-md bg-papel border border-linha  space-y-4">
+              <div className="pb-3 border-b border-linha flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <div className="flex items-center gap-2 text-tinta font-extrabold text-sm uppercase tracking-wide">
+                  <CreditCard className="w-4 h-4 text-eno-800" />
                   <span>Dados para Pagamento (Chave PIX)</span>
                 </div>
-                <span className="text-xs text-slate-500 font-medium">
+                <span className="text-xs text-cinza font-medium">
                   Condições comerciais, forma e prazo serão definidos diretamente na compra da matéria-prima
                 </span>
               </div>
 
               <div className="max-w-xl">
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                <label className="block text-xs font-bold text-tinta-2 mb-1.5">
                   Chave PIX do Fornecedor
                 </label>
                 <div className="relative">
@@ -1626,13 +1469,13 @@ export function CadastroFornecedores() {
                     value={formData.chave_pix}
                     onChange={(e) => setFormData({ ...formData, chave_pix: e.target.value })}
                     placeholder="CNPJ, E-mail, Telefone celular ou Chave Aleatória"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50/30 focus:bg-white transition-all pr-14"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm tabular-nums font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all pr-14"
                   />
-                  <span className="absolute right-3 top-2.5 text-[10px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                  <span className="absolute right-3 top-2.5 text-[10px] font-extrabold bg-eno-100 text-eno-800 px-1.5 py-0.5 rounded">
                     PIX
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1.5">
+                <p className="text-[11px] text-cinza mt-1.5">
                   Chave cadastrada para emissão de pagamentos e transferências a este fornecedor.
                 </p>
               </div>
@@ -1640,31 +1483,7 @@ export function CadastroFornecedores() {
 
           </div>
 
-          {/* RODAPÉ DO FORMULÁRIO */}
-          <div className="flex items-center justify-between px-8 py-4 border-t border-slate-200 bg-white">
-            <button
-              type="button"
-              onClick={() => setModo('lista')}
-              className="px-5 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs sm:text-sm transition-all cursor-pointer"
-            >
-              Cancelar e Voltar
-            </button>
-
-            <button
-              type="submit"
-              className="
-                flex items-center gap-2 px-8 py-2.5 rounded-xl
-                bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950
-                text-white font-bold text-xs sm:text-sm shadow-md hover:shadow-lg
-                transition-all cursor-pointer
-              "
-            >
-              <Save className="w-4 h-4" />
-              <span>{fornecedorSelecionado ? 'Salvar Alterações do Fornecedor' : 'Cadastrar Fornecedor'}</span>
-            </button>
-          </div>
-
-        </form>
+          </FormularioCadastro>
       )}
 
       {/* ========================================================= */}
@@ -1672,18 +1491,18 @@ export function CadastroFornecedores() {
       {/* (AMPLO E HORIZONTAL PARA OCUPAR A TELA)                  */}
       {/* ========================================================= */}
       {compraModalDanfe && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-4xl sm:max-w-5xl lg:max-w-6xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-eno-950/60 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="relative w-full max-w-6xl bg-papel sm:rounded-md border border-linha overflow-hidden flex flex-col sm:my-auto h-dvh sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Header do Modal */}
-            <div className="p-4 sm:p-5 bg-gradient-to-r from-[#01140b] to-[#032e1c] text-white flex items-center justify-between">
+            <div className="shrink-0 px-4 py-3 sm:p-5 bg-[linear-gradient(100deg,#042013_0%,#0b3d24_100%)] text-white flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <FileCheck2 className="w-5 h-5 text-emerald-300" />
+                <FileCheck2 className="w-5 h-5 text-eno-600" />
                 <div>
                   <h3 className="text-sm sm:text-base font-bold text-white">
                     Documento Fiscal Eletrônico (DANFE / NF-e)
                   </h3>
-                  <p className="text-[11px] text-emerald-200/80 font-mono">
+                  <p className="text-[11px] text-eno-100/80 tabular-nums">
                     Nota Fiscal de Entrada Nº {compraModalDanfe.numero_nota_fiscal} • Série {compraModalDanfe.serie_nf || '1'}
                   </p>
                 </div>
@@ -1692,41 +1511,42 @@ export function CadastroFornecedores() {
               <button
                 type="button"
                 onClick={() => setCompraModalDanfe(null)}
-                className="p-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                className="w-10 h-10 inline-flex items-center justify-center rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Fechar"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Conteúdo Fiscal */}
-            <div className="p-5 overflow-auto space-y-4 text-xs">
+            <div className="flex-1 min-h-0 p-4 sm:p-5 overflow-auto space-y-4 text-xs">
               {/* Chave de Acesso */}
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 font-mono space-y-1">
-                <span className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
+              <div className="p-3.5 rounded-md bg-papel-2 border border-linha tabular-nums space-y-1">
+                <span className="block text-[10px] font-extrabold uppercase text-cinza tracking-wider">
                   Chave de Acesso (44 Dígitos Autorizada pela SEFAZ)
                 </span>
-                <p className="text-xs sm:text-[13px] font-bold text-slate-900 break-all select-all">
+                <p className="text-xs sm:text-[13px] font-bold text-tinta break-all select-all">
                   {compraModalDanfe.chave_acesso_nfe || '35260303882110000192550010000842191002341908'}
                 </p>
               </div>
 
               {/* Grid com Dados do Documento */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Emissão</span>
-                  <span className="font-bold text-slate-800">{compraModalDanfe.data_emissao}</span>
+                <div className="p-3 rounded-md bg-papel-2 border border-linha">
+                  <span className="block text-[10px] font-bold text-cinza uppercase">Emissão</span>
+                  <span className="font-bold text-tinta">{compraModalDanfe.data_emissao}</span>
                 </div>
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Entrada</span>
-                  <span className="font-bold text-slate-800">{compraModalDanfe.data_entrega || '16/03/2026'}</span>
+                <div className="p-3 rounded-md bg-papel-2 border border-linha">
+                  <span className="block text-[10px] font-bold text-cinza uppercase">Entrada</span>
+                  <span className="font-bold text-tinta">{compraModalDanfe.data_entrega || '16/03/2026'}</span>
                 </div>
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Status SEFAZ</span>
-                  <span className="font-bold text-emerald-700">Autorizada (100)</span>
+                <div className="p-3 rounded-md bg-papel-2 border border-linha">
+                  <span className="block text-[10px] font-bold text-cinza uppercase">Status SEFAZ</span>
+                  <span className="font-bold text-eno-700">Autorizada (100)</span>
                 </div>
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-                  <span className="block text-[10px] font-bold text-emerald-800 uppercase">Valor Total NF</span>
-                  <span className="font-black text-emerald-950 font-mono text-sm">
+                <div className="p-3 rounded-md bg-eno-50 border border-linha-forte">
+                  <span className="block text-[10px] font-bold text-eno-800 uppercase">Valor Total NF</span>
+                  <span className="font-extrabold text-eno-950 tabular-nums text-sm">
                     R$ {compraModalDanfe.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -1734,12 +1554,12 @@ export function CadastroFornecedores() {
 
               {/* Itens Fiscais Constantes na NF */}
               <div className="space-y-2">
-                <span className="block font-bold text-slate-800 uppercase text-[11px] tracking-wider">
+                <span className="block font-bold text-tinta uppercase text-[11px] tracking-wider">
                   Itens Fiscais Vinculados
                 </span>
-                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                <div className="rounded-md border border-linha overflow-hidden">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-100 text-slate-600 font-bold text-[10px] uppercase">
+                    <thead className="bg-papel-2 text-tinta-2 font-bold text-[10px] uppercase">
                       <tr>
                         <th className="py-2 px-3">Item</th>
                         <th className="py-2 px-3 text-center">Qtd</th>
@@ -1747,20 +1567,20 @@ export function CadastroFornecedores() {
                         <th className="py-2 px-3 text-right">Vlr. Total</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-linha">
                       {compraModalDanfe.itens.map((it, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50">
+                        <tr key={idx} className="hover:bg-papel-2">
                           <td className="py-2 px-3">
-                            <div className="font-bold text-slate-800">{it.nome_produto}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">{it.codigo}</div>
+                            <div className="font-bold text-tinta">{it.nome_produto}</div>
+                            <div className="text-[10px] text-cinza tabular-nums">{it.codigo}</div>
                           </td>
-                          <td className="py-2 px-3 text-center font-mono font-semibold">
+                          <td className="py-2 px-3 text-center tabular-nums font-semibold">
                             {it.quantidade} {it.unidade}
                           </td>
-                          <td className="py-2 px-3 text-right font-mono text-slate-600">
+                          <td className="py-2 px-3 text-right tabular-nums text-tinta-2">
                             R$ {it.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
+                          <td className="py-2 px-3 text-right tabular-nums font-bold text-tinta">
                             R$ {it.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
                         </tr>
@@ -1770,8 +1590,8 @@ export function CadastroFornecedores() {
                 </div>
               </div>
 
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-900 flex items-center gap-2 text-[11px]">
-                <AlertCircle className="w-4 h-4 shrink-0 text-amber-700" />
+              <div className="p-3 rounded-md bg-st-aguardando-bg border border-st-aguardando/30 text-st-aguardando flex items-center gap-2 text-[11px]">
+                <AlertCircle className="w-4 h-4 shrink-0 text-st-aguardando" />
                 <span>
                   O arquivo XML oficial desta NF-e está integrado ao módulo de notas fiscais de entrada (financeiro/fiscal).
                 </span>
@@ -1779,16 +1599,16 @@ export function CadastroFornecedores() {
             </div>
 
             {/* Footer do Modal com Botões de Ação */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-              <span className="text-[11px] text-slate-500 font-medium">
+            <div className="shrink-0 p-3 sm:p-4 bg-papel-2 border-t border-linha flex flex-wrap items-center justify-between gap-2" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+              <span className="hidden sm:inline text-[11px] text-cinza font-medium">
                 XML & DANFE disponíveis para download
               </span>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none [&>button]:h-11 sm:[&>button]:h-9 [&>button]:justify-center">
                 <button
                   type="button"
                   onClick={() => alert(`Download do XML da NF-e ${compraModalDanfe.numero_nota_fiscal} simulado com sucesso.`)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs transition-all cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-linha-forte hover:bg-papel-2 text-tinta-2 font-bold text-xs transition-all cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Baixar XML</span>
@@ -1797,7 +1617,7 @@ export function CadastroFornecedores() {
                 <button
                   type="button"
                   onClick={() => alert(`Visualização do DANFE em PDF da NF-e ${compraModalDanfe.numero_nota_fiscal} aberto.`)}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs transition-all cursor-pointer shadow-xs"
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-eno-800 hover:bg-eno-900 text-white font-bold text-xs transition-all cursor-pointer "
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Abrir DANFE (PDF)</span>

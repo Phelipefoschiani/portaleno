@@ -1,14 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import {
-  BarChart3,
-  TrendingUp,
-  Package,
-  Layers,
-  Download,
-  Printer,
-  Sparkles,
-  PieChart as PieChartIcon
-} from 'lucide-react';
+import { Download, Printer } from 'lucide-react';
+import { CabecalhoPagina, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { CardNumero } from '../ui/CardNumero';
+import { Painel } from '../ui/Painel';
+import { EstadoVazio } from '../ui/EstadoVazio';
+import { CORES } from '../ui/tokens';
+import { FaixaNumerosProdutos, TabelaResponsiva, brl } from './kitProdutos';
 import {
   ResponsiveContainer,
   BarChart,
@@ -75,136 +72,129 @@ export function ProdutosRelatorios({ onNavigate }: Props) {
     document.body.removeChild(link);
   };
 
+  // Rendimento real das receitas: kg de produto por kg de mandioca
+  const fatoresExtracao = carregarReceitas().map(r => r.kg_mandioca_por_kg_produto || 0).filter(f => f > 0);
+  const extracaoMedia = fatoresExtracao.length > 0 ? 100 / (fatoresExtracao.reduce((a, b) => a + b, 0) / fatoresExtracao.length) : null;
+  const valorTotalEstoque = produtos.reduce((acc, p) => acc + p.estoque_atual_sacos * (p.custo_total || 0), 0);
+  const abaixoMinimo = produtos.filter(p => p.status !== 'EM_ESTOQUE').length;
+  const eixo = { fontSize: 11, fill: CORES.cinza };
+  const semProdutos = produtos.length === 0;
+
   return (
-    <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-y-auto">
-      
-      {/* 1. NAVEGAÇÃO DE PRODUTOS */}
+    <div className="relative h-full w-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
+      {/* Abas antigas: só fora do shell */}
       <ProdutosNavTabs activeTab="produtos_relatorios" onNavigate={onNavigate} />
 
-      {/* 2. CABEÇALHO COMPACTO & MINIMALISTA */}
-      <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Relatórios Industriais & Posição de Estoque</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
-                Consolidado
-              </span>
-            </h1>
-            <p className="text-xs text-slate-500 font-medium">
-              Balanço de massa, curva de produtos acabados vs matérias-primas e capacidade produtiva instalada.
-            </p>
-          </div>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px]">
+          <CabecalhoPagina
+            titulo="Relatórios de estoque"
+            resumo={
+              semProdutos ? (
+                'Nenhum produto acabado no estoque'
+              ) : (
+                <>
+                  {produtos.length} {produtos.length === 1 ? 'produto' : 'produtos'} · {materias.length} matérias-primas
+                  {abaixoMinimo > 0 && <span className="font-semibold text-st-aguardando"> · {abaixoMinimo} abaixo do mínimo</span>}
+                </>
+              )
+            }
+            acoes={
+              <>
+                <BotaoSecundario onClick={handleExportarCsv} className="flex-1 sm:flex-none h-11 sm:h-9">
+                  <Download className="w-4 h-4" />
+                  Exportar CSV
+                </BotaoSecundario>
+                <BotaoSecundario onClick={() => window.print()} className="flex-1 sm:flex-none h-11 sm:h-9">
+                  <Printer className="w-4 h-4" />
+                  Imprimir
+                </BotaoSecundario>
+              </>
+            }
+          />
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleExportarCsv}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Exportar CSV</span>
-            </button>
+          <div className="px-4 sm:px-6 pb-8 space-y-5">
+            <FaixaNumerosProdutos colunas={3}>
+              <CardNumero
+                destaque
+                rotulo="Estoque acabado"
+                valor={(totalEstoqueKg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}
+                unidade="t"
+                detalhe={`${brl(valorTotalEstoque)} a custo`}
+              />
+              <CardNumero rotulo="Raiz no pátio" valor={totalRaizTon.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} unidade="t" detalhe="Autonomia de moagem" />
+              <CardNumero
+                rotulo="Extração média"
+                valor={extracaoMedia === null ? '—' : extracaoMedia.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}
+                unidade={extracaoMedia === null ? undefined : '%'}
+                detalhe={extracaoMedia === null ? 'Sem receitas com mandioca' : 'Rendimento médio das receitas'}
+              />
+            </FaixaNumerosProdutos>
 
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Imprimir</span>
-            </button>
-          </div>
-        </div>
+            {semProdutos ? (
+              <div className="bg-papel border border-linha rounded-md">
+                <EstadoVazio
+                  titulo="Sem produtos para comparar"
+                  texto="O gráfico de estoque × mínimo e o resumo por produto aparecem quando houver produtos acabados cadastrados."
+                  acao={onNavigate ? <BotaoSecundario onClick={() => onNavigate('produtos_estoque_cadastro')}>Ir para produtos acabados</BotaoSecundario> : undefined}
+                />
+              </div>
+            ) : (
+              <>
+                <Painel titulo="Estoque atual × estoque mínimo" contexto="toneladas">
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={dadosGrafico} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+                        <CartesianGrid vertical={false} stroke={CORES.linha} />
+                        <XAxis dataKey="nome" tick={eixo} axisLine={{ stroke: CORES.linha }} tickLine={false} interval={0} />
+                        <YAxis tick={eixo} axisLine={false} tickLine={false} />
+                        <Tooltip
+                          contentStyle={{ borderRadius: 6, border: `1px solid ${CORES.linha}`, background: CORES.papel, fontSize: 12 }}
+                          cursor={{ fill: CORES.papel2 }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} formatter={(v: any) => <span style={{ color: CORES.tinta }}>{v}</span>} />
+                        <Bar dataKey="estoqueTon" name="Estoque atual (t)" fill={CORES.eno800} radius={[3, 3, 0, 0]} maxBarSize={36} />
+                        <Bar dataKey="minimoTon" name="Estoque mínimo (t)" fill={CORES.ouro} radius={[3, 3, 0, 0]} maxBarSize={36} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Painel>
 
-        {/* STAT BAR MINIMALISTA EM LINHA */}
-        <div className="flex flex-wrap items-center gap-6 pt-3 mt-3 border-t border-slate-100 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Estoque Acabado Total:</span>
-            <span className="font-mono font-bold text-slate-900 text-sm">
-              {(totalEstoqueKg / 1000).toLocaleString('pt-BR')} Toneladas
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Raiz no Pátio (Autonomia):</span>
-            <span className="font-mono font-bold text-slate-900">
-              {totalRaizTon.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} Ton
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Taxa de Extração Média:</span>
-            <span className="font-mono font-bold text-emerald-700">
-              {(() => {
-                // Rendimento real das receitas: kg de produto por kg de mandioca
-                const fatores = carregarReceitas().map(r => r.kg_mandioca_por_kg_produto || 0).filter(f => f > 0);
-                if (fatores.length === 0) return 'Sem receitas com mandioca';
-                const media = fatores.reduce((a, b) => a + b, 0) / fatores.length;
-                return `${(100 / media).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% de rendimento (média das receitas)`;
-              })()}
-            </span>
+                <Painel titulo="Resumo por produto" contexto="saldo e valor a custo" semPadding>
+                  <TabelaResponsiva
+                    semMoldura
+                    colunas={[
+                      { rotulo: 'Produto' },
+                      { rotulo: 'Categoria' },
+                      { rotulo: 'Saldo', numero: true },
+                      { rotulo: 'Toneladas', numero: true },
+                      { rotulo: 'Valor (custo)', numero: true },
+                    ]}
+                    linhas={produtos.map((p, idx) => ({
+                      chave: p.id || idx,
+                      celulas: [
+                        p.nome,
+                        p.categoria,
+                        `${p.estoque_atual_sacos.toLocaleString('pt-BR')} un`,
+                        `${(p.estoque_atual_kg / 1000).toLocaleString('pt-BR')} t`,
+                        <span className="font-bold text-tinta">{brl(p.estoque_atual_sacos * (p.custo_total || 0))}</span>,
+                      ],
+                    }))}
+                    rodape={
+                      <div className="flex items-baseline justify-between gap-3 tabular-nums">
+                        <span className="font-semibold text-tinta-2">Total</span>
+                        <span className="font-bold text-tinta">
+                          {(totalEstoqueKg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} t · {brl(valorTotalEstoque)}
+                        </span>
+                      </div>
+                    }
+                  />
+                </Painel>
+              </>
+            )}
           </div>
         </div>
       </div>
-
-      {/* 3. GRÁFICO E TABELAS */}
-      <div className="p-6 space-y-6">
-        
-        {/* Gráfico de Estoque Atual vs Mínimo */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-xs">
-          <div className="mb-4">
-            <h3 className="font-bold text-sm text-slate-900">Posição de Estoque Atual vs Estoque Mínimo (Toneladas)</h3>
-            <p className="text-xs text-slate-400">Garante que a fábrica nunca sofra ruptura nas entregas para indústrias e distribuidores.</p>
-          </div>
-
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dadosGrafico}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="nome" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} />
-                <Tooltip contentStyle={{ backgroundColor: '#0f172a', color: '#fff', borderRadius: '8px', fontSize: '11px' }} />
-                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                <Bar dataKey="estoqueTon" name="Estoque Atual (Ton)" fill="#064e3b" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="minimoTon" name="Estoque Mínimo (Ton)" fill="#cbd5e1" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Tabela de Posição de Estoque */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-xs">
-          <div className="mb-3">
-            <h3 className="font-bold text-sm text-slate-900">Resumo Físico por Linha de Produto</h3>
-          </div>
-
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
-                <th className="py-2.5 px-3">Produto</th>
-                <th className="py-2.5 px-3">Categoria</th>
-                <th className="py-2.5 px-3 text-right">Saldo em Sacos</th>
-                <th className="py-2.5 px-3 text-right">Saldo em Toneladas</th>
-                <th className="py-2.5 px-3 text-right">Valor em Estoque (custo)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-mono">
-              {produtos.map((p, idx) => (
-                <tr key={idx} className="hover:bg-slate-50/60">
-                  <td className="py-2.5 px-3 font-sans font-medium text-slate-900">{p.nome}</td>
-                  <td className="py-2.5 px-3 font-sans text-slate-600">{p.categoria}</td>
-                  <td className="py-2.5 px-3 text-right font-bold text-slate-800">{p.estoque_atual_sacos.toLocaleString('pt-BR')} un</td>
-                  <td className="py-2.5 px-3 text-right font-bold text-slate-800">{(p.estoque_atual_kg / 1000).toLocaleString('pt-BR')} Ton</td>
-                  <td className="py-2.5 px-3 text-right font-bold text-emerald-800">
-                    {(p.estoque_atual_sacos * (p.custo_total || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-      </div>
-
     </div>
   );
 }

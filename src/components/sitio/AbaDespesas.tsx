@@ -64,7 +64,7 @@ export function FormDespesa({ estado, aplicar, onFechar }: { estado: ControleSit
               onClick={() => setF({ ...f, categoria: c })}
               aria-pressed={f.categoria === c}
               className={`min-h-11 px-2 rounded-xl border text-xs font-bold leading-tight cursor-pointer transition-colors ${
-                f.categoria === c ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+                f.categoria === c ? 'bg-amber-600 text-white border-amber-600' : 'bg-papel text-tinta-2 border-linha-forte hover:border-linha-forte'
               }`}
             >
               {ROTULO_CATEGORIA[c]}
@@ -177,10 +177,10 @@ export function AbaDespesas({ estado, mes, aplicar }: PropsAba) {
         )}
       </section>
 
-      <section className="rounded-3xl bg-white border border-slate-200 overflow-hidden">
+      <section className="rounded-3xl bg-papel border border-linha overflow-hidden">
         <div className="px-4 sm:px-5 py-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-black tracking-tight text-slate-900">Lançamentos</h2>
+            <h2 className="text-lg font-black tracking-tight text-tinta">Lançamentos</h2>
             {aPagar > 0 && <div className="text-xs font-bold text-red-700 tabular-nums">{moeda(aPagar)} a pagar</div>}
           </div>
           <select className={`${inputCls} sm:w-60 h-11`} value={filtro} onChange={e => setFiltro(e.target.value as 'TODAS' | CategoriaDespesaSitio)}>
@@ -193,7 +193,7 @@ export function AbaDespesas({ estado, mes, aplicar }: PropsAba) {
             ))}
           </select>
         </div>
-        <div className="border-t border-slate-100">
+        <div className="border-t border-linha">
           <ListaLancamentos itens={lista} vazio="Nenhuma despesa neste mês." />
         </div>
       </section>

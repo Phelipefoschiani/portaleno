@@ -34,6 +34,11 @@ import {
 } from '../../data/pedidosVendaData';
 import { pesoDoItemKg, pacotesDoItem } from '../../data/pedidosVendaData';
 import { PedidosNavTabs } from './PedidosNavTabs';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, CampoBusca, Segmentado, SeletorFiltro } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
 import {
   OrdemProducao,
   EVENTO_OPS,
@@ -387,317 +392,268 @@ export function PedidosEmProducao({ onNavigate }: Props) {
     });
   }, [pedidos, busca]);
 
+  const toneladas = (kg: number) => `${(kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} t`;
+
   return (
-    <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-hidden">
-      
-      {/* 1. NAVEGAÇÃO DE ESTEIRA UNIFICADA */}
+    <div className="relative h-full w-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
+
+      {/* Abas antigas do fluxo: só fora do shell */}
       <PedidosNavTabs activeTab="pedidos_em_producao" onNavigate={onNavigate} />
 
-      {/* 2. CABEÇALHO COMPACTO & MINIMALISTA */}
-      <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Em Produção</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
-                {metricas.total} pedidos na esteira
-              </span>
-              {metricas.pedidosSemLote > 0 && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 font-mono">
-                  <AlertTriangle className="w-3 h-3 text-amber-600" />
-                  <span>{metricas.pedidosSemLote} pendentes de lote/vencimento</span>
-                </span>
-              )}
-            </h1>
-          </div>
-        </div>
-
-        {/* STAT BAR MINIMALISTA EM LINHA */}
-        <div className="flex flex-wrap items-center gap-6 pt-3 mt-3 border-t border-slate-100 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Meta Total:</span>
-            <span className="font-mono font-bold text-slate-900 text-sm">
-              {(metricas.volumeTotalKg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Ton
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Produzido no Pátio:</span>
-            <span className="font-mono font-bold text-emerald-800 text-sm">
-              {(metricas.volumeProduzidoAcumuladoKg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Ton
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Sacos 25kg:</span>
-            <span className="font-mono font-bold text-slate-900">
-              {metricas.sacos25kg.toLocaleString('pt-BR')} un
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Big Bags:</span>
-            <span className="font-mono font-bold text-slate-900">
-              {metricas.bigBags} un
-            </span>
-          </div>
-        </div>
+      <div className="mx-auto w-full max-w-[1700px]">
+        <CabecalhoPagina
+          titulo="Em produção"
+          resumo={
+            metricas.total === 0 ? (
+              'Nenhum pedido na esteira de produção.'
+            ) : (
+              <>
+                {metricas.total} {metricas.total === 1 ? 'pedido' : 'pedidos'} · {toneladas(metricas.volumeProduzidoAcumuladoKg)} de {toneladas(metricas.volumeTotalKg)} produzidas
+                {' · '}{metricas.sacos25kg.toLocaleString('pt-BR')} sacos 25 kg · {metricas.bigBags} big bags
+                {metricas.pedidosSemLote > 0 && (
+                  <span className="text-st-aguardando font-semibold"> · {metricas.pedidosSemLote} sem lote/vencimento</span>
+                )}
+              </>
+            )
+          }
+        />
+        <BarraFiltros>
+          <CampoBusca valor={busca} onChange={setBusca} placeholder="Buscar pedido, lote, cliente ou cidade" className="w-full md:w-80" />
+        </BarraFiltros>
       </div>
 
-      {/* 3. BARRA DE BUSCA */}
-      <div className="bg-[#f1f5f2] px-6 py-2.5 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex-1 min-w-[260px] max-w-sm relative">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por Pedido, Lote, Cliente..."
-            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-700 font-medium"
-          />
-        </div>
-      </div>
-
-      {/* 4. TABELA DE PEDIDOS EM PRODUÇÃO COM VALIDAÇÃO VISUAL DE LOTE */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/90 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
-                <th className="py-3 px-5">Pedido & Rastreabilidade</th>
-                <th className="py-3 px-4">Cliente / Praça</th>
-                <th className="py-3 px-4">Produtos do Pedido</th>
-                <th className="py-3 px-4">Progresso Produzido</th>
-                <th className="py-3 px-4">Lote & Vencimento</th>
-                <th className="py-3 px-5 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {pedidosFiltrados.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
-                    Nenhum pedido em produção no momento.
-                  </td>
-                </tr>
-              ) : (
-                pedidosFiltrados.map((item) => {
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px] px-4 sm:px-6 pb-6">
+          {pedidosFiltrados.length === 0 ? (
+            <div className="bg-papel border border-linha rounded-md">
+              <EstadoVazio
+                titulo={pedidos.length === 0 ? 'Nenhum pedido em produção' : 'Nada encontrado'}
+                texto={
+                  pedidos.length === 0
+                    ? 'Ao aprovar uma venda em Vendas, ela entra aqui para apontar a produção, registrar lote e vencimento.'
+                    : 'Confira o número do pedido, o lote ou o nome do cliente.'
+                }
+                acao={
+                  pedidos.length === 0 && onNavigate ? (
+                    <BotaoSecundario onClick={() => onNavigate('pedidos_orcamentos_sugestivo')}>Ir para Vendas</BotaoSecundario>
+                  ) : undefined
+                }
+              />
+            </div>
+          ) : (
+            <>
+              {/* Celular: cartões */}
+              <ul className="sm:hidden bg-papel border border-linha rounded-md">
+                {pedidosFiltrados.map(item => {
                   const produzidoKg = item.quantidade_produzida_acumulada_kg || 0;
                   const totalKg = item.peso_total_kg || 1;
                   const percentual = Math.min(100, Math.round((produzidoKg / totalKg) * 100));
-
-                  const temLote = Boolean(item.lote_producao && item.lote_producao.trim());
-                  const temVencimento = Boolean(item.data_vencimento && item.data_vencimento.trim());
-                  const liberadoParaFaturar = temLote && temVencimento;
-
+                  const liberadoParaFaturar = Boolean(item.lote_producao && item.lote_producao.trim()) && Boolean(item.data_vencimento && item.data_vencimento.trim());
+                  const faltaMp = (faltaMpPorPedido.get(item.id) || []).some(c => c.falta > 0);
                   return (
-                    <tr
-                      key={item.id}
-                      onClick={() => handleAbrirProducao(item)}
-                      className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
-                      title="Clique para abrir o controle de produção e apontamentos"
-                    >
-                      <td className="py-3.5 px-5">
-                        <div className="font-mono font-bold text-slate-900 group-hover:text-emerald-900">
-                          {item.numero_pedido}
-                        </div>
-                        {(faltaMpPorPedido.get(item.id) || []).some(c => c.falta > 0) && (
-                          <div className="text-[10px] text-red-700 font-bold flex items-center gap-1 mt-0.5" title="O estoque de matéria-prima não cobre o que falta produzir">
-                            <AlertTriangle className="w-3 h-3 text-red-600" />
-                            <span>Falta matéria-prima</span>
-                          </div>
-                        )}
-                        {temLote ? (
-                          <div className="text-[11px] text-emerald-800 font-mono font-semibold flex items-center gap-1 mt-0.5">
-                            <Tag className="w-3 h-3 text-emerald-600" />
-                            <span>{item.lote_producao}</span>
-                          </div>
-                        ) : (
-                          <div className="text-[10px] text-amber-700 font-bold flex items-center gap-1 mt-0.5">
-                            <AlertTriangle className="w-3 h-3 text-amber-500" />
-                            <span>Lote Pendente</span>
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900">{item.cliente_nome}</div>
-                        <div className="text-[11px] text-slate-400">{item.cliente_cidade_uf}</div>
-                      </td>
-
-                      {/* Produtos do Pedido com progresso individual */}
-                      <td className="py-3.5 px-4">
-                        <div className="space-y-1.5">
-                          {item.itens.map((it, idx) => {
-                            const qtdProd = it.quantidade_produzida || 0;
-                            const pct = Math.min(100, Math.round((qtdProd / it.quantidade) * 100));
-                            const falta = Math.max(0, it.quantidade - qtdProd);
-                            return (
-                              <div
-                                key={idx}
-                                onClick={(e) => handleAbrirProducaoComProduto(item, it.produto_id, e)}
-                                className="flex items-center justify-between gap-2 p-1 rounded-md hover:bg-emerald-50/80 transition-colors border border-transparent hover:border-emerald-200 cursor-pointer"
-                                title={`Clique para apontar produção de: ${it.produto_nome}`}
-                              >
-                                <div className="truncate max-w-[190px]">
-                                  <span className="font-mono font-bold text-slate-900">{it.quantidade}x</span>{' '}
-                                  <span className="text-slate-800 font-medium hover:text-emerald-900">{it.produto_nome}</span>
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                                    pct >= 100
-                                      ? 'bg-emerald-100 text-emerald-800'
-                                      : pct > 0
-                                      ? 'bg-blue-100 text-blue-800'
-                                      : 'bg-slate-100 text-slate-600'
-                                  }`}>
-                                    {qtdProd}/{it.quantidade} ({pct}%)
-                                  </span>
-                                  {falta > 0 && (
-                                    <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100/70 hover:bg-emerald-200 px-1 py-0.5 rounded">
-                                      +Apontar
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </td>
-
-                      {/* Progresso Total do Pedido */}
-                      <td className="py-3.5 px-4 font-mono min-w-[150px]">
-                        <div className="flex items-center justify-between text-[11px] mb-1">
-                          <span className="font-bold text-slate-800">{produzidoKg.toLocaleString('pt-BR')} kg</span>
-                          <span className="text-slate-400 font-normal">/ {totalKg.toLocaleString('pt-BR')} kg</span>
-                        </div>
-                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              percentual >= 100 ? 'bg-emerald-600' : 'bg-emerald-700'
-                            }`}
-                            style={{ width: `${percentual}%` }}
-                          />
-                        </div>
-                        <span className="text-[10px] font-bold text-emerald-800 mt-0.5 block">
-                          {percentual}% produzido
-                        </span>
-                      </td>
-
-                      {/* Status de Lote & Vencimento (Regra Obrigatória) */}
-                      <td className="py-3.5 px-4 font-mono">
-                        {liberadoParaFaturar ? (
-                          <div className="p-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
-                            <div className="text-[11px] font-bold text-emerald-950 flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                              <span>Lote: {item.lote_producao}</span>
+                    <li key={item.id} className="px-3.5 py-3 border-b border-linha last:border-b-0">
+                      <button type="button" onClick={() => handleAbrirProducao(item)} className="w-full text-left">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[11.5px] text-cinza tabular-nums">
+                              {item.numero_pedido}{item.lote_producao ? ` · Lote ${item.lote_producao}` : ''}
                             </div>
-                            <div className="text-[10px] text-emerald-800 mt-0.5">
-                              Venc: {formatarDataBR(item.data_vencimento)}
+                            <div className="text-[14px] font-bold text-tinta truncate">{item.cliente_nome}</div>
+                            <div className="text-[11.5px] text-cinza truncate">
+                              {item.itens.map(i => `${i.quantidade}x ${i.produto_nome}`).join(' · ')}
                             </div>
                           </div>
-                        ) : (
-                          <div className="p-1.5 bg-amber-50 border border-amber-300 rounded-lg text-amber-900">
-                            <div className="text-[10px] font-black flex items-center gap-1 text-amber-800">
-                              <Lock className="w-3 h-3 text-amber-600 shrink-0" />
-                              <span>Faturamento Bloqueado</span>
-                            </div>
-                            <div className="text-[9px] text-amber-700 mt-0.5">
-                              Exige Lote e Vencimento
-                            </div>
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-5 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Apontar Produto */}
-                          <button
-                            onClick={() => handleAbrirProducao(item)}
-                            className="
-                              flex items-center gap-1 px-2.5 py-1.5 rounded-lg
-                              bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-900
-                              border border-slate-200 font-bold text-xs
-                              transition-colors cursor-pointer
-                            "
-                            title="Apontar produção por produto, registrar lote e vencimento"
-                          >
-                            <HardHat className="w-3.5 h-3.5 text-emerald-800" />
-                            <span>Apontar</span>
-                          </button>
-
-                          {/* Concluir e Enviar para A Faturar */}
-                          <button
-                            onClick={() => handleTentarConcluirProducao(item)}
-                            className={`
-                              flex items-center gap-1 px-3 py-1.5 rounded-lg
-                              font-bold text-xs shadow-2xs transition-colors cursor-pointer
-                              ${liberadoParaFaturar
-                                ? 'bg-emerald-900 hover:bg-emerald-950 text-white'
-                                : 'bg-amber-600 hover:bg-amber-700 text-white'
-                              }
-                            `}
-                            title={liberadoParaFaturar
-                              ? 'Concluir produção e liberar para Faturamento'
-                              : 'Preencher Lote e Vencimento para liberar ao Faturamento'
-                            }
-                          >
-                            {liberadoParaFaturar ? (
-                              <>
-                                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                                <span>A Faturar</span>
-                              </>
-                            ) : (
-                              <>
-                                <Lock className="w-3.5 h-3.5 stroke-[2.5]" />
-                                <span>Definir Lote p/ Faturar</span>
-                              </>
-                            )}
-                          </button>
+                          {faltaMp ? (
+                            <StatusChip tom="vencido" className="shrink-0">Falta MP</StatusChip>
+                          ) : liberadoParaFaturar ? (
+                            <StatusChip tom="pago" className="shrink-0">Lote ok</StatusChip>
+                          ) : (
+                            <StatusChip tom="aguardando" className="shrink-0">Sem lote</StatusChip>
+                          )}
                         </div>
-                      </td>
-                    </tr>
+                        <div className="mt-2.5">
+                          <div className="flex items-baseline justify-between text-[11.5px] tabular-nums">
+                            <span className="text-cinza">{produzidoKg.toLocaleString('pt-BR')} de {totalKg.toLocaleString('pt-BR')} kg</span>
+                            <span className="text-[15px] font-extrabold text-tinta">{percentual}%</span>
+                          </div>
+                          <div className="mt-1 h-1.5 w-full bg-papel-3 rounded-full overflow-hidden">
+                            <div className="h-full bg-eno-700 rounded-full" style={{ width: `${percentual}%` }} />
+                          </div>
+                        </div>
+                      </button>
+                      <div className="flex gap-2 mt-2.5">
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirProducao(item)}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-md border border-linha-forte text-tinta-2 text-[12.5px] font-semibold active:bg-papel-3"
+                        >
+                          <HardHat className="w-3.5 h-3.5" /> Apontar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleTentarConcluirProducao(item)}
+                          className={`flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-md text-[12.5px] font-semibold ${
+                            liberadoParaFaturar ? 'bg-eno-800 text-white' : 'bg-st-aguardando-bg text-st-aguardando'
+                          }`}
+                        >
+                          {liberadoParaFaturar ? <Check className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                          {liberadoParaFaturar ? 'Enviar a faturar' : 'Definir lote'}
+                        </button>
+                      </div>
+                    </li>
                   );
-                })
-              )}
-            </tbody>
-          </table>
+                })}
+              </ul>
+
+              {/* A partir de sm: tabela densa */}
+              <TabelaDados className="hidden sm:block">
+                <thead className={tabela.thead}>
+                  <tr>
+                    <Th>Pedido</Th>
+                    <Th>Cliente</Th>
+                    <Th>Produtos · apontado</Th>
+                    <Th>Progresso</Th>
+                    <Th>Lote e vencimento</Th>
+                    <Th className="text-right">Ações</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pedidosFiltrados.map(item => {
+                    const produzidoKg = item.quantidade_produzida_acumulada_kg || 0;
+                    const totalKg = item.peso_total_kg || 1;
+                    const percentual = Math.min(100, Math.round((produzidoKg / totalKg) * 100));
+                    const temLote = Boolean(item.lote_producao && item.lote_producao.trim());
+                    const temVencimento = Boolean(item.data_vencimento && item.data_vencimento.trim());
+                    const liberadoParaFaturar = temLote && temVencimento;
+                    return (
+                      <tr
+                        key={item.id}
+                        onClick={() => handleAbrirProducao(item)}
+                        className={`${tabela.tr} cursor-pointer group align-top`}
+                        title="Abrir o controle de produção e apontamentos"
+                      >
+                        <Td>
+                          <div className="font-semibold text-tinta tabular-nums whitespace-nowrap group-hover:text-eno-700">{item.numero_pedido}</div>
+                          {(faltaMpPorPedido.get(item.id) || []).some(c => c.falta > 0) && (
+                            <div className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-st-vencido" title="O estoque de matéria-prima não cobre o que falta produzir">
+                              <AlertTriangle className="w-3 h-3" /> Falta matéria-prima
+                            </div>
+                          )}
+                        </Td>
+                        <Td className="max-w-[240px]">
+                          <div className="font-semibold text-tinta truncate">{item.cliente_nome}</div>
+                          <div className="text-[11.5px] text-cinza truncate">{item.cliente_cidade_uf}</div>
+                        </Td>
+                        <Td className="min-w-[260px]">
+                          <div className="space-y-0.5">
+                            {item.itens.map((it, idx) => {
+                              const qtdProd = it.quantidade_produzida || 0;
+                              const pct = Math.min(100, Math.round((qtdProd / it.quantidade) * 100));
+                              return (
+                                <button
+                                  type="button"
+                                  key={idx}
+                                  onClick={(e) => handleAbrirProducaoComProduto(item, it.produto_id, e)}
+                                  className="w-full flex items-center justify-between gap-2 px-1.5 py-1 -mx-1.5 rounded-[5px] hover:bg-papel-3 transition-colors cursor-pointer text-left"
+                                  title={`Apontar produção de ${it.produto_nome}`}
+                                >
+                                  <span className="truncate max-w-[200px] text-tinta">
+                                    <span className="font-semibold tabular-nums">{it.quantidade}x</span> {it.produto_nome}
+                                  </span>
+                                  <span className={`shrink-0 text-[11px] tabular-nums font-semibold ${pct >= 100 ? 'text-st-pago' : pct > 0 ? 'text-st-producao' : 'text-cinza'}`}>
+                                    {qtdProd}/{it.quantidade}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </Td>
+                        <Td className="min-w-[160px] tabular-nums">
+                          <div className="flex items-baseline justify-between text-[11.5px]">
+                            <span className="font-semibold text-tinta">{percentual}%</span>
+                            <span className="text-cinza">{produzidoKg.toLocaleString('pt-BR')} / {totalKg.toLocaleString('pt-BR')} kg</span>
+                          </div>
+                          <div className="mt-1 h-1.5 w-full bg-papel-3 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${percentual >= 100 ? 'bg-st-pago' : 'bg-eno-700'}`} style={{ width: `${percentual}%` }} />
+                          </div>
+                        </Td>
+                        <Td className="whitespace-nowrap tabular-nums">
+                          {liberadoParaFaturar ? (
+                            <>
+                              <div className="font-semibold text-tinta">{item.lote_producao}</div>
+                              <div className="text-[11.5px] text-cinza">Venc. {formatarDataBR(item.data_vencimento)}</div>
+                            </>
+                          ) : (
+                            <StatusChip tom="aguardando">Faturamento bloqueado</StatusChip>
+                          )}
+                        </Td>
+                        <Td className="text-right">
+                          <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirProducao(item)}
+                              className="inline-flex items-center gap-1 h-7 px-2 rounded-[5px] text-tinta-2 hover:bg-papel-3 text-[12px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                              title="Apontar produção por produto, registrar lote e vencimento"
+                            >
+                              <HardHat className="w-3.5 h-3.5" /> Apontar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleTentarConcluirProducao(item)}
+                              className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-[5px] text-[12px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro ${
+                                liberadoParaFaturar ? 'bg-eno-800 hover:bg-eno-900 text-white' : 'bg-st-aguardando-bg text-st-aguardando hover:brightness-95'
+                              }`}
+                              title={liberadoParaFaturar ? 'Concluir produção e liberar para faturamento' : 'Preencher lote e vencimento para liberar ao faturamento'}
+                            >
+                              {liberadoParaFaturar ? <Check className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                              {liberadoParaFaturar ? 'A faturar' : 'Definir lote'}
+                            </button>
+                          </div>
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </TabelaDados>
+            </>
+          )}
         </div>
       </div>
 
       {/* 5. MODAL ACOMPANHAMENTO DE PRODUÇÃO COM ESCOLHA DO PRODUTO */}
       {modalProducao && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-5xl lg:max-w-6xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-5xl lg:max-w-6xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Cabeçalho do Modal */}
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
               <div className="flex items-center gap-2.5">
-                <HardHat className="w-5 h-5 text-emerald-400" />
+                <HardHat className="w-5 h-5 text-ouro-claro" />
                 <div>
                   <h3 className="font-bold text-sm sm:text-base text-white">
                     Acompanhamento de Produção - Pedido {modalProducao.numero_pedido}
                   </h3>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-cinza">
                     Selecione o produto para apontar a quantidade finalizada. Rastreabilidade com lote e vencimento.
                   </p>
                 </div>
               </div>
-              <button onClick={() => setModalProducao(null)} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
+              <button onClick={() => setModalProducao(null)} className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-eno-800 text-eno-100 hover:text-white transition-colors cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-5 text-xs">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 text-xs">
               
               {/* CARD DE PROGRESSO POR PRODUTO DO PEDIDO */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                  <span className="font-bold text-slate-800 uppercase tracking-wider text-xs flex items-center gap-1.5">
-                    <Package className="w-4 h-4 text-emerald-700" />
+              <div className="p-4 bg-papel-2 rounded-md border border-linha space-y-3">
+                <div className="flex items-center justify-between border-b border-linha pb-2">
+                  <span className="font-bold text-tinta uppercase tracking-wider text-xs flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-eno-700" />
                     <span>Progresso Individual por Produto do Pedido</span>
                   </span>
-                  <span className="text-slate-500 font-mono text-[11px]">
-                    Destinatário: <strong className="text-slate-800">{modalProducao.cliente_nome}</strong> ({modalProducao.cliente_cidade_uf})
+                  <span className="text-cinza tabular-nums text-[11px]">
+                    Destinatário: <strong className="text-tinta">{modalProducao.cliente_nome}</strong> ({modalProducao.cliente_cidade_uf})
                   </span>
                 </div>
 
@@ -712,53 +668,53 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                       <div
                         key={idx}
                         onClick={() => setProdutoSelecionadoId(item.produto_id)}
-                        className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                        className={`p-3 rounded-md border transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
-                            : 'bg-white border-slate-200 hover:border-slate-300'
+                            ? 'bg-eno-50 border-eno-600 ring-2 ring-eno-700/20 shadow-xs'
+                            : 'bg-papel border-linha hover:border-linha-forte'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2 mb-1.5">
                           <div>
-                            <div className="font-black text-slate-900 text-xs">{item.produto_nome}</div>
-                            <div className="text-[10px] text-slate-500">Embalagem: {item.tipo_embalagem}</div>
+                            <div className="font-extrabold text-tinta text-xs">{item.produto_nome}</div>
+                            <div className="text-[10px] text-cinza">Embalagem: {item.tipo_embalagem}</div>
                             {(() => {
                               const op = opDoItem(modalProducao.id, idx);
                               if (!op) return null;
                               return (
-                                <div className={`text-[10px] font-bold font-mono ${op.status === 'CONCLUIDA' ? 'text-emerald-700' : 'text-violet-700'}`}>
+                                <div className={`text-[10px] font-bold tabular-nums ${op.status === 'CONCLUIDA' ? 'text-eno-700' : 'text-st-producao'}`}>
                                   {op.numero} · {op.status === 'CONCLUIDA' ? 'OP concluída (estoque lançado)' : op.status === 'EM_PRODUCAO' ? 'OP em produção' : 'OP planejada'}
                                 </div>
                               );
                             })()}
                           </div>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full font-mono ${
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full tabular-nums ${
                             isConcluido
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              ? 'bg-eno-100 text-eno-800 border border-eno-100'
                               : pct > 0
-                              ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                              : 'bg-slate-100 text-slate-600'
+                              ? 'bg-st-producao-bg text-st-producao border border-st-producao/30'
+                              : 'bg-papel-3/60 text-tinta-2'
                           }`}>
                             {isConcluido ? '✓ 100% Concluído' : `${pct}% Produzido`}
                           </span>
                         </div>
 
                         {/* Barra de Progresso do Produto */}
-                        <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200 mt-2">
+                        <div className="w-full h-2.5 bg-papel-3/60 rounded-full overflow-hidden border border-linha mt-2">
                           <div
                             className={`h-full rounded-full transition-all duration-300 ${
-                              isConcluido ? 'bg-emerald-600' : 'bg-emerald-700'
+                              isConcluido ? 'bg-eno-600' : 'bg-eno-700'
                             }`}
                             style={{ width: `${pct}%` }}
                           />
                         </div>
 
-                        <div className="flex justify-between items-center text-[11px] font-mono mt-1.5">
-                          <span className="text-slate-600">
-                            Finalizado: <strong className="text-slate-900">{qtdProd}</strong> de {item.quantidade} {item.tipo_embalagem.includes('Fardo') ? 'fardos' : 'sacos'}
+                        <div className="flex justify-between items-center text-[11px] tabular-nums mt-1.5">
+                          <span className="text-tinta-2">
+                            Finalizado: <strong className="text-tinta">{qtdProd}</strong> de {item.quantidade} {item.tipo_embalagem.includes('Fardo') ? 'fardos' : 'sacos'}
                           </span>
-                          <span className="text-slate-500">
-                            Faltam: <strong className="text-emerald-900">{Math.max(0, item.quantidade - qtdProd)}</strong>
+                          <span className="text-cinza">
+                            Faltam: <strong className="text-eno-800">{Math.max(0, item.quantidade - qtdProd)}</strong>
                           </span>
                         </div>
                       </div>
@@ -774,7 +730,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                   <div className="space-y-2">
                     <TabelaMateriaPrimaOP itens={nec} titulo="Matéria-prima necessária para o que falta produzir x estoque atual (baixa na conclusão das OPs)" />
                     {nec.some(c => c.falta > 0) && (
-                      <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-800 font-semibold flex items-center gap-1.5">
+                      <div className="p-2.5 rounded-md bg-st-vencido-bg border border-st-vencido/30 text-st-vencido font-semibold flex items-center gap-1.5">
                         <AlertTriangle className="w-4 h-4" />
                         <span>O estoque de matéria-prima não cobre a produção restante. É possível seguir; a falta fica registrada.</span>
                       </div>
@@ -787,12 +743,12 @@ export function PedidosEmProducao({ onNavigate }: Props) {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
                 {/* FORMULÁRIO: APONTAR PRODUTO ESCOLHIDO */}
-                <div className="lg:col-span-6 space-y-3.5 p-4 bg-emerald-50/60 rounded-2xl border border-emerald-200">
-                  <div className="flex items-center justify-between border-b border-emerald-200/80 pb-2">
-                    <span className="font-bold text-emerald-950 uppercase tracking-wider text-xs block">
+                <div className="lg:col-span-6 space-y-3.5 p-4 bg-eno-50/60 rounded-md border border-eno-100">
+                  <div className="flex items-center justify-between border-b border-eno-100/80 pb-2">
+                    <span className="font-bold text-eno-800 uppercase tracking-wider text-xs block">
                       Apontar Quantidade Finalizada
                     </span>
-                    <span className="text-[10px] font-semibold text-emerald-800">
+                    <span className="text-[10px] font-semibold text-eno-800">
                       Selecione o produto e registre
                     </span>
                   </div>
@@ -801,13 +757,13 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                     
                     {/* Seletor de Produto */}
                     <div>
-                      <label className="block font-bold text-slate-700 mb-1">
+                      <label className="block font-bold text-tinta-2 mb-1">
                         Produto a Apontar *
                       </label>
                       <select
                         value={produtoSelecionadoId}
                         onChange={(e) => setProdutoSelecionadoId(e.target.value)}
-                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-700 cursor-pointer"
+                        className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 text-xs font-bold text-tinta focus:outline-none focus:border-eno-700 cursor-pointer"
                       >
                         {modalProducao.itens.map(it => {
                           const qtdProd = it.quantidade_produzida || 0;
@@ -824,15 +780,15 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="block font-bold text-slate-700">
+                          <label className="block font-bold text-tinta-2">
                             Qtd Finalizada Agora (Embalagens) *
                           </label>
                           {(() => {
                             const itemAlvo = modalProducao.itens.find(i => i.produto_id === produtoSelecionadoId);
                             const falta = itemAlvo ? Math.max(0, itemAlvo.quantidade - (itemAlvo.quantidade_produzida || 0)) : 0;
                             return (
-                              <span className="text-[10px] text-slate-500 font-mono">
-                                Restam: <strong className="text-emerald-800">{falta}</strong>
+                              <span className="text-[10px] text-cinza tabular-nums">
+                                Restam: <strong className="text-eno-800">{falta}</strong>
                               </span>
                             );
                           })()}
@@ -844,18 +800,18 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                           value={qtdEmbalagensInput}
                           onChange={(e) => setQtdEmbalagensInput(e.target.value)}
                           placeholder="Ex: 50"
-                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 font-mono font-black text-emerald-950 text-sm focus:outline-none focus:border-emerald-700"
+                          className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 tabular-nums font-extrabold text-eno-800 text-sm focus:outline-none focus:border-eno-700"
                         />
                         
                         {/* BOTÕES DE APONTAMENTO RÁPIDO */}
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                          <span className="text-[10px] text-slate-400 font-semibold">Atalhos:</span>
+                          <span className="text-[10px] text-cinza font-semibold">Atalhos:</span>
                           {[10, 25, 50, 100, 200].map(val => (
                             <button
                               key={val}
                               type="button"
                               onClick={() => setQtdEmbalagensInput(String(val))}
-                              className="px-2 py-0.5 rounded bg-slate-100 hover:bg-emerald-100 hover:text-emerald-900 border border-slate-200 text-[10px] font-mono font-bold text-slate-700 transition-colors cursor-pointer"
+                              className="px-2 py-0.5 rounded bg-papel-3/60 hover:bg-eno-100 hover:text-eno-800 border border-linha text-[10px] tabular-nums font-bold text-tinta-2 transition-colors cursor-pointer"
                               title={`Lançar ${val} embalagens`}
                             >
                               +{val}
@@ -869,7 +825,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                                 <button
                                   type="button"
                                   onClick={() => setQtdEmbalagensInput(String(falta))}
-                                  className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                                  className="px-2 py-0.5 rounded bg-eno-600 hover:bg-eno-700 text-white text-[10px] tabular-nums font-bold transition-colors cursor-pointer"
                                   title={`Finalizar restante (${falta} unidades)`}
                                 >
                                   Concluir Restante ({falta})
@@ -881,29 +837,29 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                         </div>
 
                         {qtdEmbalagensInput && (
-                          <span className="text-[10px] text-emerald-800 font-mono mt-1 font-semibold block">
+                          <span className="text-[10px] text-eno-800 tabular-nums mt-1 font-semibold block">
                             Equivale a: {(parseInt(qtdEmbalagensInput) * (modalProducao.itens.find(i => i.produto_id === produtoSelecionadoId)?.peso_unitario_kg || 25)).toLocaleString('pt-BR')} kg
                           </span>
                         )}
                       </div>
 
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">
+                        <label className="block font-bold text-tinta-2 mb-1">
                           Data do Apontamento
                         </label>
                         <input
                           type="date"
                           value={paraISO(dataApontamento)}
                           onChange={(e) => setDataApontamento(e.target.value)}
-                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
+                          className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 tabular-nums text-tinta focus:outline-none focus:border-eno-700"
                         />
                       </div>
                     </div>
 
                     {/* Lote e Vencimento */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-emerald-100">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-eno-100">
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">
+                        <label className="block font-bold text-tinta-2 mb-1">
                           Número do Lote *
                         </label>
                         <input
@@ -912,12 +868,12 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                           value={loteInput}
                           onChange={(e) => setLoteInput(e.target.value)}
                           placeholder="Ex: LOT-2026-F104"
-                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
+                          className="w-full bg-papel border border-linha-forte rounded-lg px-2.5 py-1.5 tabular-nums font-bold text-tinta focus:outline-none focus:border-eno-700"
                         />
                       </div>
 
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">
+                        <label className="block font-bold text-tinta-2 mb-1">
                           Data de Vencimento *
                         </label>
                         <input
@@ -925,18 +881,18 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                           required
                           value={paraISO(dataVencimentoInput)}
                           onChange={(e) => setDataVencimentoInput(e.target.value)}
-                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
+                          className="w-full bg-papel border border-linha-forte rounded-lg px-2.5 py-1.5 tabular-nums font-bold text-tinta focus:outline-none focus:border-eno-700"
                         />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">Turno / Operador</label>
+                        <label className="block font-bold text-tinta-2 mb-1">Turno / Operador</label>
                         <select
                           value={operadorTurno}
                           onChange={(e) => setOperadorTurno(e.target.value)}
-                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 cursor-pointer"
+                          className="w-full bg-papel border border-linha-forte rounded-lg px-2.5 py-1.5 text-xs text-tinta cursor-pointer"
                         >
                           <option value="Turno A (Manhã) - Carlos Ferreira">Turno A (Manhã)</option>
                           <option value="Turno B (Tarde) - Marcelo Silveira">Turno B (Tarde)</option>
@@ -945,13 +901,13 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                       </div>
 
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">Observações do Turno</label>
+                        <label className="block font-bold text-tinta-2 mb-1">Observações do Turno</label>
                         <input
                           type="text"
                           value={observacaoApontamento}
                           onChange={(e) => setObservacaoApontamento(e.target.value)}
                           placeholder="Ex: Ensaque concluído e paletizado"
-                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-800"
+                          className="w-full bg-papel border border-linha-forte rounded-lg px-2.5 py-1.5 text-tinta"
                         />
                       </div>
                     </div>
@@ -959,7 +915,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                     <div className="flex justify-end pt-2">
                       <button
                         type="submit"
-                        className="flex items-center gap-2 px-5 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs cursor-pointer shadow-xs hover:shadow"
+                        className="flex items-center gap-2 px-5 py-2 rounded-md bg-eno-800 hover:bg-eno-900 text-white font-bold text-xs cursor-pointer shadow-xs hover:shadow"
                       >
                         <Plus className="w-4 h-4" />
                         <span>Salvar Apontamento do Produto</span>
@@ -971,24 +927,24 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                 {/* HISTÓRICO DE APONTAMENTOS */}
                 <div className="lg:col-span-6 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-800 uppercase tracking-wider text-xs block">
+                    <span className="font-bold text-tinta uppercase tracking-wider text-xs block">
                       Histórico de Apontamentos Realizados
                     </span>
-                    <span className="text-slate-500 font-mono text-[11px]">
-                      Total: <strong className="text-emerald-800 font-bold">{modalProducao.quantidade_produzida_acumulada_kg?.toLocaleString('pt-BR') || 0} kg</strong>
+                    <span className="text-cinza tabular-nums text-[11px]">
+                      Total: <strong className="text-eno-800 font-bold">{modalProducao.quantidade_produzida_acumulada_kg?.toLocaleString('pt-BR') || 0} kg</strong>
                     </span>
                   </div>
                   
                   {(!modalProducao.apontamentos_producao || modalProducao.apontamentos_producao.length === 0) ? (
-                    <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
-                      <Factory className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <div className="p-8 text-center text-cinza bg-papel-2 rounded-md border border-linha">
+                      <Factory className="w-8 h-8 text-cinza-claro mx-auto mb-2" />
                       <p>Nenhum apontamento registrado ainda.</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Selecione um produto ao lado e lance as embalagens finalizadas.</p>
+                      <p className="text-[11px] text-cinza mt-0.5">Selecione um produto ao lado e lance as embalagens finalizadas.</p>
                     </div>
                   ) : (
-                    <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                    <div className="border border-linha rounded-md overflow-hidden shadow-xs">
                       <table className="w-full text-left">
-                        <thead className="bg-slate-100 text-[10px] font-bold uppercase text-slate-600 border-b border-slate-200">
+                        <thead className="bg-papel-3/60 text-[10px] font-bold uppercase text-tinta-2 border-b border-linha">
                           <tr>
                             <th className="py-2.5 px-3">Data</th>
                             <th className="py-2.5 px-3">Produto / Embalagem</th>
@@ -997,31 +953,31 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                             <th className="py-2.5 px-2 text-right">Ação</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 font-mono text-xs">
+                        <tbody className="divide-y divide-linha tabular-nums text-xs">
                           {modalProducao.apontamentos_producao.map((apt) => (
-                            <tr key={apt.id} className="hover:bg-slate-50">
-                              <td className="py-2.5 px-3 font-semibold text-slate-800">{formatarDataBR(apt.data)}</td>
+                            <tr key={apt.id} className="hover:bg-papel-2">
+                              <td className="py-2.5 px-3 font-semibold text-tinta">{formatarDataBR(apt.data)}</td>
                               <td className="py-2.5 px-3 font-sans">
-                                <div className="font-bold text-slate-900 truncate max-w-[140px]" title={apt.produto_nome}>
+                                <div className="font-bold text-tinta truncate max-w-[140px]" title={apt.produto_nome}>
                                   {apt.produto_nome || 'Produto'}
                                 </div>
-                                <div className="text-[10px] text-slate-400">{apt.tipo_embalagem}</div>
+                                <div className="text-[10px] text-cinza">{apt.tipo_embalagem}</div>
                               </td>
-                              <td className="py-2.5 px-3 text-right font-black text-emerald-800">
+                              <td className="py-2.5 px-3 text-right font-extrabold text-eno-800">
                                 {apt.quantidade_produzida_embalagens ? `${apt.quantidade_produzida_embalagens} un` : ''}
-                                <div className="text-[10px] text-slate-500 font-normal">
+                                <div className="text-[10px] text-cinza font-normal">
                                   +{apt.quantidade_produzida_kg.toLocaleString('pt-BR')} kg
                                 </div>
                               </td>
-                              <td className="py-2.5 px-3 font-sans text-slate-600 text-[11px]">
+                              <td className="py-2.5 px-3 font-sans text-tinta-2 text-[11px]">
                                 <div>{apt.operador}</div>
-                                {apt.lote && <div className="text-[10px] font-mono text-emerald-700 font-bold">{apt.lote}</div>}
+                                {apt.lote && <div className="text-[10px] tabular-nums text-eno-700 font-bold">{apt.lote}</div>}
                               </td>
                               <td className="py-2.5 px-2 text-right">
                                 <button
                                   type="button"
                                   onClick={() => handleRemoverApontamento(apt.id)}
-                                  className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors"
+                                  className="p-1 text-cinza hover:text-st-vencido rounded transition-colors"
                                   title="Remover apontamento"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -1040,23 +996,23 @@ export function PedidosEmProducao({ onNavigate }: Props) {
             </div>
 
             {/* Rodapé do Modal */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+            <div className="p-4 bg-papel-2 border-t border-linha flex flex-wrap items-center justify-between gap-3 shrink-0 gap-2 max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setModalProducao(null)}
-                  className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-papel-3/60 hover:bg-linha text-tinta-2 font-bold text-xs cursor-pointer"
                 >
                   Fechar
                 </button>
 
                 {loteInput.trim() && dataVencimentoInput.trim() ? (
-                  <div className="hidden sm:flex items-center gap-1.5 text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 text-[11px] font-bold">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <div className="hidden sm:flex items-center gap-1.5 text-eno-800 bg-eno-50 px-3 py-1.5 rounded-lg border border-eno-100 text-[11px] font-bold">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-eno-700 shrink-0" />
                     <span>Rastreabilidade OK: Lote {loteInput} • Venc: {formatarDataBR(dataVencimentoInput)}</span>
                   </div>
                 ) : (
-                  <div className="hidden sm:flex items-center gap-1.5 text-amber-800 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-300 text-[11px] font-bold">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <div className="hidden sm:flex items-center gap-1.5 text-st-aguardando bg-st-aguardando-bg px-3 py-1.5 rounded-lg border border-ouro text-[11px] font-bold">
+                    <AlertTriangle className="w-3.5 h-3.5 text-st-aguardando shrink-0" />
                     <span>Lote e Vencimento obrigatórios para liberar ao faturamento</span>
                   </div>
                 )}
@@ -1064,7 +1020,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
 
               <button
                 onClick={() => handleTentarConcluirProducao(modalProducao)}
-                className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs shadow-xs cursor-pointer transition-all hover:scale-102"
+                className="flex items-center gap-1.5 px-5 py-2 rounded-md bg-eno-900 hover:bg-eno-950 text-white font-bold text-xs shadow-xs cursor-pointer transition-all hover:scale-102"
               >
                 <Check className="w-4 h-4 stroke-[2.5]" />
                 <span>Concluir Produção & Enviar para A Faturar</span>
@@ -1076,40 +1032,40 @@ export function PedidosEmProducao({ onNavigate }: Props) {
 
       {/* 6. MODAL BLOQUEIO: LOTE E VENCIMENTO OBRIGATÓRIOS PARA AVANÇAR */}
       {modalBloqueioLote && (
-        <div className="fixed inset-0 z-[110] overflow-y-auto bg-black/80 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-center animate-fadeIn">
-          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden border border-amber-300 flex flex-col">
-            <div className="bg-amber-600 text-white px-6 py-4 flex items-center justify-between shrink-0">
+        <div className="fixed inset-0 z-[110] overflow-y-auto bg-black/80 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-center animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-lg bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-ouro flex flex-col">
+            <div className="bg-ouro-escuro text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <Lock className="w-5 h-5 text-white" />
                 <div>
                   <h3 className="font-bold text-sm text-white">
                     Rastreabilidade Obrigatória
                   </h3>
-                  <p className="text-[11px] text-amber-100">
+                  <p className="text-[11px] text-ouro-claro">
                     O pedido não pode ir para faturamento sem Lote e Vencimento.
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setModalBloqueioLote(null)}
-                className="p-1 rounded-lg hover:bg-amber-700 text-amber-200 hover:text-white transition-colors cursor-pointer"
+                className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-ouro-escuro text-ouro-claro hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleConfirmarLoteEVencimentoAvancar} className="p-6 space-y-4 text-xs">
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs">
+            <form onSubmit={handleConfirmarLoteEVencimentoAvancar} className="p-4 sm:p-6 space-y-4 text-xs">
+              <div className="p-3 bg-st-aguardando-bg rounded-md border border-ouro-claro/60 text-st-aguardando text-xs">
                 <strong>Atenção:</strong> Por normas de controle de qualidade e expedição industrial do Grupo ENO, todo pedido destinado ao faturamento deve conter o <strong>Lote de Produção</strong> e a <strong>Data de Vencimento</strong> impressos na embalagem.
               </div>
 
               <div>
-                <span className="text-slate-400 block font-medium">Pedido:</span>
-                <span className="font-mono font-bold text-slate-900 text-sm">{modalBloqueioLote.numero_pedido} - {modalBloqueioLote.cliente_nome}</span>
+                <span className="text-cinza block font-medium">Pedido:</span>
+                <span className="tabular-nums font-bold text-tinta text-sm">{modalBloqueioLote.numero_pedido} - {modalBloqueioLote.cliente_nome}</span>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-800 mb-1">
+                <label className="block font-bold text-tinta mb-1">
                   Número do Lote de Fabricação *
                 </label>
                 <input
@@ -1118,13 +1074,13 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                   value={loteInput}
                   onChange={(e) => setLoteInput(e.target.value)}
                   placeholder="Ex: LOT-2026-F104"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono font-black text-slate-900 focus:outline-none focus:border-emerald-700"
+                  className="w-full bg-papel-2 border border-linha-forte rounded-lg px-3 py-2 tabular-nums font-extrabold text-tinta focus:outline-none focus:border-eno-700"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-800 mb-1">
+                  <label className="block font-bold text-tinta mb-1">
                     Data de Fabricação *
                   </label>
                   <input
@@ -1132,12 +1088,12 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                     required
                     value={paraISO(dataFabricacaoInput)}
                     onChange={(e) => setDataFabricacaoInput(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
+                    className="w-full bg-papel-2 border border-linha-forte rounded-lg px-3 py-2 tabular-nums font-bold text-tinta focus:outline-none focus:border-eno-700"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-800 mb-1">
+                  <label className="block font-bold text-tinta mb-1">
                     Data de Vencimento *
                   </label>
                   <input
@@ -1145,22 +1101,22 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                     required
                     value={paraISO(dataVencimentoInput)}
                     onChange={(e) => setDataVencimentoInput(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
+                    className="w-full bg-papel-2 border border-linha-forte rounded-lg px-3 py-2 tabular-nums font-bold text-tinta focus:outline-none focus:border-eno-700"
                   />
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <div className="pt-3 border-t border-linha flex items-center justify-end gap-2 max-sm:sticky max-sm:-bottom-4 max-sm:z-10 max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:pb-4 max-sm:bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
                 <button
                   type="button"
                   onClick={() => setModalBloqueioLote(null)}
-                  className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-papel-3/60 hover:bg-linha text-tinta-2 font-bold transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-emerald-900 hover:bg-emerald-950 text-white font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  className="px-5 py-2 rounded-lg bg-eno-900 hover:bg-eno-950 text-white font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Check className="w-4 h-4" />
                   <span>Salvar e Liberar p/ Faturar</span>

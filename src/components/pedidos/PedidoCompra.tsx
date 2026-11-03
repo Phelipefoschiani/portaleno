@@ -65,6 +65,12 @@ import {
   EVENTO_CADASTROS_ATUALIZADOS
 } from '../../data/cadastrosData';
 import { hojeISO, paraISO, formatarDataBR, somarDias } from '../../lib/datas';
+import { EMPRESA } from '../../lib/empresa';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, CampoBusca, Segmentado, SeletorFiltro } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
 
 export function PedidoCompra() {
   const [pedidos, setPedidos] = useState<PedidoCompraGeral[]>(carregarPedidosCompra());
@@ -684,25 +690,26 @@ export function PedidoCompra() {
       const pix = isAgro ? pedido.agricultor_chave_pix : pedido.fornecedor_chave_pix;
       
       // 1. CABEÇALHO DO GRUPO ENO
-      pdf.setFillColor(6, 78, 59); // emerald-900
-      pdf.roundedRect(15, 15, 12, 12, 1.5, 1.5, 'F');
+      try {
+        pdf.addImage(EMPRESA.logo, 'PNG', 15, 14.5, 12.5, 12.5);
+      } catch {
+        pdf.setFillColor(6, 78, 59);
+        pdf.roundedRect(15, 15, 12, 12, 1.5, 1.5, 'F');
+      }
       pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(9);
-      pdf.setTextColor(167, 243, 208); // emerald-200
-      pdf.text('ENO', 21, 22.5, { align: 'center' });
       
       pdf.setFontSize(13);
       pdf.setTextColor(6, 78, 59);
-      pdf.text('GRUPO ENO ALIMENTOS', 30, 20);
+      pdf.text(EMPRESA.nome, 30, 20);
       
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(8.5);
       pdf.setTextColor(71, 85, 105);
-      pdf.text('Grupo ENO Indústria e Comércio de Produtos Alimentícios Ltda', 30, 24.5);
+      pdf.text(EMPRESA.razao, 30, 24.5);
       pdf.setFontSize(7.5);
       pdf.setTextColor(100, 116, 139);
-      pdf.text('CNPJ: 45.981.234/0001-90  |  IE: 908.412.301-12', 30, 28.5);
-      pdf.text('Distrito Industrial — Jacarezinho / PR  |  Tel: (43) 3511-9000', 30, 32.5);
+      pdf.text(`CNPJ: ${EMPRESA.cnpj}  |  ${EMPRESA.endereco}`, 30, 28.5);
+      pdf.text(`Tel: ${EMPRESA.telefone}  |  ${EMPRESA.email}`, 30, 32.5);
       
       // Badge PEDIDO DE COMPRA
       pdf.setFillColor(6, 78, 59);
@@ -853,7 +860,7 @@ export function PedidoCompra() {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8.5);
       pdf.setTextColor(15, 23, 42);
-      pdf.text('Grupo ENO Alimentos', 57.5, signY + 5, { align: 'center' });
+      pdf.text(EMPRESA.razao, 57.5, signY + 5, { align: 'center' });
       pdf.text(nome || 'Fornecedor', 152.5, signY + 5, { align: 'center' });
       
       // Processo de Download Seguro para qualquer navegador e iframe
@@ -892,478 +899,329 @@ export function PedidoCompra() {
     window.print();
   };
 
-  return (
-    <div className="flex-1 w-full h-full flex flex-col bg-white rounded-2xl border border-emerald-950/15 shadow-[0_10px_35px_rgba(0,0,0,0.06)] overflow-hidden">
-      
-      {/* CABEÇALHO SUPERIOR */}
-      <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-3.5 border-b border-slate-200 bg-slate-50/80">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-900 text-white shadow-sm font-black text-sm">
-            ENO
-          </div>
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                Pedidos de Compra
-              </h2>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                {pedidos.length}
-              </span>
-            </div>
-          </div>
-        </div>
+  const abrirNovoPedido = () => {
+    // Inicializar defaults com status Programado
+    setTipoParceiroForm('FORNECEDOR');
+    setCategoriaForm('Embalagens');
+    setItemDescricaoForm('');
+    setUnidadeMedidaForm('Unidades');
+    setQuantidadeForm('1');
+    setValorUnitarioForm('');
+    setValorTotalForm('');
+    setStatusPedidoForm('Programado');
+    setModalNovoPedido(true);
+  };
 
-        {/* Botão Novo Pedido de Compra */}
+  const reais = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  const qtdPagos = pedidos.filter(p => p.status_pedido === 'Pago').length;
+  const qtdAPagar = pedidos.filter(p => p.status_pedido === 'Entregue (A Pagar)').length;
+  const qtdAConfirmar = pedidos.filter(p => p.status_pedido === 'A Confirmar').length;
+  const nomeParceiro = (p: PedidoCompraGeral) =>
+    p.tipo_parceiro === 'AGRICULTOR' ? p.agricultor_nome : p.fornecedor_fantasia || p.fornecedor_nome;
+  const veioDaRoca = (p: PedidoCompraGeral) =>
+    p.id.startsWith('ped_roca_') || (!!p.observacoes && p.observacoes.includes('Cálculo na Roça')) || p.item_descricao.toLowerCase().includes('roça');
+
+  // Situação + ação de pagamento (mesma regra de antes; só a apresentação mudou)
+  const situacaoCompra = (pedido: PedidoCompraGeral, grande = false) => {
+    const tam = grande ? 'h-10 px-3 text-[12.5px] w-full justify-center' : 'h-7 px-2.5 text-[12px]';
+    if (pedido.status_pedido === 'Programado' || pedido.status_pedido === 'A Confirmar' || pedido.status_pedido === 'Orçamento') {
+      return (
         <button
-          onClick={() => {
-            // Inicializar defaults com status Programado
-            setTipoParceiroForm('FORNECEDOR');
-            setCategoriaForm('Embalagens');
-            setItemDescricaoForm('');
-            setUnidadeMedidaForm('Unidades');
-            setQuantidadeForm('1');
-            setValorUnitarioForm('');
-            setValorTotalForm('');
-            setStatusPedidoForm('Programado');
-            setModalNovoPedido(true);
-          }}
-          className="
-            flex items-center gap-2 px-5 py-2.5 rounded-xl
-            bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950
-            text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow-md
-            transition-all cursor-pointer
-          "
+          type="button"
+          onClick={(e) => { e.stopPropagation(); handleConfirmarPedido(pedido, e); }}
+          className={`inline-flex items-center gap-1 rounded-[5px] bg-eno-800 hover:bg-eno-900 text-white font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro ${tam}`}
+          title="Transformar este pedido de compra em despesa financeira"
         >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span>+ Novo Pedido de Compra</span>
+          <ArrowRightCircle className="w-3.5 h-3.5" />
+          Virar despesa
         </button>
-      </div>
+      );
+    }
+    const pago = pedido.status_pedido === 'Pago' || pedido.status_pedido === 'Confirmado';
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); handleConfirmarPedido(pedido, e); }}
+        className={`inline-flex items-center gap-1 rounded-[5px] font-semibold cursor-pointer hover:brightness-95 focus-visible:outline-2 focus-visible:outline-ouro ${
+          pago ? 'bg-st-pago-bg text-st-pago' : 'bg-st-aguardando-bg text-st-aguardando'
+        } ${tam}`}
+        title={pago ? 'Ver ou alterar a situação do pagamento' : 'Registrar a quitação'}
+      >
+        {pago ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+        {pago ? 'Comprado / pago' : 'Entregue · a pagar'}
+      </button>
+    );
+  };
 
-      {/* CARDS NO TOPO */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-emerald-950/[0.02] border-b border-slate-200">
-        {/* Card 1: Compras Programadas */}
-        <div className="p-3.5 bg-blue-50/70 rounded-xl border border-blue-200 shadow-2xs">
-          <div className="text-[11px] font-bold text-blue-900 uppercase tracking-wider flex items-center justify-between">
-            <span>Compras Programadas</span>
-            <Clock className="w-4 h-4 text-blue-700" />
-          </div>
-          <div className="text-xl font-black text-blue-950 mt-1 font-mono">
-            R$ {totalProgramadas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-[11px] text-blue-700 font-semibold mt-0.5">
-            {qtdProgramadas} pedidos a comprar / lembrar
-          </div>
-        </div>
+  return (
+    <div className="flex-1 w-full h-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
 
-        {/* Card 2: Pagos / Finalizados */}
-        <div className="p-3.5 bg-white rounded-xl border border-emerald-200 shadow-2xs">
-          <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider flex items-center justify-between">
-            <span>Finalizados / Pagos</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-          </div>
-          <div className="text-xl font-black text-emerald-950 mt-1 font-mono">
-            R$ {totalPagos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-[11px] text-emerald-700 font-semibold mt-0.5">
-            {pedidos.filter(p => p.status_pedido === 'Pago').length} compras quitadas
-          </div>
-        </div>
+      <div className="mx-auto w-full max-w-[1700px] shrink-0">
+        <CabecalhoPagina
+          titulo="Pedidos de compra"
+          resumo={
+            pedidos.length === 0 ? (
+              'Nenhum pedido de compra cadastrado.'
+            ) : (
+              <>
+                {pedidos.length} pedidos · {reais(totalGeralCompras)} · {qtdProgramadas} programados ({reais(totalProgramadas)})
+                {qtdAPagar > 0 && <span className="text-st-aguardando font-semibold"> · {reais(totalAPagar)} a pagar</span>}
+              </>
+            )
+          }
+          acoes={
+            <BotaoPrimario onClick={abrirNovoPedido} className="w-full sm:w-auto h-10 sm:h-9">
+              <Plus className="w-4 h-4" />
+              Novo pedido de compra
+            </BotaoPrimario>
+          }
+        />
 
-        {/* Card 3: A Pagar */}
-        <div className="p-3.5 bg-white rounded-xl border border-amber-200 shadow-2xs">
-          <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wider flex items-center justify-between">
-            <span>A Pagar (Entregue)</span>
-            <Clock className="w-4 h-4 text-amber-700" />
+        {mensagemSucesso && (
+          <div className="mx-4 sm:mx-6 mb-3 pl-3 pr-1 py-1 rounded-md bg-st-pago-bg flex items-center justify-between gap-2 text-[12.5px] text-st-pago font-semibold animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{mensagemSucesso}</span>
+            </div>
+            <button
+              onClick={() => setMensagemSucesso(null)}
+              className="inline-flex items-center justify-center w-10 h-10 shrink-0 rounded-md hover:bg-st-pago/10 cursor-pointer"
+              aria-label="Fechar aviso"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <div className="text-xl font-black text-amber-950 mt-1 font-mono">
-            R$ {totalAPagar.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-[11px] text-amber-700 font-semibold mt-0.5">
-            {pedidos.filter(p => p.status_pedido === 'Entregue (A Pagar)').length} pedidos a liquidar
-          </div>
-        </div>
+        )}
 
-        {/* Card 4: Total Geral */}
-        <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-            <span>Total em Pedidos</span>
-            <DollarSign className="w-4 h-4 text-emerald-700" />
-          </div>
-          <div className="text-xl font-black text-slate-900 mt-1 font-mono">
-            R$ {totalGeralCompras.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-            {pedidos.length} pedidos cadastrados
-          </div>
-        </div>
-      </div>
-
-      {/* BANNER DE INTEGRAÇÃO COM FINANCEIRO */}
-      {mensagemSucesso && (
-        <div className="mx-6 my-2.5 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-300 flex items-center justify-between text-xs text-emerald-900 font-semibold animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
-            <span>{mensagemSucesso}</span>
-          </div>
-          <button
-            onClick={() => setMensagemSucesso(null)}
-            className="text-emerald-700 hover:text-emerald-950 p-1 cursor-pointer font-bold"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {/* ALERTA DE PEDIDOS A CONFIRMAR / VINDO DO CÁLCULO NA ROÇA */}
-      {pedidos.some(p => p.status_pedido === 'A Confirmar') && !mensagemSucesso && (
-        <div className="mx-6 my-2.5 px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-300 flex items-center justify-between text-xs text-amber-900 font-semibold animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+        {qtdAConfirmar > 0 && !mensagemSucesso && (
+          <div className="mx-4 sm:mx-6 mb-3 px-3 py-2.5 rounded-md bg-st-aguardando-bg flex items-start gap-2 text-[12.5px] text-st-aguardando">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-px" />
             <span>
-              Há <strong>{pedidos.filter(p => p.status_pedido === 'A Confirmar').length} pedido(s) aguardando definição de pagamento</strong> (incluindo compras do <strong>Cálculo na Roça</strong>). Clique em <strong>"Definir Pagamento"</strong> para informar se já pagou ou se é a pagar antes do lançamento financeiro.
+              <strong>{qtdAConfirmar} {qtdAConfirmar === 1 ? 'pedido aguarda' : 'pedidos aguardam'} definição de pagamento</strong> (inclui compras do Cálculo na roça). Use <strong>Virar despesa</strong> para dizer se já pagou ou se é a pagar.
             </span>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* BARRA DE BUSCA E FILTROS */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 border-b border-slate-100 bg-white">
-        <div className="relative flex-1 min-w-[260px] max-w-sm">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por Produtor, Fornecedor, Item, CPF/CNPJ..."
-            className="
-              w-full pl-10 pr-4 py-2 text-xs sm:text-sm font-medium
-              rounded-xl border border-slate-200 bg-slate-50/50
-              focus:bg-white focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20
-              transition-all
-            "
+        <BarraFiltros>
+          <Segmentado<typeof filtroStatus>
+            rotuloAria="Situação da compra"
+            valor={filtroStatus}
+            onChange={setFiltroStatus}
+            className="w-full md:w-fit [&>button]:h-9 sm:[&>button]:h-7"
+            opcoes={[
+              { valor: 'TODOS', rotulo: 'Todos', contagem: pedidos.length },
+              { valor: 'PROGRAMADO', rotulo: 'Programados', contagem: qtdProgramadas },
+              { valor: 'A_PAGAR', rotulo: 'A pagar', contagem: qtdAPagar },
+              { valor: 'PAGOS', rotulo: 'Pagos', contagem: qtdPagos },
+              { valor: 'ORCAMENTO', rotulo: 'Orçamento', contagem: pedidos.filter(p => p.status_pedido === 'Orçamento').length },
+            ]}
           />
-        </div>
-
-        {/* Filtros rápidos: Status e Categoria */}
-        <div className="flex flex-wrap items-center gap-2">
-          
-          {/* Status do Pedido */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600 overflow-x-auto">
-            <button
-              onClick={() => setFiltroStatus('TODOS')}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${filtroStatus === 'TODOS' ? 'bg-white text-emerald-900 shadow-sm' : 'hover:text-slate-900'}`}
-            >
-              Todos ({pedidos.length})
-            </button>
-            <button
-              onClick={() => setFiltroStatus('PROGRAMADO')}
-              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${filtroStatus === 'PROGRAMADO' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-900 hover:bg-blue-100/60'}`}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>Programados ({qtdProgramadas})</span>
-            </button>
-            <button
-              onClick={() => setFiltroStatus('PAGOS')}
-              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${filtroStatus === 'PAGOS' ? 'bg-emerald-700 text-white shadow-sm' : 'hover:text-emerald-800'}`}
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Finalizados / Pagos ({pedidos.filter(p => p.status_pedido === 'Pago').length})</span>
-            </button>
-            <button
-              onClick={() => setFiltroStatus('A_PAGAR')}
-              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${filtroStatus === 'A_PAGAR' ? 'bg-amber-500 text-white shadow-sm' : 'hover:text-amber-700'}`}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>A Pagar ({pedidos.filter(p => p.status_pedido === 'Entregue (A Pagar)').length})</span>
-            </button>
-            <button
-              onClick={() => setFiltroStatus('ORCAMENTO')}
-              className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${filtroStatus === 'ORCAMENTO' ? 'bg-white text-purple-900 shadow-sm' : 'hover:text-slate-900'}`}
-            >
-              Orçamento ({pedidos.filter(p => p.status_pedido === 'Orçamento').length})
-            </button>
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <CampoBusca valor={busca} onChange={setBusca} placeholder="Buscar produtor, fornecedor, item ou CNPJ" className="flex-1 md:flex-none md:w-72" />
+            <SeletorFiltro value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)} aria-label="Categoria" className="max-w-[44%] md:max-w-none">
+              <option value="TODAS">Todas as categorias</option>
+              <option value="Mandioca / Matéria-Prima">Mandioca / Matéria-Prima</option>
+              <option value="Mercado / Cozinha / Copa">Mercado / Cozinha / Copa</option>
+              <option value="Embalagens">Embalagens</option>
+              <option value="Combustível & Lubrificantes">Combustível & Lubrificantes</option>
+              <option value="Manutenção & Peças">Manutenção & Peças</option>
+              <option value="Químicos & Laboratório">Químicos & Laboratório</option>
+              <option value="Limpeza & Escritório">Limpeza & Escritório</option>
+              <option value="Outros">Outros</option>
+            </SeletorFiltro>
           </div>
-
-          {/* Filtro Categoria */}
-          <select
-            value={filtroCategoria}
-            onChange={(e) => setFiltroCategoria(e.target.value)}
-            className="px-3 py-1.5 text-xs font-bold bg-slate-100 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:border-emerald-600"
-          >
-            <option value="TODAS">Todas as Categorias</option>
-            <option value="Mandioca / Matéria-Prima">Mandioca / Matéria-Prima</option>
-            <option value="Mercado / Cozinha / Copa">Mercado / Cozinha / Copa</option>
-            <option value="Embalagens">Embalagens</option>
-            <option value="Combustível & Lubrificantes">Combustível & Lubrificantes</option>
-            <option value="Manutenção & Peças">Manutenção & Peças</option>
-            <option value="Químicos & Laboratório">Químicos & Laboratório</option>
-            <option value="Limpeza & Escritório">Limpeza & Escritório</option>
-            <option value="Outros">Outros</option>
-          </select>
-        </div>
+        </BarraFiltros>
       </div>
 
-      {/* TABELA DE PEDIDOS DE COMPRA (ENXUTA E DIRETA) */}
-      <div className="flex-1 overflow-auto">
-        <table className="w-full text-left border-collapse min-w-[850px]">
-          <thead className="sticky top-0 bg-slate-100/95 backdrop-blur-md z-10 border-b border-slate-200 text-[11px] font-black uppercase tracking-wider text-slate-600">
-            <tr>
-              <th className="py-3 px-4">Data</th>
-              <th className="py-3 px-5">Fornecedor / Produtor Rural</th>
-              <th className="py-3 px-4">Categoria</th>
-              <th className="py-3 px-5">Item / Descrição</th>
-              <th className="py-3 px-5 text-right">Valor Total</th>
-              <th className="py-3 px-4 text-center">Status</th>
-              <th className="py-3 px-4 text-right">Ações</th>
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-            {pedidosFiltrados.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="py-12 text-center text-slate-400">
-                  Nenhum pedido de compra encontrado para os filtros selecionados.
-                </td>
-              </tr>
-            ) : (
-              pedidosFiltrados.map((pedido) => {
-                const isMandioca = pedido.categoria === 'Mandioca / Matéria-Prima';
-                const aproveitamento = (isMandioca && pedido.quantidade > 0 && pedido.residuo_destopo_casca_kg !== undefined)
-                  ? (((pedido.quantidade - pedido.residuo_destopo_casca_kg) / pedido.quantidade) * 100).toFixed(1)
-                  : null;
-
-                // Estilo do badge de status
-                let badgeStatusStyle = 'bg-slate-100 text-slate-700 border-slate-300';
-                if (pedido.status_pedido === 'Pago') {
-                  badgeStatusStyle = 'bg-emerald-100 text-emerald-800 border-emerald-300 font-black';
-                } else if (pedido.status_pedido === 'Entregue (A Pagar)') {
-                  badgeStatusStyle = 'bg-amber-100 text-amber-900 border-amber-300 font-black';
-                } else if (pedido.status_pedido === 'Programado') {
-                  badgeStatusStyle = 'bg-blue-100 text-blue-800 border-blue-300';
-                } else if (pedido.status_pedido === 'Orçamento') {
-                  badgeStatusStyle = 'bg-purple-100 text-purple-800 border-purple-300';
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px] px-4 sm:px-6 pb-6">
+          {pedidosFiltrados.length === 0 ? (
+            <div className="bg-papel border border-linha rounded-md">
+              <EstadoVazio
+                titulo={pedidos.length === 0 ? 'Nenhum pedido de compra' : 'Nada encontrado'}
+                texto={
+                  pedidos.length === 0
+                    ? 'Registre o que a fábrica precisa comprar (mandioca, embalagens, insumos). Ao virar despesa, o pedido vai para o financeiro.'
+                    : 'Troque a situação, a categoria ou limpe a busca.'
                 }
+                acao={pedidos.length === 0 ? <BotaoPrimario onClick={abrirNovoPedido}><Plus className="w-4 h-4" />Novo pedido de compra</BotaoPrimario> : undefined}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Celular: cartões */}
+              <ul className="sm:hidden bg-papel border border-linha rounded-md">
+                {pedidosFiltrados.map(pedido => (
+                  <li key={pedido.id} className="px-3.5 py-3 border-b border-linha last:border-b-0">
+                    <button type="button" onClick={() => setPedidoVisualizarA4(pedido)} className="w-full text-left">
+                      <div className="text-[11.5px] text-cinza tabular-nums truncate">
+                        {formatarDataBR(pedido.data)} · {pedido.categoria.split('/')[0].trim()}{veioDaRoca(pedido) ? ' · Cálculo na roça' : ''}
+                      </div>
+                      <div className="text-[14px] font-bold text-tinta truncate">{nomeParceiro(pedido)}</div>
+                      <div className="text-[12px] text-tinta-2 line-clamp-2">{pedido.item_descricao}</div>
+                      <div className="flex items-end justify-end mt-1.5">
+                        <span className="text-[17px] font-extrabold tracking-[-0.01em] tabular-nums text-tinta">{reais(pedido.valor_total)}</span>
+                      </div>
+                    </button>
+                    <div className="flex items-center gap-2 mt-2.5">
+                      <div className="flex-1 min-w-0">{situacaoCompra(pedido, true)}</div>
+                      <button
+                        type="button"
+                        onClick={(e) => abrirEdicaoPedido(pedido, e)}
+                        className="w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-md border border-linha-forte text-tinta-2"
+                        aria-label="Editar pedido de compra"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => gerarEBaixarPDF(pedido)}
+                        className="w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-md border border-linha-forte text-tinta-2"
+                        aria-label="Baixar PDF"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => excluirPedido(pedido.id, e)}
+                        className="w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-md border border-linha-forte text-cinza active:bg-st-vencido-bg active:text-st-vencido"
+                        aria-label="Excluir pedido de compra"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
 
-                return (
-                  <tr 
-                    key={pedido.id}
-                    className="hover:bg-emerald-50/30 transition-colors group cursor-pointer"
-                    onClick={() => setPedidoVisualizarA4(pedido)}
-                  >
-                    {/* Data */}
-                    <td className="py-3.5 px-4 text-slate-700 font-bold whitespace-nowrap">
-                      {formatarDataBR(pedido.data)}
-                    </td>
-
-                    {/* Fornecedor / Produtor Rural */}
-                    <td className="py-3.5 px-5">
-                      {pedido.tipo_parceiro === 'AGRICULTOR' ? (
-                        <div>
-                          <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                            <Tractor className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                            <span>{pedido.agricultor_nome}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-[11px] text-emerald-800 font-medium mt-0.5">
-                            <Sprout className="w-3 h-3 text-emerald-600 shrink-0" />
-                            <span>{pedido.agricultor_propriedade}</span>
+              {/* A partir de sm: tabela densa */}
+              <TabelaDados className="hidden sm:block">
+                <thead className={tabela.thead}>
+                  <tr>
+                    <Th>Data</Th>
+                    <Th>Fornecedor / produtor</Th>
+                    <Th>Categoria</Th>
+                    <Th>Item</Th>
+                    <Th numero>Valor</Th>
+                    <Th>Situação</Th>
+                    <Th className="text-right">Ações</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pedidosFiltrados.map(pedido => (
+                    <tr key={pedido.id} onClick={() => setPedidoVisualizarA4(pedido)} className={`${tabela.tr} cursor-pointer group`}>
+                      <Td className="tabular-nums whitespace-nowrap">{formatarDataBR(pedido.data)}</Td>
+                      <Td className="max-w-[280px]">
+                        <div className="font-semibold text-tinta truncate group-hover:text-eno-700">{nomeParceiro(pedido)}</div>
+                        {pedido.tipo_parceiro === 'AGRICULTOR' ? (
+                          <div className="flex items-center gap-1.5 text-[11.5px] text-cinza min-w-0">
+                            <span className="truncate">{pedido.agricultor_propriedade || 'Produtor rural'}</span>
                             {pedido.agricultor_chave_pix && (
                               <button
+                                type="button"
                                 onClick={(e) => copiarChavePix(pedido.agricultor_chave_pix || '', pedido.id, e)}
-                                className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 hover:bg-emerald-100 text-emerald-900 px-1.5 py-0.5 rounded border border-emerald-200 cursor-pointer ml-1 font-semibold"
-                                title="Copiar Chave PIX do Produtor"
+                                className="shrink-0 inline-flex items-center gap-1 h-5 px-1.5 rounded text-[11px] font-semibold text-eno-700 hover:bg-papel-3 cursor-pointer"
+                                title="Copiar chave PIX do produtor"
                               >
-                                {copiadoId === pedido.id ? (
-                                  <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
-                                ) : (
-                                  <Copy className="w-3 h-3" />
-                                )}
-                                <span>PIX</span>
+                                {copiadoId === pedido.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                PIX
                               </button>
                             )}
                           </div>
-                        </div>
-                      ) : (
-                        <div>
-                          <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                            <Building2 className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
-                            <span>{pedido.fornecedor_fantasia || pedido.fornecedor_nome}</span>
-                          </div>
-                          {pedido.fornecedor_cnpj && (
-                            <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                              CNPJ: {pedido.fornecedor_cnpj}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Categoria */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                        {pedido.categoria === 'Mandioca / Matéria-Prima' && <Sprout className="w-3 h-3 text-emerald-700" />}
-                        {pedido.categoria === 'Mercado / Cozinha / Copa' && <UtensilsCrossed className="w-3 h-3 text-amber-700" />}
-                        {pedido.categoria === 'Embalagens' && <Package className="w-3 h-3 text-blue-700" />}
-                        {pedido.categoria === 'Combustível & Lubrificantes' && <Fuel className="w-3 h-3 text-orange-700" />}
-                        {pedido.categoria === 'Manutenção & Peças' && <Wrench className="w-3 h-3 text-slate-700" />}
-                        {pedido.categoria === 'Químicos & Laboratório' && <FlaskConical className="w-3 h-3 text-purple-700" />}
-                        <span>{pedido.categoria.split('/')[0]}</span>
-                      </span>
-                    </td>
-
-                    {/* Item / Descrição */}
-                    <td className="py-3.5 px-5">
-                      <div className="flex flex-col gap-1">
-                        {(pedido.id.startsWith('ped_roca_') || (pedido.observacoes && pedido.observacoes.includes('Cálculo na Roça')) || pedido.item_descricao.toLowerCase().includes('roça')) && (
-                          <span className="inline-flex items-center gap-1 w-fit px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300">
-                            <Tractor className="w-3 h-3 text-emerald-700" />
-                            <span>Cálculo na Roça</span>
-                          </span>
+                        ) : (
+                          pedido.fornecedor_cnpj && <div className="text-[11.5px] text-cinza tabular-nums truncate">CNPJ {pedido.fornecedor_cnpj}</div>
                         )}
-                        <div className="font-bold text-slate-800 text-xs line-clamp-2" title={pedido.item_descricao}>
-                          {pedido.item_descricao}
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Valor Total */}
-                    <td className="py-3.5 px-5 text-right font-mono font-black text-slate-900 text-sm whitespace-nowrap">
-                      R$ {pedido.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </td>
-
-                    {/* Status */}
-                    <td className="py-3.5 px-4 text-center">
-                      {(pedido.status_pedido === 'Programado' || pedido.status_pedido === 'A Confirmar' || pedido.status_pedido === 'Orçamento') ? (
-                        <div className="flex flex-col items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-200">
-                            <Clock className="w-3 h-3 text-blue-700" />
-                            <span>Programado</span>
-                          </span>
+                      </Td>
+                      <Td className="whitespace-nowrap text-tinta-2">{pedido.categoria.split('/')[0].trim()}</Td>
+                      <Td className="max-w-[300px]">
+                        <div className="text-tinta line-clamp-2" title={pedido.item_descricao}>{pedido.item_descricao}</div>
+                        {veioDaRoca(pedido) && <div className="text-[11px] text-cinza">Cálculo na roça</div>}
+                      </Td>
+                      <Td numero>
+                        <span className="font-bold text-tinta text-[13.5px]">{reais(pedido.valor_total)}</span>
+                      </Td>
+                      <Td className="whitespace-nowrap">{situacaoCompra(pedido)}</Td>
+                      <Td className="text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-0.5" onClick={e => e.stopPropagation()}>
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleConfirmarPedido(pedido, e);
-                            }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950 text-white font-black text-[11px] shadow-sm transition-all cursor-pointer hover:scale-105"
-                            title="Transformar este pedido de compra em despesa financeira"
+                            type="button"
+                            onClick={() => setPedidoVisualizarA4(pedido)}
+                            className="inline-flex items-center justify-center h-7 w-7 rounded-[5px] text-tinta-2 hover:bg-papel-3 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                            title="Ver e imprimir a folha A4"
+                            aria-label="Ver folha A4"
                           >
-                            <ArrowRightCircle className="w-3.5 h-3.5 text-emerald-300" />
-                            <span>Virar Despesa</span>
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => abrirEdicaoPedido(pedido, e)}
+                            className="inline-flex items-center justify-center h-7 w-7 rounded-[5px] text-tinta-2 hover:bg-papel-3 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                            title="Editar (altera também a despesa programada)"
+                            aria-label="Editar"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => gerarEBaixarPDF(pedido)}
+                            className="inline-flex items-center justify-center h-7 w-7 rounded-[5px] text-tinta-2 hover:bg-papel-3 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                            title="Baixar em PDF"
+                            aria-label="Baixar PDF"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => excluirPedido(pedido.id, e)}
+                            className="inline-flex items-center justify-center h-7 w-7 rounded-[5px] text-cinza-claro hover:bg-st-vencido-bg hover:text-st-vencido transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                            title="Excluir (some também da despesa programada)"
+                            aria-label="Excluir"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      ) : pedido.status_pedido === 'Pago' || pedido.status_pedido === 'Confirmado' ? (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleConfirmarPedido(pedido, e);
-                          }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs hover:bg-emerald-200 cursor-pointer"
-                          title="Clique para ver ou alterar situação do pagamento"
-                        >
-                          <CheckCircle2 className="w-3 h-3 text-emerald-700" />
-                          <span>Comprado / Pago</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleConfirmarPedido(pedido, e);
-                          }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs hover:bg-amber-200 cursor-pointer"
-                          title="Clique para registrar quitação"
-                        >
-                          <Clock className="w-3 h-3 text-amber-700" />
-                          <span>Entregue (A Pagar)</span>
-                        </button>
-                      )}
-                    </td>
-
-                    {/* Ações */}
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1">
-                        {/* Olhinho: Abre e Imprime a Folha A4 Personalizada Grupo ENO */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPedidoVisualizarA4(pedido);
-                          }}
-                          className="p-1.5 text-emerald-800 hover:text-emerald-950 hover:bg-emerald-100 rounded-lg transition-colors cursor-pointer"
-                          title="Visualizar e Imprimir Folha A4 Oficial Grupo ENO"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-
-                        {/* Editar Pedido de Compra (se editar, edita na despesa programada) */}
-                        <button
-                          onClick={(e) => abrirEdicaoPedido(pedido, e)}
-                          className="p-1.5 text-blue-700 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                          title="Editar Pedido de Compra (se editar, edita na despesa programada)"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-
-                        {/* Botão Baixar direto em PDF */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            gerarEBaixarPDF(pedido);
-                          }}
-                          className="p-1.5 text-slate-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                          title="Baixar Pedido em PDF"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-
-                        {/* Excluir Pedido (se deletar, ele some da despesa programada) */}
-                        <button
-                          onClick={(e) => excluirPedido(pedido.id, e)}
-                          className="p-1.5 text-slate-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                          title="Excluir Pedido (se deletar, some da despesa programada)"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </TabelaDados>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* ========================================================= */}
       {/* MODAL 1: NOVO PEDIDO DE COMPRA (SIMPLES: FORNECEDOR, DATA, VALOR, DESCRIÇÃO) */}
       {/* ========================================================= */}
       {modalNovoPedido && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl sm:max-w-3xl w-full max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] flex flex-col my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md border-0 sm:border border-linha shadow-2xl max-w-2xl sm:max-w-3xl w-full h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)] flex flex-col sm:my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             
             {/* Topo do Modal */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 shrink-0">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-linha bg-papel-2 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-emerald-800 text-white rounded-xl shadow-xs">
-                  <Package className="w-5 h-5 text-emerald-300" />
+                <div className="p-2.5 bg-eno-800 text-white rounded-md shadow-xs">
+                  <Package className="w-5 h-5 text-ouro-claro" />
                 </div>
                 <div>
-                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                  <h3 className="text-base sm:text-lg font-extrabold text-tinta">
                     Novo Pedido de Compra / Programação
                   </h3>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-cinza">
                     Preencha o fornecedor, data, valor e a descrição da compra necessária
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setModalNovoPedido(false)}
-                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+                className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md text-cinza hover:text-tinta-2 hover:bg-linha/60 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* SELEÇÃO DO TIPO DE PARCEIRO: FORNECEDOR vs PRODUTOR RURAL */}
-            <div className="px-6 pt-3 pb-2 border-b border-slate-100 bg-slate-50/50">
-              <div className="grid grid-cols-2 gap-2 p-1 bg-slate-200/70 rounded-xl max-w-md">
+            <div className="px-6 pt-3 pb-2 border-b border-linha bg-papel-2/50">
+              <div className="grid grid-cols-2 gap-2 p-1 bg-linha/70 rounded-md max-w-md">
                 <button
                   type="button"
                   onClick={() => {
@@ -1371,8 +1229,8 @@ export function PedidoCompra() {
                   }}
                   className={`py-2 px-4 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     tipoParceiroForm === 'FORNECEDOR'
-                      ? 'bg-emerald-800 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-eno-800 text-white shadow-sm'
+                      : 'text-tinta-2 hover:text-tinta'
                   }`}
                 >
                   <Building2 className="w-4 h-4" />
@@ -1385,8 +1243,8 @@ export function PedidoCompra() {
                   }}
                   className={`py-2 px-4 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     tipoParceiroForm === 'AGRICULTOR'
-                      ? 'bg-emerald-800 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-eno-800 text-white shadow-sm'
+                      : 'text-tinta-2 hover:text-tinta'
                   }`}
                 >
                   <Tractor className="w-4 h-4" />
@@ -1396,12 +1254,12 @@ export function PedidoCompra() {
             </div>
 
             {/* FORMULÁRIO ENXUTO E DIRETO */}
-            <form onSubmit={salvarNovoPedido} className="flex-1 overflow-y-auto p-6 space-y-4">
+            <form onSubmit={salvarNovoPedido} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
               
               {/* 1. SELEÇÃO DO FORNECEDOR OU PRODUTOR */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  {tipoParceiroForm === 'AGRICULTOR' ? 'Produtor Rural / Mandioca' : 'Fornecedor'} <span className="text-red-500">*</span>
+                <label className="block text-xs font-bold text-tinta-2 mb-1">
+                  {tipoParceiroForm === 'AGRICULTOR' ? 'Produtor Rural / Mandioca' : 'Fornecedor'} <span className="text-st-vencido">*</span>
                 </label>
 
                 {tipoParceiroForm === 'AGRICULTOR' ? (
@@ -1409,7 +1267,7 @@ export function PedidoCompra() {
                     required
                     value={agricultorIdForm}
                     onChange={(e) => setAgricultorIdForm(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-semibold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20 bg-papel"
                   >
                     {agricultores.map(agr => (
                       <option key={agr.id} value={agr.id}>
@@ -1422,7 +1280,7 @@ export function PedidoCompra() {
                     required
                     value={fornecedorIdForm}
                     onChange={(e) => setFornecedorIdForm(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-semibold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20 bg-papel"
                   >
                     {fornecedores.map(forn => (
                       <option key={forn.id} value={forn.id}>
@@ -1434,24 +1292,24 @@ export function PedidoCompra() {
 
                 {/* Card do parceiro selecionado */}
                 {tipoParceiroForm === 'AGRICULTOR' && agricultorAtualForm && (
-                  <div className="mt-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs flex items-center justify-between">
-                    <span className="font-bold text-emerald-950 flex items-center gap-1.5">
-                      <Sprout className="w-3.5 h-3.5 text-emerald-700" />
+                  <div className="mt-2 p-2.5 rounded-md bg-eno-50 border border-eno-100 text-xs flex items-center justify-between">
+                    <span className="font-bold text-eno-800 flex items-center gap-1.5">
+                      <Sprout className="w-3.5 h-3.5 text-eno-700" />
                       {agricultorAtualForm.nome_propriedade} ({agricultorAtualForm.endereco.municipio}/{agricultorAtualForm.endereco.uf})
                     </span>
-                    <span className="font-mono text-emerald-900 font-semibold">
+                    <span className="tabular-nums text-eno-800 font-semibold">
                       CPF: {agricultorAtualForm.cpf_cnpj}
                     </span>
                   </div>
                 )}
 
                 {tipoParceiroForm === 'FORNECEDOR' && fornecedorAtualForm && (
-                  <div className="mt-2 p-2.5 rounded-xl bg-indigo-50 border border-indigo-200 text-xs flex items-center justify-between">
-                    <span className="font-bold text-indigo-950 flex items-center gap-1.5">
-                      <Building2 className="w-3.5 h-3.5 text-indigo-700" />
+                  <div className="mt-2 p-2.5 rounded-md bg-st-producao-bg border border-st-producao/30 text-xs flex items-center justify-between">
+                    <span className="font-bold text-st-producao flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-st-producao" />
                       {fornecedorAtualForm.razao_nome}
                     </span>
-                    <span className="font-mono text-indigo-900 font-semibold">
+                    <span className="tabular-nums text-st-producao font-semibold">
                       CNPJ: {fornecedorAtualForm.cpf_cnpj}
                     </span>
                   </div>
@@ -1461,8 +1319,8 @@ export function PedidoCompra() {
               {/* 2. GRID: DATA DO PEDIDO / PREVISTA + VALOR PREVISTO (R$) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Data da Compra / Prevista <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
+                    Data da Compra / Prevista <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1470,16 +1328,16 @@ export function PedidoCompra() {
                     value={dataForm}
                     onChange={(e) => setDataForm(e.target.value)}
                     placeholder="DD/MM/AAAA"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Valor Estimado / Total (R$) <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
+                    Valor Estimado / Total (R$) <span className="text-st-vencido">*</span>
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3.5 top-2.5 text-xs sm:text-sm font-bold text-slate-400">R$</span>
+                    <span className="absolute left-3.5 top-2.5 text-xs sm:text-sm font-bold text-cinza">R$</span>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -1492,7 +1350,7 @@ export function PedidoCompra() {
                         if (q > 0 && t > 0) setValorUnitarioForm(formatarDecimalBR(t / q, 4));
                       }}
                       placeholder="Ex: 1.500,00"
-                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-black font-mono text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                      className="w-full pl-10 pr-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-extrabold tabular-nums text-tinta focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20"
                     />
                   </div>
                 </div>
@@ -1501,8 +1359,8 @@ export function PedidoCompra() {
               {/* 2b. QUANTIDADE + UNIDADE + VALOR UNITÁRIO (total calculado) */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Quantidade <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
+                    Quantidade <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1516,17 +1374,17 @@ export function PedidoCompra() {
                       if (q > 0 && u > 0) setValorTotalForm(formatarDecimalBR(q * u, 2));
                     }}
                     placeholder="Ex: 1.000"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold font-mono text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-bold tabular-nums text-tinta focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Unidade <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
+                    Unidade <span className="text-st-vencido">*</span>
                   </label>
                   <select
                     value={unidadeMedidaForm}
                     onChange={(e) => setUnidadeMedidaForm(e.target.value as PedidoCompraGeral['unidade_medida'])}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-semibold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20 bg-papel"
                   >
                     {UNIDADES_PEDIDO_COMPRA.map(u => (
                       <option key={u.valor} value={u.valor}>{u.rotulo}</option>
@@ -1534,7 +1392,7 @@ export function PedidoCompra() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Valor Unitário (R$)</label>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">Valor Unitário (R$)</label>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -1546,15 +1404,15 @@ export function PedidoCompra() {
                       if (q > 0 && u > 0) setValorTotalForm(formatarDecimalBR(q * u, 2));
                     }}
                     placeholder="Ex: 1,50"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold font-mono text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-bold tabular-nums text-tinta focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20"
                   />
                 </div>
               </div>
 
               {/* 3. DESCRIÇÃO DO ITEM / O QUE PRECISAMOS COMPRAR */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Descrição do Pedido / O que precisamos comprar <span className="text-red-500">*</span>
+                <label className="block text-xs font-bold text-tinta-2 mb-1">
+                  Descrição do Pedido / O que precisamos comprar <span className="text-st-vencido">*</span>
                 </label>
                 <textarea
                   required
@@ -1562,36 +1420,36 @@ export function PedidoCompra() {
                   value={itemDescricaoForm}
                   onChange={(e) => setItemDescricaoForm(e.target.value)}
                   placeholder="Ex: Precisamos de 10.000 sacarias plásticas de 1kg para empacotamento de farinha fina, compra de correia B-85 para o picador..."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 resize-none"
+                  className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20 resize-none"
                 />
               </div>
 
               {/* 4. DICA VISUAL SOBRE EFETIVAÇÃO */}
-              <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 space-y-1">
+              <div className="p-3.5 rounded-md bg-st-aguardando-bg/80 border border-ouro-claro/60 text-xs text-st-aguardando space-y-1">
                 <div className="flex items-center gap-1.5 font-bold">
-                  <Clock className="w-4 h-4 text-amber-700" />
+                  <Clock className="w-4 h-4 text-st-aguardando" />
                   <span>Programação Rápida de Compra</span>
                 </div>
-                <p className="text-[11px] text-amber-800 leading-relaxed">
+                <p className="text-[11px] text-st-aguardando leading-relaxed">
                   Este pedido ficará guardado como lembrete de compra e constará em <strong>Despesas Programadas</strong>.
                   Quando a compra for realizada, clique no botão <strong>Finalizar Compra</strong> na tabela para definir a <strong>Categoria</strong> contábil (Embalagens, Manutenção, etc.) e a <strong>Forma de Pagamento (PIX / Dinheiro)</strong>.
                 </p>
               </div>
 
               {/* BOTÕES SALVAR / CANCELAR */}
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+              <div className="pt-4 border-t border-linha flex items-center justify-end gap-3 max-sm:sticky max-sm:-bottom-4 max-sm:z-10 max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:pb-4 max-sm:bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
                 <button
                   type="button"
                   onClick={() => setModalNovoPedido(false)}
-                  className="px-5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  className="px-5 py-2.5 rounded-md border border-linha-forte text-xs font-bold text-tinta-2 hover:bg-papel-3/60 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   className="
-                    flex items-center gap-2 px-6 py-2.5 rounded-xl
-                    bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950
+                    flex items-center gap-2 px-6 py-2.5 rounded-md
+                    bg-eno-800 hover:bg-eno-900 active:bg-eno-950
                     text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow-md
                     transition-all cursor-pointer
                   "
@@ -1609,20 +1467,20 @@ export function PedidoCompra() {
       {/* MODAL DE EDIÇÃO COMPLETA: EDITAR PEDIDO DE COMPRA         */}
       {/* ========================================================= */}
       {modalEditarPedido && pedidoEditando && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-5xl lg:max-w-6xl w-full max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] flex flex-col my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md border-0 sm:border border-linha shadow-2xl max-w-5xl lg:max-w-6xl w-full h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)] flex flex-col sm:my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             
             {/* Topo do Modal de Edição */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 shrink-0">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-linha bg-papel-2 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-blue-800 text-white rounded-xl">
-                  <Pencil className="w-5 h-5 text-blue-200" />
+                <div className="p-2.5 bg-st-producao text-white rounded-md">
+                  <Pencil className="w-5 h-5 text-st-producao-bg" />
                 </div>
                 <div>
-                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                  <h3 className="text-base sm:text-lg font-extrabold text-tinta">
                     Editar Pedido de Compra / Programação
                   </h3>
-                  <p className="text-xs text-slate-500">As alterações serão sincronizadas diretamente na despesa programada vinculada</p>
+                  <p className="text-xs text-cinza">As alterações serão sincronizadas diretamente na despesa programada vinculada</p>
                 </div>
               </div>
               <button
@@ -1630,22 +1488,22 @@ export function PedidoCompra() {
                   setModalEditarPedido(false);
                   setPedidoEditando(null);
                 }}
-                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+                className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md text-cinza hover:text-tinta-2 hover:bg-linha/60 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* SELEÇÃO DO TIPO DE PARCEIRO NA EDIÇÃO */}
-            <div className="px-6 pt-3 pb-2 border-b border-slate-100 bg-white">
-              <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl max-w-md">
+            <div className="px-6 pt-3 pb-2 border-b border-linha bg-papel">
+              <div className="grid grid-cols-2 gap-2 p-1 bg-papel-3/60 rounded-md max-w-md">
                 <button
                   type="button"
                   onClick={() => setEditTipoParceiro('AGRICULTOR')}
                   className={`py-2 px-4 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     editTipoParceiro === 'AGRICULTOR'
-                      ? 'bg-emerald-800 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-eno-800 text-white shadow-sm'
+                      : 'text-tinta-2 hover:text-tinta'
                   }`}
                 >
                   <Tractor className="w-4 h-4" />
@@ -1656,8 +1514,8 @@ export function PedidoCompra() {
                   onClick={() => setEditTipoParceiro('FORNECEDOR')}
                   className={`py-2 px-4 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     editTipoParceiro === 'FORNECEDOR'
-                      ? 'bg-emerald-800 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-eno-800 text-white shadow-sm'
+                      : 'text-tinta-2 hover:text-tinta'
                   }`}
                 >
                   <Building2 className="w-4 h-4" />
@@ -1667,13 +1525,13 @@ export function PedidoCompra() {
             </div>
 
             {/* FORMULÁRIO DE EDIÇÃO */}
-            <form onSubmit={salvarEdicaoPedido} className="flex-1 overflow-y-auto p-6 space-y-4">
+            <form onSubmit={salvarEdicaoPedido} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
               
               {/* LINHA 1: PARCEIRO CADASTRADO (2 COLS) + CATEGORIA (1 COL) + DATA (1 COL) */}
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-start">
                 <div className="lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {editTipoParceiro === 'AGRICULTOR' ? 'Produtor Rural / Agricultor' : 'Fornecedor Cadastrado'} <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
+                    {editTipoParceiro === 'AGRICULTOR' ? 'Produtor Rural / Agricultor' : 'Fornecedor Cadastrado'} <span className="text-st-vencido">*</span>
                   </label>
 
                   {editTipoParceiro === 'AGRICULTOR' ? (
@@ -1681,7 +1539,7 @@ export function PedidoCompra() {
                       required
                       value={editParceiroId}
                       onChange={(e) => setEditParceiroId(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                      className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-semibold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20 bg-papel"
                     >
                       {agricultores.map(agr => (
                         <option key={agr.id} value={agr.id}>
@@ -1694,7 +1552,7 @@ export function PedidoCompra() {
                       required
                       value={editParceiroId}
                       onChange={(e) => setEditParceiroId(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                      className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-semibold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20 bg-papel"
                     >
                       {fornecedores.map(forn => (
                         <option key={forn.id} value={forn.id}>
@@ -1706,13 +1564,13 @@ export function PedidoCompra() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Categoria da Compra <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
+                    Categoria da Compra <span className="text-st-vencido">*</span>
                   </label>
                   <select
                     value={editCategoria}
                     onChange={(e) => setEditCategoria(e.target.value as CategoriaCompra)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-semibold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20 bg-papel"
                   >
                     <option value="Mandioca / Matéria-Prima">Mandioca / Matéria-Prima</option>
                     <option value="Mercado / Cozinha / Copa">Mercado / Cozinha / Copa</option>
@@ -1727,8 +1585,8 @@ export function PedidoCompra() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Data da Compra / Previsão <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
+                    Data da Compra / Previsão <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1736,7 +1594,7 @@ export function PedidoCompra() {
                     value={editData}
                     onChange={(e) => setEditData(e.target.value)}
                     placeholder="DD/MM/AAAA"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20"
                   />
                 </div>
               </div>
@@ -1744,8 +1602,8 @@ export function PedidoCompra() {
               {/* LINHA 2: SOLICITANTE + LOCAL + DESCRIÇÃO DO ITEM */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Solicitante / Comprador <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
+                    Solicitante / Comprador <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1753,12 +1611,12 @@ export function PedidoCompra() {
                     value={editCompradorNome}
                     onChange={(e) => setEditCompradorNome(e.target.value)}
                     placeholder="Ex: Almoxarifado, Gerência..."
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full px-3.5 py-2 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
                     Local da Compra
                   </label>
                   <input
@@ -1766,13 +1624,13 @@ export function PedidoCompra() {
                     value={editLocalCompra}
                     onChange={(e) => setEditLocalCompra(e.target.value)}
                     placeholder="Ex: Fornecedor, Fábrica..."
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full px-3.5 py-2 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20"
                   />
                 </div>
 
                 <div className="lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Descrição do Item / Produto Necessário <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
+                    Descrição do Item / Produto Necessário <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="text"
@@ -1780,7 +1638,7 @@ export function PedidoCompra() {
                     value={editItemDescricao}
                     onChange={(e) => setEditItemDescricao(e.target.value)}
                     placeholder="Ex: Sacaria de Ráfia Valvulada 50kg Personalizada Grupo ENO..."
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 font-bold text-slate-900"
+                    className="w-full px-3.5 py-2 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20 font-bold text-tinta"
                   />
                 </div>
               </div>
@@ -1788,8 +1646,8 @@ export function PedidoCompra() {
               {/* LINHA 3: QUANTIDADE, UNIDADE, VALOR UNITÁRIO E TOTAL */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Quantidade <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
+                    Quantidade <span className="text-st-vencido">*</span>
                   </label>
                   <input
                     type="number"
@@ -1797,18 +1655,18 @@ export function PedidoCompra() {
                     required
                     value={editQuantidade}
                     onChange={(e) => setEditQuantidade(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold font-mono focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full px-3.5 py-2 rounded-md border border-linha-forte text-xs sm:text-sm font-bold tabular-nums focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Unidade de Medida <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
+                    Unidade de Medida <span className="text-st-vencido">*</span>
                   </label>
                   <select
                     value={editUnidadeMedida}
                     onChange={(e) => setEditUnidadeMedida(e.target.value as any)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                    className="w-full px-3.5 py-2 rounded-md border border-linha-forte text-xs sm:text-sm font-semibold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20 bg-papel"
                   >
                     <option value="KG">KG (Quilogramas)</option>
                     <option value="Unidades">Unidades (UN)</option>
@@ -1822,28 +1680,28 @@ export function PedidoCompra() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Valor Unitário (R$) <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
+                    Valor Unitário (R$) <span className="text-st-vencido">*</span>
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">R$</span>
+                    <span className="absolute left-3 top-2 text-xs font-bold text-cinza">R$</span>
                     <input
                       type="number"
                       step="0.01"
                       required
                       value={editValorUnitario}
                       onChange={(e) => setEditValorUnitario(e.target.value)}
-                      className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold font-mono focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                      className="w-full pl-9 pr-3.5 py-2 rounded-md border border-linha-forte text-xs sm:text-sm font-bold tabular-nums focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20"
                     />
                   </div>
                 </div>
 
                 {/* CARD VALOR TOTAL RECALCULADO */}
-                <div className="p-3 rounded-xl bg-blue-900 text-white flex flex-col justify-center shadow-inner h-[62px]">
-                  <span className="text-[10px] text-blue-200 font-bold block uppercase tracking-wider">
+                <div className="p-3 rounded-md bg-st-producao text-white flex flex-col justify-center shadow-inner h-[62px]">
+                  <span className="text-[10px] text-st-producao-bg font-bold block uppercase tracking-wider">
                     Total Calculado
                   </span>
-                  <span className="text-base sm:text-lg font-black font-mono text-white truncate">
+                  <span className="text-base sm:text-lg font-extrabold tabular-nums text-white truncate">
                     R$ {(lerNumeroBR(editQuantidade) * lerNumeroBR(editValorUnitario)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -1852,13 +1710,13 @@ export function PedidoCompra() {
               {/* LINHA 4: STATUS, FORMA DE PAGAMENTO E OBSERVAÇÕES */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Status do Pedido <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
+                    Status do Pedido <span className="text-st-vencido">*</span>
                   </label>
                   <select
                     value={editStatusPedido}
                     onChange={(e) => setEditStatusPedido(e.target.value as StatusPedidoCompra)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                    className="w-full px-3.5 py-2 rounded-md border border-linha-forte text-xs sm:text-sm font-bold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20 bg-papel"
                   >
                     <option value="Programado">Programado (A Lembrar / Comprar)</option>
                     <option value="Pago">Pago / Finalizado</option>
@@ -1869,13 +1727,13 @@ export function PedidoCompra() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
                     Forma de Pagamento
                   </label>
                   <select
                     value={editFormaPagamento}
                     onChange={(e) => setEditFormaPagamento(e.target.value as any)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                    className="w-full px-3.5 py-2 rounded-md border border-linha-forte text-xs sm:text-sm font-semibold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20 bg-papel"
                   >
                     <option value="PIX">PIX</option>
                     <option value="Boleto Bancário">Boleto Bancário</option>
@@ -1886,7 +1744,7 @@ export function PedidoCompra() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-tinta-2 mb-1">
                     Observações (Opcional)
                   </label>
                   <input
@@ -1894,28 +1752,28 @@ export function PedidoCompra() {
                     value={editObservacoes}
                     onChange={(e) => setEditObservacoes(e.target.value)}
                     placeholder="Ex: Entrega na fábrica, prazo..."
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full px-3.5 py-2 rounded-md border border-linha-forte text-xs sm:text-sm font-medium focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-700/20"
                   />
                 </div>
               </div>
 
               {/* BOTOES SALVAR / CANCELAR */}
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+              <div className="pt-4 border-t border-linha flex items-center justify-end gap-3 max-sm:sticky max-sm:-bottom-4 max-sm:z-10 max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:pb-4 max-sm:bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
                 <button
                   type="button"
                   onClick={() => {
                     setModalEditarPedido(false);
                     setPedidoEditando(null);
                   }}
-                  className="px-5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  className="px-5 py-2.5 rounded-md border border-linha-forte text-xs font-bold text-tinta-2 hover:bg-papel-3/60 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   className="
-                    flex items-center gap-2 px-6 py-2.5 rounded-xl
-                    bg-blue-800 hover:bg-blue-900 active:bg-blue-950
+                    flex items-center gap-2 px-6 py-2.5 rounded-md
+                    bg-st-producao hover:bg-st-producao active:bg-st-producao
                     text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow-md
                     transition-all cursor-pointer
                   "
@@ -1933,16 +1791,16 @@ export function PedidoCompra() {
       {/* MODAL 2: VISUALIZAR FOLHA A4 PERSONALIZADA GRUPO ENO      */}
       {/* ========================================================= */}
       {pedidoVisualizarA4 && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/80 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl max-w-5xl lg:max-w-6xl w-full max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] flex flex-col my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/80 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-eno-900 rounded-none sm:rounded-md border-0 sm:border border-eno-800 shadow-2xl max-w-5xl lg:max-w-6xl w-full h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)] flex flex-col sm:my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             
             {/* Barra Superior de Ações */}
-            <div className="flex items-center justify-between px-5 py-2.5 border-b border-slate-700 bg-slate-800 text-white shrink-0">
+            <div className="flex items-center justify-between px-5 py-2.5 border-b border-eno-800 bg-eno-800 text-white shrink-0">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded bg-emerald-700 text-white font-black flex items-center justify-center text-xs">
+                <div className="w-7 h-7 rounded bg-eno-700 text-white font-extrabold flex items-center justify-center text-xs">
                   ENO
                 </div>
-                <h3 className="font-bold text-sm text-slate-100">
+                <h3 className="font-bold text-sm text-eno-50">
                   Folha A4 — Pedido de Compra
                 </h3>
               </div>
@@ -1954,7 +1812,7 @@ export function PedidoCompra() {
                   disabled={gerandoPdf}
                   className="
                     flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg
-                    bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs
+                    bg-eno-600 hover:bg-eno-600 disabled:opacity-50 text-white font-bold text-xs
                     shadow-sm transition-all cursor-pointer
                   "
                   title="Baixar arquivo PDF"
@@ -1972,7 +1830,7 @@ export function PedidoCompra() {
                   onClick={imprimirA4}
                   className="
                     flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                    bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs
+                    bg-eno-800 hover:bg-cinza text-white font-bold text-xs
                     shadow-sm transition-all cursor-pointer
                   "
                   title="Imprimir folha A4"
@@ -1984,7 +1842,7 @@ export function PedidoCompra() {
                 {/* Botão Fechar */}
                 <button
                   onClick={() => setPedidoVisualizarA4(null)}
-                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors cursor-pointer ml-1"
+                  className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md text-eno-100 hover:text-white hover:bg-eno-800 transition-colors cursor-pointer ml-1"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1992,59 +1850,57 @@ export function PedidoCompra() {
             </div>
 
             {/* ÁREA DE VISUALIZAÇÃO A4 ENQUADRADA SEM ROLAGEM */}
-            <div className="flex-1 p-2 sm:p-3 bg-slate-900 flex items-center justify-center overflow-hidden">
+            <div className="flex-1 p-2 sm:p-3 bg-eno-900 flex items-center justify-center overflow-hidden">
               
               <div 
                 id="folha-a4-documento"
                 className="
-                  bg-white text-slate-900 p-5 sm:p-6 rounded-sm shadow-2xl border border-slate-300
+                  bg-papel text-tinta p-5 sm:p-6 rounded-sm shadow-2xl border border-linha-forte
                   flex flex-col justify-between text-xs select-text font-sans
                   h-full max-h-[calc(100vh-215px)] aspect-[210/297] box-border
                 "
               >
                 
                 {/* 1. CABEÇALHO DA EMPRESA & DATA */}
-                <div className="flex items-start justify-between border-b-2 border-emerald-950 pb-2.5">
+                <div className="flex items-start justify-between border-b-2 border-eno-700 pb-2.5">
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded bg-emerald-900 text-emerald-300 font-black flex items-center justify-center text-[10px]">
-                        ENO
-                      </div>
-                      <h1 className="text-sm font-black text-emerald-950 tracking-tight uppercase">
-                        Grupo ENO Alimentos
+                      <img src={EMPRESA.logo} alt="" className="w-7 h-7 object-contain" />
+                      <h1 className="text-sm font-extrabold text-eno-800 tracking-tight uppercase">
+                        {EMPRESA.nome}
                       </h1>
                     </div>
-                    <div className="text-[10px] text-slate-600 font-medium">
-                      Grupo ENO Indústria e Comércio de Produtos Alimentícios Ltda
+                    <div className="text-[10px] text-tinta-2 font-medium">
+                      {EMPRESA.razao}
                     </div>
-                    <div className="text-[9px] text-slate-500">
-                      CNPJ: <strong>45.981.234/0001-90</strong> | IE: <strong>908.412.301-12</strong>
+                    <div className="text-[9px] text-cinza">
+                      CNPJ: <strong>{EMPRESA.cnpj}</strong> | {EMPRESA.endereco}
                     </div>
-                    <div className="text-[9px] text-slate-500">
-                      Distrito Industrial — Jacarezinho / PR | Tel: (43) 3511-9000
+                    <div className="text-[9px] text-cinza">
+                      Tel: {EMPRESA.telefone} | {EMPRESA.email}
                     </div>
                   </div>
 
                   <div className="text-right space-y-1">
-                    <div className="inline-block px-2 py-0.5 bg-emerald-900 text-white font-black text-[10px] uppercase tracking-wider rounded">
+                    <div className="inline-block px-2 py-0.5 bg-eno-900 text-white font-extrabold text-[10px] uppercase tracking-wider rounded">
                       Pedido de Compra
                     </div>
-                    <div className="text-xs font-bold text-slate-800">
-                      Data: <span className="font-mono">{formatarDataBR(pedidoVisualizarA4.data)}</span>
+                    <div className="text-xs font-bold text-tinta">
+                      Data: <span className="tabular-nums">{formatarDataBR(pedidoVisualizarA4.data)}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* 2. DADOS DO FORNECEDOR / AGRICULTOR */}
-                <div className="p-2.5 rounded bg-slate-50 border border-slate-200">
-                  <div className="text-[10px] font-black uppercase text-emerald-900 border-b border-slate-200 pb-1 mb-1.5">
+                <div className="p-2.5 rounded bg-papel-2 border border-linha">
+                  <div className="text-[10px] font-extrabold uppercase text-eno-800 border-b border-linha pb-1 mb-1.5">
                     {pedidoVisualizarA4.tipo_parceiro === 'AGRICULTOR' ? 'Dados do Produtor Rural' : 'Dados do Fornecedor'}
                   </div>
 
                   <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                     <div>
-                      <span className="text-slate-500">Nome:</span>{' '}
-                      <strong className="text-slate-900">
+                      <span className="text-cinza">Nome:</span>{' '}
+                      <strong className="text-tinta">
                         {pedidoVisualizarA4.tipo_parceiro === 'AGRICULTOR' 
                           ? pedidoVisualizarA4.agricultor_nome 
                           : pedidoVisualizarA4.fornecedor_nome}
@@ -2052,8 +1908,8 @@ export function PedidoCompra() {
                     </div>
 
                     <div>
-                      <span className="text-slate-500">CPF / CNPJ:</span>{' '}
-                      <strong className="text-slate-900 font-mono">
+                      <span className="text-cinza">CPF / CNPJ:</span>{' '}
+                      <strong className="text-tinta tabular-nums">
                         {pedidoVisualizarA4.tipo_parceiro === 'AGRICULTOR' 
                           ? pedidoVisualizarA4.agricultor_cpf_cnpj 
                           : pedidoVisualizarA4.fornecedor_cnpj}
@@ -2062,14 +1918,14 @@ export function PedidoCompra() {
 
                     {pedidoVisualizarA4.tipo_parceiro === 'AGRICULTOR' && pedidoVisualizarA4.agricultor_propriedade && (
                       <div>
-                        <span className="text-slate-500">Propriedade:</span>{' '}
-                        <strong className="text-slate-900">{pedidoVisualizarA4.agricultor_propriedade}</strong>
+                        <span className="text-cinza">Propriedade:</span>{' '}
+                        <strong className="text-tinta">{pedidoVisualizarA4.agricultor_propriedade}</strong>
                       </div>
                     )}
 
                     <div>
-                      <span className="text-slate-500">Cidade:</span>{' '}
-                      <strong className="text-slate-900">
+                      <span className="text-cinza">Cidade:</span>{' '}
+                      <strong className="text-tinta">
                         {pedidoVisualizarA4.tipo_parceiro === 'AGRICULTOR' 
                           ? pedidoVisualizarA4.agricultor_cidade_uf 
                           : pedidoVisualizarA4.fornecedor_cidade_uf}
@@ -2078,8 +1934,8 @@ export function PedidoCompra() {
 
                     {(pedidoVisualizarA4.agricultor_chave_pix || pedidoVisualizarA4.fornecedor_chave_pix) && (
                       <div className="col-span-2">
-                        <span className="text-slate-500">Chave PIX:</span>{' '}
-                        <strong className="text-emerald-900 font-mono">
+                        <span className="text-cinza">Chave PIX:</span>{' '}
+                        <strong className="text-eno-800 tabular-nums">
                           {pedidoVisualizarA4.agricultor_chave_pix || pedidoVisualizarA4.fornecedor_chave_pix}
                         </strong>
                       </div>
@@ -2089,31 +1945,31 @@ export function PedidoCompra() {
 
                 {/* 3. DADOS DO PRODUTO E VALORES */}
                 <div className="space-y-1">
-                  <div className="text-[10px] font-black uppercase text-slate-700">
+                  <div className="text-[10px] font-extrabold uppercase text-tinta-2">
                     Produto e Valores
                   </div>
 
-                  <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                  <table className="w-full border-collapse border border-linha-forte text-xs table-fixed">
                     <thead>
-                      <tr className="bg-slate-100 text-[10px] font-black uppercase text-slate-700 border-b border-slate-300">
-                        <th className="py-2 px-2.5 text-left border-r border-slate-300 w-[42%]">Produto / Descrição</th>
-                        <th className="py-2 px-1.5 text-right border-r border-slate-300 w-[18%]">Quantidade</th>
-                        <th className="py-2 px-1.5 text-right border-r border-slate-300 w-[18%]">Valor Unitário</th>
+                      <tr className="bg-papel-3/60 text-[10px] font-extrabold uppercase text-tinta-2 border-b border-linha-forte">
+                        <th className="py-2 px-2.5 text-left border-r border-linha-forte w-[42%]">Produto / Descrição</th>
+                        <th className="py-2 px-1.5 text-right border-r border-linha-forte w-[18%]">Quantidade</th>
+                        <th className="py-2 px-1.5 text-right border-r border-linha-forte w-[18%]">Valor Unitário</th>
                         <th className="py-2 px-2 text-right w-[22%]">Valor Total</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="border-b border-slate-200">
-                        <td className="py-2.5 px-2.5 border-r border-slate-200 font-bold text-slate-900 break-words leading-snug">
+                      <tr className="border-b border-linha">
+                        <td className="py-2.5 px-2.5 border-r border-linha font-bold text-tinta break-words leading-snug">
                           {pedidoVisualizarA4.item_descricao}
                         </td>
-                        <td className="py-2.5 px-1.5 border-r border-slate-200 text-right font-mono font-bold text-slate-900 whitespace-nowrap text-[11px]">
+                        <td className="py-2.5 px-1.5 border-r border-linha text-right tabular-nums font-bold text-tinta whitespace-nowrap text-[11px]">
                           {pedidoVisualizarA4.quantidade.toLocaleString('pt-BR')} {pedidoVisualizarA4.unidade_medida}
                         </td>
-                        <td className="py-2.5 px-1.5 border-r border-slate-200 text-right font-mono text-slate-700 whitespace-nowrap text-[11px]">
+                        <td className="py-2.5 px-1.5 border-r border-linha text-right tabular-nums text-tinta-2 whitespace-nowrap text-[11px]">
                           R$ {pedidoVisualizarA4.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="py-2.5 px-2 text-right font-mono font-black text-slate-900 text-xs bg-slate-50 whitespace-nowrap tabular-nums">
+                        <td className="py-2.5 px-2 text-right tabular-nums font-extrabold text-tinta text-xs bg-papel-2 whitespace-nowrap tabular-nums">
                           R$ {pedidoVisualizarA4.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
@@ -2122,11 +1978,11 @@ export function PedidoCompra() {
                 </div>
 
                 {/* 4. TOTAL EM DESTAQUE */}
-                <div className="p-2.5 bg-emerald-50 rounded border border-emerald-300 flex items-center justify-between">
-                  <span className="text-xs font-black text-emerald-950 uppercase">
+                <div className="p-2.5 bg-eno-50 rounded border border-eno-100 flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-eno-800 uppercase">
                     Total a Pagar:
                   </span>
-                  <span className="text-base font-black font-mono text-emerald-950">
+                  <span className="text-base font-extrabold tabular-nums text-eno-800">
                     R$ {pedidoVisualizarA4.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -2134,13 +1990,13 @@ export function PedidoCompra() {
                 {/* 5. ASSINATURAS SIMPLES */}
                 <div className="pt-4 grid grid-cols-2 gap-6 text-center text-xs">
                   <div className="space-y-1">
-                    <div className="border-t border-slate-400 w-4/5 mx-auto pt-1"></div>
-                    <div className="font-bold text-slate-900 text-[11px]">Grupo ENO Alimentos</div>
+                    <div className="border-t border-linha-forte w-4/5 mx-auto pt-1"></div>
+                    <div className="font-bold text-tinta text-[11px]">{EMPRESA.razao}</div>
                   </div>
 
                   <div className="space-y-1">
-                    <div className="border-t border-slate-400 w-4/5 mx-auto pt-1"></div>
-                    <div className="font-bold text-slate-900 text-[11px]">
+                    <div className="border-t border-linha-forte w-4/5 mx-auto pt-1"></div>
+                    <div className="font-bold text-tinta text-[11px]">
                       {pedidoVisualizarA4.tipo_parceiro === 'AGRICULTOR' 
                         ? pedidoVisualizarA4.agricultor_nome 
                         : pedidoVisualizarA4.fornecedor_nome}
@@ -2158,33 +2014,33 @@ export function PedidoCompra() {
       {/* MODAL 3: EDIÇÃO RÁPIDA DE DESTOPO / RESÍDUO / CASCA       */}
       {/* ========================================================= */}
       {pedidoEdicaoDestopo && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl sm:max-w-3xl w-full p-6 sm:p-7 space-y-4 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2 text-amber-900 font-black text-sm">
-                <Edit2 className="w-4 h-4 text-amber-700" />
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md border-0 sm:border border-linha shadow-2xl max-w-2xl sm:max-w-3xl w-full p-6 sm:p-7 space-y-4 sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-linha pb-3">
+              <div className="flex items-center gap-2 text-st-aguardando font-extrabold text-sm">
+                <Edit2 className="w-4 h-4 text-st-aguardando" />
                 <span>Editar Resíduo, Destopo e Casca</span>
               </div>
               <button
                 onClick={() => setPedidoEdicaoDestopo(null)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+                className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md text-cinza hover:text-tinta-2 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={salvarEdicaoDestopo} className="space-y-4">
-              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs">
-                <div className="font-bold text-emerald-950">
+              <div className="p-3 bg-eno-50 rounded-md border border-eno-100 text-xs">
+                <div className="font-bold text-eno-800">
                   {pedidoEdicaoDestopo.agricultor_nome || pedidoEdicaoDestopo.fornecedor_nome}
                 </div>
-                <div className="text-emerald-800 font-mono mt-0.5">
+                <div className="text-eno-800 tabular-nums mt-0.5">
                   Mandioca Total: <strong>{pedidoEdicaoDestopo.quantidade.toLocaleString('pt-BR')} KG</strong>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-tinta-2 mb-1">
                   Resíduo, Destopo e Casca (KG)
                 </label>
                 <input
@@ -2193,9 +2049,9 @@ export function PedidoCompra() {
                   value={destopoInputKg}
                   onChange={(e) => setDestopoInputKg(e.target.value)}
                   placeholder="Ex: 2100"
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono font-bold focus:outline-none focus:border-amber-600 focus:ring-2 focus:ring-amber-500/20"
+                  className="w-full px-3.5 py-2 rounded-md border border-linha-forte text-sm tabular-nums font-bold focus:outline-none focus:border-ouro focus:ring-2 focus:ring-ouro/20"
                 />
-                <span className="text-[10px] text-amber-800 font-medium block mt-1">
+                <span className="text-[10px] text-st-aguardando font-medium block mt-1">
                   Usado exclusivamente para apuração de rendimento industrial da fábrica.
                 </span>
               </div>
@@ -2204,13 +2060,13 @@ export function PedidoCompra() {
                 <button
                   type="button"
                   onClick={() => setPedidoEdicaoDestopo(null)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                  className="px-4 py-2 rounded-md border border-linha-forte text-xs font-bold text-tinta-2 hover:bg-papel-3/60 cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold shadow-sm cursor-pointer"
+                  className="px-5 py-2 rounded-md bg-ouro-escuro hover:bg-ouro-escuro text-white text-xs font-bold shadow-sm cursor-pointer"
                 >
                   Salvar Alteração
                 </button>
@@ -2224,13 +2080,13 @@ export function PedidoCompra() {
       {/* MODAL 4: DEFINIR PAGAMENTO / VIRAR DESPESA (INTEGRAÇÃO COM FINANCEIRO)    */}
       {/* ========================================================================= */}
       {pedidoDefinirPagamento && (
-        <div className="fixed inset-0 z-[120] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-4xl sm:max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
+        <div className="fixed inset-0 z-[120] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-4xl sm:max-w-5xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Topo do Modal */}
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-bold">
+                <div className="w-10 h-10 rounded-md bg-eno-600/20 text-ouro-claro border border-eno-600/40 flex items-center justify-center font-bold">
                   <ArrowRightCircle className="w-5 h-5" />
                 </div>
                 <div>
@@ -2239,47 +2095,47 @@ export function PedidoCompra() {
                       Efetivar Pedido de Compra e Virar Despesa
                     </h3>
                     {(pedidoDefinirPagamento.id.startsWith('ped_roca_') || (pedidoDefinirPagamento.observacoes && pedidoDefinirPagamento.observacoes.includes('Cálculo na Roça')) || pedidoDefinirPagamento.item_descricao.toLowerCase().includes('roça')) && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-950 text-emerald-300 border border-emerald-600">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-eno-950 text-ouro-claro border border-eno-600">
                         Origem: Cálculo na Roça
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-cinza">
                     Ajuste o produto comprado, categoria contábil e forma de pagamento para lançar como despesa no Financeiro
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setPedidoDefinirPagamento(null)}
-                className="p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-eno-800 text-eno-100 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Conteúdo do Formulário */}
-            <form onSubmit={handleSalvarDefinicaoPagamento} className="p-6 overflow-y-auto space-y-5 text-xs flex-1">
+            <form onSubmit={handleSalvarDefinicaoPagamento} className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs flex-1">
               {/* Card de Resumo do Parceiro */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+              <div className="p-4 rounded-md bg-papel-2 border border-linha flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <span className="text-slate-400 font-bold uppercase text-[10px] block">Fornecedor / Produtor Rural:</span>
-                  <strong className="text-sm font-bold text-slate-900">
+                  <span className="text-cinza font-bold uppercase text-[10px] block">Fornecedor / Produtor Rural:</span>
+                  <strong className="text-sm font-bold text-tinta">
                     {pedidoDefinirPagamento.tipo_parceiro === 'AGRICULTOR' 
                       ? pedidoDefinirPagamento.agricultor_nome 
                       : (pedidoDefinirPagamento.fornecedor_fantasia || pedidoDefinirPagamento.fornecedor_nome)}
                   </strong>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
+                  <p className="text-[11px] text-cinza mt-0.5">
                     Data Programada: <strong>{formatarDataBR(pedidoDefinirPagamento.data)}</strong> • Qtd: <strong>{pedidoDefinirPagamento.quantidade.toLocaleString('pt-BR')} {pedidoDefinirPagamento.unidade_medida}</strong>
                   </p>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-slate-400 font-bold uppercase text-[10px] block">Valor Estimado Inicial:</span>
-                  <strong className="text-lg font-black font-mono text-emerald-900">
+                  <span className="text-cinza font-bold uppercase text-[10px] block">Valor Estimado Inicial:</span>
+                  <strong className="text-lg font-extrabold tabular-nums text-eno-800">
                     R$ {pedidoDefinirPagamento.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </strong>
                   {(pedidoDefinirPagamento.agricultor_chave_pix || pedidoDefinirPagamento.fornecedor_chave_pix) && (
-                    <span className="text-[10px] text-emerald-700 font-mono block mt-0.5">
+                    <span className="text-[10px] text-eno-700 tabular-nums block mt-0.5">
                       Chave PIX: {pedidoDefinirPagamento.agricultor_chave_pix || pedidoDefinirPagamento.fornecedor_chave_pix}
                     </span>
                   )}
@@ -2287,10 +2143,10 @@ export function PedidoCompra() {
               </div>
 
               {/* SEÇÃO 1: EDIÇÃO DOS DADOS DA COMPRA (A DESCRIÇÃO VIRA PRODUTO QUE FOI COMPRADO, CATEGORIA E FORMA DE PAGAMENTO) */}
-              <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200 space-y-4">
-                <div className="flex items-center gap-2 pb-2 border-b border-emerald-200/70">
-                  <Package className="w-4 h-4 text-emerald-800" />
-                  <span className="font-black text-xs text-emerald-950 uppercase tracking-wider">
+              <div className="p-4 rounded-md bg-eno-50/50 border border-eno-100 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-eno-100/70">
+                  <Package className="w-4 h-4 text-eno-800" />
+                  <span className="font-extrabold text-xs text-eno-800 uppercase tracking-wider">
                     1. Dados da Compra Efetivada (O que foi Comprado, Categoria & Pagamento)
                   </span>
                 </div>
@@ -2298,8 +2154,8 @@ export function PedidoCompra() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Produto Comprado (Descrição inicial vira produto exato comprado) */}
                   <div className="sm:col-span-2">
-                    <label className="block font-bold text-slate-800 mb-1 text-xs">
-                      Produto / Item Comprado * <span className="text-emerald-700 font-semibold">(A descrição vira o produto que foi comprado)</span>
+                    <label className="block font-bold text-tinta mb-1 text-xs">
+                      Produto / Item Comprado * <span className="text-eno-700 font-semibold">(A descrição vira o produto que foi comprado)</span>
                     </label>
                     <input
                       type="text"
@@ -2307,19 +2163,19 @@ export function PedidoCompra() {
                       value={produtoCompradoDef}
                       onChange={(e) => setProdutoCompradoDef(e.target.value)}
                       placeholder="Ex: 5.000 Sacos de Ráfia / Rolamento 6205 / Óleo Lubrificante 68..."
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-500/20 text-xs sm:text-sm shadow-2xs"
+                      className="w-full bg-papel border border-linha-forte rounded-md px-3.5 py-2.5 font-bold text-tinta focus:outline-none focus:border-eno-700 focus:ring-2 focus:ring-eno-700/20 text-xs sm:text-sm shadow-2xs"
                     />
                   </div>
 
                   {/* Categoria da Despesa / Compra */}
                   <div>
-                    <label className="block font-bold text-slate-800 mb-1 text-xs">
+                    <label className="block font-bold text-tinta mb-1 text-xs">
                       Categoria da Despesa *
                     </label>
                     <select
                       value={categoriaDef}
                       onChange={(e) => setCategoriaDef(e.target.value as CategoriaCompra)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-slate-900 font-bold focus:outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-500/20 cursor-pointer text-xs shadow-2xs"
+                      className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2.5 text-tinta font-bold focus:outline-none focus:border-eno-700 focus:ring-2 focus:ring-eno-700/20 cursor-pointer text-xs shadow-2xs"
                     >
                       <option value="Embalagens">Embalagens (Sacos, Ráfia, Fitas)</option>
                       <option value="Mandioca / Matéria-Prima">Mandioca / Matéria-Prima</option>
@@ -2335,13 +2191,13 @@ export function PedidoCompra() {
 
                   {/* Forma de Pagamento */}
                   <div>
-                    <label className="block font-bold text-slate-800 mb-1 text-xs">
+                    <label className="block font-bold text-tinta mb-1 text-xs">
                       Forma de Pagamento *
                     </label>
                     <select
                       value={formaPagamentoDef}
                       onChange={(e) => setFormaPagamentoDef(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-slate-900 font-bold focus:outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-500/20 cursor-pointer text-xs shadow-2xs"
+                      className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2.5 text-tinta font-bold focus:outline-none focus:border-eno-700 focus:ring-2 focus:ring-eno-700/20 cursor-pointer text-xs shadow-2xs"
                     >
                       <option value="PIX">PIX</option>
                       <option value="Dinheiro">Dinheiro</option>
@@ -2354,7 +2210,7 @@ export function PedidoCompra() {
 
                   {/* Valor Total Efetivo da Compra */}
                   <div>
-                    <label className="block font-bold text-slate-800 mb-1 text-xs">
+                    <label className="block font-bold text-tinta mb-1 text-xs">
                       Valor Final da Compra (R$) *
                     </label>
                     <input
@@ -2363,13 +2219,13 @@ export function PedidoCompra() {
                       value={valorTotalDef}
                       onChange={(e) => setValorTotalDef(e.target.value)}
                       placeholder="0,00"
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 font-mono font-black text-emerald-900 text-xs sm:text-sm focus:outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-500/20 shadow-2xs"
+                      className="w-full bg-papel border border-linha-forte rounded-md px-3.5 py-2.5 tabular-nums font-extrabold text-eno-800 text-xs sm:text-sm focus:outline-none focus:border-eno-700 focus:ring-2 focus:ring-eno-700/20 shadow-2xs"
                     />
                   </div>
 
                   {/* Data da Efetivação / Vencimento */}
                   <div>
-                    <label className="block font-bold text-slate-800 mb-1 text-xs">
+                    <label className="block font-bold text-tinta mb-1 text-xs">
                       {tipoPagamentoDef === 'JA_PAGO' ? 'Data do Pagamento Realizado *' : 'Data de Vencimento *'}
                     </label>
                     <input
@@ -2378,7 +2234,7 @@ export function PedidoCompra() {
                       value={dataPagamentoOuVencDef}
                       onChange={(e) => setDataPagamentoOuVencDef(e.target.value)}
                       placeholder="DD/MM/AAAA"
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 font-mono font-bold text-slate-900 text-xs sm:text-sm focus:outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-500/20 shadow-2xs"
+                      className="w-full bg-papel border border-linha-forte rounded-md px-3.5 py-2.5 tabular-nums font-bold text-tinta text-xs sm:text-sm focus:outline-none focus:border-eno-700 focus:ring-2 focus:ring-eno-700/20 shadow-2xs"
                     />
                   </div>
                 </div>
@@ -2386,7 +2242,7 @@ export function PedidoCompra() {
 
               {/* SEÇÃO 2: SITUAÇÃO DA LIQUIDAÇÃO / PAGAMENTO */}
               <div className="space-y-2">
-                <label className="block font-bold text-slate-800 text-xs">
+                <label className="block font-bold text-tinta text-xs">
                   2. Situação da Liquidação / Pagamento no Financeiro *
                 </label>
 
@@ -2394,17 +2250,17 @@ export function PedidoCompra() {
                   <button
                     type="button"
                     onClick={() => setTipoPagamentoDef('JA_PAGO')}
-                    className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer ${
+                    className={`p-3.5 rounded-md border-2 text-left transition-all cursor-pointer ${
                       tipoPagamentoDef === 'JA_PAGO'
-                        ? 'border-emerald-600 bg-emerald-50/70 shadow-xs'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
+                        ? 'border-eno-600 bg-eno-50/70 shadow-xs'
+                        : 'border-linha bg-papel hover:border-linha-forte'
                     }`}
                   >
-                    <div className="flex items-center gap-2 text-emerald-900 font-black text-xs">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div className="flex items-center gap-2 text-eno-800 font-extrabold text-xs">
+                      <CheckCircle2 className="w-4 h-4 text-eno-700 shrink-0" />
                       <span>1. Já Foi Pago no Ato</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                    <p className="text-[11px] text-cinza mt-1 leading-relaxed">
                       O dinheiro ou PIX já foi quitado. Entrará imediatamente como Despesa Paga no caixa do Financeiro.
                     </p>
                   </button>
@@ -2412,17 +2268,17 @@ export function PedidoCompra() {
                   <button
                     type="button"
                     onClick={() => setTipoPagamentoDef('A_PAGAR')}
-                    className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer ${
+                    className={`p-3.5 rounded-md border-2 text-left transition-all cursor-pointer ${
                       tipoPagamentoDef === 'A_PAGAR'
-                        ? 'border-blue-600 bg-blue-50/70 shadow-xs'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
+                        ? 'border-st-producao/30 bg-st-producao-bg/70 shadow-xs'
+                        : 'border-linha bg-papel hover:border-linha-forte'
                     }`}
                   >
-                    <div className="flex items-center gap-2 text-blue-900 font-black text-xs">
-                      <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                    <div className="flex items-center gap-2 text-st-producao font-extrabold text-xs">
+                      <Clock className="w-4 h-4 text-st-producao shrink-0" />
                       <span>2. Ainda Não Foi Pago (A Pagar)</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                    <p className="text-[11px] text-cinza mt-1 leading-relaxed">
                       Faturado a prazo. Entrará no Contas a Pagar do Financeiro com o vencimento informado.
                     </p>
                   </button>
@@ -2430,17 +2286,17 @@ export function PedidoCompra() {
                   <button
                     type="button"
                     onClick={() => setTipoPagamentoDef('ADIANTAMENTO_PARCIAL')}
-                    className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer ${
+                    className={`p-3.5 rounded-md border-2 text-left transition-all cursor-pointer ${
                       tipoPagamentoDef === 'ADIANTAMENTO_PARCIAL'
-                        ? 'border-purple-600 bg-purple-50/70 shadow-xs'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
+                        ? 'border-st-producao/30 bg-st-producao-bg/70 shadow-xs'
+                        : 'border-linha bg-papel hover:border-linha-forte'
                     }`}
                   >
-                    <div className="flex items-center gap-2 text-purple-900 font-black text-xs">
-                      <DollarSign className="w-4 h-4 text-purple-600 shrink-0" />
+                    <div className="flex items-center gap-2 text-st-producao font-extrabold text-xs">
+                      <DollarSign className="w-4 h-4 text-st-producao shrink-0" />
                       <span>3. Adiantamento + Saldo a Pagar</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                    <p className="text-[11px] text-cinza mt-1 leading-relaxed">
                       Foi paga uma entrada e o saldo restante será lançado como título a pagar no Financeiro.
                     </p>
                   </button>
@@ -2448,14 +2304,14 @@ export function PedidoCompra() {
               </div>
 
               {/* SEÇÃO 3: CAMPOS CONDICIONAIS DE CAIXA / ADIANTAMENTO */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-md bg-papel-2 border border-linha">
                 {tipoPagamentoDef === 'JA_PAGO' ? (
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1 text-xs">Conta Bancária / Caixa de Saída</label>
+                    <label className="block font-bold text-tinta-2 mb-1 text-xs">Conta Bancária / Caixa de Saída</label>
                     <select
                       value={contaBancariaDef}
                       onChange={(e) => setContaBancariaDef(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer text-xs"
+                      className="w-full bg-papel border border-linha rounded-md px-3 py-2 text-tinta font-medium focus:outline-none focus:border-eno-700 cursor-pointer text-xs"
                     >
                       <option value="Banco do Brasil - Conta Movimento">Banco do Brasil - Conta Movimento</option>
                       <option value="Sicoob Agro - Cooperativa">Sicoob Agro - Cooperativa</option>
@@ -2466,7 +2322,7 @@ export function PedidoCompra() {
                 ) : tipoPagamentoDef === 'ADIANTAMENTO_PARCIAL' ? (
                   <>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1 text-xs">Valor do Adiantamento Pago (R$) *</label>
+                    <label className="block font-bold text-tinta-2 mb-1 text-xs">Valor do Adiantamento Pago (R$) *</label>
                     <input
                       type="number"
                       step="0.01"
@@ -2474,36 +2330,36 @@ export function PedidoCompra() {
                       value={valorAdiantadoDef}
                       onChange={(e) => setValorAdiantadoDef(e.target.value)}
                       placeholder="Ex: 1000.00"
-                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700 text-xs"
+                      className="w-full bg-papel border border-linha rounded-md px-3 py-2 tabular-nums font-bold text-tinta focus:outline-none focus:border-eno-700 text-xs"
                     />
                   </div>
                   {(lerNumeroBR(valorTotalDef) || pedidoDefinirPagamento.valor_total) - (parseFloat(valorAdiantadoDef.replace(',', '.')) || 0) > 0.009 && (
                     <div>
-                      <label className="block font-bold text-slate-700 mb-1 text-xs">Vencimento do saldo *</label>
+                      <label className="block font-bold text-tinta-2 mb-1 text-xs">Vencimento do saldo *</label>
                       <input
                         type="date"
                         required
                         value={vencimentoSaldoDef}
                         onChange={(e) => setVencimentoSaldoDef(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-emerald-700 text-xs"
+                        className="w-full bg-papel border border-linha rounded-md px-3 py-2 tabular-nums text-tinta focus:outline-none focus:border-eno-700 text-xs"
                       />
                     </div>
                   )}
                   </>
                 ) : (
-                  <div className="flex items-center text-slate-500 font-medium py-2 text-xs">
+                  <div className="flex items-center text-cinza font-medium py-2 text-xs">
                     <span>O valor total entrará integralmente no Contas a Pagar do Financeiro.</span>
                   </div>
                 )}
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1 text-xs">Observações do Pagamento (Opcional)</label>
+                  <label className="block font-bold text-tinta-2 mb-1 text-xs">Observações do Pagamento (Opcional)</label>
                   <input
                     type="text"
                     value={obsPagamentoDef}
                     onChange={(e) => setObsPagamentoDef(e.target.value)}
                     placeholder="Ex: Nota fiscal enviada, comprovante no WhatsApp..."
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:border-emerald-700 text-xs"
+                    className="w-full bg-papel border border-linha rounded-md px-3 py-2 text-tinta focus:outline-none focus:border-eno-700 text-xs"
                   />
                 </div>
 
@@ -2515,20 +2371,20 @@ export function PedidoCompra() {
               </div>
 
               {/* Botões do Rodapé */}
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
+              <div className="pt-4 border-t border-linha flex items-center justify-between max-sm:sticky max-sm:-bottom-4 max-sm:z-10 max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:pb-4 max-sm:bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
                 <button
                   type="button"
                   onClick={() => setPedidoDefinirPagamento(null)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors cursor-pointer text-xs"
+                  className="px-5 py-2.5 rounded-md bg-papel-3/60 hover:bg-linha text-tinta-2 font-bold transition-colors cursor-pointer text-xs"
                 >
                   Cancelar
                 </button>
 
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md text-xs sm:text-sm"
+                  className="px-6 py-2.5 rounded-md bg-eno-800 hover:bg-eno-900 text-white font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md text-xs sm:text-sm"
                 >
-                  <ArrowRightCircle className="w-4 h-4 text-emerald-300" />
+                  <ArrowRightCircle className="w-4 h-4 text-ouro-claro" />
                   <span>Confirmar & Virar Despesa</span>
                 </button>
               </div>

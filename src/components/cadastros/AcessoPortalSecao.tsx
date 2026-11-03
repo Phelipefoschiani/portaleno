@@ -109,7 +109,7 @@ interface Props {
 }
 
 const inputCls =
-  'w-full bg-white border border-emerald-200 rounded-xl pl-9 pr-3 py-2.5 text-xs sm:text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 disabled:bg-slate-100 disabled:text-slate-400';
+  'w-full bg-papel border border-linha-forte rounded-md pl-9 pr-3 py-2.5 text-xs sm:text-sm font-semibold text-tinta placeholder:text-cinza-claro focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 disabled:bg-papel-2 disabled:text-cinza';
 
 export function AcessoPortalSecao({ titulo, descricao, existente, estado, onChange, emailSugerido, obrigatorio, permitirRemover }: Props) {
   const set = (parcial: Partial<EstadoAcessoPortal>) => onChange({ ...estado, ...parcial });
@@ -122,30 +122,28 @@ export function AcessoPortalSecao({ titulo, descricao, existente, estado, onChan
   // Situação mostrada no selo do cabeçalho
   const situacao = existente
     ? estado.remover
-      ? { rotulo: 'Acesso será removido', cls: 'bg-red-100 text-red-800 border-red-300', Icone: UserX }
+      ? { rotulo: 'Acesso será removido', cls: 'bg-st-vencido-bg text-st-vencido border-st-vencido/30', Icone: UserX }
       : estado.ativo
-      ? { rotulo: 'Acesso ativo', cls: 'bg-emerald-100 text-emerald-800 border-emerald-300', Icone: ShieldCheck }
-      : { rotulo: 'Acesso desativado', cls: 'bg-slate-200 text-slate-700 border-slate-300', Icone: ShieldOff }
+      ? { rotulo: 'Acesso ativo', cls: 'bg-st-pago-bg text-st-pago', Icone: ShieldCheck }
+      : { rotulo: 'Acesso desativado', cls: 'bg-papel-3 text-tinta-2 border-linha-forte', Icone: ShieldOff }
     : senhaPreenchida
-    ? { rotulo: 'Acesso será criado', cls: 'bg-lime-100 text-lime-900 border-lime-300', Icone: ShieldCheck }
-    : { rotulo: obrigatorio ? 'Sem acesso (obrigatório)' : 'Sem acesso', cls: obrigatorio ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-slate-100 text-slate-600 border-slate-300', Icone: ShieldOff };
+    ? { rotulo: 'Acesso será criado', cls: 'bg-st-pago-bg text-st-pago', Icone: ShieldCheck }
+    : { rotulo: obrigatorio ? 'Sem acesso (obrigatório)' : 'Sem acesso', cls: obrigatorio ? 'bg-st-aguardando-bg text-st-aguardando border-st-aguardando/30' : 'bg-papel-2 text-tinta-2 border-linha-forte', Icone: ShieldOff };
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-emerald-900/20 bg-[linear-gradient(135deg,#f3faf6_0%,#ffffff_55%,#eef7f1_100%)]">
-      <div aria-hidden="true" className="pointer-events-none absolute -top-20 -right-16 w-56 h-56 rounded-full bg-emerald-400/15 blur-3xl" />
+    <section className="relative overflow-hidden rounded-md border border-linha bg-papel">
+      <div aria-hidden="true" className="h-[3px] filete-ouro" />
 
       {/* Cabeçalho */}
       <div className="relative flex flex-wrap items-start justify-between gap-3 px-4 sm:px-5 pt-4 pb-3">
         <div className="flex items-start gap-3 min-w-0">
-          <span className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-emerald-700 to-[#022013] text-emerald-200 flex items-center justify-center shadow-[0_8px_20px_-8px_rgba(6,78,59,0.8)]">
-            <KeyRound className="w-5 h-5" />
-          </span>
+          <KeyRound className="w-4 h-4 shrink-0 mt-0.5 text-ouro-escuro" />
           <div className="min-w-0">
-            <h3 className="text-xs font-black uppercase tracking-[0.12em] text-emerald-900">{titulo}</h3>
-            <p className="text-[11px] text-slate-600 mt-0.5">{descricao}</p>
+            <h3 className="text-[15px] font-bold tracking-[-0.01em] text-tinta">{titulo}</h3>
+            <p className="text-[11px] text-tinta-2 mt-0.5">{descricao}</p>
           </div>
         </div>
-        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black border ${situacao.cls}`}>
+        <span className={`inline-flex items-center gap-1 px-2 py-[3px] rounded-[4px] text-[11px] font-semibold ${situacao.cls}`}>
           <situacao.Icone className="w-3 h-3" />
           {situacao.rotulo}
         </span>
@@ -153,17 +151,17 @@ export function AcessoPortalSecao({ titulo, descricao, existente, estado, onChan
 
       <div className="relative px-4 sm:px-5 pb-4 space-y-3">
         {existente && (
-          <div className="text-[11px] text-slate-600">
-            Login atual: <strong className="font-mono text-slate-900">{existente.usuario}</strong>
+          <div className="text-[11px] text-tinta-2">
+            Login atual: <strong className="tabular-nums text-tinta">{existente.usuario}</strong>
             {' · '}Deixe a senha em branco para manter a atual.
           </div>
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className="block text-[11px] font-bold text-slate-700 mb-1">Login (e-mail){obrigatorio && !existente ? ' *' : ''}</label>
+            <label className="block text-[11px] font-bold text-tinta-2 mb-1">Login (e-mail){obrigatorio && !existente ? ' *' : ''}</label>
             <div className="relative">
-              <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-emerald-700/60" />
+              <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-eno-700/60" />
               <input
                 type="text"
                 inputMode="email"
@@ -176,24 +174,24 @@ export function AcessoPortalSecao({ titulo, descricao, existente, estado, onChan
               />
             </div>
             {!existente && !estado.loginEditado && (
-              <p className="text-[10px] text-slate-500 mt-1">Acompanha o e-mail do cadastro. Pode editar.</p>
+              <p className="text-[10px] text-cinza mt-1">Acompanha o e-mail do cadastro. Pode editar.</p>
             )}
             {estado.loginEditado && !existente && emailSugerido && estado.login.trim().toLowerCase() !== emailSugerido.trim().toLowerCase() && (
               <button
                 type="button"
                 onClick={() => set({ login: '', loginEditado: false })}
-                className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 hover:text-emerald-950 cursor-pointer"
+                className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-eno-800 hover:text-eno-950 cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" /> Usar o e-mail do cadastro
               </button>
             )}
           </div>
           <div>
-            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+            <label className="block text-[11px] font-bold text-tinta-2 mb-1">
               {existente ? 'Nova senha (opcional)' : `Senha${obrigatorio ? ' *' : ''}`}
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-emerald-700/60" />
+              <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-eno-700/60" />
               <input
                 type="password"
                 autoComplete="new-password"
@@ -204,12 +202,12 @@ export function AcessoPortalSecao({ titulo, descricao, existente, estado, onChan
                 className={inputCls}
               />
             </div>
-            {senhaCurta && <p className="text-[10px] text-red-600 font-bold mt-1">Mínimo de {SENHA_MINIMA} caracteres.</p>}
+            {senhaCurta && <p className="text-[10px] text-st-vencido font-bold mt-1">Mínimo de {SENHA_MINIMA} caracteres.</p>}
           </div>
           <div>
-            <label className="block text-[11px] font-bold text-slate-700 mb-1">Confirmar senha</label>
+            <label className="block text-[11px] font-bold text-tinta-2 mb-1">Confirmar senha</label>
             <div className="relative">
-              <ShieldCheck className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-emerald-700/60" />
+              <ShieldCheck className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-eno-700/60" />
               <input
                 type="password"
                 autoComplete="new-password"
@@ -220,23 +218,23 @@ export function AcessoPortalSecao({ titulo, descricao, existente, estado, onChan
                 className={inputCls}
               />
             </div>
-            {senhasDiferentes && <p className="text-[10px] text-red-600 font-bold mt-1">A confirmação não confere.</p>}
+            {senhasDiferentes && <p className="text-[10px] text-st-vencido font-bold mt-1">A confirmação não confere.</p>}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1">
-          <label className={`flex items-center gap-2 text-xs font-bold ${bloqueado ? 'text-slate-400' : 'text-slate-800'} cursor-pointer`}>
+          <label className={`flex items-center gap-2 text-xs font-bold ${bloqueado ? 'text-cinza' : 'text-tinta'} cursor-pointer`}>
             <input
               type="checkbox"
               disabled={bloqueado}
               checked={estado.ativo}
               onChange={e => set({ ativo: e.target.checked })}
-              className="w-4 h-4 accent-emerald-700"
+              className="w-4 h-4 accent-eno-700"
             />
             Acesso ativo (pode entrar no portal)
           </label>
           {existente && permitirRemover && (
-            <label className="flex items-center gap-2 text-xs font-bold text-red-700 cursor-pointer">
+            <label className="flex items-center gap-2 text-xs font-bold text-st-vencido cursor-pointer">
               <input
                 type="checkbox"
                 checked={estado.remover}
@@ -249,7 +247,7 @@ export function AcessoPortalSecao({ titulo, descricao, existente, estado, onChan
         </div>
 
         {!existente && !senhaPreenchida && (
-          <p className={`flex items-start gap-1.5 text-[11px] ${obrigatorio ? 'text-amber-800' : 'text-slate-500'}`}>
+          <p className={`flex items-start gap-1.5 text-[11px] ${obrigatorio ? 'text-st-aguardando' : 'text-cinza'}`}>
             <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             {obrigatorio
               ? 'Defina a senha para liberar o portal. Salvar sem acesso pede confirmação.'

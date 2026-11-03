@@ -1,18 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import {
-  TrendingUp,
-  Plus,
-  Search,
-  DollarSign,
-  Calendar,
-  Building2,
-  Trash2,
-  X,
-  CheckCircle2,
-  Sparkles,
-  PieChart,
-  Wallet
-} from 'lucide-react';
+import { Plus, Trash2, Save } from 'lucide-react';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, Segmentado, CampoBusca } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { CardNumero } from '../ui/CardNumero';
+import { EstadoVazio } from '../ui/EstadoVazio';
+import { ModalFolha, Campo, campo, FaixaFin, ListaCartoes, ItemCartao, moedaSemSimbolo, botaoLinhaExcluir } from './finUi';
 import {
   LancamentoReceita,
   carregarReceitasExtras,
@@ -135,323 +128,200 @@ export function FinanceiroLancarReceita({ onNavigate }: Props) {
     }
   };
 
+  const ROTULO_CURTO: Record<string, string> = {
+    'Venda de Resíduo/Bagaço Úmido': 'Bagaço úmido',
+    'Venda de Cascas/Destopo': 'Cascas e destopo',
+    'Rendimento de Aplicação Financeira': 'Aplicação financeira',
+    'Bonificação/Reembolso': 'Bonificação e reembolso',
+    'Outras Receitas': 'Outras',
+  };
+  const contagemOrigem = (o: string) => receitas.filter(r => r.origem === o).length;
+  const vazioPorFiltro = receitas.length > 0 && receitasFiltradas.length === 0;
+
+  const botaoNovo = (
+    <BotaoPrimario onClick={() => setModalNovo(true)} className="w-full sm:w-auto h-11 sm:h-9">
+      <Plus className="w-4 h-4" /> Lançar receita
+    </BotaoPrimario>
+  );
+
   return (
-    <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-hidden">
-      
-      {/* 1. NAVEGAÇÃO FINANCEIRO */}
+    <div className="relative h-full w-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
       <FinanceiroNavTabs activeTab="financeiro_lancar_receita" onNavigate={onNavigate} />
 
-      {/* 2. CABEÇALHO COMPACTO & MINIMALISTA */}
-      <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Lançamento de Receitas & Subprodutos</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono">
-                {receitas.length} entradas
-              </span>
-            </h1>
-          </div>
-
-          <button
-            onClick={() => setModalNovo(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-900 hover:bg-emerald-950 text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Lançar Nova Receita</span>
-          </button>
-        </div>
-
-        {/* 3. BARRA HORIZONTAL DE MÉTRICAS */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mt-3 pt-3 border-t border-slate-100">
-          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200/70">
-            <DollarSign className="w-4 h-4 text-emerald-700 shrink-0" />
-            <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Receitas Extras</div>
-              <div className="text-sm font-black text-emerald-900 font-mono">
-                {formatarMoeda(totalReceitas)}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200/70">
-            <Sparkles className="w-4 h-4 text-amber-700 shrink-0" />
-            <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Subprodutos (Bagaço / Cascas)</div>
-              <div className="text-sm font-black text-amber-900 font-mono">
-                {formatarMoeda(receitasSubprodutos)}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200/70">
-            <TrendingUp className="w-4 h-4 text-blue-700 shrink-0" />
-            <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Rendimentos Financeiros</div>
-              <div className="text-sm font-black text-blue-900 font-mono">
-                {formatarMoeda(rendimentosAplicacoes)}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 4. BARRA DE BUSCA E FILTROS */}
-      <div className="bg-[#f1f5f2] px-6 py-2.5 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="flex-1 min-w-[260px] max-w-sm relative">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por descrição, comprador ou conta..."
-            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-700 font-medium"
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px]">
+          <CabecalhoPagina
+            titulo="Receitas extras"
+            resumo={
+              receitas.length === 0 ? 'Subprodutos, rendimentos e reembolsos que entram no caixa' : (
+                <>
+                  <span className="font-semibold text-tinta-2">{receitas.length} {receitas.length === 1 ? 'lançamento' : 'lançamentos'}</span>
+                  <span> · entram direto no caixa</span>
+                </>
+              )
+            }
+            acoes={receitas.length === 0 ? undefined : botaoNovo}
           />
-        </div>
 
-        <div className="flex items-center gap-1.5 text-xs overflow-x-auto no-scrollbar">
-          <span className="text-slate-500 font-semibold text-[11px] mr-1">Origem:</span>
-          {['TODAS', ...ORIGENS_RECEITA].map((origem) => (
-            <button
-              key={origem}
-              onClick={() => setFiltroOrigem(origem)}
-              className={`px-2.5 py-1 rounded-md font-medium text-xs whitespace-nowrap transition-colors cursor-pointer ${
-                filtroOrigem === origem
-                  ? 'bg-slate-800 text-white font-bold'
-                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              {origem === 'TODAS' ? 'Todas as Fontes' : origem}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 5. TABELA LIMPA */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/90 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
-                <th className="py-3 px-5">Data</th>
-                <th className="py-3 px-4">Origem / Categoria</th>
-                <th className="py-3 px-4">Pagador / Destino</th>
-                <th className="py-3 px-4">Descrição do Lançamento</th>
-                <th className="py-3 px-4">Conta Creditada & Forma</th>
-                <th className="py-3 px-4 text-right">Valor Líquido</th>
-                <th className="py-3 px-5 text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {receitasFiltradas.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
-                    Nenhum lançamento de receita encontrado.
-                  </td>
-                </tr>
-              ) : (
-                receitasFiltradas.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3.5 px-5 font-mono font-semibold text-slate-700 whitespace-nowrap">
-                      {formatarDataBR(item.data)}
-                    </td>
-
-                    <td className="py-3.5 px-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold ${
-                        item.origem.includes('Bagaço')
-                          ? 'bg-amber-100 text-amber-900 border border-amber-200/60'
-                          : item.origem.includes('Cascas')
-                          ? 'bg-orange-100 text-orange-900 border border-orange-200/60'
-                          : item.origem.includes('Aplicação')
-                          ? 'bg-blue-100 text-blue-900 border border-blue-200/60'
-                          : 'bg-emerald-100 text-emerald-900 border border-emerald-200/60'
-                      }`}>
-                        {item.origem}
-                      </span>
-                    </td>
-
-                    <td className="py-3.5 px-4 font-bold text-slate-900">
-                      {item.comprador_origem}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-slate-600 font-medium max-w-xs truncate">
-                      {item.descricao}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-slate-600">
-                      <div className="font-semibold text-slate-800">{item.conta_creditada}</div>
-                      <div className="text-[11px] text-slate-400 font-medium">{item.forma_recebimento}</div>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-700 text-sm whitespace-nowrap">
-                      + {formatarMoeda(item.valor)}
-                    </td>
-
-                    <td className="py-3.5 px-5 text-right">
-                      <button
-                        onClick={() => handleExcluir(item.id)}
-                        title="Estornar lançamento"
-                        className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* MODAL NOVO LANÇAMENTO DE RECEITA (AMPLO E HORIZONTAL) */}
-      {modalNovo && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-4xl sm:max-w-5xl w-full overflow-hidden my-auto flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-900/80 border border-emerald-700 flex items-center justify-center text-emerald-300">
-                  <TrendingUp className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-white text-sm sm:text-base">
-                    Lançar Nova Receita / Subproduto
-                  </h3>
-                  <p className="text-[11px] text-slate-400">Venda de fécula, farinha, bagaço úmido, casca ou receitas financeiras</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setModalNovo(false)}
-                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 cursor-pointer transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
+          {receitas.length > 0 && (
+            <div className="px-4 sm:px-6 pb-4">
+              <FaixaFin colunas="lg:grid-cols-[1.45fr_1fr_1fr]">
+                <CardNumero destaque rotulo="Total de receitas extras" unidade="R$" unidadeAntes valor={moedaSemSimbolo(totalReceitas)} />
+                <CardNumero rotulo="Subprodutos" unidade="R$" unidadeAntes valor={moedaSemSimbolo(receitasSubprodutos)} detalhe="Bagaço, cascas e destopo" />
+                <CardNumero rotulo="Rendimentos" unidade="R$" unidadeAntes valor={moedaSemSimbolo(rendimentosAplicacoes)} detalhe="Aplicação financeira" />
+              </FaixaFin>
             </div>
+          )}
 
-            <form onSubmit={handleSalvar} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Data do Recebimento *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={paraISO(formData.data)}
-                    onChange={(e) => setFormData({ ...formData, data: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono text-slate-900 focus:outline-none focus:border-emerald-700 bg-slate-50"
-                  />
-                </div>
+          {receitas.length > 0 && (
+            <BarraFiltros>
+              <Segmentado<string>
+                rotuloAria="Origem da receita"
+                valor={filtroOrigem}
+                onChange={setFiltroOrigem}
+                opcoes={[
+                  { valor: 'TODAS', rotulo: 'Todas', contagem: receitas.length },
+                  ...ORIGENS_RECEITA.map(o => ({ valor: o as string, rotulo: ROTULO_CURTO[o] || o, contagem: contagemOrigem(o) })),
+                ]}
+              />
+              <CampoBusca valor={busca} onChange={setBusca} placeholder="Buscar descrição, pagador ou conta" className="w-full md:w-72 shrink-0" />
+            </BarraFiltros>
+          )}
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Origem / Categoria *
-                  </label>
-                  <select
-                    value={formData.origem}
-                    onChange={(e) => setFormData({ ...formData, origem: e.target.value as any })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-slate-900 font-semibold focus:outline-none focus:border-emerald-700 bg-slate-50 cursor-pointer"
-                  >
-                    {ORIGENS_RECEITA.map((orig) => (
-                      <option key={orig} value={orig}>{orig}</option>
+          <div className="px-4 sm:px-6 pb-6">
+            {receitasFiltradas.length === 0 ? (
+              <div className="bg-papel border border-linha rounded-md">
+                <EstadoVazio
+                  titulo={vazioPorFiltro ? 'Nenhuma receita com esses filtros' : 'Nenhuma receita extra lançada'}
+                  texto={vazioPorFiltro
+                    ? 'Mude a origem ou a busca para ver os outros lançamentos.'
+                    : 'Lance a venda de bagaço, cascas, rendimentos de aplicação e reembolsos. O valor entra no caixa na hora.'}
+                  acao={vazioPorFiltro
+                    ? <BotaoSecundario onClick={() => { setBusca(''); setFiltroOrigem('TODAS'); }}>Limpar filtros</BotaoSecundario>
+                    : botaoNovo}
+                />
+              </div>
+            ) : (
+              <>
+                <ListaCartoes>
+                  {receitasFiltradas.map(item => (
+                    <ItemCartao key={item.id}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-[11.5px] text-cinza tabular-nums truncate">{formatarDataBR(item.data)} · {ROTULO_CURTO[item.origem] || item.origem}</div>
+                          <div className="text-[14px] font-bold text-tinta truncate">{item.comprador_origem}</div>
+                          {item.descricao && <div className="text-[12px] text-cinza line-clamp-2">{item.descricao}</div>}
+                        </div>
+                        <span className="text-[17px] font-extrabold tracking-[-0.01em] tabular-nums text-st-pago whitespace-nowrap">+ {formatarMoeda(item.valor)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 mt-1.5">
+                        <span className="text-[12px] text-cinza truncate">{[item.conta_creditada, item.forma_recebimento].filter(Boolean).join(' · ') || 'Conta não informada'}</span>
+                        <button type="button" onClick={() => handleExcluir(item.id)} className={botaoLinhaExcluir} aria-label="Estornar lançamento" title="Estornar lançamento">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </ItemCartao>
+                  ))}
+                </ListaCartoes>
+
+                <TabelaDados className="hidden sm:block">
+                  <thead className={tabela.thead}>
+                    <tr>
+                      <Th>Data</Th>
+                      <Th>Origem</Th>
+                      <Th>Pagador e descrição</Th>
+                      <Th>Conta e forma</Th>
+                      <Th numero>Valor</Th>
+                      <Th className="text-right">Ação</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receitasFiltradas.map(item => (
+                      <tr key={item.id} className={tabela.tr}>
+                        <Td className="whitespace-nowrap tabular-nums">{formatarDataBR(item.data)}</Td>
+                        <Td className="whitespace-nowrap">{ROTULO_CURTO[item.origem] || item.origem}</Td>
+                        <Td className="max-w-[380px]">
+                          <div className="font-semibold text-tinta truncate">{item.comprador_origem}</div>
+                          <div className="text-[11.5px] text-cinza truncate">{item.descricao}</div>
+                        </Td>
+                        <Td className="max-w-[260px]">
+                          <div className="truncate">{item.conta_creditada || <span className="text-cinza-claro">—</span>}</div>
+                          <div className="text-[11.5px] text-cinza truncate">{item.forma_recebimento}</div>
+                        </Td>
+                        <Td numero><span className="font-bold text-st-pago text-[13.5px]">+ {formatarMoeda(item.valor)}</span></Td>
+                        <Td className="text-right">
+                          <button type="button" onClick={() => handleExcluir(item.id)} className={botaoLinhaExcluir} title="Estornar lançamento" aria-label="Estornar lançamento">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </Td>
+                      </tr>
                     ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Valor Recebido (R$) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={formData.valor}
-                    onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
-                    placeholder="0.00"
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono font-bold text-emerald-950 focus:outline-none focus:border-emerald-700 bg-slate-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Forma de Recebimento
-                  </label>
-                  <select
-                    value={formData.forma_recebimento}
-                    onChange={(e) => setFormData({ ...formData, forma_recebimento: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-emerald-700 bg-slate-50 cursor-pointer font-medium"
-                  >
-                    <option value="PIX à Vista">PIX à Vista</option>
-                    <option value="Transferência TED">Transferência TED</option>
-                    <option value="Boleto Bancário">Boleto Bancário</option>
-                    <option value="Depósito em Dinheiro">Depósito em Dinheiro</option>
-                    <option value="Crédito em Conta">Crédito em Conta</option>
-                  </select>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Comprador / Pagador / Fonte *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.comprador_origem}
-                    onChange={(e) => setFormData({ ...formData, comprador_origem: e.target.value })}
-                    placeholder="Ex: Confinamento Santa Luzia (Gado de Corte)"
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-emerald-700 bg-slate-50"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Conta Bancária Creditada
-                  </label>
-                  <select
-                    value={formData.conta_creditada}
-                    onChange={(e) => setFormData({ ...formData, conta_creditada: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-emerald-700 bg-slate-50 cursor-pointer font-medium"
-                  >
-                    <option value="Banco do Brasil - Conta Movimento">Banco do Brasil - Conta Movimento (Ag. 0048 / CC 18492-1)</option>
-                    <option value="Itaú Unibanco - Conta Giro">Itaú Unibanco - Conta Giro (Ag. 1892 / CC 09123-5)</option>
-                    <option value="Sicoob Agro - Cooperativa">Sicoob Agro - Cooperativa (Ag. 4310 / CC 33019-9)</option>
-                    <option value="Conta Aplicação Automática">Conta Aplicação Automática (Liquidez Diária)</option>
-                  </select>
-                </div>
-
-                <div className="sm:col-span-2 lg:col-span-4">
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Descrição dos Itens / Tonelagem / Detalhes
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.descricao}
-                    onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                    placeholder="Ex: 24 Ton de bagaço úmido prensado carregado a granel"
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-emerald-700 bg-slate-50"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setModalNovo(false)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold cursor-pointer shadow-sm transition-all"
-                >
-                  Salvar Receita
-                </button>
-              </div>
-            </form>
+                  </tbody>
+                </TabelaDados>
+              </>
+            )}
           </div>
         </div>
+      </div>
+
+      {modalNovo && (
+        <ModalFolha
+          titulo="Lançar receita"
+          subtitulo="Venda de bagaço ou casca, rendimento ou reembolso já recebido"
+          onFechar={() => setModalNovo(false)}
+          onSubmit={handleSalvar}
+          largura="sm:max-w-2xl"
+          rodape={
+            <>
+              <BotaoSecundario onClick={() => setModalNovo(false)}>Cancelar</BotaoSecundario>
+              <BotaoPrimario type="submit"><Save className="w-4 h-4" /> Salvar receita</BotaoPrimario>
+            </>
+          }
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Campo rotulo="Origem *">
+              <select value={formData.origem} onChange={e => setFormData({ ...formData, origem: e.target.value as any })} className={`${campo} cursor-pointer`}>
+                {ORIGENS_RECEITA.map(orig => <option key={orig} value={orig}>{orig}</option>)}
+              </select>
+            </Campo>
+            <Campo rotulo="Valor recebido (R$) *">
+              <input type="number" step="0.01" required inputMode="decimal" value={formData.valor}
+                onChange={e => setFormData({ ...formData, valor: e.target.value })}
+                placeholder="0,00" className={`${campo} font-semibold`} />
+            </Campo>
+            <Campo rotulo="Pagador ou fonte *" className="sm:col-span-2">
+              <input type="text" required value={formData.comprador_origem}
+                onChange={e => setFormData({ ...formData, comprador_origem: e.target.value })}
+                placeholder="Confinamento Santa Luzia" className={campo} />
+            </Campo>
+            <Campo rotulo="Data do recebimento *">
+              <input type="date" required value={paraISO(formData.data)}
+                onChange={e => setFormData({ ...formData, data: e.target.value })} className={campo} />
+            </Campo>
+            <Campo rotulo="Forma de recebimento">
+              <select value={formData.forma_recebimento} onChange={e => setFormData({ ...formData, forma_recebimento: e.target.value })} className={`${campo} cursor-pointer`}>
+                <option value="PIX à Vista">PIX à Vista</option>
+                <option value="Transferência TED">Transferência TED</option>
+                <option value="Boleto Bancário">Boleto Bancário</option>
+                <option value="Depósito em Dinheiro">Depósito em Dinheiro</option>
+                <option value="Crédito em Conta">Crédito em Conta</option>
+              </select>
+            </Campo>
+            <Campo rotulo="Conta creditada" className="sm:col-span-2">
+              <select value={formData.conta_creditada} onChange={e => setFormData({ ...formData, conta_creditada: e.target.value })} className={`${campo} cursor-pointer`}>
+                <option value="Banco do Brasil - Conta Movimento">Banco do Brasil - Conta Movimento (Ag. 0048 / CC 18492-1)</option>
+                <option value="Itaú Unibanco - Conta Giro">Itaú Unibanco - Conta Giro (Ag. 1892 / CC 09123-5)</option>
+                <option value="Sicoob Agro - Cooperativa">Sicoob Agro - Cooperativa (Ag. 4310 / CC 33019-9)</option>
+                <option value="Conta Aplicação Automática">Conta Aplicação Automática (Liquidez Diária)</option>
+              </select>
+            </Campo>
+            <Campo rotulo="Descrição" className="sm:col-span-2">
+              <input type="text" value={formData.descricao}
+                onChange={e => setFormData({ ...formData, descricao: e.target.value })}
+                placeholder="24 t de bagaço úmido prensado a granel" className={campo} />
+            </Campo>
+          </div>
+        </ModalFolha>
       )}
     </div>
   );

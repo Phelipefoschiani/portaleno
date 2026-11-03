@@ -1,26 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  Tractor,
-  Calendar,
-  Scale,
-  DollarSign,
-  TrendingUp,
-  MapPin,
-  Clock,
-  ArrowLeft,
-  FileText,
-  Search,
-  CheckCircle2,
-  Printer,
-  ChevronRight,
-  User,
-  ShieldCheck,
-  Phone,
-  CreditCard,
-  Building2,
-  Sparkles,
-  Download
-} from 'lucide-react';
+import { X } from 'lucide-react';
 import {
   CalculoNaRoca,
   carregarCalculosNaRoca,
@@ -32,6 +11,9 @@ import { formatarMoeda } from '../../data/financeiroData';
 import type { Agricultor } from '../../data/mockStore';
 import { carregarAgricultores, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
 import { formatarDataBR } from '../../lib/datas';
+import { CabecalhoPagina } from '../ui/CabecalhoPagina';
+import { EstadoVazio } from '../ui/EstadoVazio';
+import { MolduraPortal, SeletorAdminPortal } from './MolduraPortal';
 
 interface PortalAgricultorProps {
   onVoltar: () => void;
@@ -77,212 +59,125 @@ export function PortalAgricultor({ onVoltar, agricultorId, permitirSelecaoAdmin 
     return calculos.filter(c => c.fornecedor_tipo === 'AGRICULTOR' && c.fornecedor_id === agricultorAtivo.id);
   }, [calculos, agricultorAtivo]);
 
+  const kg = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+  const seletorAdmin = permitirSelecaoAdmin ? (
+    <SeletorAdminPortal
+      valor={agricultorSelecionadoId}
+      onChange={setAgricultorAdminId}
+      vazio="Administrador: escolha um produtor"
+      opcoes={agricultores.map(a => ({ id: a.id, rotulo: `${a.nome_completo} (${a.nome_propriedade || 'Propriedade'})` }))}
+    />
+  ) : null;
+
   return (
-    <div className="min-h-screen bg-[#f8faf9] text-slate-800 flex flex-col font-sans select-none">
-
-      {/* 1. TOPO DO PORTAL DEDICADO DO AGRICULTOR */}
-      <header className="sticky top-0 z-30 bg-[#022013] text-white border-b border-emerald-800 shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onVoltar}
-              className="p-2 sm:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
-              title="Voltar ao Painel Principal"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white shadow-sm">
-              <Tractor className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">
-                Grupo ENO · Mandiocultura
-              </div>
-              <h1 className="text-base sm:text-xl font-black text-white tracking-tight leading-none">
-                Portal do Produtor Rural & Pesagens
-              </h1>
-            </div>
+    <MolduraPortal
+      portal="Portal do Produtor"
+      conta={agricultorAtivo?.nome_completo}
+      contexto={agricultorAtivo ? agricultorAtivo.nome_propriedade || undefined : undefined}
+      onVoltar={onVoltar}
+      ehAdmin={permitirSelecaoAdmin}
+      seletorAdmin={seletorAdmin}
+    >
+      {!agricultorAtivo && (
+        <div className="px-3 sm:px-5 pt-6">
+          <div className="bg-papel border border-linha rounded-md">
+            <EstadoVazio
+              titulo="Usuário sem agricultor vinculado"
+              texto={permitirSelecaoAdmin
+                ? 'Escolha um produtor no seletor acima para ver o portal como ele vê.'
+                : 'Peça ao administrador para vincular seu usuário a um agricultor cadastrado em Usuários e acessos.'}
+            />
           </div>
-
-          {/* Seletor de Agricultor / Conta do Produtor */}
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex flex-col text-right">
-              <span className="text-[11px] text-emerald-300 font-semibold">Produtor Conectado</span>
-              <span className="text-xs font-black text-white truncate max-w-[220px]">
-                {agricultorAtivo?.nome_completo || 'Produtor Rural'}
-              </span>
-            </div>
-            {permitirSelecaoAdmin && (
-            <select
-              value={agricultorSelecionadoId}
-              onChange={(e) => setAgricultorAdminId(e.target.value)}
-              className="bg-emerald-950/80 border border-emerald-600/50 text-white text-xs font-bold rounded-xl px-3 py-2 outline-none cursor-pointer hover:border-emerald-400"
-              title="Visualizar como (somente administrador)"
-            >
-              <option value="" className="bg-slate-900 text-white">Administrador: escolha um produtor</option>
-              {agricultores.map(a => (
-                <option key={a.id} value={a.id} className="bg-slate-900 text-white">
-                  {a.nome_completo} ({a.nome_propriedade || 'Propriedade'})
-                </option>
-              ))}
-            </select>
-            )}
-          </div>
-
         </div>
-      </header>
+      )}
 
-      {/* 2. CONTEÚDO PRINCIPAL */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-
-        {!agricultorAtivo && (
-          <div className="bg-white rounded-2xl border border-amber-200 p-8 max-w-md mx-auto text-center shadow-xs">
-            <Tractor className="w-10 h-10 mx-auto text-amber-500 mb-3" />
-            <h2 className="text-lg font-black text-slate-900">Usuário sem agricultor vinculado</h2>
-            <p className="text-sm text-slate-500 mt-1">
-              {permitirSelecaoAdmin
-                ? 'Selecione um produtor cadastrado acima para visualizar o portal.'
-                : 'Peça ao administrador para vincular seu usuário a um agricultor cadastrado em "Usuários e Acessos".'}
-            </p>
+      {agricultorAtivo && (
+        <>
+          <CabecalhoPagina
+            titulo={agricultorAtivo.nome_completo}
+            resumo={[
+              agricultorAtivo.nome_propriedade,
+              `${agricultorAtivo.endereco.municipio}/${agricultorAtivo.endereco.uf}${agricultorAtivo.endereco.comunidade_bairro ? ` (${agricultorAtivo.endereco.comunidade_bairro})` : ''}`,
+              agricultorAtivo.cpf_cnpj,
+            ].filter(Boolean).join(' · ')}
+            className="!px-3 sm:!px-5"
+          />
+          {/* PIX cadastrado para pagamento: uma linha, sem caixa extra */}
+          <div className="mx-3 sm:mx-5 mb-4 flex flex-wrap items-baseline gap-x-3 sm:gap-x-6 gap-y-1 border-y border-linha py-2.5 text-[13px]">
+            <span className="basis-full sm:basis-auto text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza">PIX para pagamento</span>
+            <span className="font-semibold text-tinta tabular-nums break-all">{agricultorAtivo.chave_pix || 'Chave ainda não cadastrada'}</span>
+            <span className="text-cinza">{agricultorAtivo.tipo_chave_pix}{agricultorAtivo.banco_nome ? ` · ${agricultorAtivo.banco_nome}` : ''}</span>
           </div>
-        )}
-
-        {/* Identificação do Agricultor e Propriedade */}
-        {agricultorAtivo && (
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-start sm:items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
-                <User className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-black text-slate-900">
-                    {agricultorAtivo.nome_completo}
-                  </h2>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    Fornecedor Ativo de Mandioca
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 mt-1">
-                  <span className="flex items-center gap-1 font-semibold text-emerald-800">
-                    <Building2 className="w-3.5 h-3.5" />
-                    {agricultorAtivo.nome_propriedade || 'Propriedade Rural'}
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                    {agricultorAtivo.endereco.municipio}/{agricultorAtivo.endereco.uf} ({agricultorAtivo.endereco.comunidade_bairro})
-                  </span>
-                  <span>•</span>
-                  <span className="font-mono">CPF/CNPJ: {agricultorAtivo.cpf_cnpj}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Dados PIX cadastrados para liquidação imediata */}
-            <div className="bg-emerald-50/70 border border-emerald-200/70 rounded-xl p-3 text-xs w-full md:w-auto">
-              <div className="text-[10px] uppercase font-bold text-emerald-800 flex items-center gap-1.5">
-                <CreditCard className="w-3.5 h-3.5 text-emerald-700" />
-                Dados PIX Cadastrados para Pagamento
-              </div>
-              <div className="font-mono font-bold text-slate-900 mt-1 text-sm">
-                {agricultorAtivo.chave_pix || 'Aguardando cadastro de chave'}
-              </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">
-                Tipo: {agricultorAtivo.tipo_chave_pix} · Banco: {agricultorAtivo.banco_nome || 'Conta Bancária Rural'}
-              </div>
-            </div>
+          {/* Extrato: totais, filtro por período/safra, pagamentos e comprovantes (somente as pesagens deste produtor) */}
+          <div className="px-3 sm:px-5">
+            <ExtratoAgricultor calculos={pesagensDoAgricultor} onVerTicket={setTicketModal} />
           </div>
-        )}
+        </>
+      )}
 
-        {/* Extrato: totais, filtro por período/safra, pagamentos e comprovantes (somente as pesagens deste produtor) */}
-        {agricultorAtivo && (
-          <ExtratoAgricultor calculos={pesagensDoAgricultor} onVerTicket={setTicketModal} />
-        )}
-
-      </main>
-
-      {/* Modal Visualizar Ticket Individual */}
+      {/* Comprovante de pesagem: tela cheia no celular, janela no computador */}
       {ticketModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-emerald-900/20 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-emerald-700">Comprovante Oficial de Pesagem</span>
-                <h3 className="text-lg font-black text-slate-900">{ticketModal.numero_ticket}</h3>
+        <div className="fixed inset-0 z-50 bg-eno-950/60 flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label={`Comprovante ${ticketModal.numero_ticket}`}>
+          <div className="bg-papel w-full sm:max-w-lg h-dvh sm:h-auto sm:max-h-[90vh] sm:rounded-md border border-linha flex flex-col overflow-hidden shadow-[0_24px_60px_-20px_rgba(4,32,19,0.6)]">
+            <div className="h-[3px] filete-ouro shrink-0" aria-hidden />
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-linha shrink-0">
+              <div className="min-w-0">
+                <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza">Comprovante de pesagem</div>
+                <h3 className="text-[18px] font-extrabold text-tinta tabular-nums truncate">{ticketModal.numero_ticket}</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setTicketModal(null)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                className="w-10 h-10 inline-flex items-center justify-center rounded-md text-cinza hover:text-tinta hover:bg-papel-3 cursor-pointer"
+                aria-label="Fechar"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="py-4 space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl">
-                <div>
-                  <div className="text-slate-500">Produtor:</div>
-                  <div className="font-bold text-slate-900">{ticketModal.fornecedor_nome}</div>
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 text-[13px]">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <div><dt className="text-[11.5px] text-cinza">Produtor</dt><dd className="font-semibold text-tinta">{ticketModal.fornecedor_nome}</dd></div>
+                <div><dt className="text-[11.5px] text-cinza">Data e hora</dt><dd className="font-semibold text-tinta tabular-nums">{formatarDataBR(ticketModal.data)} {ticketModal.hora}</dd></div>
+                <div><dt className="text-[11.5px] text-cinza">Local da roça</dt><dd className="font-semibold text-tinta">{ticketModal.local_pesagem}</dd></div>
+                <div><dt className="text-[11.5px] text-cinza">Pesador</dt><dd className="font-semibold text-tinta">{ticketModal.pesador_responsavel}</dd></div>
+              </dl>
+
+              <div className="border border-linha rounded-md overflow-hidden">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-linha">
+                  {[
+                    ['Sacos', `${ticketModal.total_sacos}`],
+                    ['Peso bruto', `${kg(pesosDoCalculo(ticketModal).bruto)} kg`],
+                    ['Desconto', `− ${kg(pesosDoCalculo(ticketModal).desconto)} kg`],
+                    ['Peso líquido', `${kg(pesosDoCalculo(ticketModal).liquido)} kg`],
+                  ].map(([r, v]) => (
+                    <div key={r} className="bg-papel px-3 py-2.5">
+                      <div className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-cinza">{r}</div>
+                      <div className="mt-1 text-[15px] font-extrabold text-tinta tabular-nums">{v}</div>
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <div className="text-slate-500">Data / Hora:</div>
-                  <div className="font-bold text-slate-900">{formatarDataBR(ticketModal.data)} {ticketModal.hora}</div>
-                </div>
-                <div>
-                  <div className="text-slate-500">Local da Roça:</div>
-                  <div className="font-bold text-slate-900">{ticketModal.local_pesagem}</div>
-                </div>
-                <div>
-                  <div className="text-slate-500">Pesador / Conferente:</div>
-                  <div className="font-bold text-slate-900">{ticketModal.pesador_responsavel}</div>
+                <div className="px-3 py-2 text-[12px] text-cinza border-t border-linha tabular-nums">
+                  Média por saco: {ticketModal.peso_medio_saco_kg.toFixed(1)} kg
+                  {descricaoDesconto(ticketModal) && <span className="block text-st-aguardando">Desconto aplicado: {descricaoDesconto(ticketModal)}</span>}
                 </div>
               </div>
 
-              <div className="border border-slate-200 rounded-xl p-3">
-                <div className="font-bold text-slate-800 mb-2">Resumo da Carga:</div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                  <div className="bg-emerald-50 p-2 rounded-lg">
-                    <div className="text-[10px] text-slate-500">Total Sacos</div>
-                    <div className="text-base font-black text-emerald-800">{ticketModal.total_sacos} sc</div>
-                  </div>
-                  <div className="bg-slate-50 p-2 rounded-lg">
-                    <div className="text-[10px] text-slate-500">Peso Bruto</div>
-                    <div className="text-base font-black text-slate-800">{pesosDoCalculo(ticketModal).bruto.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} kg</div>
-                  </div>
-                  <div className="bg-amber-50 p-2 rounded-lg">
-                    <div className="text-[10px] text-slate-500">Desconto</div>
-                    <div className="text-base font-black text-amber-700">- {pesosDoCalculo(ticketModal).desconto.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} kg</div>
-                  </div>
-                  <div className="bg-emerald-50 p-2 rounded-lg">
-                    <div className="text-[10px] text-slate-500">Peso Líquido</div>
-                    <div className="text-base font-black text-emerald-800">{pesosDoCalculo(ticketModal).liquido.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} kg</div>
-                  </div>
-                </div>
-                {descricaoDesconto(ticketModal) && (
-                  <div className="mt-2 text-[11px] text-amber-800">Desconto aplicado: {descricaoDesconto(ticketModal)}</div>
-                )}
-                <div className="mt-1 text-[11px] text-slate-500">Média por saco: {ticketModal.peso_medio_saco_kg.toFixed(1)} kg</div>
-              </div>
-
-              <div className="bg-emerald-950 text-white rounded-xl p-4 flex items-center justify-between">
+              <div className="bg-eno-900 text-white rounded-md px-4 py-3 flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-[10px] text-emerald-300 uppercase font-semibold">Valor Total Líquido</div>
-                  <div className="text-xs text-slate-300">{formatarMoeda(ticketModal.preco_por_kg)} por kg × peso líquido</div>
+                  <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ouro-claro">Valor líquido</div>
+                  <div className="text-[12px] text-white/70 tabular-nums">{formatarMoeda(ticketModal.preco_por_kg)} por kg × peso líquido</div>
                 </div>
-                <div className="text-xl font-black text-emerald-400">
-                  {formatarMoeda(ticketModal.valor_total_estimado)}
-                </div>
+                <div className="text-[22px] font-extrabold tabular-nums">{formatarMoeda(ticketModal.valor_total_estimado)}</div>
               </div>
 
               {ticketModal.sacos && ticketModal.sacos.length > 0 && (
-                <div className="mt-2">
-                  <div className="font-bold text-slate-800 mb-1 text-[11px]">Listagem dos Sacos Pesados:</div>
-                  <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-xl p-2 grid grid-cols-4 gap-1 text-[11px] font-mono bg-slate-50">
+                <div>
+                  <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza mb-1.5">Sacos pesados</div>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 text-[12px] tabular-nums">
                     {ticketModal.sacos.map(s => (
-                      <div key={s.numero} className="p-1 bg-white rounded border border-slate-200 text-center">
-                        <span className="text-slate-400">#{s.numero}:</span> <span className="font-bold text-slate-800">{s.peso_kg.toFixed(1)}kg</span>
+                      <div key={s.numero} className="px-2 py-1 bg-papel-2 rounded border border-linha text-center">
+                        <span className="text-cinza">#{s.numero}</span> <span className="font-semibold text-tinta">{s.peso_kg.toFixed(1)} kg</span>
                       </div>
                     ))}
                   </div>
@@ -290,10 +185,11 @@ export function PortalAgricultor({ onVoltar, agricultorId, permitirSelecaoAdmin 
               )}
             </div>
 
-            <div className="pt-4 border-t border-slate-200 flex justify-end">
+            <div className="shrink-0 px-4 py-3 border-t border-linha bg-papel-2 flex justify-end" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
               <button
+                type="button"
                 onClick={() => setTicketModal(null)}
-                className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 cursor-pointer"
+                className="w-full sm:w-auto h-11 sm:h-9 px-5 rounded-md bg-eno-800 text-white text-[13px] font-semibold hover:bg-eno-900 cursor-pointer"
               >
                 Fechar
               </button>
@@ -301,7 +197,6 @@ export function PortalAgricultor({ onVoltar, agricultorId, permitirSelecaoAdmin 
           </div>
         </div>
       )}
-
-    </div>
+    </MolduraPortal>
   );
 }

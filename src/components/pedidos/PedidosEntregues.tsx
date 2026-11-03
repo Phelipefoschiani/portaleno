@@ -21,6 +21,11 @@ import {
   salvarPedidosVenda
 } from '../../data/pedidosVendaData';
 import { PedidosNavTabs } from './PedidosNavTabs';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, CampoBusca, Segmentado, SeletorFiltro } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
 import { limparEstadoProducaoFaturamento } from '../../data/pedidosVendaData';
 import { hojeISO, somarDias, formatarDataBR } from '../../lib/datas';
 
@@ -99,227 +104,221 @@ export function PedidosEntregues({ onNavigate }: Props) {
     }
   };
 
+  const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const toneladas = (kg: number) => `${(kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} t`;
+
   return (
-    <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-hidden">
-      
-      {/* 1. NAVEGAÇÃO DE ESTEIRA UNIFICADA */}
+    <div className="relative h-full w-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
+
+      {/* Abas antigas do fluxo: só fora do shell */}
       <PedidosNavTabs activeTab="pedidos_entregues" onNavigate={onNavigate} />
 
-      {/* 2. CABEÇALHO COMPACTO & MINIMALISTA */}
-      <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Pedidos Entregues</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
-                {metricas.total} finalizados
-              </span>
-            </h1>
-          </div>
-        </div>
-
-        {/* STAT BAR MINIMALISTA EM LINHA */}
-        <div className="flex flex-wrap items-center gap-6 pt-3 mt-3 border-t border-slate-100 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Faturamento Concluído:</span>
-            <span className="font-mono font-bold text-slate-900 text-sm">
-              {metricas.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Volume Total Entregue:</span>
-            <span className="font-mono font-bold text-slate-900">
-              {(metricas.volumeTotalKg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Toneladas
-            </span>
-          </div>
-        </div>
+      <div className="mx-auto w-full max-w-[1700px]">
+        <CabecalhoPagina
+          titulo="Entregues"
+          resumo={
+            metricas.total === 0
+              ? 'Nenhum pedido entregue ainda.'
+              : `${metricas.total} ${metricas.total === 1 ? 'pedido entregue' : 'pedidos entregues'} · ${moeda(metricas.valorTotal)} · ${toneladas(metricas.volumeTotalKg)}`
+          }
+        />
+        <BarraFiltros>
+          <CampoBusca valor={busca} onChange={setBusca} placeholder="Buscar pedido, NF-e, cliente ou cidade" className="w-full md:w-80" />
+        </BarraFiltros>
       </div>
 
-      {/* 3. BARRA DE BUSCA */}
-      <div className="bg-[#f1f5f2] px-6 py-2.5 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex-1 min-w-[260px] max-w-sm relative">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por Pedido, NF-e, Cliente..."
-            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-700 font-medium"
-          />
-        </div>
-      </div>
-
-      {/* 4. TABELA LIMPA */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/90 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
-                <th className="py-3 px-5">Pedido & NF-e</th>
-                <th className="py-3 px-4">Cliente / Praça</th>
-                <th className="py-3 px-4">Data de Entrega</th>
-                <th className="py-3 px-4">Volume</th>
-                <th className="py-3 px-4">Valor Total</th>
-                <th className="py-3 px-5 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {pedidosFiltrados.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
-                    Nenhum pedido entregue encontrado.
-                  </td>
-                </tr>
-              ) : (
-                pedidosFiltrados.map((item) => {
-                  return (
-                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-5">
-                        <div className="font-mono font-bold text-slate-900">
-                          {item.numero_pedido}
-                        </div>
-                        {item.nota_fiscal && (
-                          <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                            NF-e {item.nota_fiscal.numero}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px] px-4 sm:px-6 pb-6">
+          {pedidosFiltrados.length === 0 ? (
+            <div className="bg-papel border border-linha rounded-md">
+              <EstadoVazio
+                titulo={pedidos.length === 0 ? 'Nenhum pedido entregue' : 'Nada encontrado'}
+                texto={
+                  pedidos.length === 0
+                    ? 'Quando um pedido faturado tiver a entrega confirmada, ele aparece aqui com a opção de repetir a compra.'
+                    : 'Confira o número do pedido, da NF-e ou o nome do cliente.'
+                }
+              />
+            </div>
+          ) : (
+            <>
+              {/* Celular: cartões */}
+              <ul className="sm:hidden bg-papel border border-linha rounded-md">
+                {pedidosFiltrados.map(item => (
+                  <li key={item.id} className="px-3.5 py-3 border-b border-linha last:border-b-0">
+                    <button type="button" onClick={() => setModalDetalhes(item)} className="w-full text-left">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-[11.5px] text-cinza tabular-nums">
+                            {item.numero_pedido}{item.nota_fiscal ? ` · NF-e ${item.nota_fiscal.numero}` : ''}
                           </div>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900">{item.cliente_nome}</div>
-                        <div className="text-[11px] text-slate-400">{item.cliente_cidade_uf}</div>
-                      </td>
-
-                      <td className="py-3.5 px-4 font-mono text-slate-700">
-                        {formatarDataBR(item.data_entrega_realizada || item.data_previsao_entrega)}
-                        <div className="flex items-center gap-1 text-[10px] text-emerald-700 font-sans mt-0.5">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>Recebido</span>
+                          <div className="text-[14px] font-bold text-tinta truncate">{item.cliente_nome}</div>
+                          <div className="text-[11.5px] text-cinza truncate">{item.cliente_cidade_uf}</div>
                         </div>
-                      </td>
+                        <StatusChip tom="pago" className="shrink-0">Entregue</StatusChip>
+                      </div>
+                      <div className="flex items-end justify-between mt-2">
+                        <span className="text-[11.5px] text-cinza tabular-nums">
+                          {formatarDataBR(item.data_entrega_realizada || item.data_previsao_entrega)} · {toneladas(item.peso_total_kg)}
+                        </span>
+                        <span className="text-[17px] font-extrabold tracking-[-0.01em] tabular-nums text-tinta">{moeda(item.valor_total)}</span>
+                      </div>
+                    </button>
+                    <div className="flex gap-2 mt-2.5">
+                      <button
+                        type="button"
+                        onClick={() => handleRepetirPedido(item)}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-md border border-linha-forte text-tinta-2 text-[12.5px] font-semibold active:bg-papel-3"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" /> Repetir pedido
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setModalDetalhes(item)}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-md border border-linha-forte text-tinta-2 text-[12.5px] font-semibold active:bg-papel-3"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> Comprovante
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
 
-                      <td className="py-3.5 px-4 font-mono">
-                        <div className="font-bold text-slate-900">
-                          {(item.peso_total_kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Ton
-                        </div>
-                        <div className="text-[10px] text-slate-400">
-                          {item.itens.reduce((acc, i) => acc + i.quantidade, 0)} unidades
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                        {item.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        <div className="text-[10px] text-slate-400 font-normal font-sans">
-                          {item.prazo_pagamento}
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+              {/* A partir de sm: tabela densa */}
+              <TabelaDados className="hidden sm:block">
+                <thead className={tabela.thead}>
+                  <tr>
+                    <Th>Pedido</Th>
+                    <Th>Cliente</Th>
+                    <Th>Entrega</Th>
+                    <Th numero>Volume</Th>
+                    <Th numero>Valor</Th>
+                    <Th className="text-right">Ações</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pedidosFiltrados.map(item => (
+                    <tr key={item.id} onClick={() => setModalDetalhes(item)} className={`${tabela.tr} cursor-pointer group`}>
+                      <Td>
+                        <div className="font-semibold text-tinta tabular-nums whitespace-nowrap group-hover:text-eno-700">{item.numero_pedido}</div>
+                        {item.nota_fiscal && <div className="text-[11.5px] text-cinza tabular-nums">NF-e {item.nota_fiscal.numero}</div>}
+                      </Td>
+                      <Td className="max-w-[280px]">
+                        <div className="font-semibold text-tinta truncate">{item.cliente_nome}</div>
+                        <div className="text-[11.5px] text-cinza truncate">{item.cliente_cidade_uf}</div>
+                      </Td>
+                      <Td className="whitespace-nowrap tabular-nums">
+                        <div>{formatarDataBR(item.data_entrega_realizada || item.data_previsao_entrega)}</div>
+                        <StatusChip tom="pago" className="mt-0.5">Recebido</StatusChip>
+                      </Td>
+                      <Td numero>
+                        <div className="font-semibold text-tinta">{toneladas(item.peso_total_kg)}</div>
+                        <div className="text-[11.5px] text-cinza">{item.itens.reduce((acc, i) => acc + i.quantidade, 0)} un.</div>
+                      </Td>
+                      <Td numero>
+                        <div className="font-bold text-tinta text-[13.5px]">{moeda(item.valor_total)}</div>
+                        <div className="text-[11.5px] text-cinza font-normal">{item.prazo_pagamento}</div>
+                      </Td>
+                      <Td className="text-right">
+                        <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
                           <button
+                            type="button"
                             onClick={() => handleRepetirPedido(item)}
-                            className="
-                              flex items-center gap-1 px-3 py-1.5 rounded-lg
-                              bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs
-                              border border-slate-300 transition-colors cursor-pointer
-                            "
-                            title="Gerar Nova Cotação Replicando este Pedido"
+                            className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[5px] border border-linha-forte text-tinta-2 hover:bg-papel-3 text-[12px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                            title="Gerar nova cotação repetindo este pedido"
                           >
-                            <RotateCcw className="w-3.5 h-3.5" />
-                            <span>Repetir</span>
+                            <RotateCcw className="w-3.5 h-3.5" /> Repetir
                           </button>
-
                           <button
+                            type="button"
                             onClick={() => setModalDetalhes(item)}
-                            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-                            title="Ver Detalhes"
+                            className="inline-flex items-center gap-1 h-7 px-2 rounded-[5px] text-tinta-2 hover:bg-papel-3 text-[12px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye className="w-3.5 h-3.5" /> Ver
                           </button>
                         </div>
-                      </td>
+                      </Td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  ))}
+                </tbody>
+              </TabelaDados>
+            </>
+          )}
         </div>
       </div>
 
       {/* 5. MODAL DETALHES DO PEDIDO ENTREGUE (AMPLO E HORIZONTAL) */}
       {modalDetalhes && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-5xl lg:max-w-6xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-5xl lg:max-w-6xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+            <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
               <h3 className="font-bold text-sm sm:text-base text-white">Comprovante de Entrega - Pedido {modalDetalhes.numero_pedido}</h3>
-              <button onClick={() => setModalDetalhes(null)} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
+              <button onClick={() => setModalDetalhes(null)} className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-eno-800 text-eno-100 hover:text-white transition-colors cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
+            <div className="p-4 sm:p-6 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 
                 {/* Coluna 1: Dados do Cliente e Documento */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
-                  <span className="font-bold text-slate-800 uppercase tracking-wider text-xs block mb-1">
+                <div className="p-4 bg-papel-2 rounded-md border border-linha space-y-2.5">
+                  <span className="font-bold text-tinta uppercase tracking-wider text-xs block mb-1">
                     Dados da Entrega
                   </span>
-                  <div className="flex justify-between items-center py-1 border-b border-slate-200/80">
-                    <span className="text-slate-500 font-medium">Cliente:</span>
-                    <strong className="text-slate-900 font-bold">{modalDetalhes.cliente_nome}</strong>
+                  <div className="flex justify-between items-center py-1 border-b border-linha/80">
+                    <span className="text-cinza font-medium">Cliente:</span>
+                    <strong className="text-tinta font-bold">{modalDetalhes.cliente_nome}</strong>
                   </div>
-                  <div className="flex justify-between items-center py-1 border-b border-slate-200/80">
-                    <span className="text-slate-500 font-medium">Entregue em:</span>
-                    <span className="font-mono text-slate-700 font-bold">{modalDetalhes.data_entrega_realizada}</span>
+                  <div className="flex justify-between items-center py-1 border-b border-linha/80">
+                    <span className="text-cinza font-medium">Entregue em:</span>
+                    <span className="tabular-nums text-tinta-2 font-bold">{modalDetalhes.data_entrega_realizada}</span>
                   </div>
                   {modalDetalhes.nota_fiscal && (
-                    <div className="flex justify-between items-center py-1 border-b border-slate-200/80">
-                      <span className="text-slate-500 font-medium">Documento Fiscal:</span>
-                      <span className="font-mono text-emerald-900 font-bold">NF-e {modalDetalhes.nota_fiscal.numero}</span>
+                    <div className="flex justify-between items-center py-1 border-b border-linha/80">
+                      <span className="text-cinza font-medium">Documento Fiscal:</span>
+                      <span className="tabular-nums text-eno-800 font-bold">NF-e {modalDetalhes.nota_fiscal.numero}</span>
                     </div>
                   )}
                   {modalDetalhes.lote_producao && (
-                    <div className="flex justify-between items-center py-1 border-b border-slate-200/80">
-                      <span className="text-slate-500 font-medium">Lote de Produção:</span>
-                      <span className="font-mono text-emerald-900 font-bold">{modalDetalhes.lote_producao}</span>
+                    <div className="flex justify-between items-center py-1 border-b border-linha/80">
+                      <span className="text-cinza font-medium">Lote de Produção:</span>
+                      <span className="tabular-nums text-eno-800 font-bold">{modalDetalhes.lote_producao}</span>
                     </div>
                   )}
                   {modalDetalhes.data_vencimento && (
-                    <div className="flex justify-between items-center py-1 border-b border-slate-200/80">
-                      <span className="text-slate-500 font-medium">Data de Vencimento:</span>
-                      <span className="font-mono text-slate-800 font-bold">{formatarDataBR(modalDetalhes.data_vencimento)}</span>
+                    <div className="flex justify-between items-center py-1 border-b border-linha/80">
+                      <span className="text-cinza font-medium">Data de Vencimento:</span>
+                      <span className="tabular-nums text-tinta font-bold">{formatarDataBR(modalDetalhes.data_vencimento)}</span>
                     </div>
                   )}
                   {modalDetalhes.nota_fiscal?.arquivo_anexado && (
-                    <div className="flex justify-between items-center py-1 border-b border-slate-200/80">
-                      <span className="text-slate-500 font-medium">Arquivo Guardado:</span>
-                      <span className="font-mono text-emerald-800 font-bold text-[11px] truncate max-w-[200px]">{modalDetalhes.nota_fiscal.arquivo_anexado}</span>
+                    <div className="flex justify-between items-center py-1 border-b border-linha/80">
+                      <span className="text-cinza font-medium">Arquivo Guardado:</span>
+                      <span className="tabular-nums text-eno-800 font-bold text-[11px] truncate max-w-[200px]">{modalDetalhes.nota_fiscal.arquivo_anexado}</span>
                     </div>
                   )}
                   <div className="pt-2 flex justify-between items-center">
-                    <span className="font-bold text-slate-700 text-xs">Total Liquidado:</span>
-                    <span className="font-mono font-black text-lg text-emerald-900">
+                    <span className="font-bold text-tinta-2 text-xs">Total Liquidado:</span>
+                    <span className="tabular-nums font-extrabold text-lg text-eno-800">
                       {modalDetalhes.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </span>
                   </div>
                 </div>
 
                 {/* Coluna 2: Itens Entregues */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                  <span className="font-bold text-slate-800 uppercase tracking-wider text-xs block mb-1">
+                <div className="p-4 bg-papel-2 rounded-md border border-linha space-y-2">
+                  <span className="font-bold text-tinta uppercase tracking-wider text-xs block mb-1">
                     Itens Entregues e Conferidos
                   </span>
                   <div className="space-y-1.5 max-h-48 overflow-y-auto">
                     {modalDetalhes.itens.map((it, idx) => (
-                      <div key={idx} className="flex justify-between items-center p-2.5 bg-white rounded-xl border border-slate-200/80">
+                      <div key={idx} className="flex justify-between items-center p-2.5 bg-papel rounded-md border border-linha/80">
                         <div>
-                          <strong className="text-slate-800">{it.produto_nome}</strong>
-                          <div className="text-slate-500 font-mono text-[11px]">{it.quantidade}x {it.tipo_embalagem}</div>
+                          <strong className="text-tinta">{it.produto_nome}</strong>
+                          <div className="text-cinza tabular-nums text-[11px]">{it.quantidade}x {it.tipo_embalagem}</div>
                         </div>
-                        <div className="font-mono font-bold text-slate-900 text-xs">
+                        <div className="tabular-nums font-bold text-tinta text-xs">
                           {it.subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </div>
                       </div>
@@ -330,12 +329,12 @@ export function PedidosEntregues({ onNavigate }: Props) {
               </div>
             </div>
 
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+            <div className="p-4 bg-papel-2 border-t border-linha flex items-center justify-between shrink-0 gap-2 max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
               <button
                 onClick={() => window.print()}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 cursor-pointer text-xs shadow-xs"
+                className="flex items-center gap-2 px-4 py-2 rounded-md bg-papel border border-linha-forte text-tinta-2 font-bold hover:bg-papel-3/60 cursor-pointer text-xs shadow-xs"
               >
-                <Printer className="w-4 h-4 text-emerald-700" />
+                <Printer className="w-4 h-4 text-eno-700" />
                 <span>Imprimir Recibo</span>
               </button>
 
@@ -344,7 +343,7 @@ export function PedidosEntregues({ onNavigate }: Props) {
                   handleRepetirPedido(modalDetalhes);
                   setModalDetalhes(null);
                 }}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs shadow-sm cursor-pointer"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-md bg-eno-900 hover:bg-eno-950 text-white font-bold text-xs shadow-sm cursor-pointer"
               >
                 <RotateCcw className="w-4 h-4" />
                 <span>Repetir Pedido</span>

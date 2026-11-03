@@ -83,8 +83,8 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
   const ehMesAtual = mes === mesAtualKey();
 
   return (
-    <div className="min-h-screen bg-[#f4f7f5] text-slate-900 flex flex-col font-sans">
-      <header className="bg-[#022013] text-white sticky top-0 z-30 shadow-md shadow-emerald-950/30">
+    <div className="min-h-screen bg-papel-2 text-tinta flex flex-col font-sans">
+      <header className="bg-eno-900 text-white sticky top-0 z-30 shadow-md shadow-emerald-950/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -174,7 +174,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
       </main>
 
       {/* Navegação inferior (celular) */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#022013] border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-eno-900 border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
         <div className="grid grid-cols-5">
           {ABAS.map(a => {
             const Icone = a.icone;

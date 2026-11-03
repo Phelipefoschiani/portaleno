@@ -1,22 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CampoNumero } from '../ui/CampoNumero';
-import {
-  FileText,
-  Plus,
-  Eye,
-  Edit2,
-  Trash2,
-  Search,
-  Printer,
-  X,
-  CheckCircle2,
-  Copy,
-  Check,
-  Building2,
-  Save,
-  ShieldCheck,
-  PlusCircle
-} from 'lucide-react';
+import { Plus, Eye, Edit2, Trash2, Printer, CheckCircle2, Copy, Check, Save, PlusCircle } from 'lucide-react';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, CampoBusca } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
+import { ModalFolha, BotaoTopo, Secao, Campo, form, BotaoIcone, BotaoCartao, Aviso } from './kitProdutos';
 import {
   FichaTecnica,
   ItemFichaTecnica,
@@ -29,7 +19,7 @@ import {
   consumoPorPacoteDaReceita,
   ReceitaIndustrial
 } from '../../data/produtosData';
-import { RefreshCw, FlaskConical } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 
 const fmtQtd = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 4 });
 
@@ -299,579 +289,427 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
     });
   };
 
+  const semNenhuma = fichas.length === 0;
+  const desatualizadas = fichas.filter(fichaDesatualizada).length;
+
   return (
-    <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-hidden">
-      
-      {/* 1. NAVEGAÇÃO DE PRODUTOS */}
+    <div className="relative h-full w-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
+      {/* Abas antigas: só fora do shell */}
       <ProdutosNavTabs activeTab="produtos_ficha_tecnica" onNavigate={onNavigate} />
 
-      {/* 2. CABEÇALHO COMPACTO & MINIMALISTA */}
-      <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Fichas Técnicas & Especificações</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
-                {fichas.length} cadastradas
-              </span>
-            </h1>
-            <p className="text-xs text-slate-500 font-medium">
-              Você adiciona os itens e as quantidades que quiser, sem campos engessados ou obrigatórios.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleAbrirNova}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs shadow-xs transition-all cursor-pointer hover:shadow"
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ Incluir Nova Ficha Técnica</span>
-            </button>
-          </div>
-        </div>
-
-        {/* STAT BAR MINIMALISTA EM LINHA */}
-        <div className="flex flex-wrap items-center gap-6 pt-3 mt-3 border-t border-slate-100 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Formato:</span>
-            <span className="font-mono font-bold text-slate-900 text-sm">
-              Itens e Quantidades Livres
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Exportação:</span>
-            <span className="font-mono font-bold text-emerald-700">
-              Pronto para Impressão, PDF ou Foto
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Flexibilidade:</span>
-            <span className="font-mono font-bold text-slate-900">
-              Você define o que vai na ficha
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {toastMsg && (
-        <div className="mx-6 mt-3 p-3 bg-emerald-100 border border-emerald-300 rounded-xl text-emerald-900 text-xs font-bold flex items-center gap-2 animate-fadeIn shrink-0">
-          <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
-          <span>{toastMsg}</span>
-        </div>
-      )}
-
-      {/* 3. BARRA DE BUSCA */}
-      <div className="bg-[#f1f5f2] px-6 py-2.5 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex-1 min-w-[260px] max-w-sm relative">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por Produto, Código ou Item..."
-            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-700 font-medium"
-          />
-        </div>
-
-        <div className="text-xs text-slate-500 font-medium hidden sm:block">
-          Mostrando <span className="font-bold text-slate-800">{fichasFiltradas.length}</span> fichas
-        </div>
-      </div>
-
-      {/* 4. TABELA DE FICHAS TÉCNICAS (TUDO EM LINHAS DE UMA TABELA) */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/90 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
-                <th className="py-3 px-5">Produto / Nome da Ficha</th>
-                <th className="py-3 px-3">Código</th>
-                <th className="py-3 px-4">O que tem na Ficha (Itens & Quantidades)</th>
-                <th className="py-3 px-3 text-center">Total de Itens</th>
-                <th className="py-3 px-5 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {fichasFiltradas.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400 font-medium">
-                    Nenhuma ficha técnica cadastrada. Clique em "+ Incluir Nova Ficha Técnica".
-                  </td>
-                </tr>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px]">
+          <CabecalhoPagina
+            titulo="Fichas técnicas"
+            resumo={
+              semNenhuma ? (
+                'Nenhuma ficha cadastrada'
               ) : (
-                fichasFiltradas.map((f) => {
-                  const itens = f.itens_especificacao || [];
-                  return (
-                    <tr key={f.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-5">
-                        <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
-                          <span>{f.produto_nome}</span>
-                          {fichaDesatualizada(f) && (
-                            <span className="px-1.5 py-0.5 rounded bg-amber-50 border border-amber-300 text-amber-800 text-[10px] font-bold">
-                              Receita alterada — atualizar ficha
-                            </span>
-                          )}
+                <>
+                  {fichas.length} {fichas.length === 1 ? 'ficha' : 'fichas'} · itens e quantidades livres, prontas para imprimir ou enviar
+                  {desatualizadas > 0 && (
+                    <span className="font-semibold text-st-aguardando"> · {desatualizadas} com receita alterada</span>
+                  )}
+                </>
+              )
+            }
+            acoes={
+              semNenhuma ? undefined : (
+                <BotaoPrimario onClick={handleAbrirNova} className="w-full sm:w-auto h-11 sm:h-9">
+                  <Plus className="w-4 h-4" />
+                  Nova ficha técnica
+                </BotaoPrimario>
+              )
+            }
+          />
+
+          {toastMsg && (
+            <div className="px-4 sm:px-6 pb-3">
+              <Aviso tom="pago" className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                {toastMsg}
+              </Aviso>
+            </div>
+          )}
+
+          {!semNenhuma && (
+            <BarraFiltros>
+              <CampoBusca valor={busca} onChange={setBusca} placeholder="Buscar produto, código ou item" className="w-full md:w-80" />
+              <span className="hidden md:block text-[12.5px] text-cinza tabular-nums">
+                {fichasFiltradas.length} de {fichas.length}
+              </span>
+            </BarraFiltros>
+          )}
+
+          <div className="px-4 sm:px-6 pb-8">
+            {fichasFiltradas.length === 0 ? (
+              <div className="bg-papel border border-linha rounded-md">
+                {semNenhuma ? (
+                  <EstadoVazio
+                    titulo="Nenhuma ficha técnica"
+                    texto="Escolha o produto e a ficha puxa as matérias-primas da receita. Depois acrescente umidade, validade ou o que quiser."
+                    acao={
+                      <BotaoPrimario onClick={handleAbrirNova}>
+                        <Plus className="w-4 h-4" />
+                        Nova ficha técnica
+                      </BotaoPrimario>
+                    }
+                  />
+                ) : (
+                  <EstadoVazio
+                    titulo="Nenhuma ficha encontrada"
+                    texto={`Nada com "${busca}". Busque pelo nome do produto, código ou um item da ficha.`}
+                    acao={<BotaoSecundario onClick={() => setBusca('')}>Limpar busca</BotaoSecundario>}
+                  />
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Celular: cartões */}
+                <ul className="sm:hidden bg-papel border border-linha rounded-md">
+                  {fichasFiltradas.map(f => {
+                    const itens = f.itens_especificacao || [];
+                    return (
+                      <li key={f.id} className="px-3.5 py-3 border-b border-linha last:border-b-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[14px] font-bold text-tinta leading-snug">{f.produto_nome}</div>
+                            <div className="text-[11.5px] text-cinza tabular-nums">
+                              {f.codigo || f.registro_sif_mapa || 'Sem código'} · {itens.length} {itens.length === 1 ? 'item' : 'itens'}
+                            </div>
+                          </div>
+                          {fichaDesatualizada(f) && <StatusChip tom="aguardando" className="shrink-0">Receita alterada</StatusChip>}
                         </div>
-                        {f.descricao_padrao && (
-                          <div className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{f.descricao_padrao}</div>
+                        {itens.length > 0 && (
+                          <dl className="mt-2 space-y-0.5 text-[12.5px]">
+                            {itens.slice(0, 3).map((it, idx) => (
+                              <div key={idx} className="flex items-baseline justify-between gap-3">
+                                <dt className="min-w-0 truncate text-tinta-2">{it.item_nome}</dt>
+                                <dd className="shrink-0 font-semibold tabular-nums text-tinta">{it.quantidade}</dd>
+                              </div>
+                            ))}
+                            {itens.length > 3 && <div className="text-[11.5px] text-cinza">+{itens.length - 3} itens</div>}
+                          </dl>
                         )}
-                      </td>
-
-                      <td className="py-3.5 px-3 font-mono font-bold text-slate-700">
-                        {f.codigo || f.registro_sif_mapa || '—'}
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <div className="flex flex-wrap gap-1.5 max-w-xl">
-                          {itens.slice(0, 4).map((it, idx) => (
-                            <span
-                              key={idx}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px] text-slate-800"
-                            >
-                              <span className="font-semibold text-slate-900">{it.item_nome}:</span>
-                              <span className="font-mono font-bold text-emerald-800">{it.quantidade}</span>
-                            </span>
-                          ))}
-                          {itens.length > 4 && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 text-[10px] text-slate-500 font-semibold">
-                              +{itens.length - 4} mais...
-                            </span>
-                          )}
+                        <div className="flex gap-2 mt-2.5">
+                          <BotaoCartao primario onClick={() => setFichaVisualizar(f)}>
+                            <Eye className="w-3.5 h-3.5" /> Ver ficha
+                          </BotaoCartao>
+                          <BotaoCartao onClick={() => handleAbrirEdicao(f)}>
+                            <Edit2 className="w-3.5 h-3.5" /> Editar
+                          </BotaoCartao>
+                          <BotaoIcone rotulo={`Excluir ficha ${f.produto_nome}`} perigo onClick={() => handleExcluir(f.id, f.produto_nome)} className="border border-linha-forte">
+                            <Trash2 className="w-4 h-4" />
+                          </BotaoIcone>
                         </div>
-                      </td>
+                      </li>
+                    );
+                  })}
+                </ul>
 
-                      <td className="py-3.5 px-3 text-center font-mono font-bold text-slate-900">
-                        {itens.length} {itens.length === 1 ? 'item' : 'itens'}
-                      </td>
-
-                      <td className="py-3.5 px-5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => setFichaVisualizar(f)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs shadow-2xs cursor-pointer transition-colors"
-                            title="Visualizar laudo completo para foto ou impressão"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Ver Ficha</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleAbrirEdicao(f)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-800 hover:bg-emerald-50 transition-colors cursor-pointer border border-transparent hover:border-emerald-200"
-                            title="Editar Ficha Técnica"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-
-                          <button
-                            onClick={() => handleExcluir(f.id, f.produto_nome)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer border border-transparent hover:border-red-200"
-                            title="Excluir Ficha Técnica"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
+                {/* Computador: tabela */}
+                <TabelaDados className="hidden sm:block">
+                  <thead className={tabela.thead}>
+                    <tr>
+                      <Th>Produto</Th>
+                      <Th>Código</Th>
+                      <Th>Itens da ficha</Th>
+                      <Th numero>Itens</Th>
+                      <Th className="text-right">Ações</Th>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  </thead>
+                  <tbody>
+                    {fichasFiltradas.map(f => {
+                      const itens = f.itens_especificacao || [];
+                      return (
+                        <tr key={f.id} className={tabela.tr}>
+                          <Td className="max-w-[320px]">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="font-semibold text-tinta">{f.produto_nome}</span>
+                              {fichaDesatualizada(f) && <StatusChip tom="aguardando">Receita alterada</StatusChip>}
+                            </div>
+                            {f.descricao_padrao && <div className="text-[11.5px] text-cinza truncate">{f.descricao_padrao}</div>}
+                          </Td>
+                          <Td className="whitespace-nowrap tabular-nums">{f.codigo || f.registro_sif_mapa || '—'}</Td>
+                          <Td>
+                            <div className="text-[12.5px] text-tinta-2 max-w-xl line-clamp-2">
+                              {itens.slice(0, 4).map((it, idx) => (
+                                <span key={idx}>
+                                  {idx > 0 && <span className="text-cinza-claro"> · </span>}
+                                  {it.item_nome} <span className="font-semibold tabular-nums text-tinta">{it.quantidade}</span>
+                                </span>
+                              ))}
+                              {itens.length > 4 && <span className="text-cinza"> · +{itens.length - 4}</span>}
+                            </div>
+                          </Td>
+                          <Td numero>{itens.length}</Td>
+                          <Td className="text-right whitespace-nowrap">
+                            <div className="inline-flex items-center gap-0.5">
+                              <BotaoSecundario onClick={() => setFichaVisualizar(f)} className="h-8 px-2.5 text-[12.5px] mr-1" title="Ver a ficha completa para imprimir ou enviar">
+                                <Eye className="w-3.5 h-3.5" /> Ver ficha
+                              </BotaoSecundario>
+                              <BotaoIcone rotulo="Editar ficha" onClick={() => handleAbrirEdicao(f)}>
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </BotaoIcone>
+                              <BotaoIcone rotulo="Excluir ficha" perigo onClick={() => handleExcluir(f.id, f.produto_nome)}>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </BotaoIcone>
+                            </div>
+                          </Td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </TabelaDados>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* 5. MODAL FORM: INCLUIR / EDITAR FICHA TÉCNICA (TOTALMENTE LIVRE, SEM ESPAÇOS FORÇADOS) */}
+      {/* MODAL INCLUIR / EDITAR FICHA */}
       {modalFormAberto && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <FileText className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-sm sm:text-base text-white">
-                  {fichaEmEdicao ? `Editar Ficha: ${fichaEmEdicao.produto_nome}` : 'Nova Ficha Técnica'}
-                </h3>
-              </div>
-              <button
-                onClick={() => setModalFormAberto(false)}
-                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSalvarFicha} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
-              
-              {/* Informações Básicas da Ficha */}
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                <div className="sm:col-span-8">
-                  <label className="block font-bold text-slate-800 mb-1">
-                    Vincular ao Produto do Estoque *
-                  </label>
-                  <select
-                    required
-                    value={formProdutoId}
-                    onChange={(e) => {
-                      const selectedId = e.target.value;
-                      const prod = produtosEstoque.find(p => p.id === selectedId);
-                      setFormProdutoId(selectedId);
-                      if (prod) setFormProdutoNome(prod.nome);
-                      // Preenche automaticamente com as matérias-primas da receita do produto
-                      aplicarItensDaReceita(selectedId, formItens);
-                    }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
-                  >
-                    <option value="">-- Selecione um Produto --</option>
-                    {produtosEstoque.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.nome} ({p.tipo_embalagem})
-                      </option>
-                    ))}
-                    {/* Opção para nome livre caso não queira vincular (opcional, mas o user pediu pra puxar o produto) */}
-                    {formProdutoId === '' && formProdutoNome !== '' && (
-                      <option value="">{formProdutoNome} (Não vinculado)</option>
-                    )}
-                  </select>
-                </div>
-
-                <div className="sm:col-span-4">
-                  <label className="block font-bold text-slate-800 mb-1">
-                    Código / Referência (Opcional)
-                  </label>
-                  <input
-                    type="text"
-                    value={formCodigo}
-                    onChange={(e) => setFormCodigo(e.target.value)}
-                    placeholder="Ex: FT-001"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-800 mb-1">
-                  Descrição Geral ou Observações (Opcional)
-                </label>
+        <ModalFolha
+          titulo={fichaEmEdicao ? `Editar ficha · ${fichaEmEdicao.produto_nome}` : 'Nova ficha técnica'}
+          subtitulo="Escolha o produto, confira os itens da receita e acrescente o que quiser."
+          onFechar={() => setModalFormAberto(false)}
+          onSubmit={handleSalvarFicha}
+          largura="sm:max-w-4xl"
+          corpoClassName="space-y-4"
+          rodape={
+            <>
+              <BotaoSecundario onClick={() => setModalFormAberto(false)}>Cancelar</BotaoSecundario>
+              <BotaoPrimario type="submit">
+                <Save className="w-4 h-4" />
+                {fichaEmEdicao ? 'Salvar alterações' : 'Salvar ficha'}
+              </BotaoPrimario>
+            </>
+          }
+        >
+          <Secao titulo="Produto">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+              <Campo rotulo="Produto do estoque *" className="sm:col-span-8">
+                <select
+                  required
+                  value={formProdutoId}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    const prod = produtosEstoque.find(p => p.id === selectedId);
+                    setFormProdutoId(selectedId);
+                    if (prod) setFormProdutoNome(prod.nome);
+                    // Preenche automaticamente com as matérias-primas da receita do produto
+                    aplicarItensDaReceita(selectedId, formItens);
+                  }}
+                  className={form.select}
+                >
+                  <option value="">Selecione um produto</option>
+                  {produtosEstoque.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome} ({p.tipo_embalagem})
+                    </option>
+                  ))}
+                  {formProdutoId === '' && formProdutoNome !== '' && <option value="">{formProdutoNome} (Não vinculado)</option>}
+                </select>
+              </Campo>
+              <Campo rotulo="Código / referência" className="sm:col-span-4">
+                <input type="text" value={formCodigo} onChange={(e) => setFormCodigo(e.target.value)} placeholder="Ex: FT-001" className={`${form.campo} tabular-nums`} />
+              </Campo>
+              {(() => {
+                const rec = formProdutoId ? receitaDoProduto(formProdutoId) : undefined;
+                const desatualizada = !!rec && (formReceitaId !== rec.id || formAssinatura !== assinaturaComposicaoReceita(rec));
+                return (
+                  <>
+                    <div className="sm:col-span-8">
+                      <Aviso tom={desatualizada ? 'aguardando' : formProdutoId && rec ? 'pago' : 'producao'} className="flex flex-wrap items-center justify-between gap-2 h-full">
+                        <span>
+                          {formProdutoId
+                            ? rec
+                              ? <>Receita <b>{rec.nome || rec.produto_nome}</b>{desatualizada ? ': a composição mudou desde a última atualização da ficha.' : ': itens da composição sincronizados.'}</>
+                              : 'Produto sem receita vinculada (cadastre a receita no produto).'
+                            : 'Escolha o produto para puxar as matérias-primas da receita.'}
+                        </span>
+                        {rec && (
+                          <button
+                            type="button"
+                            onClick={() => aplicarItensDaReceita(formProdutoId, formItens)}
+                            className={`inline-flex items-center gap-1.5 h-10 sm:h-8 px-3 rounded-md text-[12.5px] font-semibold cursor-pointer ${
+                              desatualizada ? 'bg-st-aguardando text-white' : 'border border-st-pago/30 bg-papel text-st-pago'
+                            }`}
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            Atualizar da receita
+                          </button>
+                        )}
+                      </Aviso>
+                    </div>
+                    <Campo rotulo="Validade (meses)" className="sm:col-span-4" ajuda="Usado na validade padrão das ordens de produção">
+                      <CampoNumero inteiro min={1} value={formValidadeMeses} onChange={(n) => setFormValidadeMeses(n)} className={form.campoNumero} />
+                    </Campo>
+                  </>
+                );
+              })()}
+              <Campo rotulo="Descrição ou observações" className="sm:col-span-12">
                 <textarea
                   rows={2}
                   value={formDescricao}
                   onChange={(e) => setFormDescricao(e.target.value)}
                   placeholder="Escreva qualquer detalhe ou observação sobre o produto..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:outline-none focus:border-emerald-700 leading-relaxed"
+                  className={form.textarea}
                 />
-              </div>
+              </Campo>
+            </div>
+          </Secao>
 
-              {/* VÍNCULO COM A RECEITA + VALIDADE */}
-              {(() => {
-                const rec = formProdutoId ? receitaDoProduto(formProdutoId) : undefined;
-                const desatualizada = !!rec && (formReceitaId !== rec.id || formAssinatura !== assinaturaComposicaoReceita(rec));
-                return (
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                    <div className={`sm:col-span-8 p-3 rounded-xl border flex flex-wrap items-center justify-between gap-2 ${desatualizada ? 'bg-amber-50 border-amber-300' : 'bg-emerald-50/60 border-emerald-200'}`}>
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-800">
-                        <FlaskConical className="w-3.5 h-3.5 text-emerald-700" />
-                        {formProdutoId
-                          ? rec
-                            ? <span>Receita: <strong>{rec.nome || rec.produto_nome}</strong>{desatualizada ? ' — a composição mudou desde a última atualização da ficha' : ' — itens da composição sincronizados'}</span>
-                            : <span>Produto sem receita vinculada (cadastre a receita no produto).</span>
-                          : <span>Escolha o produto para puxar as matérias-primas da receita.</span>}
-                      </div>
-                      {rec && (
-                        <button
-                          type="button"
-                          onClick={() => aplicarItensDaReceita(formProdutoId, formItens)}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${desatualizada ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-white border border-emerald-300 text-emerald-900 hover:bg-emerald-100'}`}
-                        >
-                          <RefreshCw className="w-3 h-3" />
-                          <span>Atualizar da receita</span>
-                        </button>
-                      )}
-                    </div>
-                    <div className="sm:col-span-4">
-                      <label className="block font-bold text-slate-800 mb-1">Prazo de Validade (meses)</label>
-                      <CampoNumero
-                        inteiro
-                        min={1}
-                        value={formValidadeMeses}
-                        onChange={(n) => setFormValidadeMeses(n)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
-                      />
-                      <span className="text-[10px] text-slate-500">Usado na validade padrão das Ordens de Produção</span>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* SEÇÃO DINÂMICA: A PESSOA ADICIONA AS COISAS QUE QUER E A QUANTIDADE */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/70 p-4 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2">
-                  <div>
-                    <span className="font-bold text-slate-900 text-xs uppercase tracking-wider block">
-                      Itens & Quantidades da Ficha Técnica
+          <Secao
+            titulo="Itens e quantidades"
+            contexto={`${formItens.filter(it => it.item_nome.trim() !== '').length} preenchidos · especificações, insumos ou propriedades, com a quantidade ou o valor de cada um`}
+            semPadding
+            acao={
+              <button
+                type="button"
+                onClick={handleAdicionarItemLinha}
+                className="inline-flex items-center gap-1 h-10 sm:h-8 px-3 rounded-md border border-linha-forte bg-papel text-[12.5px] font-semibold text-eno-700 hover:bg-papel-3 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Adicionar item
+              </button>
+            }
+          >
+            <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_260px_40px] gap-x-3 px-4 py-2 border-b border-linha bg-papel-2 text-[10.5px] font-bold uppercase tracking-[0.12em] text-cinza">
+              <span>Item / especificação</span>
+              <span>Quantidade / valor</span>
+              <span />
+            </div>
+            <ul>
+              {formItens.map((item, idx) => (
+                <li key={idx} className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_260px_40px] gap-x-3 gap-y-2 items-start px-4 py-3 sm:py-2 border-b border-linha last:border-b-0">
+                  <label className="block min-w-0">
+                    <span className="sm:hidden block text-[11px] font-semibold text-cinza mb-0.5">
+                      Item {idx + 1}
+                      {item.origem === 'RECEITA' && <span className="ml-1.5 text-eno-700">· da receita</span>}
                     </span>
-                    <p className="text-[11px] text-slate-500">
-                      Adicione as especificações, insumos ou propriedades que você quer e informe a quantidade/valor de cada um.
-                    </p>
+                    <input
+                      type="text"
+                      required
+                      value={item.item_nome}
+                      onChange={(e) => handleAtualizarItemLinha(idx, 'item_nome', e.target.value)}
+                      placeholder={`Ex: ${idx === 0 ? 'Mandioca Selecionada' : idx === 1 ? 'Umidade' : 'Embalagem'}`}
+                      className={form.campo}
+                    />
+                    {item.origem === 'RECEITA' && <span className="hidden sm:block mt-0.5 text-[10.5px] font-bold uppercase tracking-[0.12em] text-eno-700">da receita</span>}
+                  </label>
+                  <div className="row-start-1 col-start-2 sm:col-start-3 sm:row-start-auto flex justify-end pt-[18px] sm:pt-0 sm:order-last">
+                    <BotaoIcone rotulo="Remover este item" perigo onClick={() => handleRemoverItemLinha(idx)}>
+                      <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                    </BotaoIcone>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={handleAdicionarItemLinha}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>+ Adicionar Item / Coisa</span>
-                  </button>
-                </div>
-
-                {/* Tabela Dinâmica em Linhas */}
-                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-slate-100 text-[10px] font-bold uppercase text-slate-600 border-b border-slate-200">
-                      <tr>
-                        <th className="py-2.5 px-3">O que você quer colocar (Item / Especificação)</th>
-                        <th className="py-2.5 px-3 w-48 sm:w-64">Quantidade / Valor</th>
-                        <th className="py-2.5 px-2 w-12 text-center">Ação</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs">
-                      {formItens.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/80">
-                          {/* Nome do item que a pessoa quer colocar */}
-                          <td className="py-2 px-3">
-                            <input
-                              type="text"
-                              required
-                              value={item.item_nome}
-                              onChange={(e) => handleAtualizarItemLinha(idx, 'item_nome', e.target.value)}
-                              placeholder={`Ex: ${idx === 0 ? 'Mandioca Selecionada' : idx === 1 ? 'Umidade' : 'Embalagem'}`}
-                              className="w-full bg-slate-50 hover:bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
-                            />
-                            {item.origem === 'RECEITA' && (
-                              <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700">da receita</span>
-                            )}
-                          </td>
-
-                          {/* Quantidade ou valor que a pessoa quer colocar */}
-                          <td className="py-2 px-3">
-                            <input
-                              type="text"
-                              required
-                              value={item.quantidade}
-                              onChange={(e) => handleAtualizarItemLinha(idx, 'quantidade', e.target.value)}
-                              placeholder={`Ex: ${idx === 0 ? '1 kg' : idx === 1 ? '12%' : '1 unidade'}`}
-                              className="w-full bg-slate-50 hover:bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-emerald-950 focus:outline-none focus:border-emerald-700"
-                            />
-                          </td>
-
-                          {/* Remover Linha */}
-                          <td className="py-2 px-2 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoverItemLinha(idx)}
-                              className="p-1 rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
-                              title="Remover este item"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    Total de itens nesta ficha: <strong className="text-slate-800">{formItens.filter(it => it.item_nome.trim() !== '').length}</strong>
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={handleAdicionarItemLinha}
-                    className="text-xs text-emerald-800 hover:text-emerald-950 font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    <PlusCircle className="w-3.5 h-3.5" />
-                    <span>Adicionar mais uma linha</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setModalFormAberto(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{fichaEmEdicao ? 'Salvar Alterações' : 'Salvar Ficha'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+                  <label className="block col-span-2 sm:col-span-1">
+                    <span className="sm:hidden block text-[11px] font-semibold text-cinza mb-0.5">Quantidade / valor</span>
+                    <input
+                      type="text"
+                      required
+                      value={item.quantidade}
+                      onChange={(e) => handleAtualizarItemLinha(idx, 'quantidade', e.target.value)}
+                      placeholder={`Ex: ${idx === 0 ? '1 kg' : idx === 1 ? '12%' : '1 unidade'}`}
+                      className={`${form.campo} tabular-nums`}
+                    />
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <div className="px-4 py-2.5 border-t border-linha">
+              <button type="button" onClick={handleAdicionarItemLinha} className="inline-flex items-center gap-1.5 h-10 sm:h-8 text-[12.5px] font-semibold text-eno-700 hover:text-eno-900 cursor-pointer">
+                <PlusCircle className="w-4 h-4" />
+                Adicionar mais uma linha
+              </button>
+            </div>
+          </Secao>
+        </ModalFolha>
       )}
 
-      {/* 6. MODAL VISUALIZAR ESPELHO DA FICHA TÉCNICA (PRONTO PARA PDF / IMPRESSÃO / FOTO) */}
+      {/* MODAL VISUALIZAR FICHA (PRONTA PARA IMPRIMIR / PDF / FOTO) */}
       {fichaVisualizar && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
-            
-            {/* Barra Superior de Ações */}
-            <div className="bg-slate-900 text-white px-6 py-3.5 flex items-center justify-between border-b border-slate-800 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-sm sm:text-base text-white">
-                  Ficha Técnica: {fichaVisualizar.produto_nome}
-                </h3>
+        <ModalFolha
+          titulo={fichaVisualizar.produto_nome}
+          subtitulo={`Ficha técnica${fichaVisualizar.codigo ? ` · ${fichaVisualizar.codigo}` : ''}`}
+          onFechar={() => setFichaVisualizar(null)}
+          largura="sm:max-w-4xl"
+          corpoClassName="bg-eno-900/[0.06] px-3 sm:px-6"
+          acoesTopo={
+            <BotaoTopo onClick={() => handleAbrirEdicao(fichaVisualizar)} title="Editar dados da ficha">
+              <Edit2 className="w-3.5 h-3.5" />
+              Editar
+            </BotaoTopo>
+          }
+          rodape={
+            <>
+              <span className="hidden sm:block sm:mr-auto">
+                <BotaoSecundario onClick={() => setFichaVisualizar(null)}>Fechar</BotaoSecundario>
+              </span>
+              <BotaoSecundario onClick={() => handleCopiarTexto(fichaVisualizar)}>
+                {copiado ? <Check className="w-4 h-4 text-st-pago" /> : <Copy className="w-4 h-4" />}
+                {copiado ? 'Copiado' : 'Copiar texto'}
+              </BotaoSecundario>
+              <BotaoPrimario onClick={() => window.print()}>
+                <Printer className="w-4 h-4" />
+                Imprimir / PDF
+              </BotaoPrimario>
+            </>
+          }
+        >
+          {/* Documento imprimível */}
+          <article id="laudo-imprimivel" className="mx-auto max-w-[760px] bg-papel border border-linha rounded-md shadow-[0_18px_40px_-24px_rgba(4,32,19,0.45)] overflow-hidden text-tinta">
+            <div className="h-[4px] filete-ouro" aria-hidden />
+            <header className="px-5 sm:px-8 pt-5 pb-4 border-b-2 border-tinta flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+              <div>
+                <div className="text-[18px] sm:text-[20px] font-extrabold tracking-[-0.01em]">GRUPO ENO AGROINDUSTRIAL</div>
+                <p className="text-[11.5px] text-cinza leading-snug">Fecularia & Mandioca Gourmet · Rodovia PR-482, km 14 · CNPJ 14.882.910/0001-44</p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleAbrirEdicao(fichaVisualizar)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-white font-bold transition-colors cursor-pointer border border-slate-700"
-                  title="Editar dados da ficha"
-                >
-                  <Edit2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Editar</span>
-                </button>
-                <button
-                  onClick={() => setFichaVisualizar(null)}
-                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+              <div className="sm:text-right">
+                <div className="text-[10.5px] font-bold uppercase tracking-[0.18em] text-ouro-escuro">Ficha técnica oficial</div>
+                {fichaVisualizar.codigo && <div className="text-[12px] text-cinza tabular-nums">Código <b className="text-tinta">{fichaVisualizar.codigo}</b></div>}
               </div>
-            </div>
+            </header>
 
-            {/* Conteúdo Imprimível / Laudo Timbrado */}
-            <div id="laudo-imprimivel" className="p-6 sm:p-8 space-y-5 text-xs overflow-y-auto flex-1 bg-white">
-              
-              {/* Cabeçalho Corporativo Oficial */}
-              <div className="border-b-2 border-slate-900 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Building2 className="w-6 h-6 text-emerald-900" />
-                    <span className="text-xl font-black text-slate-900 tracking-tight">GRUPO ENO AGROINDUSTRIAL</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 font-medium">
-                    Fecularia & Mandioca Gourmet • Rodovia PR-482, km 14 • CNPJ: 14.882.910/0001-44
-                  </p>
+            <div className="px-5 sm:px-8 py-5 space-y-5">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza">Produto</div>
+                  <h2 className="text-[22px] sm:text-[26px] font-extrabold leading-tight tracking-[-0.02em]">{fichaVisualizar.produto_nome}</h2>
                 </div>
-
-                <div className="text-right">
-                  <div className="inline-block px-3 py-1 bg-emerald-900 text-white font-black rounded-lg text-xs uppercase font-mono tracking-wider">
-                    FICHA TÉCNICA OFICIAL
-                  </div>
-                  {fichaVisualizar.codigo && (
-                    <div className="text-[11px] text-slate-500 mt-1 font-mono">
-                      Código: <span className="font-bold text-slate-900">{fichaVisualizar.codigo}</span>
-                    </div>
-                  )}
+                <div className="sm:text-right">
+                  <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza">Emissão</div>
+                  <div className="text-[13px] font-semibold tabular-nums">{new Date().toLocaleDateString('pt-BR')}</div>
                 </div>
               </div>
 
-              {/* Título do Produto */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Produto</span>
-                  <h2 className="text-lg font-black text-slate-900">{fichaVisualizar.produto_nome}</h2>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Emissão</span>
-                  <span className="font-mono font-bold text-slate-800 text-xs">{new Date().toLocaleDateString('pt-BR')}</span>
-                </div>
-              </div>
-
-              {/* Descrição se houver */}
               {fichaVisualizar.descricao_padrao && (
-                <div className="p-4 rounded-xl border border-slate-200 bg-white">
-                  <span className="font-bold text-slate-900 block text-xs uppercase tracking-wider mb-1">
-                    Descrição do Produto / Processo:
-                  </span>
-                  <p className="text-slate-700 leading-relaxed text-[11px]">{fichaVisualizar.descricao_padrao}</p>
+                <div>
+                  <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza mb-1">Descrição do produto / processo</div>
+                  <p className="text-[13px] leading-relaxed text-tinta-2">{fichaVisualizar.descricao_padrao}</p>
                 </div>
               )}
 
-              {/* Tabela de Itens e Quantidades Cadastradas em Linhas */}
               <div>
-                <span className="font-bold text-slate-900 uppercase tracking-wider text-xs block mb-2">
-                  Especificações, Insumos e Parâmetros da Ficha
-                </span>
-                <table className="w-full text-left border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                  <thead className="bg-slate-100/90 text-[10px] font-bold uppercase text-slate-600 border-b border-slate-200">
-                    <tr>
-                      <th className="py-2.5 px-4">Item / Especificação</th>
-                      <th className="py-2.5 px-4 text-right">Quantidade / Valor Definido</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs font-mono">
-                    {(fichaVisualizar.itens_especificacao || []).map((it, idx) => (
-                      <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'}>
-                        <td className="py-2.5 px-4 font-sans font-medium text-slate-800">
-                          {it.item_nome}
-                        </td>
-                        <td className="py-2.5 px-4 text-right font-bold text-slate-900">
-                          {it.quantidade}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza mb-1.5">Especificações, insumos e parâmetros</div>
+                <dl className="border-t border-tinta/80">
+                  {(fichaVisualizar.itens_especificacao || []).map((it, idx) => (
+                    <div key={idx} className="flex items-baseline justify-between gap-4 py-2 border-b border-linha">
+                      <dt className="min-w-0 text-[13px] text-tinta-2">{it.item_nome}</dt>
+                      <dd className="shrink-0 max-w-[55%] text-right text-[13px] font-bold tabular-nums">{it.quantidade}</dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
 
-              {/* Rodapé do Laudo */}
-              <div className="pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between text-[11px] text-slate-500">
-                <div>
-                  Controle de Qualidade • <span className="font-bold text-slate-700">Grupo ENO</span>
-                </div>
-                <div className="font-mono text-[10px]">
-                  Documento emitido eletronicamente pelo Sistema de Gestão Industrial
-                </div>
-              </div>
-
+              <footer className="pt-3 border-t border-linha flex flex-wrap items-center justify-between gap-2 text-[11px] text-cinza">
+                <span>Controle de Qualidade · <b className="text-tinta-2">Grupo ENO</b></span>
+                <span>Documento emitido eletronicamente pelo Sistema de Gestão Industrial</span>
+              </footer>
             </div>
-
-            {/* Rodapé de Ações do Modal */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => window.print()}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold cursor-pointer text-xs shadow-xs transition-colors"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Imprimir / Salvar em PDF</span>
-                </button>
-
-                <button
-                  onClick={() => handleCopiarTexto(fichaVisualizar)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 cursor-pointer text-xs shadow-2xs transition-colors"
-                >
-                  {copiado ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-600" />}
-                  <span>{copiado ? 'Copiado!' : 'Copiar Texto Resumo'}</span>
-                </button>
-              </div>
-
-              <button
-                onClick={() => setFichaVisualizar(null)}
-                className="px-6 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs cursor-pointer"
-              >
-                Fechar
-              </button>
-            </div>
-
-          </div>
-        </div>
+          </article>
+        </ModalFolha>
       )}
-
     </div>
   );
 }

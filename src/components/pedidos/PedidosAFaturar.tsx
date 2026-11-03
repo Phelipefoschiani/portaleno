@@ -33,6 +33,11 @@ import {
 } from '../../data/pedidosVendaData';
 import { verificarDisponibilidadeProduto } from '../../data/produtosData';
 import { PedidosNavTabs } from './PedidosNavTabs';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, CampoBusca, Segmentado, SeletorFiltro } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
 
 interface FaltaEstoqueFaturar {
   produto_id: string;
@@ -272,262 +277,227 @@ export function PedidosAFaturar({ onNavigate }: Props) {
     if (onNavigate) onNavigate('pedidos_faturados');
   };
 
+  const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const toneladas = (kg: number) => `${(kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} t`;
+
   return (
-    <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-hidden">
-      
-      {/* 1. NAVEGAÇÃO DE ESTEIRA UNIFICADA */}
+    <div className="relative h-full w-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
+
+      {/* Abas antigas do fluxo: só fora do shell */}
       <PedidosNavTabs activeTab="pedidos_a_faturar" onNavigate={onNavigate} />
 
-      {/* 2. CABEÇALHO COMPACTO & MINIMALISTA */}
-      <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>A Faturar</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-mono">
-                {metricas.total} cargas prontas
-              </span>
-            </h1>
-          </div>
+      <div className="mx-auto w-full max-w-[1700px]">
+        <CabecalhoPagina
+          titulo="A faturar"
+          resumo={
+            metricas.total === 0
+              ? 'Nenhuma carga pronta para faturar.'
+              : `${metricas.total} ${metricas.total === 1 ? 'carga pronta' : 'cargas prontas'} · ${moeda(metricas.valorTotal)} · ${toneladas(metricas.volumeTotalKg)} · ${metricas.liberados} com crédito liberado`
+          }
+        >
+          <p className="mt-2 text-[12px] text-cinza max-w-3xl">
+            A NF-e é emitida fora do sistema. Em cada carga, use <strong className="text-tinta-2">Importar NF</strong> para guardar o XML/PDF e a chave de acesso; o pedido passa para Faturados.
+          </p>
+        </CabecalhoPagina>
 
-          <div className="flex items-center gap-2">
-            {pedidos.length > 0 && (
-              <button
-                onClick={() => handleAbrirImportarNf(pedidos[0])}
-                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
-                title="Importar e arquivar arquivo XML ou PDF de Nota Fiscal externa"
-              >
-                <FileUp className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Importar / Guardar NF</span>
-              </button>
-            )}
+        {toastSucesso && (
+          <div className="mx-4 sm:mx-6 mb-3 px-3 py-2.5 bg-st-pago-bg rounded-md text-st-pago text-[12.5px] font-semibold flex items-center gap-2 animate-fadeIn">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{toastSucesso}</span>
           </div>
-        </div>
+        )}
 
-        {/* STAT BAR MINIMALISTA EM LINHA */}
-        <div className="flex flex-wrap items-center gap-6 pt-3 mt-3 border-t border-slate-100 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Saldo a Faturar:</span>
-            <span className="font-mono font-bold text-emerald-900 text-sm">
-              {metricas.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Cargas no Pátio:</span>
-            <span className="font-mono font-bold text-slate-900">
-              {metricas.total} pedidos
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Peso Físico:</span>
-            <span className="font-mono font-bold text-slate-900">
-              {(metricas.volumeTotalKg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Ton
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Crédito Aprovado:</span>
-            <span className="font-mono font-bold text-emerald-700">
-              {metricas.liberados} pedidos liberados
-            </span>
-          </div>
-        </div>
+        <BarraFiltros>
+          <CampoBusca valor={busca} onChange={setBusca} placeholder="Buscar pedido, lote, cliente ou CNPJ" className="w-full md:w-80" />
+        </BarraFiltros>
       </div>
 
-      {toastSucesso && (
-        <div className="mx-6 mt-3 p-3 bg-emerald-100 border border-emerald-300 rounded-xl text-emerald-900 text-xs font-bold flex items-center gap-2 animate-fadeIn">
-          <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
-          <span>{toastSucesso}</span>
-        </div>
-      )}
-
-      {/* 3. AVISO INFORMATIVO SEFAZ EXTERNA */}
-      <div className="mx-6 mt-3 p-3 bg-blue-50/80 border border-blue-200 rounded-xl text-blue-900 text-xs flex items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-2">
-          <FileCheck2 className="w-4 h-4 text-blue-700 shrink-0" />
-          <span>
-            <strong>Fluxo sem conexão SEFAZ:</strong> As notas fiscais são emitidas externamente. Clique em <strong>Importar / Guardar NF</strong> em cada pedido para anexar o arquivo XML/PDF e registrar a chave de acesso.
-          </span>
-        </div>
-      </div>
-
-      {/* 4. BARRA DE BUSCA */}
-      <div className="bg-[#f1f5f2] px-6 py-2.5 mt-3 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex-1 min-w-[260px] max-w-sm relative">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por Pedido, Lote, Cliente, CNPJ..."
-            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-700 font-medium"
-          />
-        </div>
-      </div>
-
-      {/* 5. TABELA DE CARGAS A FATURAR */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/90 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
-                <th className="py-3 px-5">Pedido & Rastreabilidade</th>
-                <th className="py-3 px-4">Destinatário / Praça</th>
-                <th className="py-3 px-4">Produtos / Peso</th>
-                <th className="py-3 px-4">Valor Faturável</th>
-                <th className="py-3 px-4">Lote & Vencimento</th>
-                <th className="py-3 px-4">Nota Fiscal Externa</th>
-                <th className="py-3 px-5 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {pedidosFiltrados.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
-                    Nenhuma carga aguardando faturamento. Todos os pedidos faturados.
-                  </td>
-                </tr>
-              ) : (
-                pedidosFiltrados.map((item) => {
-                  const itensResumo = item.itens.map(i => `${i.quantidade}x ${i.tipo_embalagem}`).join(' + ');
-
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px] px-4 sm:px-6 pb-6">
+          {pedidosFiltrados.length === 0 ? (
+            <div className="bg-papel border border-linha rounded-md">
+              <EstadoVazio
+                titulo={pedidos.length === 0 ? 'Nenhuma carga a faturar' : 'Nada encontrado'}
+                texto={
+                  pedidos.length === 0
+                    ? 'Pedidos chegam aqui quando a produção conclui o lote. Acompanhe o andamento em Em produção.'
+                    : 'Confira o número do pedido, o lote ou o nome do cliente.'
+                }
+                acao={
+                  pedidos.length === 0 && onNavigate ? (
+                    <BotaoSecundario onClick={() => onNavigate('pedidos_em_producao')}>Ver em produção</BotaoSecundario>
+                  ) : undefined
+                }
+              />
+            </div>
+          ) : (
+            <>
+              {/* Celular: cartões */}
+              <ul className="sm:hidden bg-papel border border-linha rounded-md">
+                {pedidosFiltrados.map(item => {
+                  const faltas = faltasPorPedido.get(item.id) || [];
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-5">
-                        <div className="font-mono font-bold text-slate-900">
-                          {item.numero_pedido}
-                        </div>
-                        {(faltasPorPedido.get(item.id) || []).length > 0 && (
-                          <div
-                            className="text-[10px] text-red-700 font-bold flex items-center gap-1"
-                            title={(faltasPorPedido.get(item.id) || []).map(f => `${f.produto_nome}: faltam ${f.falta} pct`).join(' | ')}
-                          >
-                            <AlertTriangle className="w-3 h-3 text-red-600" />
-                            <span>Estoque não cobre</span>
+                    <li key={item.id} className="px-3.5 py-3 border-b border-linha last:border-b-0">
+                      <button type="button" onClick={() => setModalDetalhes(item)} className="w-full text-left">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[11.5px] text-cinza tabular-nums">
+                              {item.numero_pedido} · Lote {item.lote_producao || 'padrão'}
+                            </div>
+                            <div className="text-[14px] font-bold text-tinta truncate">{item.cliente_nome}</div>
+                            <div className="text-[11.5px] text-cinza truncate">{item.cliente_cidade_uf}</div>
                           </div>
-                        )}
-                        <div className="text-[11px] text-slate-400 font-mono">
-                          {item.data_emissao.split('-').reverse().join('/')}
+                          {faltas.length > 0 ? (
+                            <StatusChip tom="vencido" className="shrink-0">Estoque não cobre</StatusChip>
+                          ) : (
+                            <StatusChip tom="aguardando" className="shrink-0">Sem NF-e</StatusChip>
+                          )}
                         </div>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900">{item.cliente_nome}</div>
-                        <div className="text-[11px] text-slate-400">{item.cliente_cidade_uf}</div>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <div className="font-medium text-slate-800 truncate max-w-xs" title={itensResumo}>
-                          {itensResumo}
+                        <div className="flex items-end justify-between mt-2">
+                          <span className="text-[11.5px] text-cinza tabular-nums">{toneladas(item.peso_total_kg)} · {item.prazo_pagamento}</span>
+                          <span className="text-[17px] font-extrabold tracking-[-0.01em] tabular-nums text-tinta">{moeda(item.valor_total)}</span>
                         </div>
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          {(item.peso_total_kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Ton ({item.peso_total_kg.toLocaleString('pt-BR')} kg)
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4 font-mono font-bold text-emerald-950">
-                        {item.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        <div className="text-[10px] text-slate-400 font-normal font-sans">
-                          {item.prazo_pagamento}
-                        </div>
-                      </td>
-
-                      {/* Lote & Vencimento (vindos da Produção) */}
-                      <td className="py-3.5 px-4 font-mono">
-                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-900 border border-emerald-200 text-[11px] font-bold">
-                          <Tag className="w-3 h-3 text-emerald-700" />
-                          <span>{item.lote_producao || 'Lote Padrão'}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500 mt-0.5">
-                          Venc: {item.data_vencimento ? formatarDataBR(item.data_vencimento) : '2 anos'}
-                        </div>
-                      </td>
-
-                      {/* Status da NF */}
-                      <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                          <UploadCloud className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Aguardando Importação</span>
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Ver Detalhes */}
-                          <button
-                            onClick={() => setModalDetalhes(item)}
-                            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-                            title="Ver detalhes da carga"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-
-                          {/* BOTÃO PRINCIPAL: IMPORTAR / GUARDAR NF */}
-                          <button
-                            onClick={() => handleAbrirImportarNf(item)}
-                            className="
-                              inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg
-                              bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs
-                              shadow-2xs transition-colors cursor-pointer
-                            "
-                            title="Importar e Guardar Nota Fiscal (XML ou PDF)"
-                          >
-                            <FileUp className="w-3.5 h-3.5 stroke-[2.5]" />
-                            <span>Importar NF</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                      </button>
+                      <div className="flex gap-2 mt-2.5">
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirImportarNf(item)}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-md bg-eno-800 text-white text-[12.5px] font-semibold"
+                        >
+                          <FileUp className="w-3.5 h-3.5" /> Importar NF
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModalDetalhes(item)}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-md border border-linha-forte text-tinta-2 text-[12.5px] font-semibold active:bg-papel-3"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> Detalhes
+                        </button>
+                      </div>
+                    </li>
                   );
-                })
-              )}
-            </tbody>
-          </table>
+                })}
+              </ul>
+
+              {/* A partir de sm: tabela densa */}
+              <TabelaDados className="hidden sm:block">
+                <thead className={tabela.thead}>
+                  <tr>
+                    <Th>Pedido</Th>
+                    <Th>Cliente</Th>
+                    <Th>Itens</Th>
+                    <Th>Lote</Th>
+                    <Th>NF-e</Th>
+                    <Th numero>Valor</Th>
+                    <Th className="text-right">Ações</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pedidosFiltrados.map(item => {
+                    const itensResumo = item.itens.map(i => `${i.quantidade}x ${i.tipo_embalagem}`).join(' + ');
+                    const faltas = faltasPorPedido.get(item.id) || [];
+                    return (
+                      <tr key={item.id} onClick={() => setModalDetalhes(item)} className={`${tabela.tr} cursor-pointer group`}>
+                        <Td>
+                          <div className="font-semibold text-tinta tabular-nums whitespace-nowrap group-hover:text-eno-700">{item.numero_pedido}</div>
+                          <div className="text-[11.5px] text-cinza tabular-nums">{formatarDataBR(item.data_emissao)}</div>
+                          {faltas.length > 0 && (
+                            <div
+                              className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-st-vencido"
+                              title={faltas.map(f => `${f.produto_nome}: faltam ${f.falta} pct`).join(' | ')}
+                            >
+                              <AlertTriangle className="w-3 h-3" /> Estoque não cobre
+                            </div>
+                          )}
+                        </Td>
+                        <Td className="max-w-[260px]">
+                          <div className="font-semibold text-tinta truncate">{item.cliente_nome}</div>
+                          <div className="text-[11.5px] text-cinza truncate">{item.cliente_cidade_uf}</div>
+                        </Td>
+                        <Td className="max-w-[240px]">
+                          <div className="truncate" title={itensResumo}>{itensResumo}</div>
+                          <div className="text-[11.5px] text-cinza tabular-nums">{item.peso_total_kg.toLocaleString('pt-BR')} kg</div>
+                        </Td>
+                        <Td className="whitespace-nowrap tabular-nums">
+                          <div className="font-semibold text-tinta">{item.lote_producao || 'Lote padrão'}</div>
+                          <div className="text-[11.5px] text-cinza">Venc. {item.data_vencimento ? formatarDataBR(item.data_vencimento) : '2 anos'}</div>
+                        </Td>
+                        <Td className="whitespace-nowrap">
+                          <StatusChip tom="aguardando">Aguardando importação</StatusChip>
+                        </Td>
+                        <Td numero>
+                          <div className="font-bold text-tinta text-[13.5px]">{moeda(item.valor_total)}</div>
+                          <div className="text-[11.5px] text-cinza font-normal">{item.prazo_pagamento}</div>
+                        </Td>
+                        <Td className="text-right">
+                          <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirImportarNf(item)}
+                              className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[5px] bg-eno-800 hover:bg-eno-900 text-white text-[12px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                              title="Importar e guardar a nota fiscal (XML ou PDF)"
+                            >
+                              <FileUp className="w-3.5 h-3.5" /> Importar NF
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setModalDetalhes(item)}
+                              className="inline-flex items-center gap-1 h-7 px-2 rounded-[5px] text-tinta-2 hover:bg-papel-3 text-[12px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> Ver
+                            </button>
+                          </div>
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </TabelaDados>
+            </>
+          )}
         </div>
       </div>
 
       {/* 6. MODAL IMPORTAR E GUARDAR NOTA FISCAL (SEM CONEXÃO SEFAZ) */}
       {modalImportarNf && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-4xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Topo do Modal */}
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
               <div className="flex items-center gap-2.5">
-                <FileUp className="w-5 h-5 text-emerald-400" />
+                <FileUp className="w-5 h-5 text-ouro-claro" />
                 <div>
                   <h3 className="font-bold text-sm sm:text-base text-white">
                     Importar e Guardar Nota Fiscal Emitida
                   </h3>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-cinza">
                     Vincule o arquivo XML ou PDF da NF emitida externamente ao pedido {modalImportarNf.numero_pedido}.
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setModalImportarNf(null)}
-                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-eno-800 text-eno-100 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleConfirmarGuardaNf} className="p-6 space-y-5 text-xs overflow-y-auto flex-1">
+            <form onSubmit={handleConfirmarGuardaNf} className="p-4 sm:p-6 space-y-5 text-xs overflow-y-auto flex-1">
 
               {/* Aviso de estoque de produto acabado insuficiente */}
               {(() => {
                 const faltas = faltasEstoquePedido(modalImportarNf);
                 if (faltas.length === 0) return null;
                 return (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-800 space-y-1">
+                  <div className="p-3 bg-st-vencido-bg border border-st-vencido/30 rounded-md text-st-vencido space-y-1">
                     <div className="font-bold flex items-center gap-1.5">
-                      <AlertTriangle className="w-4 h-4 text-red-600" />
+                      <AlertTriangle className="w-4 h-4 text-st-vencido" />
                       <span>Estoque de produto acabado não cobre este pedido (é possível faturar mesmo assim)</span>
                     </div>
                     {faltas.map(f => (
-                      <div key={f.produto_id} className="text-[11px] font-mono">
+                      <div key={f.produto_id} className="text-[11px] tabular-nums">
                         {f.produto_nome}: pedido {f.pacotes} pct · estoque {f.disponivel} pct · <strong>faltam {f.falta} pct</strong>
                       </div>
                     ))}
@@ -536,15 +506,15 @@ export function PedidosAFaturar({ onNavigate }: Props) {
               })()}
               
               {/* Aviso explicativo */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 flex items-start gap-2.5">
-                <FileCheck2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+              <div className="p-3 bg-papel-2 border border-linha rounded-md text-tinta-2 flex items-start gap-2.5">
+                <FileCheck2 className="w-4 h-4 text-eno-700 shrink-0 mt-0.5" />
                 <div className="text-[11px] leading-relaxed">
                   <strong>Armazenamento Fiscal:</strong> Como o faturamento oficial é processado no software emissor da empresa, anexe o arquivo (XML/PDF) e registre os números fiscais abaixo para arquivamento e rastreabilidade da carga na expedição.
                 </div>
               </div>
 
               {/* ÁREA DE ANEXO DE ARQUIVO (XML OU PDF) */}
-              <div className="p-4 bg-emerald-50/50 rounded-2xl border-2 border-dashed border-emerald-300 text-center space-y-2">
+              <div className="p-4 bg-eno-50/50 rounded-md border-2 border-dashed border-eno-100 text-center space-y-2">
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -553,29 +523,29 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                   className="hidden"
                 />
 
-                <UploadCloud className="w-8 h-8 text-emerald-700 mx-auto" />
+                <UploadCloud className="w-8 h-8 text-eno-700 mx-auto" />
                 <div>
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="px-4 py-2 bg-white border border-emerald-600 text-emerald-900 rounded-xl font-bold text-xs hover:bg-emerald-50 transition-colors shadow-2xs cursor-pointer"
+                    className="px-4 py-2 bg-papel border border-eno-600 text-eno-800 rounded-md font-bold text-xs hover:bg-eno-50 transition-colors shadow-2xs cursor-pointer"
                   >
                     Selecionar Arquivo da Nota Fiscal (XML ou PDF)
                   </button>
-                  <p className="text-[10px] text-slate-500 mt-1">
+                  <p className="text-[10px] text-cinza mt-1">
                     Formatos aceitos: .xml (NF-e oficial) ou .pdf (DANFE gerado)
                   </p>
                 </div>
 
                 {nomeArquivoAnexado && (
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-emerald-400 text-emerald-950 font-mono font-bold text-xs">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-papel border border-eno-600 text-eno-800 tabular-nums font-bold text-xs">
                     {tipoArquivoAnexado === 'PDF' ? (
-                      <FileText className="w-4 h-4 text-red-600" />
+                      <FileText className="w-4 h-4 text-st-vencido" />
                     ) : (
-                      <FileCode className="w-4 h-4 text-emerald-700" />
+                      <FileCode className="w-4 h-4 text-eno-700" />
                     )}
                     <span>{nomeArquivoAnexado}</span>
-                    <span className="text-[10px] text-emerald-700 font-sans font-normal">(Pronto p/ guardar)</span>
+                    <span className="text-[10px] text-eno-700 font-sans font-normal">(Pronto p/ guardar)</span>
                   </div>
                 )}
               </div>
@@ -583,7 +553,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
               {/* CAMPOS FISCAIS CONFERIDOS */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
+                  <label className="block font-bold text-tinta-2 mb-1">
                     Número da Nota Fiscal *
                   </label>
                   <input
@@ -592,12 +562,12 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                     value={numeroNfImport}
                     onChange={(e) => setNumeroNfImport(e.target.value)}
                     placeholder="Ex: 24589"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
+                    className="w-full bg-papel-2 border border-linha-forte rounded-lg px-3 py-2 tabular-nums font-bold text-tinta focus:outline-none focus:border-eno-700"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
+                  <label className="block font-bold text-tinta-2 mb-1">
                     Série da NF *
                   </label>
                   <input
@@ -606,26 +576,26 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                     value={serieNfImport}
                     onChange={(e) => setSerieNfImport(e.target.value)}
                     placeholder="Ex: 1"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
+                    className="w-full bg-papel-2 border border-linha-forte rounded-lg px-3 py-2 tabular-nums font-bold text-tinta focus:outline-none focus:border-eno-700"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
+                  <label className="block font-bold text-tinta-2 mb-1">
                     Data de Emissão da NF
                   </label>
                   <input
                     type="text"
                     value={dataEmissaoImport}
                     onChange={(e) => setDataEmissaoImport(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
+                    className="w-full bg-papel-2 border border-linha-forte rounded-lg px-3 py-2 tabular-nums text-tinta focus:outline-none focus:border-eno-700"
                   />
                 </div>
               </div>
 
               {/* CHAVE DE ACESSO (44 DÍGITOS) */}
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
+                <label className="block font-bold text-tinta-2 mb-1">
                   Chave de Acesso da NF-e (44 Dígitos) *
                 </label>
                 <input
@@ -635,87 +605,87 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                   value={chaveAcessoImport}
                   onChange={(e) => setChaveAcessoImport(e.target.value.replace(/\s+/g, ''))}
                   placeholder="Ex: 35260908849120000109550010000245891829384756"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold text-xs text-slate-900 focus:outline-none focus:border-emerald-700 tracking-wider"
+                  className="w-full bg-papel-2 border border-linha-forte rounded-lg px-3 py-2 tabular-nums font-bold text-xs text-tinta focus:outline-none focus:border-eno-700 tracking-wider"
                 />
-                <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
+                <span className="text-[10px] text-cinza tabular-nums mt-0.5 block">
                   Tamanho: {chaveAcessoImport.length} de 44 caracteres
                 </span>
               </div>
 
               {/* DADOS DE TRANSPORTE & LOGÍSTICA */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <span className="font-bold text-slate-800 uppercase tracking-wider text-xs block">
+              <div className="p-4 bg-papel-2 rounded-md border border-linha space-y-3">
+                <span className="font-bold text-tinta uppercase tracking-wider text-xs block">
                   Transporte & Expedição da Carga
                 </span>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Transportadora</label>
+                    <label className="block font-bold text-tinta-2 mb-1">Transportadora</label>
                     <input
                       type="text"
                       value={transportadoraInput}
                       onChange={(e) => setTransportadoraInput(e.target.value)}
                       placeholder="Ex: TransVale Logística"
-                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700"
+                      className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 text-tinta font-medium focus:outline-none focus:border-eno-700"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Placa do Veículo</label>
+                    <label className="block font-bold text-tinta-2 mb-1">Placa do Veículo</label>
                     <input
                       type="text"
                       value={placaInput}
                       onChange={(e) => setPlacaInput(e.target.value.toUpperCase())}
                       placeholder="Ex: BRA-2E19"
-                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold uppercase text-slate-800 focus:outline-none focus:border-emerald-700"
+                      className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 tabular-nums font-bold uppercase text-tinta focus:outline-none focus:border-eno-700"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Motorista</label>
+                    <label className="block font-bold text-tinta-2 mb-1">Motorista</label>
                     <input
                       type="text"
                       value={motoristaInput}
                       onChange={(e) => setMotoristaInput(e.target.value)}
                       placeholder="Ex: Sebastião Antunes"
-                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700"
+                      className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 text-tinta font-medium focus:outline-none focus:border-eno-700"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Resumo Financeiro */}
-              <div className="flex items-center justify-between p-3.5 bg-emerald-950/[0.04] border border-emerald-900/20 rounded-xl">
+              <div className="flex items-center justify-between p-3.5 bg-eno-950/[0.04] border border-eno-700/20 rounded-md">
                 <div>
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                  <span className="text-[10px] font-bold text-cinza uppercase tracking-wider block">
                     Valor Total da Nota Fiscal
                   </span>
-                  <span className="font-mono text-base font-black text-emerald-950">
+                  <span className="tabular-nums text-base font-extrabold text-eno-800">
                     {modalImportarNf.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                  <span className="text-[10px] font-bold text-cinza uppercase tracking-wider block">
                     Lote Vinculado
                   </span>
-                  <span className="font-mono text-xs font-bold text-slate-800">
+                  <span className="tabular-nums text-xs font-bold text-tinta">
                     {modalImportarNf.lote_producao || 'LOT-2026-PADRAO'} • Venc: {modalImportarNf.data_vencimento ? formatarDataBR(modalImportarNf.data_vencimento) : '2 anos'}
                   </span>
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+              <div className="pt-3 border-t border-linha flex items-center justify-end gap-3 max-sm:sticky max-sm:-bottom-4 max-sm:z-10 max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:pb-4 max-sm:bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
                 <button
                   type="button"
                   onClick={() => setModalImportarNf(null)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors cursor-pointer"
+                  className="px-5 py-2.5 rounded-md bg-papel-3/60 hover:bg-linha text-tinta-2 font-bold transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm hover:shadow"
+                  className="px-6 py-2.5 rounded-md bg-eno-900 hover:bg-eno-950 text-white font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm hover:shadow"
                 >
                   <FileCheck className="w-4 h-4 stroke-[2.5]" />
                   <span>Guardar NF e Concluir Faturamento</span>
@@ -729,47 +699,47 @@ export function PedidosAFaturar({ onNavigate }: Props) {
 
       {/* 7. MODAL DETALHES DO PEDIDO A FATURAR */}
       {modalDetalhes && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
+          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-3xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+            <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
               <h3 className="font-bold text-sm sm:text-base text-white flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-emerald-400" />
+                <Receipt className="w-5 h-5 text-ouro-claro" />
                 <span>Conferência da Carga - Pedido {modalDetalhes.numero_pedido}</span>
               </h3>
               <button
                 onClick={() => setModalDetalhes(null)}
-                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-eno-800 text-eno-100 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
-              <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <div className="p-4 sm:p-6 space-y-4 text-xs overflow-y-auto flex-1">
+              <div className="grid grid-cols-2 gap-4 p-3 bg-papel-2 rounded-md border border-linha">
                 <div>
-                  <span className="text-slate-400 block font-medium">Cliente:</span>
-                  <strong className="text-slate-900 text-sm">{modalDetalhes.cliente_nome}</strong>
-                  <div className="text-slate-500 font-mono mt-0.5">{modalDetalhes.cliente_cnpj_cpf}</div>
-                  <div className="text-slate-500">{modalDetalhes.cliente_cidade_uf}</div>
+                  <span className="text-cinza block font-medium">Cliente:</span>
+                  <strong className="text-tinta text-sm">{modalDetalhes.cliente_nome}</strong>
+                  <div className="text-cinza tabular-nums mt-0.5">{modalDetalhes.cliente_cnpj_cpf}</div>
+                  <div className="text-cinza">{modalDetalhes.cliente_cidade_uf}</div>
                 </div>
                 <div className="text-right">
-                  <span className="text-slate-400 block font-medium">Rastreabilidade da Fábrica:</span>
-                  <div className="font-mono font-bold text-emerald-900 text-xs">
+                  <span className="text-cinza block font-medium">Rastreabilidade da Fábrica:</span>
+                  <div className="tabular-nums font-bold text-eno-800 text-xs">
                     Lote: {modalDetalhes.lote_producao || 'Lote Padrão'}
                   </div>
-                  <div className="text-slate-600 mt-0.5">
+                  <div className="text-tinta-2 mt-0.5">
                     Vencimento: {modalDetalhes.data_vencimento ? formatarDataBR(modalDetalhes.data_vencimento) : '2 anos'}
                   </div>
-                  <div className="text-slate-500">
+                  <div className="text-cinza">
                     Frete: {modalDetalhes.tipo_frete}
                   </div>
                 </div>
               </div>
 
               {/* Tabela de Produtos */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <div className="border border-linha rounded-md overflow-hidden">
                 <table className="w-full text-left">
-                  <thead className="bg-slate-100 text-[10px] font-bold uppercase text-slate-600 border-b border-slate-200">
+                  <thead className="bg-papel-3/60 text-[10px] font-bold uppercase text-tinta-2 border-b border-linha">
                     <tr>
                       <th className="py-2.5 px-3">Produto</th>
                       <th className="py-2.5 px-3 text-center">Embalagem</th>
@@ -778,16 +748,16 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                       <th className="py-2.5 px-3 text-right">Subtotal</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 font-mono text-xs">
+                  <tbody className="divide-y divide-linha tabular-nums text-xs">
                     {modalDetalhes.itens.map((it, idx) => (
                       <tr key={idx}>
-                        <td className="py-2.5 px-3 font-sans font-semibold text-slate-800">{it.produto_nome}</td>
-                        <td className="py-2.5 px-3 text-center font-sans text-slate-600">{it.tipo_embalagem}</td>
-                        <td className="py-2.5 px-3 text-center font-bold text-slate-900">{it.quantidade}</td>
-                        <td className="py-2.5 px-3 text-right text-slate-700">
+                        <td className="py-2.5 px-3 font-sans font-semibold text-tinta">{it.produto_nome}</td>
+                        <td className="py-2.5 px-3 text-center font-sans text-tinta-2">{it.tipo_embalagem}</td>
+                        <td className="py-2.5 px-3 text-center font-bold text-tinta">{it.quantidade}</td>
+                        <td className="py-2.5 px-3 text-right text-tinta-2">
                           {it.preco_unitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-bold text-slate-900">
+                        <td className="py-2.5 px-3 text-right font-bold text-tinta">
                           {it.subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </td>
                       </tr>
@@ -796,26 +766,26 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                 </table>
               </div>
 
-              <div className="flex items-center justify-between p-3.5 bg-emerald-950/[0.04] border border-emerald-900/20 rounded-xl">
+              <div className="flex items-center justify-between p-3.5 bg-eno-950/[0.04] border border-eno-700/20 rounded-md">
                 <div>
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Peso Total</span>
-                  <span className="font-mono text-xs font-bold text-slate-800">
+                  <span className="text-[10px] font-bold text-cinza uppercase tracking-wider block">Peso Total</span>
+                  <span className="tabular-nums text-xs font-bold text-tinta">
                     {(modalDetalhes.peso_total_kg / 1000).toFixed(2)} Ton ({modalDetalhes.peso_total_kg.toLocaleString('pt-BR')} kg)
                   </span>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Total Geral</span>
-                  <span className="font-mono text-base font-black text-emerald-950">
+                  <span className="text-[10px] font-bold text-cinza uppercase tracking-wider block">Total Geral</span>
+                  <span className="tabular-nums text-base font-extrabold text-eno-800">
                     {modalDetalhes.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+            <div className="p-4 bg-papel-2 border-t border-linha flex items-center justify-between shrink-0 gap-2 max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
               <button
                 onClick={() => setModalDetalhes(null)}
-                className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-papel-3/60 hover:bg-linha text-tinta-2 font-bold text-xs cursor-pointer"
               >
                 Fechar
               </button>
@@ -826,7 +796,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                   setModalDetalhes(null);
                   handleAbrirImportarNf(p);
                 }}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs shadow-xs cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-eno-900 hover:bg-eno-950 text-white font-bold text-xs shadow-xs cursor-pointer"
               >
                 <FileUp className="w-4 h-4" />
                 <span>Importar / Guardar NF deste Pedido</span>

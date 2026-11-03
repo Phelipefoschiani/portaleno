@@ -1,21 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CampoNumero } from '../ui/CampoNumero';
-import {
-  Boxes,
-  Plus,
-  Search,
-  CheckCircle2,
-  AlertTriangle,
-  Building2,
-  Scale,
-  Edit2,
-  Trash2,
-  X,
-  Save,
-  Check,
-  TrendingDown,
-  Layers
-} from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, Check, AlertTriangle, ArrowDownUp } from 'lucide-react';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, Segmentado, CampoBusca } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { StatusChip, TomStatus } from '../ui/StatusChip';
+import { CardNumero } from '../ui/CardNumero';
+import { EstadoVazio } from '../ui/EstadoVazio';
+import { formatarMoeda } from '../../data/financeiroData';
+import { ModalFolha, Secao, Campo, form, BotaoIcone, BotaoCartao, Aviso, FaixaNumerosProdutos } from './kitProdutos';
 import {
   MateriaPrimaEstoque,
   carregarMateriaPrima,
@@ -260,511 +253,454 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
     }
   };
 
+  const situacao = (item: MateriaPrimaEstoque): { tom: TomStatus; rotulo: string } =>
+    item.status === 'NORMAL'
+      ? { tom: 'pago', rotulo: 'Normal' }
+      : item.status === 'CRITICO'
+      ? { tom: 'vencido', rotulo: 'Crítico' }
+      : { tom: 'aguardando', rotulo: 'Repor' };
+  const qtd = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+  const CATEGORIAS_MP: MateriaPrimaEstoque['categoria'][] = ['Raiz In Natura', 'Ingredientes', 'Biomassa / Lenha', 'Embalagens', 'Insumos Industriais'];
+  const semNenhuma = materias.length === 0;
+
   return (
-    <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-hidden">
-      
-      {/* 1. NAVEGAÇÃO DE PRODUTOS */}
+    <div className="relative h-full w-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
+      {/* Abas antigas: só fora do shell */}
       <ProdutosNavTabs activeTab="produtos_materia_prima" onNavigate={onNavigate} />
 
-      {/* 2. CABEÇALHO COMPACTO & MINIMALISTA */}
-      <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Matéria-Prima & Insumos Industriais</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
-                {materias.length} insumos
-              </span>
-            </h1>
-          </div>
-
-          <button
-            onClick={handleAbrirNovo}
-            className="
-              flex items-center gap-2 px-4 py-2 rounded-xl
-              bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs
-              shadow-xs transition-all cursor-pointer
-            "
-          >
-            <Plus className="w-4 h-4" />
-            <span>Novo Insumo / Matéria-Prima</span>
-          </button>
-        </div>
-
-        {/* STAT BAR MINIMALISTA EM LINHA */}
-        <div className="flex flex-wrap items-center gap-6 pt-3 mt-3 border-t border-slate-100 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Raiz no Pátio / Silos:</span>
-            <span className="font-mono font-bold text-slate-900 text-sm">
-              {metricas.raizTon.toLocaleString('pt-BR')} Toneladas
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Lenha Caldeira:</span>
-            <span className="font-mono font-bold text-slate-900">
-              {metricas.lenhaM3} m³ (estéreos)
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Sacos Ráfia 25kg:</span>
-            <span className="font-mono font-bold text-slate-900">
-              {metricas.sacariaUn.toLocaleString('pt-BR')} un
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Status Insumos:</span>
-            <span className={`font-mono font-bold ${metricas.alertas > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
-              {metricas.alertas > 0 ? `${metricas.alertas} precisando reposição` : 'Estoque abastecido'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. BARRA DE BUSCA E FILTROS */}
-      <div className="bg-[#f1f5f2] px-6 py-2.5 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="flex-1 min-w-[260px] max-w-sm relative">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por Insumo, Código ou Fornecedor..."
-            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-700 font-medium"
-          />
-        </div>
-
-        <select
-          value={filtroCategoria}
-          onChange={(e) => setFiltroCategoria(e.target.value)}
-          className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 cursor-pointer focus:outline-none"
-        >
-          <option value="TODAS">Todas as Categorias</option>
-          <option value="Raiz In Natura">Raiz In Natura</option>
-          <option value="Ingredientes">Ingredientes</option>
-          <option value="Biomassa / Lenha">Biomassa / Lenha</option>
-          <option value="Embalagens">Embalagens</option>
-          <option value="Insumos Industriais">Insumos Industriais</option>
-        </select>
-      </div>
-
-      {/* 4. TABELA LIMPA */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/90 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
-                <th className="py-3 px-5">Insumo & Código</th>
-                <th className="py-3 px-4">Categoria</th>
-                <th className="py-3 px-4">Localização</th>
-                <th className="py-3 px-4">Estoque Atual</th>
-                <th className="py-3 px-4">Custo Médio</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-5 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {materiasFiltradas.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
-                    Nenhum insumo encontrado.
-                  </td>
-                </tr>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px]">
+          <CabecalhoPagina
+            titulo="Matéria-prima"
+            resumo={
+              semNenhuma ? (
+                'Nenhum insumo cadastrado'
               ) : (
-                materiasFiltradas.map((item) => {
-                  return (
-                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-5">
-                        <div className="font-bold text-slate-900">{item.nome}</div>
-                        <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                          {item.codigo} • Fornec:{' '}
-                          {(() => {
-                            const o = origemDaMateriaPrima(item);
-                            return <span className={o.semFornecedor ? 'font-sans font-bold text-amber-700' : ''}>{o.texto}</span>;
-                          })()}
-                        </div>
-                      </td>
+                <>
+                  {materias.length} {materias.length === 1 ? 'insumo' : 'insumos'}
+                  {metricas.alertas > 0 ? (
+                    <span className="font-semibold text-st-aguardando"> · {metricas.alertas} precisando reposição</span>
+                  ) : (
+                    <span> · estoque abastecido</span>
+                  )}
+                </>
+              )
+            }
+            acoes={
+              semNenhuma ? undefined : (
+                <BotaoPrimario onClick={handleAbrirNovo} className="w-full sm:w-auto h-11 sm:h-9">
+                  <Plus className="w-4 h-4" />
+                  Novo insumo
+                </BotaoPrimario>
+              )
+            }
+          />
 
-                      <td className="py-3.5 px-4 font-medium text-slate-700">
-                        {item.categoria}
-                      </td>
+          {!semNenhuma && (
+            <div className="px-4 sm:px-6 pb-4">
+              <FaixaNumerosProdutos colunas={5}>
+                <CardNumero destaque rotulo="Raiz no pátio e silos" valor={metricas.raizTon.toLocaleString('pt-BR')} unidade="t" detalhe="Mandioca in natura, convertida para toneladas" />
+                <CardNumero rotulo="Lenha da caldeira" valor={metricas.lenhaM3.toLocaleString('pt-BR')} unidade="m³" detalhe="estéreos" />
+                <CardNumero rotulo="Sacos ráfia 25 kg" valor={metricas.sacariaUn.toLocaleString('pt-BR')} unidade="un" />
+                <CardNumero
+                  rotulo="Repor"
+                  valor={metricas.alertas}
+                  unidade={metricas.alertas === 1 ? 'insumo' : 'insumos'}
+                  detalhe={metricas.alertas > 0 ? 'Abaixo do mínimo' : 'Nenhum abaixo do mínimo'}
+                  alerta={metricas.alertas > 0 ? 'aguardando' : undefined}
+                />
+                <CardNumero rotulo="Insumos" valor={materias.length} unidade="cadastrados" />
+              </FaixaNumerosProdutos>
+            </div>
+          )}
 
-                      <td className="py-3.5 px-4 text-slate-600">
-                        {item.localizacao_patio}
-                      </td>
+          {!semNenhuma && (
+            <BarraFiltros>
+              <Segmentado<string>
+                rotuloAria="Categoria do insumo"
+                valor={filtroCategoria}
+                onChange={setFiltroCategoria}
+                opcoes={[
+                  { valor: 'TODAS', rotulo: 'Todas', contagem: materias.length },
+                  ...CATEGORIAS_MP.map(c => ({ valor: c, rotulo: c, contagem: materias.filter(m => m.categoria === c).length })),
+                ]}
+              />
+              <CampoBusca valor={busca} onChange={setBusca} placeholder="Buscar insumo, código ou fornecedor" className="w-full md:w-72" />
+            </BarraFiltros>
+          )}
 
-                      <td className="py-3.5 px-4 font-mono">
-                        <div className="font-bold text-slate-900">
-                          {item.estoque_atual.toLocaleString('pt-BR')} {item.unidade_medida}
-                        </div>
-                        <div className="text-[10px] text-slate-400">
-                          Mínimo: {item.estoque_minimo} {item.unidade_medida}
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                        {item.custo_medio_unitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        <span className="text-[10px] text-slate-400 font-normal font-sans ml-1">/{item.unidade_medida}</span>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        {item.status === 'NORMAL' ? (
-                          <div className="flex items-center gap-1.5 text-emerald-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                            <span className="font-medium">Normal</span>
+          <div className="px-4 sm:px-6 pb-8">
+            {materiasFiltradas.length === 0 ? (
+              <div className="bg-papel border border-linha rounded-md">
+                {semNenhuma ? (
+                  <EstadoVazio
+                    titulo="Nenhuma matéria-prima"
+                    texto="Cadastre a mandioca, as embalagens e os ingredientes. As receitas só usam insumos cadastrados aqui."
+                    acao={
+                      <BotaoPrimario onClick={handleAbrirNovo}>
+                        <Plus className="w-4 h-4" />
+                        Novo insumo
+                      </BotaoPrimario>
+                    }
+                  />
+                ) : (
+                  <EstadoVazio
+                    titulo="Nenhum insumo com esses filtros"
+                    texto="Mude a categoria ou a busca para ver os outros insumos."
+                    acao={<BotaoSecundario onClick={() => { setBusca(''); setFiltroCategoria('TODAS'); }}>Limpar filtros</BotaoSecundario>}
+                  />
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Celular: cartões */}
+                <ul className="sm:hidden bg-papel border border-linha rounded-md">
+                  {materiasFiltradas.map(item => {
+                    const st = situacao(item);
+                    const o = origemDaMateriaPrima(item);
+                    return (
+                      <li key={item.id} className="px-3.5 py-3 border-b border-linha last:border-b-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[14px] font-bold text-tinta leading-snug">{item.nome}</div>
+                            <div className="text-[11.5px] text-cinza truncate">
+                              {item.codigo} · {item.categoria} ·{' '}
+                              <span className={o.semFornecedor ? 'font-semibold text-st-aguardando' : ''}>{o.texto}</span>
+                            </div>
                           </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-amber-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            <span className="font-medium">Reposição Necessária</span>
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => abrirMovimentacao(item)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-[11px] transition-colors cursor-pointer"
-                            title="Entrada, uso, perda ou contagem do estoque"
-                          >
-                            <Boxes className="w-3.5 h-3.5" />
-                            <span>Movimentar</span>
-                          </button>
-                          <button
-                            onClick={() => handleAbrirEdicao(item)}
-                            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-                            title="Editar Insumo"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleExcluir(item.id)}
-                            className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <StatusChip tom={st.tom} className="shrink-0">{st.rotulo}</StatusChip>
                         </div>
-                      </td>
+                        <div className="mt-2 flex items-end justify-between gap-3">
+                          <div>
+                            <div className="text-[17px] font-extrabold tracking-[-0.01em] tabular-nums text-tinta">
+                              {qtd(item.estoque_atual)} <span className="text-[12px] font-semibold text-cinza">{item.unidade_medida}</span>
+                            </div>
+                            <div className="text-[11.5px] text-cinza tabular-nums">mínimo {qtd(item.estoque_minimo)} {item.unidade_medida}</div>
+                          </div>
+                          <div className="text-right text-[12px] text-cinza tabular-nums">
+                            <div className="text-[14px] font-semibold text-tinta-2">{formatarMoeda(item.custo_medio_unitario)}</div>
+                            por {item.unidade_medida}
+                          </div>
+                        </div>
+                        <div className="flex gap-2 mt-2.5">
+                          <BotaoCartao primario onClick={() => abrirMovimentacao(item)}>
+                            <ArrowDownUp className="w-3.5 h-3.5" /> Movimentar
+                          </BotaoCartao>
+                          <BotaoCartao onClick={() => handleAbrirEdicao(item)}>
+                            <Edit2 className="w-3.5 h-3.5" /> Editar
+                          </BotaoCartao>
+                          <BotaoIcone rotulo={`Excluir ${item.nome}`} perigo onClick={() => handleExcluir(item.id)} className="border border-linha-forte">
+                            <Trash2 className="w-4 h-4" />
+                          </BotaoIcone>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                {/* Computador: tabela densa */}
+                <TabelaDados className="hidden sm:block">
+                  <thead className={tabela.thead}>
+                    <tr>
+                      <Th>Insumo</Th>
+                      <Th>Categoria</Th>
+                      <Th>Local</Th>
+                      <Th numero>Saldo</Th>
+                      <Th numero>Custo médio</Th>
+                      <Th>Situação</Th>
+                      <Th className="text-right">Ações</Th>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  </thead>
+                  <tbody>
+                    {materiasFiltradas.map(item => {
+                      const st = situacao(item);
+                      const o = origemDaMateriaPrima(item);
+                      return (
+                        <tr key={item.id} className={tabela.tr}>
+                          <Td className="max-w-[360px]">
+                            <div className="font-semibold text-tinta">{item.nome}</div>
+                            <div className="text-[11.5px] text-cinza truncate">
+                              {item.codigo} · <span className={o.semFornecedor ? 'font-semibold text-st-aguardando' : ''}>{o.texto}</span>
+                            </div>
+                          </Td>
+                          <Td className="whitespace-nowrap">{item.categoria}</Td>
+                          <Td className="text-cinza">{item.localizacao_patio || '—'}</Td>
+                          <Td numero>
+                            <div className="font-semibold text-tinta">
+                              {qtd(item.estoque_atual)} <span className="text-[11.5px] font-normal text-cinza">{item.unidade_medida}</span>
+                            </div>
+                            <div className="text-[11px] text-cinza">mín. {qtd(item.estoque_minimo)}</div>
+                          </Td>
+                          <Td numero>
+                            <span className="font-semibold text-tinta">{formatarMoeda(item.custo_medio_unitario)}</span>
+                            <span className="text-[11px] text-cinza"> /{item.unidade_medida}</span>
+                          </Td>
+                          <Td>
+                            <StatusChip tom={st.tom}>{st.rotulo}</StatusChip>
+                          </Td>
+                          <Td className="text-right">
+                            <div className="inline-flex items-center gap-0.5">
+                              <BotaoSecundario onClick={() => abrirMovimentacao(item)} className="h-8 px-2.5 text-[12.5px] mr-1" title="Entrada, uso, perda ou contagem do estoque">
+                                <ArrowDownUp className="w-3.5 h-3.5" /> Movimentar
+                              </BotaoSecundario>
+                              <BotaoIcone rotulo="Editar insumo" onClick={() => handleAbrirEdicao(item)}>
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </BotaoIcone>
+                              <BotaoIcone rotulo="Excluir insumo" perigo onClick={() => handleExcluir(item.id)}>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </BotaoIcone>
+                            </div>
+                          </Td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </TabelaDados>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* 5. MODAL NOVO / EDITAR INSUMO (AMPLO E HORIZONTAL) */}
+      {/* MODAL NOVO / EDITAR INSUMO */}
       {modalAberto && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <Layers className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-sm sm:text-base text-white">
-                  {modoEdicao ? 'Editar Matéria-Prima / Insumo' : 'Cadastrar Matéria-Prima / Insumo'}
-                </h3>
-              </div>
-              <button onClick={() => setModalAberto(false)} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
+        <ModalFolha
+          titulo={modoEdicao ? `Editar ${modoEdicao.nome}` : 'Novo insumo'}
+          subtitulo="Matéria-prima usada nas receitas: unidade, custo médio, fornecedor e local."
+          onFechar={() => setModalAberto(false)}
+          onSubmit={handleSalvar}
+          largura="sm:max-w-4xl"
+          corpoClassName="space-y-4"
+          rodape={
+            <>
+              <BotaoSecundario onClick={() => setModalAberto(false)}>Cancelar</BotaoSecundario>
+              <BotaoPrimario type="submit">
+                <Save className="w-4 h-4" />
+                Salvar insumo
+              </BotaoPrimario>
+            </>
+          }
+        >
+          <Secao titulo="Identificação">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+              <Campo rotulo="Descrição do insumo *" className="sm:col-span-8">
+                <input
+                  type="text"
+                  required
+                  value={formData.nome}
+                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                  placeholder="Ex: Raiz de Mandioca In Natura Lavada"
+                  className={form.campo}
+                />
+              </Campo>
+              <Campo rotulo="Código *" className="sm:col-span-4">
+                <input
+                  type="text"
+                  required
+                  value={formData.codigo}
+                  onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
+                  className={`${form.campo} tabular-nums`}
+                />
+              </Campo>
+              <Campo rotulo="Categoria *" className="sm:col-span-4">
+                <select required value={formData.categoria} onChange={(e) => setFormData({ ...formData, categoria: e.target.value as any })} className={form.select}>
+                  <option value="">Selecione</option>
+                  <option value="Raiz In Natura">Raiz In Natura</option>
+                  <option value="Ingredientes">Ingredientes (trigo, sal, temperos...)</option>
+                  <option value="Biomassa / Lenha">Biomassa / Lenha</option>
+                  <option value="Embalagens">Embalagens</option>
+                  <option value="Insumos Industriais">Insumos Industriais</option>
+                </select>
+              </Campo>
+              <Campo
+                rotulo="Unidade de medida *"
+                className="sm:col-span-4"
+                ajuda={
+                  modoEdicao && formData.unidade_medida && modoEdicao.unidade_medida !== formData.unidade_medida ? (
+                    <span className="font-semibold text-st-aguardando">Saldo, mínimo e custo serão convertidos para a nova unidade quando possível.</span>
+                  ) : undefined
+                }
+              >
+                <select required value={formData.unidade_medida} onChange={(e) => setFormData({ ...formData, unidade_medida: e.target.value as any })} className={form.select}>
+                  <option value="">Selecione</option>
+                  <option value="KG">KG (Quilo)</option>
+                  <option value="G">G (Grama)</option>
+                  <option value="UN">UN (Unidade)</option>
+                  <option value="TON">TON (Tonelada)</option>
+                  <option value="LITRO">LITRO</option>
+                  <option value="ML">ML (Mililitro)</option>
+                  <option value="ESTÉREO (m³)">ESTÉREO (m³)</option>
+                </select>
+              </Campo>
+              <Campo rotulo="Fornecedor" className="sm:col-span-4">
+                {formData.categoria === 'Raiz In Natura' ? (
+                  <div className="flex h-11 sm:h-9 items-center rounded-md border border-eno-100 bg-eno-50 px-3 text-[13px] font-semibold text-eno-700">
+                    Agricultores (cadastro de agricultores)
+                  </div>
+                ) : (
+                  <select value={formData.fornecedor_id} onChange={(e) => setFormData({ ...formData, fornecedor_id: e.target.value })} className={form.select}>
+                    <option value="">{SEM_FORNECEDOR}</option>
+                    {carregarFornecedores().filter(f => f.ativo !== false).map(f => (
+                      <option key={f.id} value={f.id}>{f.fantasia || f.razao_nome}</option>
+                    ))}
+                  </select>
+                )}
+              </Campo>
             </div>
+          </Secao>
 
-            <form onSubmit={handleSalvar} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Código *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.codigo}
-                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Categoria *</label>
-                  <select
-                    required
-                    value={formData.categoria}
-                    onChange={(e) => setFormData({ ...formData, categoria: e.target.value as any })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
-                  >
-                    <option value="">-- Selecione --</option>
-                    <option value="Raiz In Natura">Raiz In Natura</option>
-                    <option value="Ingredientes">Ingredientes (trigo, sal, temperos...)</option>
-                    <option value="Biomassa / Lenha">Biomassa / Lenha</option>
-                    <option value="Embalagens">Embalagens</option>
-                    <option value="Insumos Industriais">Insumos Industriais</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Unidade de Medida *</label>
-                  <select
-                    required
-                    value={formData.unidade_medida}
-                    onChange={(e) => setFormData({ ...formData, unidade_medida: e.target.value as any })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
-                  >
-                    <option value="">-- Selecione --</option>
-                    <option value="KG">KG (Quilo)</option>
-                    <option value="G">G (Grama)</option>
-                    <option value="UN">UN (Unidade)</option>
-                    <option value="TON">TON (Tonelada)</option>
-                    <option value="LITRO">LITRO</option>
-                    <option value="ML">ML (Mililitro)</option>
-                    <option value="ESTÉREO (m³)">ESTÉREO (m³)</option>
-                  </select>
-                  {modoEdicao && formData.unidade_medida && modoEdicao.unidade_medida !== formData.unidade_medida && (
-                    <span className="block mt-1 text-[10px] font-semibold text-amber-700">
-                      Saldo, mínimo e custo serão convertidos para a nova unidade quando possível.
-                    </span>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">{modoEdicao ? 'Saldo Atual' : 'Saldo Inicial'}</label>
-                  <CampoNumero
-                    step="any"
-                    min={0}
-                    value={formData.estoque_atual}
-                    readOnly={!!modoEdicao}
-                    onChange={(n) => setFormData({ ...formData, estoque_atual: n })}
-                    className={`w-full border border-slate-200 rounded-lg px-3 py-2 font-bold font-mono text-center text-slate-800 focus:outline-none focus:border-emerald-700 ${modoEdicao ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50'}`}
-                  />
-                  {modoEdicao && (
-                    <span className="block mt-1 text-[10px] text-slate-500">Altere o saldo pelo botão <b>Movimentar</b>.</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="lg:col-span-2">
-                  <label className="block font-bold text-slate-700 mb-1">Descrição do Insumo *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.nome}
-                    onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                    placeholder="Ex: Raiz de Mandioca In Natura Lavada"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Custo Médio (R$)</label>
-                  <CampoNumero
-                    step="0.01"
-                    min={0}
-                    value={formData.custo_medio_unitario}
-                    onChange={(n) => setFormData({ ...formData, custo_medio_unitario: n })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-bold font-mono text-center text-slate-800 focus:outline-none focus:border-emerald-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Fornecedor</label>
-                  {formData.categoria === 'Raiz In Natura' ? (
-                    <div className="w-full bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-emerald-900 font-bold">
-                      Agricultores (Cadastro de Agricultores)
-                    </div>
-                  ) : (
-                    <select
-                      value={formData.fornecedor_id}
-                      onChange={(e) => setFormData({ ...formData, fornecedor_id: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer"
-                    >
-                      <option value="">{SEM_FORNECEDOR}</option>
-                      {carregarFornecedores().filter(f => f.ativo !== false).map(f => (
-                        <option key={f.id} value={f.id}>{f.fantasia || f.razao_nome}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Localização no Pátio / Silos</label>
+          <Secao titulo="Estoque e custo">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+              <Campo
+                rotulo={modoEdicao ? 'Saldo atual' : 'Saldo inicial'}
+                className="sm:col-span-3"
+                ajuda={modoEdicao ? <>Altere o saldo pelo botão <b>Movimentar</b>.</> : undefined}
+              >
+                <CampoNumero
+                  step="any"
+                  min={0}
+                  value={formData.estoque_atual}
+                  readOnly={!!modoEdicao}
+                  onChange={(n) => setFormData({ ...formData, estoque_atual: n })}
+                  className={modoEdicao ? form.campoLeitura : form.campoNumero}
+                />
+              </Campo>
+              <Campo rotulo="Custo médio (R$)" className="sm:col-span-3">
+                <CampoNumero step="0.01" min={0} value={formData.custo_medio_unitario} onChange={(n) => setFormData({ ...formData, custo_medio_unitario: n })} className={form.campoNumero} />
+              </Campo>
+              <Campo rotulo="Localização no pátio / silos" className="sm:col-span-6">
                 <input
                   type="text"
                   value={formData.localizacao_patio}
                   onChange={(e) => setFormData({ ...formData, localizacao_patio: e.target.value })}
                   placeholder="Ex: Pátio de Descarga & Silos"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700"
+                  className={form.campo}
                 />
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setModalAberto(false)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm hover:shadow"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Salvar Insumo</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+              </Campo>
+            </div>
+          </Secao>
+        </ModalFolha>
       )}
 
       {/* MODAL: MOVIMENTAR ESTOQUE DO INSUMO */}
       {mpMovimentando && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
-              <div>
-                <h3 className="font-bold text-sm sm:text-base">Movimentar Estoque: {mpMovimentando.nome}</h3>
-                <p className="text-[11px] text-slate-300 mt-0.5">
-                  Saldo atual: <b className="font-mono">{mpMovimentando.estoque_atual.toLocaleString('pt-BR')} {mpMovimentando.unidade_medida}</b>
-                  {' '}• Custo médio: <b className="font-mono">{mpMovimentando.custo_medio_unitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/{mpMovimentando.unidade_medida}</b>
-                </p>
-              </div>
-              <button onClick={() => setMpMovimentando(null)} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSalvarMovimento} className="p-6 space-y-4 text-xs overflow-y-auto">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(Object.keys(ROTULO_MOV) as TipoMovimentoMP[]).map(tipo => (
-                  <button
-                    key={tipo}
-                    type="button"
-                    onClick={() => { setMovTipo(tipo); setMovErro(null); }}
-                    className={`px-2 py-2 rounded-xl border font-bold text-[11px] transition-colors cursor-pointer ${movTipo === tipo ? 'bg-emerald-800 border-emerald-800 text-white' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
-                  >
-                    {ROTULO_MOV[tipo]}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    {movTipo === 'AJUSTE' ? `Quantidade contada (${mpMovimentando.unidade_medida})` : `Quantidade (${mpMovimentando.unidade_medida})`} *
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    required
-                    value={movQtd}
-                    onChange={(e) => setMovQtd(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-bold font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
-                  />
-                </div>
-                {movTipo === 'ENTRADA' && (
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Custo por {mpMovimentando.unidade_medida} (R$)</label>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      value={movCusto}
-                      onChange={(e) => setMovCusto(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
-                    />
-                  </div>
-                )}
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Data</label>
-                  <input
-                    type="date"
-                    value={movData}
-                    onChange={(e) => setMovData(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-emerald-700"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Observação</label>
-                <input
-                  type="text"
-                  value={movObs}
-                  onChange={(e) => setMovObs(e.target.value)}
-                  placeholder={movTipo === 'ENTRADA' ? 'Ex.: NF 1234, fornecedor...' : movTipo === 'SAIDA' ? 'Ex.: abriu 2 sacos para a produção' : movTipo === 'PERDA' ? 'Ex.: saco rasgado, vencido' : 'Ex.: inventário do mês'}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-emerald-700"
-                />
-              </div>
-
-              {(() => {
-                const q = parseFloat(movQtd.replace(',', '.'));
-                if (!(q >= 0)) return null;
-                const saldo = mpMovimentando.estoque_atual;
-                const novo = movTipo === 'ENTRADA' ? saldo + q : movTipo === 'AJUSTE' ? q : saldo - q;
-                return (
-                  <div className={`p-3 rounded-xl border font-mono font-bold ${novo < 0 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-900'}`}>
-                    Saldo após o movimento: {parseFloat(novo.toFixed(4)).toLocaleString('pt-BR')} {mpMovimentando.unidade_medida}
-                  </div>
-                );
-              })()}
-
-              {movErro && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 font-bold flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4" /> {movErro}
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setMpMovimentando(null)} className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 cursor-pointer">
-                  Cancelar
+        <ModalFolha
+          titulo={`Movimentar ${mpMovimentando.nome}`}
+          subtitulo={
+            <>
+              Saldo {qtd(mpMovimentando.estoque_atual)} {mpMovimentando.unidade_medida} · custo médio {formatarMoeda(mpMovimentando.custo_medio_unitario)}/{mpMovimentando.unidade_medida}
+            </>
+          }
+          onFechar={() => setMpMovimentando(null)}
+          onSubmit={handleSalvarMovimento}
+          largura="sm:max-w-2xl"
+          corpoClassName="space-y-4"
+          rodape={
+            <>
+              <BotaoSecundario onClick={() => setMpMovimentando(null)}>Cancelar</BotaoSecundario>
+              <BotaoPrimario type="submit">
+                <Check className="w-4 h-4" />
+                Registrar
+              </BotaoPrimario>
+            </>
+          }
+        >
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="radiogroup" aria-label="Tipo de movimento">
+            {(Object.keys(ROTULO_MOV) as TipoMovimentoMP[]).map(tipo => {
+              const ativo = movTipo === tipo;
+              return (
+                <button
+                  key={tipo}
+                  type="button"
+                  role="radio"
+                  aria-checked={ativo}
+                  onClick={() => { setMovTipo(tipo); setMovErro(null); }}
+                  className={`min-h-11 px-2.5 py-2 rounded-md border text-[12.5px] font-semibold leading-tight transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro ${
+                    ativo ? 'bg-eno-800 border-eno-800 text-white' : 'bg-papel border-linha-forte text-tinta-2 hover:bg-papel-3'
+                  }`}
+                >
+                  {ROTULO_MOV[tipo]}
                 </button>
-                <button type="submit" className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold cursor-pointer">
-                  <Check className="w-4 h-4" /> Registrar
-                </button>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100">
-                <h4 className="font-bold text-slate-800 mb-2">Histórico de movimentações</h4>
-                {historicoMov.length === 0 ? (
-                  <p className="text-slate-400">Nenhuma movimentação registrada ainda.</p>
-                ) : (
-                  <table className="w-full text-left">
-                    <thead className="text-[10px] uppercase text-slate-500 border-b border-slate-200">
-                      <tr>
-                        <th className="py-1.5">Data</th>
-                        <th className="py-1.5">Tipo</th>
-                        <th className="py-1.5 text-right">Qtd</th>
-                        <th className="py-1.5 text-right">Saldo</th>
-                        <th className="py-1.5 pl-3">Obs.</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {historicoMov.map(m => (
-                        <tr key={m.id}>
-                          <td className="py-1.5 font-mono">{m.data.split('-').reverse().join('/')}</td>
-                          <td className="py-1.5">{ROTULO_MOV[m.tipo]}</td>
-                          <td className={`py-1.5 text-right font-mono font-bold ${m.tipo === 'ENTRADA' || (m.tipo === 'AJUSTE' && m.quantidade >= 0) ? 'text-emerald-700' : 'text-red-600'}`}>
-                            {m.tipo === 'ENTRADA' || (m.tipo === 'AJUSTE' && m.quantidade >= 0) ? '+' : '−'}{Math.abs(m.quantidade).toLocaleString('pt-BR')} {m.unidade_medida}
-                          </td>
-                          <td className="py-1.5 text-right font-mono">{m.saldo_posterior.toLocaleString('pt-BR')}</td>
-                          <td className="py-1.5 pl-3 text-slate-500">{m.observacao || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </form>
+              );
+            })}
           </div>
-        </div>
-      )}
 
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Campo rotulo={`${movTipo === 'AJUSTE' ? 'Quantidade contada' : 'Quantidade'} (${mpMovimentando.unidade_medida}) *`}>
+              <input type="number" inputMode="decimal" step="any" min="0" required value={movQtd} onChange={(e) => setMovQtd(e.target.value)} className={form.campoNumero} />
+            </Campo>
+            {movTipo === 'ENTRADA' && (
+              <Campo rotulo={`Custo por ${mpMovimentando.unidade_medida} (R$)`}>
+                <input type="number" inputMode="decimal" step="any" min="0" value={movCusto} onChange={(e) => setMovCusto(e.target.value)} className={form.campoNumero} />
+              </Campo>
+            )}
+            <Campo rotulo="Data">
+              <input type="date" value={movData} onChange={(e) => setMovData(e.target.value)} className={form.campo} />
+            </Campo>
+          </div>
+
+          <Campo rotulo="Observação">
+            <input
+              type="text"
+              value={movObs}
+              onChange={(e) => setMovObs(e.target.value)}
+              placeholder={movTipo === 'ENTRADA' ? 'Ex.: NF 1234, fornecedor...' : movTipo === 'SAIDA' ? 'Ex.: abriu 2 sacos para a produção' : movTipo === 'PERDA' ? 'Ex.: saco rasgado, vencido' : 'Ex.: inventário do mês'}
+              className={form.campo}
+            />
+          </Campo>
+
+          {(() => {
+            const q = parseFloat(movQtd.replace(',', '.'));
+            if (!(q >= 0)) return null;
+            const saldo = mpMovimentando.estoque_atual;
+            const novo = movTipo === 'ENTRADA' ? saldo + q : movTipo === 'AJUSTE' ? q : saldo - q;
+            return (
+              <div className={`flex items-baseline justify-between gap-3 rounded-md border px-3.5 py-2.5 ${novo < 0 ? 'bg-st-vencido-bg border-st-vencido/20 text-st-vencido' : 'bg-eno-50 border-eno-100 text-tinta'}`}>
+                <span className="text-[12.5px] font-semibold">Saldo após o movimento</span>
+                <span className="text-[18px] font-extrabold tabular-nums">
+                  {parseFloat(novo.toFixed(4)).toLocaleString('pt-BR')} <span className="text-[12px] font-semibold">{mpMovimentando.unidade_medida}</span>
+                </span>
+              </div>
+            );
+          })()}
+
+          {movErro && (
+            <Aviso tom="vencido" className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" /> {movErro}
+            </Aviso>
+          )}
+
+          <section>
+            <h3 className="text-[12px] font-bold uppercase tracking-[0.12em] text-cinza mb-2">Histórico de movimentações</h3>
+            {historicoMov.length === 0 ? (
+              <p className="text-[12.5px] text-cinza">Nenhuma movimentação registrada ainda.</p>
+            ) : (
+              <ul className="rounded-md border border-linha bg-papel">
+                {historicoMov.map(m => {
+                  const positivo = m.tipo === 'ENTRADA' || (m.tipo === 'AJUSTE' && m.quantidade >= 0);
+                  return (
+                    <li key={m.id} className="flex items-start justify-between gap-3 px-3 py-2 border-b border-linha last:border-b-0">
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-semibold text-tinta">{ROTULO_MOV[m.tipo]}</div>
+                        <div className="text-[11.5px] text-cinza tabular-nums truncate">
+                          {m.data.split('-').reverse().join('/')}
+                          {m.observacao ? ` · ${m.observacao}` : ''}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0 tabular-nums">
+                        <div className={`text-[13px] font-bold ${positivo ? 'text-st-pago' : 'text-st-vencido'}`}>
+                          {positivo ? '+' : '−'}{Math.abs(m.quantidade).toLocaleString('pt-BR')} {m.unidade_medida}
+                        </div>
+                        <div className="text-[11px] text-cinza">saldo {m.saldo_posterior.toLocaleString('pt-BR')}</div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        </ModalFolha>
+      )}
     </div>
   );
 }

@@ -34,6 +34,11 @@ import { calcularConsumoProducao, ConsumoMateriaPrimaProducao } from '../../data
 import { carregarEstoqueProdutos, ProdutoEstoque } from '../../data/produtosData';
 import { formatarDataBR, hojeISO } from '../../lib/datas';
 import { PedidosNavTabs } from '../pedidos/PedidosNavTabs';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, CampoBusca, Segmentado, SeletorFiltro } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
 
 interface Props {
   // ADMIN: tela no fluxo de Pedidos | PRODUCAO: portal do chão de fábrica (sem valores financeiros)
@@ -45,28 +50,35 @@ type FiltroStatus = 'ABERTAS' | StatusOrdemProducao | 'TODAS';
 
 const fmt = (n: number, casas = 3) => (Number(n) || 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
 
+const TOM_STATUS: Record<StatusOrdemProducao, 'aguardando' | 'producao' | 'pago' | 'neutro'> = {
+  PLANEJADA: 'aguardando',
+  EM_PRODUCAO: 'producao',
+  CONCLUIDA: 'pago',
+  CANCELADA: 'neutro'
+};
+
 const ROTULO_STATUS: Record<StatusOrdemProducao, { rotulo: string; classe: string }> = {
-  PLANEJADA: { rotulo: 'Planejada', classe: 'bg-sky-50 text-sky-800 border-sky-200' },
-  EM_PRODUCAO: { rotulo: 'Em Produção', classe: 'bg-amber-50 text-amber-800 border-amber-300' },
-  CONCLUIDA: { rotulo: 'Concluída', classe: 'bg-emerald-50 text-emerald-800 border-emerald-300' },
-  CANCELADA: { rotulo: 'Cancelada', classe: 'bg-slate-100 text-slate-500 border-slate-200' }
+  PLANEJADA: { rotulo: 'Planejada', classe: 'bg-st-producao-bg text-st-producao border-st-producao/30' },
+  EM_PRODUCAO: { rotulo: 'Em Produção', classe: 'bg-st-aguardando-bg text-st-aguardando border-ouro' },
+  CONCLUIDA: { rotulo: 'Concluída', classe: 'bg-eno-50 text-eno-800 border-eno-100' },
+  CANCELADA: { rotulo: 'Cancelada', classe: 'bg-papel-3/60 text-cinza border-linha' }
 };
 
 // Tabela de MP necessária x estoque, com alerta vermelho do que falta
 export function TabelaMateriaPrimaOP({ itens, titulo, real }: { itens: ConsumoMateriaPrimaProducao[]; titulo: string; real?: boolean }) {
   if (itens.length === 0) {
     return (
-      <div className="text-[11px] text-slate-400 italic px-1">
+      <div className="text-[11px] text-cinza italic px-1">
         {real ? 'Nenhuma matéria-prima baixada.' : 'Sem matéria-prima calculada (produto sem receita ou quantidade zerada).'}
       </div>
     );
   }
   return (
-    <div className="rounded-lg border border-slate-200 overflow-hidden">
-      <div className="bg-slate-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">{titulo}</div>
+    <div className="rounded-md border border-linha overflow-x-auto">
+      <div className="bg-papel-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-cinza border-b border-linha">{titulo}</div>
       <table className="w-full text-[11px]">
         <thead>
-          <tr className="text-slate-400 text-[10px] uppercase">
+          <tr className="text-cinza text-[10px] uppercase">
             <th className="text-left py-1 px-3 font-bold">Matéria-prima</th>
             <th className="text-right py-1 px-3 font-bold">{real ? 'Necessário' : 'Necessária'}</th>
             <th className="text-right py-1 px-3 font-bold">{real ? 'Estoque na baixa' : 'Estoque atual'}</th>
@@ -74,17 +86,17 @@ export function TabelaMateriaPrimaOP({ itens, titulo, real }: { itens: ConsumoMa
             <th className="text-right py-1 px-3 font-bold">Falta</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100 font-mono">
+        <tbody className="divide-y divide-linha tabular-nums">
           {itens.map(c => (
-            <tr key={c.materia_prima_id} className={c.falta > 0 ? 'bg-red-50/70' : ''}>
-              <td className="py-1 px-3 font-sans font-semibold text-slate-800">
+            <tr key={c.materia_prima_id} className={c.falta > 0 ? 'bg-st-vencido-bg/70' : ''}>
+              <td className="py-1 px-3 font-sans font-semibold text-tinta">
                 {c.materia_prima_nome}
-                {c.unidade_incompativel && <span className="ml-1 text-[9px] text-amber-700 font-bold">(unidade incompatível na receita)</span>}
+                {c.unidade_incompativel && <span className="ml-1 text-[9px] text-st-aguardando font-bold">(unidade incompatível na receita)</span>}
               </td>
               <td className="py-1 px-3 text-right">{fmt(c.quantidade_necessaria)} {c.unidade}</td>
-              <td className="py-1 px-3 text-right text-slate-600">{fmt(c.estoque_atual)} {c.unidade}</td>
+              <td className="py-1 px-3 text-right text-tinta-2">{fmt(c.estoque_atual)} {c.unidade}</td>
               {real && <td className="py-1 px-3 text-right">{fmt(c.quantidade_consumida || 0)} {c.unidade}</td>}
-              <td className={`py-1 px-3 text-right font-bold ${c.falta > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+              <td className={`py-1 px-3 text-right font-bold ${c.falta > 0 ? 'text-st-vencido' : 'text-eno-700'}`}>
                 {c.falta > 0 ? `-${fmt(c.falta)} ${c.unidade}` : 'OK'}
               </td>
             </tr>
@@ -301,62 +313,50 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
 
   const conteudo = (
     <>
-      {/* CABEÇALHO */}
-      <div className="bg-white border-b border-slate-200/80 px-6 py-3.5 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2 flex-wrap">
-            <ClipboardList className="w-5 h-5 text-emerald-700" />
-            <span>Ordens de Produção</span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
-              {contagem.ABERTAS} abertas
-            </span>
-            {contagem.comFalta > 0 && (
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 flex items-center gap-1 font-mono">
-                <AlertTriangle className="w-3 h-3" />
-                <span>{contagem.comFalta} com falta de matéria-prima</span>
-              </span>
-            )}
-          </h1>
-          <button
-            onClick={() => setNovaAberta(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs cursor-pointer shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nova OP para Estoque</span>
-          </button>
-        </div>
-      </div>
-
-      {/* FILTROS */}
-      <div className="bg-[#f1f5f2] px-6 py-2.5 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="flex flex-wrap gap-1.5">
-          {filtros.map(f => (
-            <button
-              key={f.id}
-              onClick={() => setFiltro(f.id)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer ${filtro === f.id ? 'bg-emerald-900 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
-            >
-              {f.rotulo} <span className="font-mono opacity-70">{contagem[f.id]}</span>
-            </button>
-          ))}
-        </div>
-        <div className="relative w-full sm:w-72">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            placeholder="Buscar OP, produto, pedido, lote..."
-            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs focus:outline-none focus:border-emerald-700"
+      <div className="mx-auto w-full max-w-[1700px] shrink-0">
+        <CabecalhoPagina
+          titulo="Ordens de produção"
+          className={modo === 'PRODUCAO' ? 'pt-4' : ''}
+          resumo={
+            <>
+              {contagem.ABERTAS} {contagem.ABERTAS === 1 ? 'aberta' : 'abertas'} · {contagem.EM_PRODUCAO} em produção · {contagem.PLANEJADA} planejadas
+              {contagem.comFalta > 0 && (
+                <span className="text-st-vencido font-semibold"> · {contagem.comFalta} com falta de matéria-prima</span>
+              )}
+            </>
+          }
+          acoes={
+            <BotaoPrimario onClick={() => setNovaAberta(true)} className="w-full sm:w-auto h-10 sm:h-9">
+              <Plus className="w-4 h-4" />
+              Nova OP para estoque
+            </BotaoPrimario>
+          }
+        />
+        <BarraFiltros>
+          <Segmentado<FiltroStatus>
+            rotuloAria="Situação das ordens"
+            valor={filtro}
+            onChange={setFiltro}
+            className="w-full md:w-fit [&>button]:h-9 sm:[&>button]:h-7"
+            opcoes={filtros.map(f => ({ valor: f.id, rotulo: f.rotulo, contagem: contagem[f.id] }))}
           />
-        </div>
+          <CampoBusca valor={busca} onChange={setBusca} placeholder="Buscar OP, produto, pedido ou lote" className="w-full md:w-72" />
+        </BarraFiltros>
       </div>
 
       {/* LISTA DE OPs */}
-      <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-3">
+      <div className="flex-1 min-h-0 overflow-y-auto">
+       <div className="mx-auto w-full max-w-[1700px] px-4 sm:px-6 pb-6 space-y-3">
         {opsFiltradas.length === 0 && (
-          <div className="bg-white rounded-xl border border-slate-200 py-12 text-center text-slate-400 text-sm font-medium">
-            Nenhuma ordem de produção neste filtro.
+          <div className="bg-papel rounded-md border border-linha">
+            <EstadoVazio
+              titulo={ops.length === 0 ? 'Nenhuma ordem de produção' : 'Nenhuma ordem neste filtro'}
+              texto={
+                ops.length === 0
+                  ? 'As OPs nascem dos pedidos aprovados para produção. Para produzir para o estoque, crie uma OP avulsa.'
+                  : 'Troque a situação acima ou limpe a busca.'
+              }
+            />
           </div>
         )}
         {opsFiltradas.map(op => {
@@ -367,31 +367,29 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
           const progresso = op.quantidade_planejada_pacotes > 0 ? Math.min(100, Math.round((op.quantidade_produzida_pacotes / op.quantidade_planejada_pacotes) * 100)) : 0;
           const un = op.unidades_por_embalagem || 1;
           return (
-            <div key={op.id} className={`bg-white rounded-xl border shadow-xs p-4 space-y-3 ${temFalta ? 'border-red-300' : 'border-slate-200'}`}>
+            <div key={op.id} className={`bg-papel rounded-md border p-4 space-y-3 ${temFalta ? 'border-st-vencido/40' : 'border-linha'}`}>
               <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono font-black text-slate-900 text-sm">{op.numero}</span>
-                    <span className={`px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${st.classe}`}>{st.rotulo}</span>
+                    <span className="tabular-nums font-extrabold text-tinta text-sm">{op.numero}</span>
+                    <StatusChip tom={TOM_STATUS[op.status]}>{st.rotulo}</StatusChip>
                     {op.origem === 'PEDIDO' ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-violet-50 border border-violet-200 text-violet-800 text-[10px] font-bold">
+                      <span className="inline-flex items-center gap-1 text-[11.5px] text-tinta-2 min-w-0">
                         <ShoppingBag className="w-3 h-3" /> {op.pedido_numero} · {op.cliente_nome}
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-bold">
+                      <span className="inline-flex items-center gap-1 text-[11.5px] text-cinza">
                         <Warehouse className="w-3 h-3" /> Para estoque
                       </span>
                     )}
                     {temFalta && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-bold">
-                        <AlertTriangle className="w-3 h-3" /> Falta matéria-prima
-                      </span>
+                      <StatusChip tom="vencido">Falta matéria-prima</StatusChip>
                     )}
                   </div>
-                  <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                    <Package className="w-4 h-4 text-emerald-700" /> {op.produto_nome}
+                  <div className="text-[15px] font-bold text-tinta">
+                    {op.produto_nome}
                   </div>
-                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
+                  <div className="text-[11px] text-cinza flex items-center gap-1.5 flex-wrap">
                     <FlaskConical className="w-3 h-3" />
                     <span>{op.receita_nome ? `Receita: ${op.receita_nome}` : 'Sem receita vinculada'}</span>
                     <span>•</span>
@@ -400,50 +398,50 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
                     {op.data_conclusao && <><span>•</span><span>Concluída {formatarDataBR(op.data_conclusao)}</span></>}
                   </div>
                   {(op.lote || op.data_validade) && (
-                    <div className="text-[11px] text-slate-600 flex items-center gap-1.5 flex-wrap">
+                    <div className="text-[11px] text-tinta-2 flex items-center gap-1.5 flex-wrap">
                       <Tag className="w-3 h-3" />
-                      <span>Lote <strong className="font-mono">{op.lote || '-'}</strong></span>
+                      <span>Lote <strong className="tabular-nums">{op.lote || '-'}</strong></span>
                       <span>• Fab. {formatarDataBR(op.data_fabricacao)}</span>
                       <span>• Val. {formatarDataBR(op.data_validade)}</span>
                     </div>
                   )}
                 </div>
 
-                <div className="min-w-[220px] space-y-2">
+                <div className="lg:min-w-[240px] space-y-2">
                   <div className="text-xs">
-                    <div className="flex justify-between font-semibold text-slate-600">
+                    <div className="flex justify-between font-semibold text-tinta-2">
                       <span>Produzido</span>
-                      <span className="font-mono text-slate-900">
+                      <span className="tabular-nums text-tinta">
                         {fmt(op.quantidade_produzida_pacotes)} / {fmt(op.quantidade_planejada_pacotes)} pct
                       </span>
                     </div>
                     {un > 1 && (
-                      <div className="text-[10px] text-slate-400 text-right font-mono">
+                      <div className="text-[10px] text-cinza text-right tabular-nums">
                         {fmt(op.quantidade_produzida_pacotes / un)} / {fmt(op.quantidade_planejada_pacotes / un)} {op.tipo_embalagem || 'embalagens'} ({un} pct)
                       </div>
                     )}
-                    <div className="h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
-                      <div className="h-full bg-emerald-600" style={{ width: `${progresso}%` }} />
+                    <div className="h-1.5 bg-papel-3/60 rounded-full mt-1 overflow-hidden">
+                      <div className="h-full bg-eno-600" style={{ width: `${progresso}%` }} />
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5 justify-end">
+                  <div className="flex flex-wrap gap-1.5 lg:justify-end max-lg:[&>button]:flex-1 max-lg:[&>button]:justify-center max-sm:[&>button]:h-10">
                     {op.status === 'PLANEJADA' && (
-                      <button onClick={() => handleIniciar(op)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-700 hover:bg-sky-800 text-white text-[11px] font-bold cursor-pointer">
+                      <button onClick={() => handleIniciar(op)} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[5px] bg-st-producao hover:bg-st-producao text-white text-[11px] font-bold cursor-pointer">
                         <Play className="w-3 h-3" /> Iniciar
                       </button>
                     )}
                     {aberta && (
-                      <button onClick={() => abrirAcao(op, 'APONTAR')} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-[11px] font-bold cursor-pointer">
+                      <button onClick={() => abrirAcao(op, 'APONTAR')} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[5px] bg-papel border border-linha-forte hover:bg-papel-2 text-tinta text-[11px] font-bold cursor-pointer">
                         <PenLine className="w-3 h-3" /> Apontar
                       </button>
                     )}
                     {aberta && (
-                      <button onClick={() => abrirAcao(op, 'CONCLUIR')} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] font-bold cursor-pointer">
+                      <button onClick={() => abrirAcao(op, 'CONCLUIR')} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[5px] bg-eno-800 hover:bg-eno-900 text-white text-[11px] font-bold cursor-pointer">
                         <CheckCircle2 className="w-3 h-3" /> Concluir
                       </button>
                     )}
                     {aberta && modo === 'ADMIN' && (
-                      <button onClick={() => handleCancelar(op)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-red-700 hover:bg-red-50 text-[11px] font-bold cursor-pointer">
+                      <button onClick={() => handleCancelar(op)} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[5px] text-st-vencido hover:bg-st-vencido-bg text-[11px] font-bold cursor-pointer">
                         <XCircle className="w-3 h-3" /> Cancelar
                       </button>
                     )}
@@ -463,24 +461,25 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
             </div>
           );
         })}
+       </div>
       </div>
 
       {/* MODAL: NOVA OP PARA ESTOQUE */}
       {novaAberta && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-4">
-          <form onSubmit={handleCriarNova} className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl text-xs">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
-              <h3 className="font-black text-slate-900 text-sm">Nova Ordem de Produção para Estoque</h3>
-              <button type="button" onClick={() => setNovaAberta(false)} className="p-1 rounded-lg hover:bg-slate-100 cursor-pointer"><X className="w-4 h-4" /></button>
+        <div className="fixed inset-0 z-50 bg-eno-900/60 flex items-stretch sm:items-center justify-center p-0 sm:p-4">
+          <form onSubmit={handleCriarNova} className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md w-full max-w-2xl h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-y-auto shadow-xl text-xs flex flex-col">
+            <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-2 border-b border-linha sticky top-0 bg-papel z-10">
+              <h3 className="font-extrabold text-tinta text-sm">Nova Ordem de Produção para Estoque</h3>
+              <button type="button" onClick={() => setNovaAberta(false)} className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-papel-3/60 cursor-pointer" aria-label="Fechar"><X className="w-4 h-4" /></button>
             </div>
-            <div className="p-5 space-y-3">
+            <div className="p-4 sm:p-5 space-y-3 flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
                 <div className="sm:col-span-7">
-                  <label className="block font-bold text-slate-700 mb-1">Produto *</label>
+                  <label className="block font-bold text-tinta-2 mb-1">Produto *</label>
                   <select
                     value={novaProdutoId}
                     onChange={e => setNovaProdutoId(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
+                    className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 font-bold text-tinta focus:outline-none focus:border-eno-700"
                   >
                     <option value="">-- Selecione --</option>
                     {produtos.map(p => (
@@ -491,30 +490,30 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
                   </select>
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block font-bold text-slate-700 mb-1">Pacotes *</label>
-                  <input type="number" min="1" step="1" value={novaQtd} onChange={e => setNovaQtd(e.target.value)} className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-right focus:outline-none focus:border-emerald-700" />
+                  <label className="block font-bold text-tinta-2 mb-1">Pacotes *</label>
+                  <input type="number" min="1" step="1" value={novaQtd} onChange={e => setNovaQtd(e.target.value)} className="w-full border border-linha-forte rounded-md px-3 py-2 tabular-nums font-bold text-right focus:outline-none focus:border-eno-700" />
                 </div>
                 <div className="sm:col-span-3">
-                  <label className="block font-bold text-slate-700 mb-1">Previsão</label>
-                  <input type="date" value={novaData} onChange={e => setNovaData(e.target.value)} className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono focus:outline-none focus:border-emerald-700" />
+                  <label className="block font-bold text-tinta-2 mb-1">Previsão</label>
+                  <input type="date" value={novaData} onChange={e => setNovaData(e.target.value)} className="w-full border border-linha-forte rounded-md px-3 py-2 tabular-nums focus:outline-none focus:border-eno-700" />
                 </div>
               </div>
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Observação</label>
-                <input type="text" value={novaObs} onChange={e => setNovaObs(e.target.value)} className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-700" />
+                <label className="block font-bold text-tinta-2 mb-1">Observação</label>
+                <input type="text" value={novaObs} onChange={e => setNovaObs(e.target.value)} className="w-full border border-linha-forte rounded-md px-3 py-2 focus:outline-none focus:border-eno-700" />
               </div>
               {novaProdutoId && (parseFloat(novaQtd) || 0) > 0 && (
                 <TabelaMateriaPrimaOP itens={previaNova} titulo="Matéria-prima necessária x estoque atual" />
               )}
               {previaNova.some(c => c.falta > 0) && (
-                <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-800 font-semibold flex items-center gap-1.5">
+                <div className="p-2.5 rounded-md bg-st-vencido-bg border border-st-vencido/30 text-st-vencido font-semibold flex items-center gap-1.5">
                   <AlertTriangle className="w-4 h-4" /> O estoque de matéria-prima não cobre esta OP. Você pode criar mesmo assim.
                 </div>
               )}
             </div>
-            <div className="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
-              <button type="button" onClick={() => setNovaAberta(false)} className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold cursor-pointer">Cancelar</button>
-              <button type="submit" className="px-4 py-2 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold cursor-pointer">Criar OP</button>
+            <div className="px-5 py-3 border-t border-linha flex justify-end gap-2 sticky bottom-0 bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:min-h-11">
+              <button type="button" onClick={() => setNovaAberta(false)} className="px-4 py-2 rounded-md bg-papel-3/60 hover:bg-linha font-bold cursor-pointer">Cancelar</button>
+              <button type="submit" className="px-4 py-2 rounded-md bg-eno-900 hover:bg-eno-950 text-white font-bold cursor-pointer">Criar OP</button>
             </div>
           </form>
         </div>
@@ -522,31 +521,31 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
 
       {/* MODAL: APONTAR / CONCLUIR */}
       {opAcao && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-4">
-          <form onSubmit={handleConfirmarAcao} className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl text-xs">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
-              <h3 className="font-black text-slate-900 text-sm">
+        <div className="fixed inset-0 z-50 bg-eno-900/60 flex items-stretch sm:items-center justify-center p-0 sm:p-4">
+          <form onSubmit={handleConfirmarAcao} className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md w-full max-w-2xl h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-y-auto shadow-xl text-xs flex flex-col">
+            <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-2 border-b border-linha sticky top-0 bg-papel z-10">
+              <h3 className="font-extrabold text-tinta text-sm">
                 {opAcao.tipo === 'APONTAR' ? 'Apontar produção' : 'Concluir'} — {opAcao.op.numero} · {opAcao.op.produto_nome}
               </h3>
-              <button type="button" onClick={() => setOpAcao(null)} className="p-1 rounded-lg hover:bg-slate-100 cursor-pointer"><X className="w-4 h-4" /></button>
+              <button type="button" onClick={() => setOpAcao(null)} className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-papel-3/60 cursor-pointer" aria-label="Fechar"><X className="w-4 h-4" /></button>
             </div>
-            <div className="p-5 space-y-3">
-              <div className="text-[11px] text-slate-600">
-                Planejado: <strong className="font-mono">{fmt(opAcao.op.quantidade_planejada_pacotes)} pct</strong> · Já apontado: <strong className="font-mono">{fmt(opAcao.op.quantidade_produzida_pacotes)} pct</strong>
+            <div className="p-4 sm:p-5 space-y-3 flex-1">
+              <div className="text-[11px] text-tinta-2">
+                Planejado: <strong className="tabular-nums">{fmt(opAcao.op.quantidade_planejada_pacotes)} pct</strong> · Já apontado: <strong className="tabular-nums">{fmt(opAcao.op.quantidade_produzida_pacotes)} pct</strong>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
+                  <label className="block font-bold text-tinta-2 mb-1">
                     {opAcao.tipo === 'APONTAR' ? 'Pacotes produzidos agora *' : 'Total produzido (pct) *'}
                   </label>
-                  <input type="number" step="1" value={formPacotes} onChange={e => setFormPacotes(e.target.value)} className="w-full border-2 border-emerald-600 rounded-xl px-3 py-2 font-mono font-black text-right focus:outline-none" />
+                  <input type="number" step="1" value={formPacotes} onChange={e => setFormPacotes(e.target.value)} className="w-full border-2 border-eno-600 rounded-md px-3 py-2 tabular-nums font-extrabold text-right focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Lote *</label>
-                  <input type="text" value={formLote} onChange={e => setFormLote(e.target.value)} className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold focus:outline-none focus:border-emerald-700" />
+                  <label className="block font-bold text-tinta-2 mb-1">Lote *</label>
+                  <input type="text" value={formLote} onChange={e => setFormLote(e.target.value)} className="w-full border border-linha-forte rounded-md px-3 py-2 tabular-nums font-bold focus:outline-none focus:border-eno-700" />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Fabricação</label>
+                  <label className="block font-bold text-tinta-2 mb-1">Fabricação</label>
                   <input
                     type="date"
                     value={formFabricacao}
@@ -554,23 +553,23 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
                       setFormFabricacao(e.target.value);
                       if (e.target.value) setFormValidade(validadePadraoProduto(opAcao.op.produto_id, e.target.value));
                     }}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono focus:outline-none focus:border-emerald-700"
+                    className="w-full border border-linha-forte rounded-md px-3 py-2 tabular-nums focus:outline-none focus:border-eno-700"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Validade *</label>
-                  <input type="date" value={formValidade} onChange={e => setFormValidade(e.target.value)} className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono focus:outline-none focus:border-emerald-700" />
+                  <label className="block font-bold text-tinta-2 mb-1">Validade *</label>
+                  <input type="date" value={formValidade} onChange={e => setFormValidade(e.target.value)} className="w-full border border-linha-forte rounded-md px-3 py-2 tabular-nums focus:outline-none focus:border-eno-700" />
                 </div>
               </div>
               {opAcao.tipo === 'APONTAR' && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Operador / Turno</label>
-                    <input type="text" value={formOperador} onChange={e => setFormOperador(e.target.value)} className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-700" />
+                    <label className="block font-bold text-tinta-2 mb-1">Operador / Turno</label>
+                    <input type="text" value={formOperador} onChange={e => setFormOperador(e.target.value)} className="w-full border border-linha-forte rounded-md px-3 py-2 focus:outline-none focus:border-eno-700" />
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Observação</label>
-                    <input type="text" value={formObs} onChange={e => setFormObs(e.target.value)} className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-700" />
+                    <label className="block font-bold text-tinta-2 mb-1">Observação</label>
+                    <input type="text" value={formObs} onChange={e => setFormObs(e.target.value)} className="w-full border border-linha-forte rounded-md px-3 py-2 focus:outline-none focus:border-eno-700" />
                   </div>
                 </div>
               )}
@@ -579,14 +578,14 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
                 titulo={opAcao.tipo === 'CONCLUIR' ? 'Baixa de matéria-prima na conclusão (receita x produzido)' : 'Matéria-prima correspondente a este apontamento (baixa só na conclusão)'}
               />
               {consumoAcao.some(c => c.falta > 0) && (
-                <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-800 font-semibold flex items-center gap-1.5">
+                <div className="p-2.5 rounded-md bg-st-vencido-bg border border-st-vencido/30 text-st-vencido font-semibold flex items-center gap-1.5">
                   <AlertTriangle className="w-4 h-4" /> Matéria-prima insuficiente no estoque. É possível seguir; a falta fica registrada na OP.
                 </div>
               )}
             </div>
-            <div className="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
-              <button type="button" onClick={() => setOpAcao(null)} className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold cursor-pointer">Voltar</button>
-              <button type="submit" className="px-4 py-2 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold cursor-pointer">
+            <div className="px-5 py-3 border-t border-linha flex justify-end gap-2 sticky bottom-0 bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:min-h-11">
+              <button type="button" onClick={() => setOpAcao(null)} className="px-4 py-2 rounded-md bg-papel-3/60 hover:bg-linha font-bold cursor-pointer">Voltar</button>
+              <button type="submit" className="px-4 py-2 rounded-md bg-eno-900 hover:bg-eno-950 text-white font-bold cursor-pointer">
                 {opAcao.tipo === 'APONTAR' ? 'Registrar apontamento' : 'Concluir OP'}
               </button>
             </div>
@@ -597,11 +596,11 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
   );
 
   if (modo === 'PRODUCAO') {
-    return <div className="w-full flex flex-col bg-[#f8faf8] text-slate-800 rounded-2xl border border-slate-200 overflow-hidden min-h-[60vh]">{conteudo}</div>;
+    return <div className="w-full flex flex-col bg-papel-2 text-tinta rounded-md border border-linha overflow-hidden min-h-[60vh]">{conteudo}</div>;
   }
 
   return (
-    <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-hidden">
+    <div className="relative h-full w-full flex flex-col bg-papel-2 text-tinta overflow-hidden">
       <PedidosNavTabs activeTab="pedidos_ordens_producao" onNavigate={onNavigate} />
       {conteudo}
     </div>

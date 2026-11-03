@@ -39,6 +39,12 @@ import {
 } from '../../data/cadastrosData';
 import { useListaPersistida } from '../../lib/useListaPersistida';
 import { hojeISO, somarDias, formatarDataBR } from '../../lib/datas';
+import { CabecalhoPagina, BotaoPrimario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, Segmentado, CampoBusca, SeletorFiltro } from '../ui/BarraFiltros';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
+import { ModalCadastro, BotaoLinha, BotaoCartao } from './FormularioCadastro';
+import { ListaCadastro, LinkLinha } from './ListaCadastro';
 
 interface CadastroProvisorioPortifolioProps {
   onNavigateToCliente?: (clienteId: string) => void;
@@ -291,380 +297,239 @@ export function CadastroProvisorioPortifolio({
     }
   };
 
+  const statusVip = (item: CadastroProvisorio) => {
+    const dias = getDiasRestantes(item.data_vencimento);
+    if (isCadastroExpirado(item.data_vencimento)) return <StatusChip tom="vencido">Expirado</StatusChip>;
+    if (dias <= 2) return <StatusChip tom="aguardando">Vence em {dias}d</StatusChip>;
+    return <StatusChip tom="pago">Ativo · {dias} dias</StatusChip>;
+  };
+  const chavePedidos = (item: CadastroProvisorio, grande?: boolean) => (
+    <button
+      type="button"
+      onClick={() => handleToggleLiberarPedidos(item.id)}
+      aria-pressed={item.permissoes.liberar_pedidos}
+      title={item.permissoes.liberar_pedidos ? 'Clique para bloquear pedidos' : 'Clique para liberar pedidos'}
+      className={`inline-flex items-center justify-center gap-1.5 ${grande ? 'h-10 w-full' : 'h-8'} px-2.5 rounded-md text-[12.5px] font-semibold border transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro ${
+        item.permissoes.liberar_pedidos
+          ? 'bg-st-pago-bg text-st-pago border-st-pago/25'
+          : 'bg-papel text-cinza border-linha-forte hover:text-tinta'
+      }`}
+    >
+      {item.permissoes.liberar_pedidos ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+      {item.permissoes.liberar_pedidos ? 'Pedidos liberados' : 'Pedidos bloqueados'}
+    </button>
+  );
+
   return (
-    <div className="relative h-full w-full flex flex-col bg-[#f4f8f5] text-slate-800 overflow-hidden">
-
-      {/* ========================================================= */}
-      {/* 1. CABEÇALHO & CARDS DE INDICADORES (MÉTRICAS)            */}
-      {/* ========================================================= */}
-      <div className="bg-white border-b border-emerald-900/10 px-6 py-4 shadow-xs shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-
-          <div>
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-emerald-800 text-white shadow-sm">
-                <Sparkles className="w-5 h-5 text-emerald-200" />
-              </div>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                  Cadastro Provisório Portfólio
-                </h1>
-                <p className="text-xs sm:text-sm text-slate-500 font-medium">
-                  Cadastros temporários com data limite para consulta de fotos, eventos, preços, parceiros e liberação de pedidos.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Botão Novo Cadastro Provisório */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleAbrirNovo}
-              className="
-                flex items-center gap-2 px-5 py-2.5 rounded-xl
-                bg-gradient-to-r from-emerald-700 to-lime-600 hover:from-emerald-800 hover:to-lime-700
-                text-white font-extrabold text-xs sm:text-sm shadow-md transition-all cursor-pointer
-              "
-            >
-              <Plus className="w-4.5 h-4.5 stroke-[3]" />
-              <span>Novo Cadastro Provisório</span>
-            </button>
-          </div>
-
-        </div>
-
-        {/* CARDS DE KPIS LIMPOS (APENAS TOTAL, ATIVOS E EXPIRADOS) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-4">
-          <div className="bg-[#f8fbf9] rounded-xl p-3.5 border border-emerald-900/10 flex items-center justify-between">
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">Total de Cadastros</span>
-              <span className="text-2xl font-black text-slate-900 font-mono">{metricas.total}</span>
-            </div>
-            <div className="p-2.5 rounded-xl bg-emerald-100/60 text-emerald-700">
-              <Users className="w-5 h-5" />
-            </div>
-          </div>
-
-          <div className="bg-[#f8fbf9] rounded-xl p-3.5 border border-emerald-900/10 flex items-center justify-between">
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 block">Acessos Ativos</span>
-              <span className="text-2xl font-black text-emerald-700 font-mono">{metricas.ativos}</span>
-            </div>
-            <div className="p-2.5 rounded-xl bg-emerald-100 text-emerald-700">
-              <Clock className="w-5 h-5" />
-            </div>
-          </div>
-
-          <div className="bg-[#f8fbf9] rounded-xl p-3.5 border border-emerald-900/10 flex items-center justify-between">
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-red-600 block">Cadastros Expirados</span>
-              <span className="text-2xl font-black text-red-600 font-mono">{metricas.expirados}</span>
-            </div>
-            <div className="p-2.5 rounded-xl bg-red-100 text-red-700">
-              <AlertCircle className="w-5 h-5" />
-            </div>
-          </div>
-        </div>
+    <div className="relative h-full w-full min-h-0 flex flex-col bg-papel-2 text-tinta overflow-hidden">
+      <div className="mx-auto w-full max-w-[1700px]">
+        <CabecalhoPagina
+          titulo="Acessos VIP"
+          resumo={
+            metricas.total === 0
+              ? 'Cadastros provisórios com prazo para ver o portfólio, preços e fazer pedidos'
+              : `${metricas.total} ${metricas.total === 1 ? 'cadastro' : 'cadastros'} · ${metricas.ativos} ${metricas.ativos === 1 ? 'ativo' : 'ativos'}${metricas.expirados ? ` · ${metricas.expirados} expirados` : ''}`
+          }
+          acoes={
+            metricas.total === 0 ? undefined : (
+              <BotaoPrimario onClick={handleAbrirNovo} className="w-full sm:w-auto h-10 sm:h-9">
+                <Plus className="w-4 h-4" /> Novo acesso VIP
+              </BotaoPrimario>
+            )
+          }
+        />
+        {metricas.total > 0 && (
+          <BarraFiltros>
+            <Segmentado<'TODOS' | 'ATIVOS' | 'EXPIRADOS'>
+              rotuloAria="Situação"
+              valor={statusFilter as 'TODOS' | 'ATIVOS' | 'EXPIRADOS'}
+              onChange={v => setStatusFilter(v)}
+              opcoes={[
+                { valor: 'TODOS', rotulo: 'Todos', contagem: metricas.total },
+                { valor: 'ATIVOS', rotulo: 'Ativos', contagem: metricas.ativos },
+                { valor: 'EXPIRADOS', rotulo: 'Expirados', contagem: metricas.expirados },
+              ]}
+            />
+            <CampoBusca valor={searchTerm} onChange={setSearchTerm} placeholder="Buscar convidado, empresa ou cidade" className="w-full md:w-80 [&_input]:h-10 sm:[&_input]:h-8" />
+          </BarraFiltros>
+        )}
       </div>
 
-      {/* ========================================================= */}
-      {/* 2. BARRA DE BUSCA E FILTROS                               */}
-      {/* ========================================================= */}
-      <div className="bg-[#eef4f0] px-6 py-3 border-b border-emerald-900/10 flex flex-wrap items-center justify-between gap-3 shrink-0">
-
-        {/* Campo de Busca */}
-        <div className="flex-1 min-w-[280px] max-w-md relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por Convidado, Empresa, E-mail ou Cidade..."
-            className="
-              w-full pl-9 pr-4 py-2 rounded-xl bg-white border border-emerald-900/15 text-xs sm:text-sm
-              text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-600 shadow-2xs font-medium
-            "
-          />
-        </div>
-
-        {/* Filtros de Status */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center bg-white rounded-xl border border-emerald-900/15 p-1 shadow-2xs">
-            <button
-              onClick={() => setStatusFilter('TODOS')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                statusFilter === 'TODOS' ? 'bg-emerald-800 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Todos ({cadastros.length})
-            </button>
-            <button
-              onClick={() => setStatusFilter('ATIVOS')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                statusFilter === 'ATIVOS' ? 'bg-emerald-800 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Ativos
-            </button>
-            <button
-              onClick={() => setStatusFilter('EXPIRADOS')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                statusFilter === 'EXPIRADOS' ? 'bg-red-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Expirados
-            </button>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ========================================================= */}
-      {/* 3. TABELA LIMPA E DIRETA                                  */}
-      {/* ========================================================= */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="bg-white rounded-2xl border border-emerald-900/10 shadow-xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[#022013] text-emerald-200 border-b border-emerald-900/40 text-[11px] font-extrabold uppercase tracking-wider">
-                <th className="py-3.5 px-6">Convidado / Empresa</th>
-                <th className="py-3.5 px-4">Data de Vencimento</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4 text-center">Liberar Pedidos?</th>
-                <th className="py-3.5 px-6 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-emerald-900/5 text-xs sm:text-sm">
-              {cadastrosFiltrados.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400 font-semibold">
-                    Nenhum cadastro provisório encontrado.
-                  </td>
-                </tr>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1700px] px-4 sm:px-6 pb-6 space-y-5">
+          {cadastrosFiltrados.length === 0 ? (
+            <div className="bg-papel border border-linha rounded-md">
+              {metricas.total === 0 ? (
+                <EstadoVazio
+                  titulo="Nenhum acesso VIP criado"
+                  texto="Crie um acesso com data limite para um comprador conhecer o portfólio, ver preços e, se liberado, fazer pedidos."
+                  acao={<BotaoPrimario onClick={handleAbrirNovo} className="h-10 sm:h-9"><Plus className="w-4 h-4" /> Novo acesso VIP</BotaoPrimario>}
+                />
               ) : (
-                cadastrosFiltrados.map((item) => {
-                  const expirado = isCadastroExpirado(item.data_vencimento);
-                  const diasRestantes = getDiasRestantes(item.data_vencimento);
-                  const dataVencFormatada = formatarDataBR(item.data_vencimento);
-
-                  return (
-                    <tr key={item.id} className="hover:bg-emerald-50/40 transition-colors">
-
-                      {/* Convidado & Empresa */}
-                      <td className="py-4 px-6">
-                        <div className="font-extrabold text-slate-900 text-sm">{item.nome_convidado}</div>
-                        <div className="text-xs text-emerald-800 font-semibold flex items-center gap-1.5 mt-0.5">
-                          <Building2 className="w-3.5 h-3.5 shrink-0" />
-                          <span>{item.empresa_solicitante}</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1 font-mono">
-                          <span>{item.cidade}/{item.uf}</span>
-                          <span>•</span>
-                          <span>{item.telefone_whatsapp}</span>
-                        </div>
-                      </td>
-
-                      {/* Data de Vencimento */}
-                      <td className="py-4 px-4 font-mono font-bold text-slate-900">
-                        {dataVencFormatada}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-4 px-4">
-                        {expirado ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-extrabold bg-red-100 text-red-800 border border-red-300">
-                            <XCircle className="w-3.5 h-3.5 text-red-600" />
-                            <span>Expirado</span>
-                          </span>
-                        ) : diasRestantes <= 2 ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-extrabold bg-amber-100 text-amber-800 border border-amber-300">
-                            <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                            <span>Vence em {diasRestantes}d</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Ativo ({diasRestantes} dias)</span>
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Liberar Pedidos Toggle */}
-                      <td className="py-4 px-4 text-center">
-                        <button
-                          onClick={() => handleToggleLiberarPedidos(item.id)}
-                          className={`
-                            inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs
-                            ${item.permissoes.liberar_pedidos
-                              ? 'bg-lime-600 text-white hover:bg-lime-700'
-                              : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                            }
-                          `}
-                          title={item.permissoes.liberar_pedidos ? 'Clique para Bloquear Pedidos' : 'Clique para Liberar Pedidos'}
-                        >
-                          {item.permissoes.liberar_pedidos ? (
-                            <>
-                              <Unlock className="w-3.5 h-3.5" />
-                              <span>Liberado</span>
-                            </>
-                          ) : (
-                            <>
-                              <Lock className="w-3.5 h-3.5" />
-                              <span>Bloqueado</span>
-                            </>
-                          )}
-                        </button>
-                      </td>
-
-                      {/* Ações */}
-                      <td className="py-4 px-6 text-right">
-                        <div className="flex items-center justify-end gap-2">
-
-                          {/* Prorrogar Vencimento Rápido (+15 dias) */}
-                          <button
-                            onClick={() => handleProrrogarRapido(item.id, 15)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
-                            title="Prorrogar +15 Dias"
-                          >
-                            <RefreshCw className="w-3.5 h-3.5" />
-                            <span>+15d</span>
-                          </button>
-
-                          {/* Editar */}
-                          <button
-                            onClick={() => handleAbrirEdicao(item)}
-                            className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
-                            title="Editar Cadastro"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-
-                          {/* Excluir */}
-                          <button
-                            onClick={() => handleExcluir(item.id)}
-                            className="p-2 rounded-xl hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-                            title="Excluir Cadastro"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-
-                        </div>
-                      </td>
-
-                    </tr>
-                  );
-                })
+                <EstadoVazio titulo="Nenhum acesso com esses filtros" texto="Confira a busca ou volte para Todos." />
               )}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          ) : (
+            <ListaCadastro<CadastroProvisorio>
+              itens={cadastrosFiltrados}
+              chave={c => c.id}
+              cartao={c => ({
+                sobre: `${c.codigo_acesso} · vence ${formatarDataBR(c.data_vencimento)}`,
+                titulo: c.nome_convidado,
+                subtitulo: `${c.empresa_solicitante} · ${c.cidade}/${c.uf}`,
+                status: statusVip(c),
+                detalhes: [c.telefone_whatsapp],
+              })}
+              acoesCartao={c => (
+                <div className="flex flex-col gap-2 w-full">
+                  {chavePedidos(c, true)}
+                  <div className="flex gap-2">
+                    <BotaoCartao onClick={() => handleProrrogarRapido(c.id, 15)} className="flex-1"><RefreshCw className="w-3.5 h-3.5" /> +15 dias</BotaoCartao>
+                    <BotaoCartao onClick={() => handleAbrirEdicao(c)} className="flex-1"><Edit2 className="w-3.5 h-3.5" /> Editar</BotaoCartao>
+                    <BotaoCartao perigo onClick={() => handleExcluir(c.id)} rotulo={`Excluir ${c.nome_convidado}`} className="w-10 !px-0"><Trash2 className="w-4 h-4" /></BotaoCartao>
+                  </div>
+                </div>
+              )}
+              colunas={[
+                {
+                  titulo: 'Convidado',
+                  render: c => (
+                    <>
+                      <div className="font-semibold text-tinta">{c.nome_convidado}</div>
+                      <div className="text-[11.5px] text-cinza">{c.empresa_solicitante} · {c.cidade}/{c.uf}</div>
+                    </>
+                  ),
+                },
+                { titulo: 'Código', className: 'tabular-nums whitespace-nowrap', render: c => c.codigo_acesso },
+                { titulo: 'Telefone', className: 'tabular-nums whitespace-nowrap', render: c => c.telefone_whatsapp || '—' },
+                { titulo: 'Vencimento', className: 'tabular-nums whitespace-nowrap', render: c => formatarDataBR(c.data_vencimento) },
+                { titulo: 'Situação', render: c => statusVip(c) },
+                { titulo: 'Pedidos', render: c => chavePedidos(c) },
+              ]}
+              acoesLinha={c => (
+                <>
+                  <LinkLinha onClick={() => handleProrrogarRapido(c.id, 15)} title="Prorrogar 15 dias"><RefreshCw className="w-3.5 h-3.5" /> +15d</LinkLinha>
+                  <BotaoLinha rotulo="Editar acesso" onClick={() => handleAbrirEdicao(c)}><Edit2 className="w-4 h-4" /></BotaoLinha>
+                  <BotaoLinha perigo rotulo="Excluir acesso" onClick={() => handleExcluir(c.id)}><Trash2 className="w-4 h-4" /></BotaoLinha>
+                </>
+              )}
+            />
+          )}
 
-        {/* PEDIDOS TRANSMITIDOS PELOS CONVIDADOS (PORTAL VIP) */}
-        <div className="mt-6 bg-white rounded-2xl border border-emerald-900/10 shadow-xs overflow-hidden">
-          <div className="px-6 py-3.5 border-b border-emerald-900/10 flex items-center justify-between">
-            <h3 className="text-sm font-black text-slate-900">Pedidos recebidos pelo Portfólio VIP</h3>
-            <span className="text-xs font-bold text-slate-500">{pedidosPortfolio.length} pedido(s)</span>
-          </div>
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[#022013] text-emerald-200 text-[11px] font-extrabold uppercase tracking-wider">
-                <th className="py-3 px-6">Pedido / Data</th>
-                <th className="py-3 px-4">Convidado / Empresa</th>
-                <th className="py-3 px-4">RCA</th>
-                <th className="py-3 px-4">Itens</th>
-                <th className="py-3 px-4 text-right">Total</th>
-                <th className="py-3 px-6">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-emerald-900/5 text-xs sm:text-sm">
-              {pedidosPortfolio.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
-                    Nenhum pedido transmitido pelos convidados ainda.
-                  </td>
-                </tr>
-              ) : (
-                pedidosPortfolio.map(ped => (
-                  <tr key={ped.id} className="hover:bg-emerald-50/40 align-top">
-                    <td className="py-3 px-6">
-                      <div className="font-mono font-bold text-slate-900">{ped.numero_pedido}</div>
-                      <div className="text-[11px] text-slate-500">{ped.data_hora}</div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="font-bold text-slate-900">{ped.nome_convidado}</div>
-                      <div className="text-[11px] text-emerald-800 font-semibold">{ped.empresa_solicitante}</div>
-                    </td>
-                    <td className="py-3 px-4 text-slate-700">{ped.rca_nome || '-'}</td>
-                    <td className="py-3 px-4 text-[11px] text-slate-600">
-                      {ped.itens.map((it, idx) => (
-                        <div key={idx}>{it.quantidade}x {it.produto_nome} ({it.tipo_embalagem})</div>
-                      ))}
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono font-black text-slate-900">
-                      R$ {Number(ped.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="py-3 px-6">
-                      <select
-                        value={ped.status}
+          {/* PEDIDOS TRANSMITIDOS PELOS CONVIDADOS (PORTAL VIP) */}
+          <section>
+            <div className="flex items-baseline justify-between gap-3 pt-2 pb-2.5">
+              <h2 className="text-[17px] font-bold tracking-[-0.01em] text-tinta">Pedidos recebidos pelo Portal VIP</h2>
+              <span className="text-[12px] text-cinza tabular-nums">{pedidosPortfolio.length} {pedidosPortfolio.length === 1 ? 'pedido' : 'pedidos'}</span>
+            </div>
+            {pedidosPortfolio.length === 0 ? (
+              <div className="bg-papel border border-linha rounded-md">
+                <EstadoVazio titulo="Nenhum pedido dos convidados ainda" texto="Quando um convidado com pedidos liberados enviar um pedido pelo Portal VIP, ele aparece aqui para acompanhar." />
+              </div>
+            ) : (
+              <ListaCadastro<PedidoPortifolio>
+                itens={pedidosPortfolio}
+                chave={p => p.id}
+                cartao={p => ({
+                  sobre: `${p.numero_pedido} · ${p.data_hora}`,
+                  titulo: p.nome_convidado,
+                  subtitulo: `${p.empresa_solicitante}${p.rca_nome ? ` · ${p.rca_nome}` : ''}`,
+                  status: <span className="text-[15px] font-extrabold tabular-nums text-tinta">R$ {Number(p.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>,
+                  detalhes: p.itens.map(it => `${it.quantidade}x ${it.produto_nome} (${it.tipo_embalagem})`),
+                })}
+                acoesCartao={p => (
+                  <SeletorFiltro
+                    value={p.status}
+                    aria-label={`Situação do pedido ${p.numero_pedido}`}
+                    onChange={(e) => {
+                      const status = e.target.value as PedidoPortifolio['status'];
+                      setPedidosPortfolio(prev => prev.map(x => x.id === p.id ? { ...x, status } : x));
+                    }}
+                    className="w-full h-10"
+                  >
+                    <option value="Aguardando Aprovação">Aguardando aprovação</option>
+                    <option value="Aprovado pelo RCA">Aprovado pelo RCA</option>
+                    <option value="Em Faturamento">Em faturamento</option>
+                    <option value="Entregue">Entregue</option>
+                  </SeletorFiltro>
+                )}
+                colunas={[
+                  {
+                    titulo: 'Pedido',
+                    render: p => (
+                      <>
+                        <div className="font-semibold text-tinta tabular-nums">{p.numero_pedido}</div>
+                        <div className="text-[11.5px] text-cinza tabular-nums">{p.data_hora}</div>
+                      </>
+                    ),
+                  },
+                  {
+                    titulo: 'Convidado',
+                    render: p => (
+                      <>
+                        <div className="font-semibold text-tinta">{p.nome_convidado}</div>
+                        <div className="text-[11.5px] text-cinza">{p.empresa_solicitante}</div>
+                      </>
+                    ),
+                  },
+                  { titulo: 'RCA', render: p => p.rca_nome || '—' },
+                  {
+                    titulo: 'Itens',
+                    render: p => (
+                      <div className="text-[12px]">
+                        {p.itens.map((it, idx) => <div key={idx}>{it.quantidade}x {it.produto_nome} ({it.tipo_embalagem})</div>)}
+                      </div>
+                    ),
+                  },
+                  { titulo: 'Total', numero: true, className: 'font-semibold text-tinta', render: p => `R$ ${Number(p.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` },
+                  {
+                    titulo: 'Situação',
+                    render: p => (
+                      <SeletorFiltro
+                        value={p.status}
+                        aria-label={`Situação do pedido ${p.numero_pedido}`}
                         onChange={(e) => {
                           const status = e.target.value as PedidoPortifolio['status'];
-                          setPedidosPortfolio(prev => prev.map(p => p.id === ped.id ? { ...p, status } : p));
+                          setPedidosPortfolio(prev => prev.map(x => x.id === p.id ? { ...x, status } : x));
                         }}
-                        className="bg-white border border-emerald-900/20 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
                       >
-                        <option value="Aguardando Aprovação">Aguardando Aprovação</option>
+                        <option value="Aguardando Aprovação">Aguardando aprovação</option>
                         <option value="Aprovado pelo RCA">Aprovado pelo RCA</option>
-                        <option value="Em Faturamento">Em Faturamento</option>
+                        <option value="Em Faturamento">Em faturamento</option>
                         <option value="Entregue">Entregue</option>
-                      </select>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                      </SeletorFiltro>
+                    ),
+                  },
+                ]}
+              />
+            )}
+          </section>
         </div>
       </div>
 
-      {/* ========================================================= */}
-      {/* 4. MODAL NOVO CADASTRO / EDIÇÃO - MAIS LARGO QUE ALTO     */}
-      {/* (LAYOUT HORIZONTAL / LANDSCAPE AMPLO PARA NÃO CORTAR)     */}
-      {/* ========================================================= */}
+      {/* Novo / editar acesso VIP */}
       {modalAberto && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-5xl lg:max-w-6xl xl:max-w-7xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-emerald-900/20 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
-
-            {/* Topo do Modal */}
-            <div className="bg-[#022013] text-white px-7 py-4 flex items-center justify-between border-b border-emerald-800 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <Sparkles className="w-5 h-5 text-lime-400" />
-                <h3 className="font-black text-lg text-white">
-                  {modoEdicao ? 'Editar Cadastro Provisório' : 'Novo Cadastro Provisório'}
-                </h3>
-              </div>
-              <button
-                onClick={() => setModalAberto(false)}
-                className="p-1.5 rounded-xl hover:bg-emerald-900 text-emerald-200 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Conteúdo do Formulário em Layout Amplo (2 Colunas Lado a Lado) */}
-            <form onSubmit={handleSalvar} className="p-6 sm:p-8 overflow-y-auto space-y-6 flex-1">
-
+        <ModalCadastro
+          onSubmit={handleSalvar}
+          onFechar={() => setModalAberto(false)}
+          titulo={modoEdicao ? 'Editar acesso VIP' : 'Novo acesso VIP'}
+          subtitulo="Dados do convidado, prazo do acesso e o que ele pode ver e fazer"
+          rotuloSalvar={modoEdicao ? 'Salvar alterações' : 'Criar acesso'}
+          largura="max-w-6xl"
+        >
+            <div className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 items-start">
 
                 {/* COLUNA ESQUERDA: DADOS PESSOAIS & EMPRESA */}
                 <div className="space-y-4">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-emerald-900 border-b border-emerald-900/10 pb-1.5 flex items-center gap-2">
-                    <User className="w-4 h-4 text-emerald-700" />
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-eno-900 border-b border-linha pb-1.5 flex items-center gap-2">
+                    <User className="w-4 h-4 text-eno-700" />
                     <span>Dados do Convidado & Empresa</span>
                   </h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div className="sm:col-span-2">
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-tinta-2 mb-1">
                         Nome do Convidado / Prospect *
                       </label>
                       <input
@@ -673,12 +538,12 @@ export function CadastroProvisorioPortifolio({
                         value={formData.nome_convidado}
                         onChange={(e) => setFormData({ ...formData, nome_convidado: e.target.value })}
                         placeholder="Ex: Carlos Eduardo Drummond"
-                        className="w-full bg-[#f8fbf9] border border-emerald-900/20 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-600 font-medium"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3.5 py-2 text-xs text-tinta focus:outline-none focus:border-eno-600 font-medium"
                       />
                     </div>
 
                     <div className="sm:col-span-2">
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-tinta-2 mb-1">
                         Empresa / Razão Social *
                       </label>
                       <input
@@ -687,12 +552,12 @@ export function CadastroProvisorioPortifolio({
                         value={formData.empresa_solicitante}
                         onChange={(e) => setFormData({ ...formData, empresa_solicitante: e.target.value })}
                         placeholder="Ex: Laticínios Vale Verde S/A"
-                        className="w-full bg-[#f8fbf9] border border-emerald-900/20 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-600 font-medium"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3.5 py-2 text-xs text-tinta focus:outline-none focus:border-eno-600 font-medium"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-tinta-2 mb-1">
                         CPF ou CNPJ
                       </label>
                       <input
@@ -700,12 +565,12 @@ export function CadastroProvisorioPortifolio({
                         value={formData.cpf_cnpj}
                         onChange={(e) => setFormData({ ...formData, cpf_cnpj: e.target.value })}
                         placeholder="00.000.000/0001-00"
-                        className="w-full bg-[#f8fbf9] border border-emerald-900/20 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-600 font-medium"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3.5 py-2 text-xs text-tinta focus:outline-none focus:border-eno-600 font-medium"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-tinta-2 mb-1">
                         WhatsApp / Celular
                       </label>
                       <input
@@ -713,12 +578,12 @@ export function CadastroProvisorioPortifolio({
                         value={formData.telefone_whatsapp}
                         onChange={(e) => setFormData({ ...formData, telefone_whatsapp: e.target.value })}
                         placeholder="(00) 00000-0000"
-                        className="w-full bg-[#f8fbf9] border border-emerald-900/20 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-600 font-medium"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3.5 py-2 text-xs text-tinta focus:outline-none focus:border-eno-600 font-medium"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-tinta-2 mb-1">
                         E-mail
                       </label>
                       <input
@@ -726,12 +591,12 @@ export function CadastroProvisorioPortifolio({
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                         placeholder="contato@empresa.com.br"
-                        className="w-full bg-[#f8fbf9] border border-emerald-900/20 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-600 font-medium"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3.5 py-2 text-xs text-tinta focus:outline-none focus:border-eno-600 font-medium"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-tinta-2 mb-1">
                         Cidade & UF
                       </label>
                       <div className="grid grid-cols-3 gap-2">
@@ -740,7 +605,7 @@ export function CadastroProvisorioPortifolio({
                           value={formData.cidade}
                           onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
                           placeholder="Cidade"
-                          className="col-span-2 bg-[#f8fbf9] border border-emerald-900/20 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-600 font-medium"
+                          className="col-span-2 bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs text-tinta focus:outline-none focus:border-eno-600 font-medium"
                         />
                         <input
                           type="text"
@@ -748,19 +613,19 @@ export function CadastroProvisorioPortifolio({
                           maxLength={2}
                           onChange={(e) => setFormData({ ...formData, uf: e.target.value.toUpperCase() })}
                           placeholder="UF"
-                          className="bg-[#f8fbf9] border border-emerald-900/20 rounded-xl px-2 py-2 text-xs text-slate-800 text-center font-bold uppercase focus:outline-none focus:border-emerald-600"
+                          className="bg-papel border border-linha-forte rounded-md px-2 py-2 text-xs text-tinta text-center font-bold uppercase focus:outline-none focus:border-eno-600"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-tinta-2 mb-1">
                         RCA Responsável
                       </label>
                       <select
                         value={formData.rca_responsavel_id}
                         onChange={(e) => setFormData({ ...formData, rca_responsavel_id: e.target.value })}
-                        className="w-full bg-[#f8fbf9] border border-emerald-900/20 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-600 font-medium"
+                        className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs text-tinta focus:outline-none focus:border-eno-600 font-medium"
                       >
                         <option value="">Sem RCA (botão "Fale com seu RCA" fica oculto)</option>
                         {rcasCadastrados.map(r => (
@@ -777,9 +642,9 @@ export function CadastroProvisorioPortifolio({
                 <div className="space-y-4">
 
                   {/* Bloco de Vencimento */}
-                  <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-900/10 space-y-2.5">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-emerald-900 flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-emerald-700" />
+                  <div className="bg-eno-50/70 p-4 rounded-md border border-linha space-y-2.5">
+                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-eno-900 flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-eno-700" />
                       <span>Data de Vencimento do Acesso *</span>
                     </h4>
 
@@ -789,7 +654,7 @@ export function CadastroProvisorioPortifolio({
                         required
                         value={formData.data_vencimento}
                         onChange={(e) => setFormData({ ...formData, data_vencimento: e.target.value })}
-                        className="bg-white border border-emerald-900/30 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600 shadow-2xs"
+                        className="bg-papel border border-eno-900/30 rounded-md px-3 py-1.5 text-xs font-bold text-tinta focus:outline-none focus:border-eno-600 "
                       />
 
                       {/* Atalhos Rápidos */}
@@ -797,28 +662,28 @@ export function CadastroProvisorioPortifolio({
                         <button
                           type="button"
                           onClick={() => handleSetDiasVencimento(7)}
-                          className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-emerald-100 border border-emerald-900/20 text-xs font-bold text-emerald-900 cursor-pointer shadow-2xs"
+                          className="px-2.5 py-1.5 rounded-lg bg-papel hover:bg-eno-100 border border-linha-forte text-xs font-bold text-eno-900 cursor-pointer "
                         >
                           +7d
                         </button>
                         <button
                           type="button"
                           onClick={() => handleSetDiasVencimento(15)}
-                          className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-emerald-100 border border-emerald-900/20 text-xs font-bold text-emerald-900 cursor-pointer shadow-2xs"
+                          className="px-2.5 py-1.5 rounded-lg bg-papel hover:bg-eno-100 border border-linha-forte text-xs font-bold text-eno-900 cursor-pointer "
                         >
                           +15d
                         </button>
                         <button
                           type="button"
                           onClick={() => handleSetDiasVencimento(30)}
-                          className="px-2.5 py-1.5 rounded-lg bg-emerald-800 text-white text-xs font-bold cursor-pointer shadow-xs"
+                          className="px-2.5 py-1.5 rounded-lg bg-eno-800 text-white text-xs font-bold cursor-pointer "
                         >
                           +30d
                         </button>
                         <button
                           type="button"
                           onClick={() => handleSetDiasVencimento(60)}
-                          className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-emerald-100 border border-emerald-900/20 text-xs font-bold text-emerald-900 cursor-pointer shadow-2xs"
+                          className="px-2.5 py-1.5 rounded-lg bg-papel hover:bg-eno-100 border border-linha-forte text-xs font-bold text-eno-900 cursor-pointer "
                         >
                           +60d
                         </button>
@@ -827,22 +692,22 @@ export function CadastroProvisorioPortifolio({
                   </div>
 
                   {/* Bloco de Liberação de Pedidos */}
-                  <div className={`p-4 rounded-2xl border transition-all ${
+                  <div className={`p-4 rounded-md border transition-all ${
                     formData.permissoes.liberar_pedidos
-                      ? 'bg-lime-50/80 border-lime-400'
-                      : 'bg-slate-50 border-slate-200'
+                      ? 'bg-eno-600/80 border-eno-600'
+                      : 'bg-papel-2 border-linha'
                   }`}>
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                        <div className="text-xs font-extrabold uppercase tracking-wider text-tinta flex items-center gap-2">
                           <span>Liberar Emissão de Pedidos</span>
                           {formData.permissoes.liberar_pedidos && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-lime-200 text-lime-900">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-eno-600 text-eno-600">
                               LIBERADO
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-slate-600 mt-0.5">
+                        <p className="text-xs text-tinta-2 mt-0.5">
                           Permite ao convidado transmitir pedidos online através do portfólio.
                         </p>
                       </div>
@@ -856,17 +721,17 @@ export function CadastroProvisorioPortifolio({
                         })}
                         className={`
                           w-13 h-7 rounded-full p-1 transition-colors cursor-pointer flex items-center
-                          ${formData.permissoes.liberar_pedidos ? 'bg-lime-600 justify-end' : 'bg-slate-300 justify-start'}
+                          ${formData.permissoes.liberar_pedidos ? 'bg-eno-600 justify-end' : 'bg-slate-300 justify-start'}
                         `}
                       >
-                        <div className="w-5 h-5 rounded-full bg-white shadow-md" />
+                        <div className="w-5 h-5 rounded-full bg-papel " />
                       </button>
                     </div>
 
                     {formData.permissoes.liberar_pedidos && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-lime-200 animate-fadeIn">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-eno-600 animate-fadeIn">
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                          <label className="block text-[11px] font-bold text-tinta-2 uppercase tracking-wider mb-1">
                             Limite para Pedidos (R$)
                           </label>
                           <CampoNumero
@@ -878,12 +743,12 @@ export function CadastroProvisorioPortifolio({
                               permissoes: { ...formData.permissoes, limite_valor_pedido: n }
                             })}
                             placeholder="Ex: 50000"
-                            className="w-full bg-white border border-lime-400 rounded-xl px-3 py-1.5 text-xs font-mono font-bold text-slate-900"
+                            className="w-full bg-papel border border-eno-600 rounded-md px-3 py-1.5 text-xs tabular-nums font-bold text-tinta"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                          <label className="block text-[11px] font-bold text-tinta-2 uppercase tracking-wider mb-1">
                             Condição de Pagamento
                           </label>
                           <select
@@ -892,7 +757,7 @@ export function CadastroProvisorioPortifolio({
                               ...formData,
                               permissoes: { ...formData.permissoes, forma_pagamento_autorizada: e.target.value }
                             })}
-                            className="w-full bg-white border border-lime-400 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-900 cursor-pointer"
+                            className="w-full bg-papel border border-eno-600 rounded-md px-2.5 py-1.5 text-xs font-bold text-tinta cursor-pointer"
                           >
                             <option value="Boleto Bancário 28 Dias">Boleto Bancário 28 Dias</option>
                             <option value="Boleto Bancário 35 Dias">Boleto Bancário 35 Dias</option>
@@ -906,7 +771,7 @@ export function CadastroProvisorioPortifolio({
 
                   {/* Observações */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-bold text-tinta-2 mb-1">
                       Observações Comerciais
                     </label>
                     <textarea
@@ -914,7 +779,7 @@ export function CadastroProvisorioPortifolio({
                       value={formData.observacoes}
                       onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
                       placeholder="Informações adicionais sobre o prospect ou negociação..."
-                      className="w-full bg-[#f8fbf9] border border-emerald-900/20 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:border-emerald-600 font-medium"
+                      className="w-full bg-papel border border-linha-forte rounded-md p-2.5 text-xs text-tinta focus:outline-none focus:border-eno-600 font-medium"
                     />
                   </div>
 
@@ -922,31 +787,8 @@ export function CadastroProvisorioPortifolio({
 
               </div>
 
-              {/* Botões do Rodapé do Modal */}
-              <div className="pt-4 border-t border-emerald-900/10 flex items-center justify-end gap-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setModalAberto(false)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="
-                    px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs
-                    shadow-md transition-all flex items-center gap-2 cursor-pointer
-                  "
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{modoEdicao ? 'Salvar Alterações' : 'Criar Cadastro'}</span>
-                </button>
-              </div>
-
-            </form>
-
-          </div>
-        </div>
+            </div>
+        </ModalCadastro>
       )}
 
     </div>

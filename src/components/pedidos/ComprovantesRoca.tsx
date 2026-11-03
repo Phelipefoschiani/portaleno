@@ -1,6 +1,7 @@
 // Componentes compartilhados das compras de mandioca (Cálculo na Roça):
 // anexo de comprovante de pagamento, visualização/baixa e extrato do agricultor (portal e cadastro).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { TABELA_CARTAO } from './tabelaCartao';
 import { Paperclip, FileText, Download, Eye, X, Trash2, Calendar, Scale, DollarSign, CheckCircle2, Clock } from 'lucide-react';
 import {
   CalculoNaRoca,
@@ -138,16 +139,16 @@ export function CampoAnexoComprovante({ arquivo, onChange }: CampoAnexoProps) {
 
   return (
     <div>
-      <label className="block font-bold text-slate-700 mb-1 text-xs">Comprovante de Pagamento (imagem ou PDF, até 1,5 MB)</label>
+      <label className="block font-bold text-tinta-2 mb-1 text-xs">Comprovante de Pagamento (imagem ou PDF, até 1,5 MB)</label>
       <input ref={inputRef} type="file" accept="image/*,application/pdf" onChange={handleArquivo} className="hidden" />
       {arquivo ? (
-        <div className="flex items-center justify-between gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-xs">
+        <div className="flex items-center justify-between gap-2 bg-eno-50 border border-eno-100 rounded-md px-3 py-2 text-xs">
           <div className="flex items-center gap-2 min-w-0">
-            <Paperclip className="w-4 h-4 text-emerald-700 shrink-0" />
-            <span className="font-bold text-emerald-950 truncate">{arquivo.nome}</span>
-            <span className="text-emerald-700 shrink-0">({formatarTamanho(arquivo.tamanho_bytes)})</span>
+            <Paperclip className="w-4 h-4 text-eno-700 shrink-0" />
+            <span className="font-bold text-eno-800 truncate">{arquivo.nome}</span>
+            <span className="text-eno-700 shrink-0">({formatarTamanho(arquivo.tamanho_bytes)})</span>
           </div>
-          <button type="button" onClick={() => onChange(null)} className="p-1 rounded-lg hover:bg-emerald-100 text-emerald-800 cursor-pointer" title="Remover anexo">
+          <button type="button" onClick={() => onChange(null)} className="p-1 rounded-lg hover:bg-eno-100 text-eno-800 cursor-pointer" title="Remover anexo">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -156,13 +157,13 @@ export function CampoAnexoComprovante({ arquivo, onChange }: CampoAnexoProps) {
           type="button"
           disabled={lendo}
           onClick={() => inputRef.current?.click()}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-dashed border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs cursor-pointer disabled:opacity-60"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-dashed border-linha-forte bg-papel hover:bg-papel-2 text-tinta-2 font-bold text-xs cursor-pointer disabled:opacity-60"
         >
-          <Paperclip className="w-4 h-4 text-slate-500" />
+          <Paperclip className="w-4 h-4 text-cinza" />
           <span>{lendo ? 'Processando arquivo...' : 'Anexar comprovante (opcional)'}</span>
         </button>
       )}
-      {erro && <p className="text-[11px] text-red-600 font-semibold mt-1">{erro}</p>}
+      {erro && <p className="text-[11px] text-st-vencido font-semibold mt-1">{erro}</p>}
     </div>
   );
 }
@@ -196,52 +197,52 @@ export function ModalComprovantes({ calculo, onFechar, permitirRemover = false, 
   }, [calculo.id]);
 
   return (
-    <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4" onClick={onFechar}>
-      <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] uppercase font-bold text-emerald-700">Comprovantes de Pagamento</span>
-            <h3 className="text-base font-black text-slate-900">Ticket {calculo.numero_ticket} • {calculo.fornecedor_nome}</h3>
+    <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-xs flex items-stretch sm:items-center justify-center p-0 sm:p-4" onClick={onFechar}>
+      <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md max-w-2xl w-full shadow-2xl border-0 sm:border border-linha h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-4 sm:px-5 py-3 border-b border-linha flex items-center justify-between gap-2 shrink-0">
+          <div className="min-w-0">
+            <span className="text-[10.5px] uppercase tracking-[0.14em] font-bold text-cinza">Comprovantes de pagamento</span>
+            <h3 className="text-base font-extrabold text-tinta">Ticket {calculo.numero_ticket} • {calculo.fornecedor_nome}</h3>
           </div>
-          <button onClick={onFechar} className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer">
+          <button onClick={onFechar} className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md text-cinza hover:text-tinta-2 hover:bg-papel-3/60 cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="p-5 overflow-y-auto space-y-4">
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
           {permitirAnexar && (
-            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+            <div className="p-3 rounded-md bg-papel-2 border border-linha space-y-2">
               <CampoAnexoComprovante arquivo={novoAnexo} onChange={setNovoAnexo} />
               {novoAnexo && (
                 <div className="flex justify-end">
-                  <button onClick={salvarNovoAnexo} className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer">
+                  <button onClick={salvarNovoAnexo} className="px-4 py-2 rounded-md bg-eno-700 hover:bg-eno-800 text-white text-xs font-bold cursor-pointer">
                     Salvar comprovante
                   </button>
                 </div>
               )}
-              {erroAnexo && <p className="text-[11px] text-red-600 font-semibold">{erroAnexo}</p>}
+              {erroAnexo && <p className="text-[11px] text-st-vencido font-semibold">{erroAnexo}</p>}
             </div>
           )}
           {lista.length === 0 ? (
-            <p className="text-center text-sm text-slate-500 py-8">Nenhum comprovante anexado a esta pesagem.</p>
+            <p className="text-center text-sm text-cinza py-8">Nenhum comprovante anexado a esta pesagem.</p>
           ) : (
             lista.map(comp => (
-              <div key={comp.id} className="border border-slate-200 rounded-2xl overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs">
+              <div key={comp.id} className="border border-linha rounded-md overflow-hidden">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-papel-2 border-b border-linha text-xs">
                   <div className="min-w-0">
-                    <div className="font-bold text-slate-900 truncate">{comp.nome}</div>
-                    <div className="text-[11px] text-slate-500">Enviado em {formatarDataBR(comp.enviado_em)} • {formatarTamanho(comp.tamanho_bytes)}</div>
+                    <div className="font-bold text-tinta truncate">{comp.nome}</div>
+                    <div className="text-[11px] text-cinza">Enviado em {formatarDataBR(comp.enviado_em)} • {formatarTamanho(comp.tamanho_bytes)}</div>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <button onClick={() => abrirComprovante(comp)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer">
+                    <button onClick={() => abrirComprovante(comp)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-papel border border-linha hover:bg-papel-3/60 text-tinta-2 font-bold cursor-pointer">
                       <Eye className="w-3.5 h-3.5" /> Abrir
                     </button>
-                    <button onClick={() => baixarComprovante(comp)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold cursor-pointer">
+                    <button onClick={() => baixarComprovante(comp)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-eno-700 hover:bg-eno-800 text-white font-bold cursor-pointer">
                       <Download className="w-3.5 h-3.5" /> Baixar
                     </button>
                     {permitirRemover && (
                       <button
                         onClick={() => { if (window.confirm('Remover este comprovante?')) removerComprovante(calculo.id, comp.id); }}
-                        className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 cursor-pointer"
+                        className="p-1.5 rounded-lg hover:bg-st-vencido-bg text-cinza hover:text-st-vencido cursor-pointer"
                         title="Remover comprovante"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -250,10 +251,10 @@ export function ModalComprovantes({ calculo, onFechar, permitirRemover = false, 
                   </div>
                 </div>
                 {comp.tipo.startsWith('image/') ? (
-                  <img src={comp.data_url} alt={comp.nome} className="w-full max-h-[420px] object-contain bg-slate-100" />
+                  <img src={comp.data_url} alt={comp.nome} className="w-full max-h-[420px] object-contain bg-papel-3/60" />
                 ) : (
-                  <div className="flex items-center gap-2 px-4 py-6 text-xs text-slate-600">
-                    <FileText className="w-5 h-5 text-red-600" />
+                  <div className="flex items-center gap-2 px-4 py-6 text-xs text-tinta-2">
+                    <FileText className="w-5 h-5 text-st-vencido" />
                     <span>Documento PDF. Use "Abrir" ou "Baixar" para visualizar.</span>
                   </div>
                 )}
@@ -271,15 +272,15 @@ export function ModalComprovantes({ calculo, onFechar, permitirRemover = false, 
 // =====================================================================
 
 const ESTILO_STATUS: Record<StatusExtratoRoca, string> = {
-  PAGO: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-  PARCIAL: 'bg-blue-100 text-blue-800 border-blue-300',
-  A_RECEBER: 'bg-amber-100 text-amber-800 border-amber-300',
-  VENCIDO: 'bg-red-100 text-red-700 border-red-300'
+  PAGO: 'bg-st-pago-bg text-st-pago border-transparent',
+  PARCIAL: 'bg-st-producao-bg text-st-producao border-transparent',
+  A_RECEBER: 'bg-st-aguardando-bg text-st-aguardando border-transparent',
+  VENCIDO: 'bg-st-vencido-bg text-st-vencido border-transparent'
 };
 
 export function SeloStatusExtrato({ status }: { status: StatusExtratoRoca }) {
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black border ${ESTILO_STATUS[status]}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-[3px] rounded-[4px] text-[11px] font-semibold whitespace-nowrap border ${ESTILO_STATUS[status]}`}>
       {status === 'PAGO' ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
       {ROTULO_STATUS_EXTRATO[status]}
     </span>
@@ -367,46 +368,45 @@ export function ExtratoAgricultor({ calculos, onVerTicket, permitirRemoverCompro
   return (
     <div className="space-y-4">
       {/* Totais do período */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-          <div className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Scale className="w-3.5 h-3.5 text-emerald-700" /> Entregue no período</div>
-          <div className="text-xl sm:text-2xl font-black text-emerald-800 mt-1 font-mono">{(totais.kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} <span className="text-sm text-slate-500">ton</span></div>
-          <div className="text-[11px] text-slate-500 mt-0.5">{kg(totais.kg)} líquidos • {filtradas.length} {filtradas.length === 1 ? 'pesagem' : 'pesagens'}</div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-linha border border-linha rounded-md overflow-hidden">
+        <div className="bg-papel px-4 py-3.5 min-w-0">
+          <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza">Entregue no período</div>
+          <div className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] text-tinta mt-1.5 tabular-nums truncate">{(totais.kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} <span className="text-sm text-cinza">ton</span></div>
+          <div className="text-[11px] text-cinza mt-0.5">{kg(totais.kg)} líquidos • {filtradas.length} {filtradas.length === 1 ? 'pesagem' : 'pesagens'}</div>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-          <div className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5 text-slate-600" /> Valor total</div>
-          <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 font-mono">{formatarMoeda(totais.valor)}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Peso líquido × preço/kg</div>
+        <div className="bg-papel px-4 py-3.5 min-w-0">
+          <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza">Valor total</div>
+          <div className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] text-tinta mt-1.5 tabular-nums truncate">{formatarMoeda(totais.valor)}</div>
+          <div className="text-[11px] text-cinza mt-0.5">Peso líquido × preço/kg</div>
         </div>
-        <div className="bg-white rounded-2xl border border-emerald-200 p-4 shadow-xs">
-          <div className="text-xs font-bold text-emerald-700 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Recebido</div>
-          <div className="text-xl sm:text-2xl font-black text-emerald-700 mt-1 font-mono">{formatarMoeda(totais.recebido)}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Pagamentos já realizados</div>
+        <div className="bg-papel px-4 py-3.5 min-w-0">
+          <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza">Recebido</div>
+          <div className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] text-tinta mt-1.5 tabular-nums truncate">{formatarMoeda(totais.recebido)}</div>
+          <div className="text-[11px] text-cinza mt-0.5">Pagamentos já realizados</div>
         </div>
-        <div className="bg-white rounded-2xl border border-amber-200 p-4 shadow-xs">
-          <div className="text-xs font-bold text-amber-700 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> A receber</div>
-          <div className="text-xl sm:text-2xl font-black text-amber-800 mt-1 font-mono">{formatarMoeda(totais.saldo)}</div>
+        <div className="bg-papel px-4 py-3.5 min-w-0">
+          <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza">A receber</div>
+          <div className="text-[19px] sm:text-[22px] font-extrabold tracking-[-0.02em] text-tinta mt-1.5 tabular-nums truncate">{formatarMoeda(totais.saldo)}</div>
           <div className="text-[11px] mt-0.5">
             {totais.vencido > 0.009
-              ? <span className="text-red-600 font-bold">{formatarMoeda(totais.vencido)} vencido</span>
-              : <span className="text-slate-500">Nenhum valor vencido</span>}
+              ? <span className="text-st-vencido font-bold">{formatarMoeda(totais.vencido)} vencido</span>
+              : <span className="text-cinza">Nenhum valor vencido</span>}
           </div>
         </div>
       </div>
 
       {/* Tabela do extrato */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-50/50">
+      <div className="bg-papel rounded-md border border-linha overflow-hidden">
+        <div className="px-4 sm:px-5 py-3.5 border-b border-linha flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <h3 className="font-extrabold text-slate-900 text-base">Extrato de Pesagens e Pagamentos</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Cada compra com peso bruto, desconto, líquido, quanto já foi pago, quando e o saldo a receber</p>
+            <h3 className="font-bold text-tinta text-[15px] tracking-[-0.01em]">Extrato de pesagens e pagamentos</h3>
+            <p className="text-xs text-cinza mt-0.5">Cada compra com peso bruto, desconto, líquido, quanto já foi pago, quando e o saldo a receber</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Calendar className="w-4 h-4 text-emerald-800" />
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto max-sm:[&>select]:flex-1 max-sm:[&>select]:h-11 max-sm:[&>input]:h-11 max-sm:[&>input]:flex-1">
             <select
               value={periodo}
               onChange={e => setPeriodo(e.target.value)}
-              className="bg-white border border-slate-200 text-xs font-bold rounded-xl px-3 py-1.5 outline-none cursor-pointer"
+              className="bg-papel border border-linha text-xs font-bold rounded-md px-3 py-1.5 outline-none cursor-pointer"
             >
               <option value="TODOS">Todo o período</option>
               <option value="MES">Este mês</option>
@@ -416,17 +416,17 @@ export function ExtratoAgricultor({ calculos, onVerTicket, permitirRemoverCompro
             </select>
             {periodo === 'PERSONALIZADO' && (
               <>
-                <input type="date" value={dataDe} onChange={e => setDataDe(e.target.value)} className="bg-white border border-slate-200 text-xs rounded-xl px-2 py-1.5 outline-none" title="De" />
-                <span className="text-xs text-slate-400">até</span>
-                <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)} className="bg-white border border-slate-200 text-xs rounded-xl px-2 py-1.5 outline-none" title="Até" />
+                <input type="date" value={dataDe} onChange={e => setDataDe(e.target.value)} className="bg-papel border border-linha text-xs rounded-md px-2 py-1.5 outline-none" title="De" />
+                <span className="text-xs text-cinza">até</span>
+                <input type="date" value={dataAte} onChange={e => setDataAte(e.target.value)} className="bg-papel border border-linha text-xs rounded-md px-2 py-1.5 outline-none" title="Até" />
               </>
             )}
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[1100px]">
-            <thead className="bg-slate-100/75 text-slate-700 font-extrabold uppercase tracking-wider text-[10px] border-b border-slate-200">
+          <table className={`${TABELA_CARTAO} ${TABELA_CARTAO} w-full text-left text-xs sm:min-w-[1100px]`}>
+            <thead className="bg-papel-2 text-cinza font-bold uppercase tracking-[0.12em] text-[10.5px] border-b border-linha-forte">
               <tr>
                 <th className="py-3 px-4">Ticket / Data</th>
                 <th className="py-3 px-3 text-right">Bruto</th>
@@ -442,43 +442,43 @@ export function ExtratoAgricultor({ calculos, onVerTicket, permitirRemoverCompro
                 <th className="py-3 px-4 text-right">Documentos</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-linha">
               {filtradas.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-slate-400">Nenhuma pesagem encontrada no período selecionado.</td>
+                  <td data-rotulo="Ticket / Data" colSpan={12} className="py-12 text-center text-cinza">Nenhuma pesagem encontrada no período selecionado.</td>
                 </tr>
               ) : (
                 filtradas.map(l => (
-                  <tr key={l.calculo.id} className="hover:bg-emerald-50/30 transition-colors">
-                    <td className="py-3 px-4">
-                      <div className="font-extrabold text-slate-900 font-mono">{l.calculo.numero_ticket}</div>
-                      <div className="text-[11px] text-slate-500">{formatarDataBR(l.calculo.data)} • {l.calculo.total_sacos} sc</div>
+                  <tr key={l.calculo.id} className="hover:bg-eno-50/30 transition-colors">
+                    <td data-rotulo="Ticket / Data" className="py-3 px-4">
+                      <div className="font-extrabold text-tinta tabular-nums">{l.calculo.numero_ticket}</div>
+                      <div className="text-[11px] text-cinza">{formatarDataBR(l.calculo.data)} • {l.calculo.total_sacos} sc</div>
                     </td>
-                    <td className="py-3 px-3 text-right font-mono text-slate-700">{kg(l.peso_bruto_kg)}</td>
-                    <td className="py-3 px-3 text-right font-mono text-amber-700">{l.desconto_kg > 0 ? `- ${kg(l.desconto_kg)}` : '—'}</td>
-                    <td className="py-3 px-3 text-right font-mono font-bold text-emerald-800">{kg(l.peso_liquido_kg)}</td>
-                    <td className="py-3 px-3 text-right font-mono text-slate-700">{formatarMoeda(l.calculo.preco_por_kg)}</td>
-                    <td className="py-3 px-3 text-right font-mono font-black text-slate-900">{formatarMoeda(l.valor_total)}</td>
-                    <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700">{formatarMoeda(l.valor_recebido)}</td>
-                    <td className="py-3 px-3 text-slate-700">
+                    <td data-rotulo="Bruto" className="py-3 px-3 text-right tabular-nums text-tinta-2">{kg(l.peso_bruto_kg)}</td>
+                    <td data-rotulo="Desconto" className="py-3 px-3 text-right tabular-nums text-st-aguardando">{l.desconto_kg > 0 ? `- ${kg(l.desconto_kg)}` : '—'}</td>
+                    <td data-rotulo="Líquido" className="py-3 px-3 text-right tabular-nums font-bold text-eno-800">{kg(l.peso_liquido_kg)}</td>
+                    <td data-rotulo="Preço/kg" className="py-3 px-3 text-right tabular-nums text-tinta-2">{formatarMoeda(l.calculo.preco_por_kg)}</td>
+                    <td data-rotulo="Valor total" className="py-3 px-3 text-right tabular-nums font-extrabold text-tinta">{formatarMoeda(l.valor_total)}</td>
+                    <td data-rotulo="Recebido" className="py-3 px-3 text-right tabular-nums font-bold text-eno-700">{formatarMoeda(l.valor_recebido)}</td>
+                    <td data-rotulo="Pago em / Forma" className="py-3 px-3 text-tinta-2">
                       {l.pagamentos.length > 0 ? (
                         <>
                           <div className="font-bold">{formatarDataBR(l.data_ultimo_pagamento)}</div>
-                          <div className="text-[11px] text-slate-500">{l.forma_pagamento || '—'}{l.pagamentos.length > 1 ? ` • ${l.pagamentos.length} pagamentos` : ''}</div>
+                          <div className="text-[11px] text-cinza">{l.forma_pagamento || '—'}{l.pagamentos.length > 1 ? ` • ${l.pagamentos.length} pagamentos` : ''}</div>
                         </>
-                      ) : <span className="text-slate-400">—</span>}
+                      ) : <span className="text-cinza">—</span>}
                     </td>
-                    <td className="py-3 px-3 text-right font-mono font-bold text-amber-800">{l.saldo > 0.009 ? formatarMoeda(l.saldo) : '—'}</td>
-                    <td className={`py-3 px-3 font-bold ${l.status === 'VENCIDO' ? 'text-red-600' : 'text-slate-700'}`}>
-                      {l.vencimento ? formatarDataBR(l.vencimento) : (l.saldo > 0.009 ? <span className="text-slate-400 font-normal">A definir</span> : '—')}
+                    <td data-rotulo="Saldo" className="py-3 px-3 text-right tabular-nums font-bold text-st-aguardando">{l.saldo > 0.009 ? formatarMoeda(l.saldo) : '—'}</td>
+                    <td data-rotulo="Vencimento" className={`py-3 px-3 font-bold ${l.status === 'VENCIDO' ? 'text-st-vencido' : 'text-tinta-2'}`}>
+                      {l.vencimento ? formatarDataBR(l.vencimento) : (l.saldo > 0.009 ? <span className="text-cinza font-normal">A definir</span> : '—')}
                     </td>
-                    <td className="py-3 px-3 text-center"><SeloStatusExtrato status={l.status} /></td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td data-rotulo="Status" className="py-3 px-3 sm:text-center"><SeloStatusExtrato status={l.status} /></td>
+                    <td data-rotulo="Documentos" className="py-3 px-4 text-right max-sm:col-span-2">
+                      <div className="flex items-center sm:justify-end gap-1.5 max-sm:[&>button]:h-10 max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center">
                         {onVerTicket && (
                           <button
                             onClick={() => onVerTicket(l.calculo)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] border border-emerald-200 cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-eno-50 hover:bg-eno-100 text-eno-800 font-bold text-[11px] border border-eno-100 cursor-pointer"
                             title="Comprovante de pesagem"
                           >
                             <FileText className="w-3.5 h-3.5" /> Pesagem
@@ -487,13 +487,13 @@ export function ExtratoAgricultor({ calculos, onVerTicket, permitirRemoverCompro
                         {comComprovante.has(l.calculo.id) ? (
                           <button
                             onClick={() => setComprovantesDe(l.calculo)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-eno-900 hover:bg-eno-800 text-white font-bold text-[11px] cursor-pointer"
                             title="Ver / baixar comprovante de pagamento"
                           >
                             <Paperclip className="w-3.5 h-3.5" /> Comprovante
                           </button>
                         ) : (
-                          <span className="text-[10px] text-slate-400 px-1" title="Nenhum comprovante de pagamento anexado">Sem comprovante</span>
+                          <span className="text-[10px] text-cinza px-1" title="Nenhum comprovante de pagamento anexado">Sem comprovante</span>
                         )}
                       </div>
                     </td>

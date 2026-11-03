@@ -58,7 +58,7 @@ export function FormApontamento({ estado, aplicar, onFechar }: { estado: Control
   if (ativas.length === 0) {
     return (
       <Folha titulo="Apontar horas" icone={<Timer className="w-6 h-6" />} onFechar={onFechar} onSubmit={e => { e.preventDefault(); onFechar(); }} rotuloConfirmar="Entendi">
-        <p className="text-sm text-slate-600">Cadastre antes a máquina na aba <strong>Máquinas</strong>.</p>
+        <p className="text-sm text-tinta-2">Cadastre antes a máquina na aba <strong>Máquinas</strong>.</p>
       </Folha>
     );
   }
@@ -132,7 +132,7 @@ export function FormApontamento({ estado, aplicar, onFechar }: { estado: Control
             key={a}
             type="button"
             onClick={() => setF({ ...f, atividade: a })}
-            className={`min-h-9 px-3 rounded-lg text-xs font-bold border cursor-pointer ${f.atividade === a ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-white text-slate-600 border-slate-300'}`}
+            className={`min-h-9 px-3 rounded-lg text-xs font-bold border cursor-pointer ${f.atividade === a ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-papel text-tinta-2 border-linha-forte'}`}
           >
             {a}
           </button>
@@ -181,7 +181,7 @@ export function AbaHoras({ estado, mes, aplicar }: PropsAba) {
     <div className="space-y-5">
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-stretch">
         <BotaoAcao onClick={() => setAberto(true)} icone={<Timer className="w-5 h-5" />} titulo="Apontar horas" sub="Horímetro início/fim ou horas do dia" />
-        <div className="rounded-2xl bg-[#022013] text-white px-5 py-3 flex items-center justify-between sm:justify-end gap-4">
+        <div className="rounded-2xl bg-eno-900 text-white px-5 py-3 flex items-center justify-between sm:justify-end gap-4">
           <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-300">{rotuloMes(mes)}</span>
           <span className="text-3xl font-black tabular-nums tracking-tight">
             {fmtNum(totalHorasMes, 1)}
@@ -191,7 +191,7 @@ export function AbaHoras({ estado, mes, aplicar }: PropsAba) {
       </div>
 
       {metricas.length === 0 ? (
-        <div className="rounded-3xl bg-white border border-slate-200 p-6 text-sm text-slate-500 text-center">
+        <div className="rounded-3xl bg-papel border border-linha p-6 text-sm text-cinza text-center">
           Nenhuma máquina cadastrada. Cadastre na aba Máquinas para apontar horas.
         </div>
       ) : (
@@ -199,29 +199,29 @@ export function AbaHoras({ estado, mes, aplicar }: PropsAba) {
           {metricas
             .filter(m => m.maquina.ativo || m.horasTotal > 0)
             .map(m => (
-              <article key={m.maquina.id} className="relative overflow-hidden rounded-3xl bg-white border border-slate-200 p-5">
+              <article key={m.maquina.id} className="relative overflow-hidden rounded-3xl bg-papel border border-linha p-5">
                 <div className="pointer-events-none absolute -right-8 -top-10 w-32 h-32 rounded-full bg-emerald-100/70 blur-2xl" />
                 <div className="relative flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="font-black text-slate-900 truncate">{m.maquina.nome}</h3>
-                    <div className="text-xs text-slate-500 tabular-nums">
+                    <h3 className="font-black text-tinta truncate">{m.maquina.nome}</h3>
+                    <div className="text-xs text-cinza tabular-nums">
                       {m.maquina.medidor === 'HODOMETRO' ? 'Hodômetro' : 'Horímetro'} {fmtNum(m.leituraAtual, 1)}
                       {!m.maquina.ativo && ' · inativa'}
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-3xl font-black tabular-nums tracking-tight text-emerald-900 leading-none">{fmtNum(m.horasMes, 1)}</div>
-                    <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-400 mt-1">h no mês</div>
+                    <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-cinza-claro mt-1">h no mês</div>
                   </div>
                 </div>
                 <dl className="relative mt-4 grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded-xl bg-slate-50 py-2">
-                    <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</dt>
-                    <dd className="font-black tabular-nums text-slate-900">{fmtNum(m.horasTotal, 1)} h</dd>
+                  <div className="rounded-xl bg-papel-2 py-2">
+                    <dt className="text-[10px] font-bold uppercase tracking-wider text-cinza-claro">Total</dt>
+                    <dd className="font-black tabular-nums text-tinta">{fmtNum(m.horasTotal, 1)} h</dd>
                   </div>
-                  <div className="rounded-xl bg-slate-50 py-2">
-                    <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{m.maquina.medidor === 'HODOMETRO' ? 'km/L' : 'L/h'}</dt>
-                    <dd className="font-black tabular-nums text-slate-900">
+                  <div className="rounded-xl bg-papel-2 py-2">
+                    <dt className="text-[10px] font-bold uppercase tracking-wider text-cinza-claro">{m.maquina.medidor === 'HODOMETRO' ? 'km/L' : 'L/h'}</dt>
+                    <dd className="font-black tabular-nums text-tinta">
                       {m.maquina.medidor === 'HODOMETRO'
                         ? m.kmPorLitro !== null
                           ? fmtNum(m.kmPorLitro, 1)
@@ -231,12 +231,12 @@ export function AbaHoras({ estado, mes, aplicar }: PropsAba) {
                         : '—'}
                     </dd>
                   </div>
-                  <div className="rounded-xl bg-slate-50 py-2">
-                    <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">R$/h</dt>
-                    <dd className="font-black tabular-nums text-slate-900 text-sm leading-6">{m.custoPorHora !== null ? moeda(m.custoPorHora) : '—'}</dd>
+                  <div className="rounded-xl bg-papel-2 py-2">
+                    <dt className="text-[10px] font-bold uppercase tracking-wider text-cinza-claro">R$/h</dt>
+                    <dd className="font-black tabular-nums text-tinta text-sm leading-6">{m.custoPorHora !== null ? moeda(m.custoPorHora) : '—'}</dd>
                   </div>
                 </dl>
-                <p className="relative mt-2 text-[11px] text-slate-400 tabular-nums">
+                <p className="relative mt-2 text-[11px] text-cinza-claro tabular-nums">
                   {fmtNum(m.litrosTotal, 0)} L abastecidos no total · {fmtNum(m.litrosMes, 0)} L no mês
                 </p>
               </article>
@@ -244,9 +244,9 @@ export function AbaHoras({ estado, mes, aplicar }: PropsAba) {
         </section>
       )}
 
-      <section className="rounded-3xl bg-white border border-slate-200 overflow-hidden">
+      <section className="rounded-3xl bg-papel border border-linha overflow-hidden">
         <div className="px-4 sm:px-5 py-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-black tracking-tight text-slate-900">Apontamentos de {rotuloMes(mes)}</h2>
+          <h2 className="text-lg font-black tracking-tight text-tinta">Apontamentos de {rotuloMes(mes)}</h2>
           <select className={`${inputCls} sm:w-60 h-11`} value={filtroMaquina} onChange={e => setFiltroMaquina(e.target.value)}>
             <option value="TODAS">Todas as máquinas</option>
             {estado.maquinas.map(m => (
@@ -257,21 +257,21 @@ export function AbaHoras({ estado, mes, aplicar }: PropsAba) {
           </select>
         </div>
         {apontamentosMes.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500 border-t border-slate-100">Nenhuma hora apontada neste mês.</p>
+          <p className="py-8 text-center text-sm text-cinza border-t border-linha">Nenhuma hora apontada neste mês.</p>
         ) : (
-          <ul className="divide-y divide-slate-100 border-t border-slate-100">
+          <ul className="divide-y divide-linha border-t border-linha">
             {apontamentosMes.map(a => (
               <li key={a.id} className="px-4 sm:px-5 py-3 flex items-center gap-3">
                 <div className="w-12 shrink-0 text-center">
                   <div className="text-lg font-black leading-none tabular-nums">{formatarDataBR(a.data).slice(0, 2)}</div>
-                  <div className="text-[10px] font-bold uppercase text-slate-400 tabular-nums">{formatarDataBR(a.data).slice(3, 5)}</div>
+                  <div className="text-[10px] font-bold uppercase text-cinza-claro tabular-nums">{formatarDataBR(a.data).slice(3, 5)}</div>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-bold text-slate-900 truncate">
+                  <div className="text-sm font-bold text-tinta truncate">
                     {nomeMaq(a.maquinaId)} · {a.atividade}
                     {a.talhao ? ` · ${a.talhao}` : ''}
                   </div>
-                  <div className="text-xs text-slate-500 truncate tabular-nums">
+                  <div className="text-xs text-cinza truncate tabular-nums">
                     {a.horimetroFinal !== undefined && a.horimetroFinal !== null
                       ? `${fmtNum(a.horimetroInicial, 1)} → ${fmtNum(a.horimetroFinal, 1)}`
                       : 'horas informadas'}
@@ -283,7 +283,7 @@ export function AbaHoras({ estado, mes, aplicar }: PropsAba) {
                   type="button"
                   onClick={() => excluir(a.id)}
                   aria-label="Excluir apontamento"
-                  className="w-10 h-10 shrink-0 rounded-xl text-slate-400 hover:text-red-700 hover:bg-red-50 flex items-center justify-center cursor-pointer"
+                  className="w-10 h-10 shrink-0 rounded-xl text-cinza-claro hover:text-red-700 hover:bg-red-50 flex items-center justify-center cursor-pointer"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
