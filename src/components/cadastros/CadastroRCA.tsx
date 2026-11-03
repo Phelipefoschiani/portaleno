@@ -511,9 +511,9 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
         estados_atuacao: formData.estados_atuacao || ['PR'],
         cidades_principais: formData.cidades_principais || '',
         tabela_preco_padrao_id: formData.tabela_preco_padrao_id || '',
-        tabela_preco_padrao_nome: nomeTabelaPreco(formData.tabela_preco_padrao_id) || 'Tabela Padrão',
+        tabela_preco_padrao_nome: nomeTabelaPreco(formData.tabela_preco_padrao_id) || '',
         modelo_comissao: formData.modelo_comissao || 'geral',
-        comissao_padrao_percentual: Number(formData.comissao_padrao_percentual) || 3.5,
+        comissao_padrao_percentual: Number(formData.comissao_padrao_percentual ?? 3.5) || 0,
         comissoes_por_grupo: formData.comissoes_por_grupo || [],
         comissoes_por_cliente: formData.comissoes_por_cliente || [],
         comissoes_por_produto: formData.comissoes_por_produto || [],
@@ -546,7 +546,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
           ...selectedRca.endereco,
           ...(formData.endereco || {})
         },
-        tabela_preco_padrao_nome: nomeTabelaPreco(formData.tabela_preco_padrao_id) || selectedRca.tabela_preco_padrao_nome,
+        tabela_preco_padrao_nome: formData.tabela_preco_padrao_id ? (nomeTabelaPreco(formData.tabela_preco_padrao_id) || selectedRca.tabela_preco_padrao_nome) : '',
         comissao_padrao_percentual: Number(formData.comissao_padrao_percentual),
         comissoes_por_grupo: formData.comissoes_por_grupo || [],
         comissoes_por_cliente: formData.comissoes_por_cliente || [],
@@ -1165,6 +1165,20 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                         />
                         <span className="text-[11px] text-slate-500">Ao faturar o pedido, a comissão vira conta a pagar ao RCA com este vencimento e a chave PIX cadastrada.</span>
                       </div>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-bold text-slate-700 block mb-1">Tabela de preço padrão (clientes cadastrados pelo RCA)</label>
+                      <select
+                        value={formData.tabela_preco_padrao_id || ''}
+                        onChange={(e) => setFormData({ ...formData, tabela_preco_padrao_id: e.target.value })}
+                        className="w-full max-w-sm bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                      >
+                        <option value="">-- Sem tabela padrão --</option>
+                        {carregarTabelasPreco().filter(t => t.status !== 'ARQUIVADA' || t.id === formData.tabela_preco_padrao_id).map(t => (
+                          <option key={t.id} value={t.id}>{t.nome}{t.codigo ? ` (${t.codigo})` : ''}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 

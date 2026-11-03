@@ -58,6 +58,7 @@ import {
   StatusPedidoCompra
 } from '../../data/mockStore';
 import { FinanceiroNavTabs } from './FinanceiroNavTabs';
+import { carregarCalculosNaRoca, definirPagamentoCalculoRoca, excluirCalculoNaRoca } from '../../data/calculoRocaData';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -227,7 +228,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
     };
     salvarDespesas([nova, ...carregarDespesas()]);
     // Despesa realizada já foi paga: sai do caixa uma única vez
-    registrarBaixaNoCaixa(`despesa:${nova.id}`, -nova.valor);
+    registrarBaixaNoCaixa(`despesa:${nova.id}`, -nova.valor, { descricao: `${nova.descricao}${nova.categoria ? ` (${nova.categoria})` : ''}`, data: nova.data });
     setModalNovaDespesa(false);
     setMensagemFeedback('Despesa operacional lançada com sucesso!');
     setTimeout(() => setMensagemFeedback(null), 5000);
@@ -247,7 +248,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
   // Ação: Salvar Novo Pedido de Compra Programado (Simples: Fornecedor, Data, Valor e Descrição)
   const handleSalvarNovoPedidoProgramado = (e: React.FormEvent) => {
     e.preventDefault();
-    const total = parseFloat(novoValorTotal.replace(',', '.')) || (Number(novoQtd) * Number(novoUnitario)) || 0;
+    const total = parseFloat(novoValorTotal.includes(',') ? novoValorTotal.replace(/\./g, '').replace(',', '.') : novoValorTotal) || (Number(novoQtd) * Number(novoUnitario)) || 0;
     if (total <= 0) {
       alert('Informe um valor estimado maior que zero.');
       return;
@@ -398,6 +399,16 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
   // Ação: Excluir Pedido Programado (Se deletar, ele some!)
   const handleExcluirProgramado = (pedidoId: string) => {
     if (confirm('Deseja excluir este pedido de compra programado? Ele sumirá desta lista e de pedidos de compra.')) {
+      // Pedido gerado pelo Cálculo na Roça: exclui junto a pesagem (sem deixar pesagem órfã)
+      const calculo = carregarCalculosNaRoca().find(c => c.pedido_compra_id === pedidoId);
+      if (calculo) {
+        const res = excluirCalculoNaRoca(calculo.id);
+        setPedidosCompra(carregarPedidosCompra());
+        if (!res.sucesso) alert(res.mensagem);
+        setMensagemFeedback(res.mensagem);
+        setTimeout(() => setMensagemFeedback(null), 5000);
+        return;
+      }
       const atualizados = carregarPedidosCompra().filter(p => p.id !== pedidoId);
       salvarPedidosCompra(atualizados);
       setPedidosCompra(atualizados);
@@ -428,7 +439,9 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
     if (!pedidoFinalizando) return;
 
     const itemEfetivado = produtoFinalizacao.trim() || pedidoFinalizando.item_descricao;
-    const valTotal = parseFloat(valorTotalFinalizacao.replace(',', '.')) || numeroSeguro(pedidoFinalizando.valor_total);
+    // Aceita "1.500,00", "1500,00" e "1500.00"
+    const textoValor = valorTotalFinalizacao.trim();
+    const valTotal = parseFloat(textoValor.includes(',') ? textoValor.replace(/\./g, '').replace(',', '.') : textoValor) || numeroSeguro(pedidoFinalizando.valor_total);
     if (!(valTotal > 0)) {
       alert('Informe o valor total da compra.');
       return;
@@ -440,7 +453,22 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
 
     // 2. Efetivação única (mesma do Pedido de Compra): status do pedido, despesa paga OU título
     // a pagar, entrada no estoque de matéria-prima e baixa no caixa — sem duplicar
-    const res = efetivarPedidoCompra(pedidoFinalizando.id, {
+    // Pedido do Cálculo na Roça: define o pagamento pela pesagem (situação da pesagem e extrato do agricultor)
+    const calculoRoca = carregarCalculosNaRoca().find(c => c.pedido_compra_id === pedidoFinalizando.id);
+    const res = calculoRoca
+      ? definirPagamentoCalculoRoca(
+          calculoRoca.id,
+          {
+            tipo: tipoFinalizacao === 'JA_PAGO' ? 'JA_PAGO' : 'A_PAGAR',
+            forma_pagamento: formaPagamentoFinalizacao,
+            data_pagamento_ou_vencimento: dataEfetiva,
+            valor_pago: tipoFinalizacao === 'JA_PAGO' ? valTotal : 0,
+            saldo_restante: tipoFinalizacao === 'JA_PAGO' ? 0 : valTotal,
+            observacao: obsFinalizacao || undefined
+          },
+          { item_descricao: itemEfetivado, valor_total: valTotal, categoria: categoriaFinalizacao as CategoriaCompra }
+        )
+      : efetivarPedidoCompra(pedidoFinalizando.id, {
       tipo: tipoFinalizacao === 'JA_PAGO' ? 'JA_PAGO' : 'A_PAGAR',
       data: dataEfetiva,
       forma_pagamento: formaPagamentoFinalizacao,

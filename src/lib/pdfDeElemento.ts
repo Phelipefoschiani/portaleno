@@ -51,35 +51,62 @@ export async function gerarPdfDeElemento(elemento: HTMLElement): Promise<jsPDF> 
   const pxPorMm = largura / A4_L;
   const alturaUtilPx = (A4_A - 2 * MARGEM) * pxPorMm;
 
+  // Bloco de fechamento (totais, assinaturas, rodapé): marcado com data-pdf-final, vai sempre
+  // ao pé da última página — nunca solto no meio da folha
+  const blocoFinal = elemento.querySelector('[data-pdf-final]') as HTMLElement | null;
+  const inicioFinal = blocoFinal ? Math.round(blocoFinal.getBoundingClientRect().top - topoElemento) : altura;
+  const alturaConteudo = blocoFinal && inicioFinal > 0 ? inicioFinal : altura;
+  const alturaFinal = altura - alturaConteudo;
+
+  const recortar = (de: number, ate: number): string | null => {
+    const fatia = document.createElement('canvas');
+    fatia.width = canvas.width;
+    fatia.height = Math.max(1, Math.ceil((ate - de) * escala));
+    const ctx = fatia.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = corPapel;
+    ctx.fillRect(0, 0, fatia.width, fatia.height);
+    ctx.drawImage(canvas, 0, Math.floor(de * escala), canvas.width, fatia.height, 0, 0, fatia.width, fatia.height);
+    return fatia.toDataURL('image/jpeg', 0.9);
+  };
+  const novaPaginaPapel = (primeira: boolean) => {
+    if (!primeira) pdf.addPage();
+    pdf.setFillColor(...rgbPapel);
+    pdf.rect(0, 0, A4_L, A4_A, 'F');
+  };
+
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
   let inicio = 0;
   let pagina = 0;
-  while (inicio < altura - 1) {
+  let ocupadoUltimaMm = 0; // até onde a última página já está preenchida (mm)
+  while (inicio < alturaConteudo - 1) {
     // 1ª página encosta no topo (a faixa da marca começa na borda); as demais têm margem
     const topoMm = pagina === 0 ? 0 : MARGEM;
     const limite = inicio + (A4_A - topoMm - MARGEM) * pxPorMm;
-    let fim = altura;
-    if (limite < altura) {
+    let fim = alturaConteudo;
+    if (limite < alturaConteudo) {
       const candidatos = quebrasOrdenadas.filter(p => p > inicio + alturaUtilPx * 0.4 && p <= limite);
       fim = candidatos.length ? candidatos[candidatos.length - 1] : limite;
     }
-
-    const fatia = document.createElement('canvas');
-    fatia.width = canvas.width;
-    fatia.height = Math.ceil((fim - inicio) * escala);
-    const ctx = fatia.getContext('2d');
-    if (!ctx) break;
-    ctx.fillStyle = corPapel;
-    ctx.fillRect(0, 0, fatia.width, fatia.height);
-    ctx.drawImage(canvas, 0, Math.floor(inicio * escala), canvas.width, fatia.height, 0, 0, fatia.width, fatia.height);
-
-    if (pagina > 0) pdf.addPage();
-    pdf.setFillColor(...rgbPapel);
-    pdf.rect(0, 0, A4_L, A4_A, 'F');
+    const img = recortar(inicio, fim);
+    if (!img) break;
+    novaPaginaPapel(pagina === 0);
     const alturaMm = (fim - inicio) / pxPorMm;
-    pdf.addImage(fatia.toDataURL('image/jpeg', 0.9), 'JPEG', 0, topoMm, A4_L, alturaMm, undefined, 'FAST');
+    pdf.addImage(img, 'JPEG', 0, topoMm, A4_L, alturaMm, undefined, 'FAST');
+    ocupadoUltimaMm = topoMm + alturaMm;
     inicio = fim;
     pagina++;
+  }
+
+  if (alturaFinal > 1) {
+    const img = recortar(alturaConteudo, altura);
+    const alturaFinalMm = alturaFinal / pxPorMm;
+    // Cabe no pé da última página? senão vai para uma página nova, também no pé
+    if (pagina === 0 || ocupadoUltimaMm + alturaFinalMm > A4_A - MARGEM) {
+      novaPaginaPapel(pagina === 0);
+      pagina++;
+    }
+    if (img) pdf.addImage(img, 'JPEG', 0, A4_A - MARGEM - alturaFinalMm, A4_L, alturaFinalMm, undefined, 'FAST');
   }
 
   const total = pdf.getNumberOfPages();

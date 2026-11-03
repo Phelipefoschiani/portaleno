@@ -46,7 +46,7 @@ import {
   isAcessoPortfolioBloqueado,
   getDiasRestantes
 } from '../../data/portfolioData';
-import { obterRcaPorId, registrarPedidoPortfolio } from '../../data/cadastrosData';
+import { obterRcaPorId, registrarPedidoPortfolio, carregarPedidosPortfolio } from '../../data/cadastrosData';
 import { formatarDataBR } from '../../lib/datas';
 
 interface PortalConvidadoExclusivoProps {
@@ -176,7 +176,17 @@ export function PortalConvidadoExclusivo({
 
     const novoPedido: PedidoPortifolio = {
       id: `ped_port_${Date.now()}`,
-      numero_pedido: `PED-VIP-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      // Sequencial no ano (o sorteio de 3 dígitos repetia números)
+      numero_pedido: (() => {
+        const ano = new Date().getFullYear();
+        const maior = carregarPedidosPortfolio().reduce((max, p) => {
+          const prefixo = `PED-VIP-${ano}-`;
+          const num = String(p.numero_pedido || '').startsWith(prefixo) ? parseInt(String(p.numero_pedido).slice(prefixo.length), 10) : NaN;
+          const m = Number.isFinite(num) ? [prefixo, String(num)] : null;
+          return m ? Math.max(max, parseInt(m[1], 10)) : max;
+        }, 0);
+        return `PED-VIP-${ano}-${String(maior + 1).padStart(3, '0')}`;
+      })(),
       cadastro_provisorio_id: cadastro.id,
       nome_convidado: cadastro.nome_convidado,
       empresa_solicitante: cadastro.empresa_solicitante,

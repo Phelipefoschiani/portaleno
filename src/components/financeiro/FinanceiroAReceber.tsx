@@ -108,7 +108,7 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
       );
       salvarTitulosReceber(atualizados);
       // Entrada no caixa (uma única vez por título)
-      registrarBaixaNoCaixa(`receber:${id}`, alvo.valor);
+      registrarBaixaNoCaixa(`receber:${id}`, alvo.valor, { descricao: `Recebimento ${alvo.numero_documento} - ${alvo.cliente_nome}` });
     }
   };
 

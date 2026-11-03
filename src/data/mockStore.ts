@@ -327,7 +327,7 @@ export function efetivarPedidoCompra(pedidoId: string, dados: DadosEfetivacaoCom
   despesasRemovidas.forEach((d: any) => estornarBaixaNoCaixa(`despesa:${d.id}`));
   despesas
     .filter((d: any) => d.pedido_compra_id === pedido.id && d.status_despesa === 'PAGO')
-    .forEach((d: any) => registrarBaixaNoCaixa(`despesa:${d.id}`, -(Number(d.valor) || 0)));
+    .forEach((d: any) => registrarBaixaNoCaixa(`despesa:${d.id}`, -(Number(d.valor) || 0), { descricao: `${d.descricao} (${d.categoria})`, data: d.data }));
 
   // 3. Entrada no estoque de matéria-prima: só itens que são matéria-prima cadastrada, uma única vez
   let entrada: RegistroEntradaMateriaPrima | null | undefined = pedido.entrada_estoque;

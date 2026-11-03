@@ -2,7 +2,7 @@
 // Integra Contas a Receber (Vendas Faturadas), Contas a Pagar (Compras de Mandioca / Insumos),
 // Lançamento de Despesas, Notas Fiscais (Entrada/Saída), Receitas Extras e Caixa de Investimento.
 
-import { parseData, mesAtualKey, hojeISO } from '../lib/datas';
+import { parseData, mesAtualKey, hojeISO, paraISO } from '../lib/datas';
 
 export interface TituloReceber {
   id: string;
@@ -369,35 +369,181 @@ function carregarBaixasCaixa(): Record<string, number> {
   }
 }
 
+// ============================================================
+// EXTRATO DO CAIXA (cada movimentação do saldo gera um movimento legível)
+// ============================================================
+const STORAGE_KEY_CAIXA_MOVIMENTOS = 'grupo_eno_financeiro_caixa_movimentos_v1';
+
+export type FundoCaixa = 'saldo_disponivel_industrial' | 'fundo_reserva_safra' | 'fundo_modernizacao_maquinario';
+
+export const ROTULO_FUNDO_CAIXA: Record<FundoCaixa, string> = {
+  saldo_disponivel_industrial: 'Caixa Industrial',
+  fundo_reserva_safra: 'Reserva de Safra',
+  fundo_modernizacao_maquinario: 'Modernização / CAPEX'
+};
+
+export type OrigemMovimentoCaixa =
+  | 'Despesa'
+  | 'Conta a pagar'
+  | 'Conta a receber'
+  | 'Receita'
+  | 'Investimento'
+  | 'Transferência'
+  | 'Saldo inicial'
+  | 'Ajuste';
+
+export const ORIGENS_MOVIMENTO_CAIXA: OrigemMovimentoCaixa[] = [
+  'Despesa', 'Conta a pagar', 'Conta a receber', 'Receita', 'Investimento', 'Transferência', 'Saldo inicial', 'Ajuste'
+];
+
+export interface MovimentoCaixa {
+  id: string;
+  data: string; // AAAA-MM-DD
+  tipo: 'ENTRADA' | 'SAIDA';
+  origem: OrigemMovimentoCaixa;
+  descricao: string;
+  valor: number; // sempre positivo
+  saldo_apos: number; // saldo do fundo após o movimento
+  chave: string;
+  fundo: FundoCaixa;
+  estorno?: boolean;
+  registrado_em: string;
+}
+
+export interface InfoMovimentoCaixa {
+  descricao?: string;
+  origem?: OrigemMovimentoCaixa | string;
+  data?: string;
+  fundo?: FundoCaixa;
+}
+
+const FUNDOS_CAIXA: FundoCaixa[] = ['saldo_disponivel_industrial', 'fundo_reserva_safra', 'fundo_modernizacao_maquinario'];
+
+function origemPelaChave(chave: string): OrigemMovimentoCaixa {
+  if (chave.startsWith('despesa:desp_inv_')) return 'Investimento';
+  if (chave.startsWith('despesa:')) return 'Despesa';
+  if (chave.startsWith('pagar:')) return 'Conta a pagar';
+  if (chave.startsWith('receber:')) return 'Conta a receber';
+  if (chave.startsWith('receita:')) return 'Receita';
+  if (chave.startsWith('transf:')) return 'Transferência';
+  if (chave.startsWith('inicial:')) return 'Saldo inicial';
+  return 'Ajuste';
+}
+
+function normalizarOrigem(origem: string | undefined, chave: string): OrigemMovimentoCaixa {
+  return ORIGENS_MOVIMENTO_CAIXA.includes(origem as OrigemMovimentoCaixa) ? (origem as OrigemMovimentoCaixa) : origemPelaChave(chave);
+}
+
+// Sem descrição informada: busca o lançamento pela chave (ex.: despesa do sítio, comissão paga)
+function descricaoPelaChave(chave: string): string {
+  try {
+    const [prefixo, ...resto] = chave.split(':');
+    const id = resto.join(':');
+    if (prefixo === 'despesa') {
+      const d = carregarDespesas().find(x => x.id === id);
+      if (d) return `${d.descricao}${d.categoria ? ` (${d.categoria})` : ''}`;
+    } else if (prefixo === 'pagar') {
+      const t = carregarTitulosPagar().find(x => x.id === id);
+      if (t) return `Pagamento ${t.numero_documento} - ${t.favorecido_nome}${t.categoria ? ` (${t.categoria})` : ''}`;
+    } else if (prefixo === 'receber') {
+      const t = carregarTitulosReceber().find(x => x.id === id);
+      if (t) return `Recebimento ${t.numero_documento} - ${t.cliente_nome}`;
+    } else if (prefixo === 'receita') {
+      const r = carregarReceitasExtras().find(x => x.id === id);
+      if (r) return r.descricao;
+    }
+  } catch (e) {
+    // sem descrição: usa a origem
+  }
+  return '';
+}
+
+export function carregarMovimentosCaixa(): MovimentoCaixa[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_CAIXA_MOVIMENTOS);
+    const lista = raw ? JSON.parse(raw) : [];
+    return Array.isArray(lista) ? lista : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+let seqMovimento = 0;
+function gravarMovimentoCaixa(mov: Omit<MovimentoCaixa, 'id' | 'registrado_em'>): void {
+  const lista = carregarMovimentosCaixa();
+  seqMovimento += 1;
+  lista.push({ ...mov, id: `mov_${Date.now()}_${seqMovimento}`, registrado_em: new Date().toISOString() });
+  localStorage.setItem(STORAGE_KEY_CAIXA_MOVIMENTOS, JSON.stringify(lista));
+}
+
 /**
- * Movimenta o saldo disponível do caixa (positivo = entrada, negativo = saída).
+ * Movimenta o saldo do caixa (positivo = entrada, negativo = saída) e grava o movimento no extrato.
  * `chave` identifica o lançamento (ex.: 'pagar:<id>', 'receber:<id>', 'despesa:<id>');
  * se a chave já foi aplicada, nada acontece. Retorna true se movimentou.
+ * `info` (opcional): descrição legível, origem, data (DD/MM/AAAA ou AAAA-MM-DD) e fundo (padrão: caixa industrial).
  */
-export function registrarBaixaNoCaixa(chave: string, delta: number): boolean {
+export function registrarBaixaNoCaixa(chave: string, delta: number, info?: InfoMovimentoCaixa): boolean {
   if (typeof window === 'undefined') return false;
   const valor = numeroSeguro(delta);
   if (!chave || valor === 0) return false;
   const baixas = carregarBaixasCaixa();
   if (Object.prototype.hasOwnProperty.call(baixas, chave)) return false;
+  const fundo: FundoCaixa = info?.fundo && FUNDOS_CAIXA.includes(info.fundo) ? info.fundo : 'saldo_disponivel_industrial';
   const caixa = carregarCaixaInvestimento();
-  caixa.saldo_disponivel_industrial = numeroSeguro(caixa.saldo_disponivel_industrial + valor);
+  caixa[fundo] = numeroSeguro(numeroSeguro(caixa[fundo]) + valor);
   baixas[chave] = valor;
   localStorage.setItem(STORAGE_KEY_CAIXA_BAIXAS, JSON.stringify(baixas));
+  const origem = normalizarOrigem(info?.origem, chave);
+  gravarMovimentoCaixa({
+    data: paraISO(info?.data) || hojeISO(),
+    tipo: valor > 0 ? 'ENTRADA' : 'SAIDA',
+    origem,
+    descricao: (info?.descricao || '').trim() || descricaoPelaChave(chave) || origem,
+    valor: Math.abs(valor),
+    saldo_apos: caixa[fundo],
+    chave,
+    fundo
+  });
   salvarCaixaInvestimento(caixa);
   return true;
 }
 
-/** Desfaz a movimentação de uma chave (ex.: lançamento pago excluído). Retorna true se estornou. */
-export function estornarBaixaNoCaixa(chave: string): boolean {
+/** Desfaz a movimentação de uma chave (ex.: lançamento pago excluído) e grava o estorno no extrato. Retorna true se estornou. */
+export function estornarBaixaNoCaixa(chave: string, info?: { descricao?: string; data?: string }): boolean {
   if (typeof window === 'undefined') return false;
   const baixas = carregarBaixasCaixa();
   if (!Object.prototype.hasOwnProperty.call(baixas, chave)) return false;
+  const original = [...carregarMovimentosCaixa()].reverse().find(m => m.chave === chave && !m.estorno);
+  const fundo: FundoCaixa = original?.fundo || 'saldo_disponivel_industrial';
+  const valor = numeroSeguro(baixas[chave]);
   const caixa = carregarCaixaInvestimento();
-  caixa.saldo_disponivel_industrial = numeroSeguro(caixa.saldo_disponivel_industrial - numeroSeguro(baixas[chave]));
+  caixa[fundo] = numeroSeguro(numeroSeguro(caixa[fundo]) - valor);
   delete baixas[chave];
   localStorage.setItem(STORAGE_KEY_CAIXA_BAIXAS, JSON.stringify(baixas));
+  gravarMovimentoCaixa({
+    data: paraISO(info?.data) || hojeISO(),
+    tipo: valor > 0 ? 'SAIDA' : 'ENTRADA',
+    origem: original?.origem || origemPelaChave(chave),
+    descricao: info?.descricao || `Estorno de ${original?.descricao || chave}`,
+    valor: Math.abs(valor),
+    saldo_apos: caixa[fundo],
+    chave,
+    fundo,
+    estorno: true
+  });
   salvarCaixaInvestimento(caixa);
+  return true;
+}
+
+/** Transferência entre fundos: dois movimentos (saída da origem e entrada no destino). */
+export function transferirEntreFundosCaixa(origem: FundoCaixa, destino: FundoCaixa, valor: number, data?: string): boolean {
+  const v = numeroSeguro(valor);
+  if (typeof window === 'undefined' || v <= 0 || origem === destino) return false;
+  const chave = `transf:${Date.now()}`;
+  const desc = `Transferência ${ROTULO_FUNDO_CAIXA[origem]} → ${ROTULO_FUNDO_CAIXA[destino]}`;
+  registrarBaixaNoCaixa(`${chave}:saida`, -v, { origem: 'Transferência', descricao: desc, data, fundo: origem });
+  registrarBaixaNoCaixa(`${chave}:entrada`, v, { origem: 'Transferência', descricao: desc, data, fundo: destino });
   return true;
 }
 

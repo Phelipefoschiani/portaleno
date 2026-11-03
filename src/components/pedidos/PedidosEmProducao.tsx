@@ -40,8 +40,13 @@ import {
   carregarOrdensProducao,
   ordensDoPedido,
   sincronizarOrdensComPedido,
-  garantirOrdensDosPedidosEmProducao
+  garantirOrdensDosPedidosEmProducao,
+  validadePadraoProduto
 } from '../../data/ordensProducaoData';
+import { formatarDataBR } from '../../lib/datas';
+
+// Validade padrão do pedido: prazo da ficha técnica do 1º produto (24 meses quando não informado)
+const validadePadraoPedidoBR = (p: PedidoVenda) => formatarDataBR(validadePadraoProduto(p.itens[0]?.produto_id || ''));
 import { calcularConsumoProducao, ConsumoMateriaPrimaProducao } from '../../data/pipelineIntegrado';
 import { TabelaMateriaPrimaOP } from '../producao/OrdensProducaoPainel';
 
@@ -130,8 +135,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
     setLoteInput(p.lote_producao || `LOT-${new Date().getFullYear()}-${p.numero_pedido.replace(/\D/g, '')}`);
     const hoje = new Date();
     setDataFabricacaoInput(p.data_fabricacao || hoje.toLocaleDateString('pt-BR'));
-    hoje.setFullYear(hoje.getFullYear() + 2); // 2 anos de validade padrão
-    setDataVencimentoInput(p.data_vencimento || hoje.toLocaleDateString('pt-BR'));
+    setDataVencimentoInput(p.data_vencimento || validadePadraoPedidoBR(p));
     setDataApontamento(new Date().toLocaleDateString('pt-BR'));
     setQtdEmbalagensInput('');
     setObservacaoApontamento('');
@@ -277,8 +281,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
       setLoteInput(loteEfetivo || pedido.lote_producao || `LOT-${new Date().getFullYear()}-${pedido.numero_pedido.replace(/\D/g, '')}`);
       const hoje = new Date();
       setDataFabricacaoInput(fabricacaoEfetiva || hoje.toLocaleDateString('pt-BR'));
-      hoje.setFullYear(hoje.getFullYear() + 2);
-      setDataVencimentoInput(vencimentoEfetivo || hoje.toLocaleDateString('pt-BR'));
+      setDataVencimentoInput(vencimentoEfetivo || validadePadraoPedidoBR(pedido));
       return;
     }
 

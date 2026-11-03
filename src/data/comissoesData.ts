@@ -59,7 +59,8 @@ export function rotuloRegraComissao(regra?: string): string {
 export const PREFIXO_TITULO_COMISSAO = 'pag_com_';
 export const DIA_VENCIMENTO_COMISSAO_PADRAO = 10;
 
-const r2 = (v: number) => Math.round((Number(v) || 0) * 100) / 100;
+// Arredonda centavos sem o erro de ponto flutuante (ex.: 4,725 -> 4,73 e não 4,72)
+const r2 = (v: number) => Math.round(parseFloat(((Number(v) || 0) * 100).toFixed(6))) / 100;
 const norm = (s?: string) =>
   String(s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 

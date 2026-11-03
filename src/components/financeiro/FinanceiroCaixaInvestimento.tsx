@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Landmark,
   Plus,
@@ -20,8 +20,19 @@ import {
   carregarCaixaInvestimento,
   salvarCaixaInvestimento,
   formatarMoeda,
-  numeroSeguro
+  numeroSeguro,
+  carregarDespesas,
+  salvarDespesas,
+  DespesaOperacional,
+  registrarBaixaNoCaixa,
+  transferirEntreFundosCaixa,
+  carregarMovimentosCaixa,
+  MovimentoCaixa,
+  FundoCaixa,
+  ROTULO_FUNDO_CAIXA,
+  ORIGENS_MOVIMENTO_CAIXA
 } from '../../data/financeiroData';
+import { hojeISO, paraISO, formatarDataBR, mesAtualKey } from '../../lib/datas';
 import { FinanceiroNavTabs } from './FinanceiroNavTabs';
 
 interface Props {
@@ -30,6 +41,18 @@ interface Props {
 
 export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
   const [caixa, setCaixa] = useState<CaixaInvestimento>(() => carregarCaixaInvestimento());
+  const [movimentos, setMovimentos] = useState<MovimentoCaixa[]>(() => carregarMovimentosCaixa());
+  const [filtroMes, setFiltroMes] = useState<string>(() => mesAtualKey());
+  const [filtroOrigem, setFiltroOrigem] = useState<string>('TODAS');
+  // Saldo inicial / aporte e ajuste manual
+  const [modalMovimento, setModalMovimento] = useState<'INICIAL' | 'AJUSTE' | null>(null);
+  const [formMov, setFormMov] = useState({
+    valor: '',
+    fundo: 'saldo_disponivel_industrial' as FundoCaixa,
+    sentido: 'ENTRADA' as 'ENTRADA' | 'SAIDA',
+    descricao: '',
+    data: hojeISO()
+  });
   const [modalNovoInvest, setModalNovoInvest] = useState(false);
   const [modalTransferencia, setModalTransferencia] = useState(false);
 
@@ -39,7 +62,8 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
     valor: '',
     categoria: 'Modernização de Maquinário',
     data: new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
-    status: 'PLANEJADO' as 'CONCLUIDO' | 'EM_ANDAMENTO' | 'PLANEJADO'
+    status: 'PLANEJADO' as 'CONCLUIDO' | 'EM_ANDAMENTO' | 'PLANEJADO',
+    fonte: 'saldo_disponivel_industrial' as FundoCaixa | 'NENHUM'
   });
 
   // Form para transferência entre fundos
@@ -52,6 +76,7 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
   useEffect(() => {
     const handleUpdate = () => {
       setCaixa(carregarCaixaInvestimento());
+      setMovimentos(carregarMovimentosCaixa());
     };
     handleUpdate();
     window.addEventListener('financeiro_updated', handleUpdate);
@@ -67,34 +92,106 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
     numeroSeguro(caixa.fundo_reserva_safra) +
     numeroSeguro(caixa.fundo_modernizacao_maquinario);
 
+  // Extrato filtrado (mês AAAA-MM e origem), do mais recente para o mais antigo
+  const movimentosFiltrados = useMemo(() => {
+    return movimentos
+      .filter(m => (!filtroMes || String(m.data || '').slice(0, 7) === filtroMes) && (filtroOrigem === 'TODAS' || m.origem === filtroOrigem))
+      .slice()
+      .reverse();
+  }, [movimentos, filtroMes, filtroOrigem]);
+
+  // Entradas/saídas do mês (transferência entre fundos não é entrada nem saída da empresa)
+  const resumoMes = useMemo(() => {
+    const doMes = movimentos.filter(m => String(m.data || '').slice(0, 7) === filtroMes && m.origem !== 'Transferência');
+    const entradas = doMes.filter(m => m.tipo === 'ENTRADA').reduce((acc, m) => acc + numeroSeguro(m.valor), 0);
+    const saidas = doMes.filter(m => m.tipo === 'SAIDA').reduce((acc, m) => acc + numeroSeguro(m.valor), 0);
+    return { entradas, saidas, resultado: entradas - saidas };
+  }, [movimentos, filtroMes]);
+
   const handleSalvarInvestimento = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formInvest.titulo || !formInvest.valor) return;
+    const valor = numeroSeguro(formInvest.valor);
+    if (!formInvest.titulo || !(valor > 0)) {
+      alert('Informe o título e um valor maior que zero.');
+      return;
+    }
 
+    const id = `inv_${Date.now()}`;
+    const fonte = formInvest.fonte;
+    const despesaId = fonte !== 'NENHUM' ? `desp_inv_${id}` : undefined;
     const novoProjeto = {
-      id: `inv_${Date.now()}`,
+      id,
       data: formInvest.data,
       titulo: formInvest.titulo,
-      valor: numeroSeguro(formInvest.valor),
+      valor,
       categoria: formInvest.categoria,
-      status: formInvest.status
+      status: formInvest.status,
+      ...(despesaId ? { despesa_id: despesaId, fundo_origem: fonte } : {})
     };
+    const atual = carregarCaixaInvestimento();
+    salvarCaixaInvestimento({ ...atual, investimentos_recentes: [novoProjeto, ...atual.investimentos_recentes] });
 
-    const atualizado: CaixaInvestimento = {
-      ...caixa,
-      investimentos_recentes: [novoProjeto, ...caixa.investimentos_recentes]
-    };
+    // Investimento debitado: vira despesa paga (categoria Investimento) e sai do fundo escolhido.
+    // A chave do caixa é a da própria despesa: excluir a despesa estorna o mesmo valor (sem contar duas vezes).
+    if (despesaId && fonte !== 'NENHUM') {
+      const descricao = `[Investimento] ${formInvest.titulo} - ${formInvest.categoria}`;
+      const despesa: DespesaOperacional & Record<string, unknown> = {
+        id: despesaId,
+        tipo_despesa: 'REALIZADA',
+        status_despesa: 'PAGO',
+        investimento_id: id,
+        data: hojeISO(),
+        categoria: 'Investimento',
+        descricao,
+        valor,
+        setor: 'Fábrica & Moagem',
+        responsavel: 'Diretoria',
+        forma_pagamento: ROTULO_FUNDO_CAIXA[fonte]
+      };
+      salvarDespesas([despesa, ...carregarDespesas()]);
+      registrarBaixaNoCaixa(`despesa:${despesaId}`, -valor, { origem: 'Investimento', descricao, fundo: fonte });
+    }
 
-    setCaixa(atualizado);
-    salvarCaixaInvestimento(atualizado);
+    setCaixa(carregarCaixaInvestimento());
+    setMovimentos(carregarMovimentosCaixa());
     setModalNovoInvest(false);
     setFormInvest({
       titulo: '',
       valor: '',
       categoria: 'Modernização de Maquinário',
       data: new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
-      status: 'PLANEJADO'
+      status: 'PLANEJADO',
+      fonte: 'saldo_disponivel_industrial'
     });
+  };
+
+  const abrirModalMovimento = (modo: 'INICIAL' | 'AJUSTE') => {
+    setFormMov({ valor: '', fundo: 'saldo_disponivel_industrial', sentido: 'ENTRADA', descricao: '', data: hojeISO() });
+    setModalMovimento(modo);
+  };
+
+  const handleSalvarMovimento = (e: React.FormEvent) => {
+    e.preventDefault();
+    const v = numeroSeguro(formMov.valor);
+    if (!(v > 0)) {
+      alert('Informe um valor maior que zero.');
+      return;
+    }
+    if (modalMovimento === 'AJUSTE' && !formMov.descricao.trim()) {
+      alert('Informe o motivo do ajuste.');
+      return;
+    }
+    const inicial = modalMovimento === 'INICIAL';
+    const delta = inicial || formMov.sentido === 'ENTRADA' ? v : -v;
+    registrarBaixaNoCaixa(`${inicial ? 'inicial' : 'ajuste'}:${Date.now()}`, delta, {
+      origem: inicial ? 'Saldo inicial' : 'Ajuste',
+      descricao: formMov.descricao.trim() || (inicial ? 'Saldo inicial / aporte' : 'Ajuste'),
+      data: paraISO(formMov.data) || hojeISO(),
+      fundo: formMov.fundo
+    });
+    setCaixa(carregarCaixaInvestimento());
+    setMovimentos(carregarMovimentosCaixa());
+    setModalMovimento(null);
   };
 
   const handleEfetuarTransferencia = (e: React.FormEvent) => {
@@ -111,14 +208,10 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
       return;
     }
 
-    const atualizado: CaixaInvestimento = {
-      ...caixa,
-      [formTransf.origem]: caixa[formTransf.origem] - v,
-      [formTransf.destino]: caixa[formTransf.destino] + v
-    };
-
-    setCaixa(atualizado);
-    salvarCaixaInvestimento(atualizado);
+    // Grava no extrato (saída da origem + entrada no destino)
+    transferirEntreFundosCaixa(formTransf.origem, formTransf.destino, v);
+    setCaixa(carregarCaixaInvestimento());
+    setMovimentos(carregarMovimentosCaixa());
     setModalTransferencia(false);
     setFormTransf({
       origem: 'saldo_disponivel_industrial',
@@ -145,7 +238,21 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
             </h1>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => abrirModalMovimento('INICIAL')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <ArrowDownLeft className="w-3.5 h-3.5" />
+              <span>Saldo inicial / Aporte</span>
+            </button>
+            <button
+              onClick={() => abrirModalMovimento('AJUSTE')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <PieChart className="w-3.5 h-3.5 text-slate-500" />
+              <span>Ajuste</span>
+            </button>
             <button
               onClick={() => setModalTransferencia(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-semibold transition-colors cursor-pointer"
@@ -230,7 +337,93 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
 
         </div>
 
-        {/* 4. TABELA DE PROJETOS DE INVESTIMENTO & MELHORIAS FABRIS */}
+        {/* 4. EXTRATO DO CAIXA (de onde veio cada movimentação) */}
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Extrato do Caixa</h2>
+              <p className="text-xs text-slate-500">
+                Despesas pagas, contas pagas/recebidas, receitas, investimentos, transferências e ajustes.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <input
+                type="month"
+                value={filtroMes}
+                onChange={(e) => setFiltroMes(e.target.value)}
+                aria-label="Mês do extrato"
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-700"
+              />
+              <select
+                value={filtroOrigem}
+                onChange={(e) => setFiltroOrigem(e.target.value)}
+                aria-label="Origem do movimento"
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-700 cursor-pointer"
+              >
+                <option value="TODAS">Todas as origens</option>
+                {ORIGENS_MOVIMENTO_CAIXA.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-6 px-6 py-3 border-b border-slate-100 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 font-medium">Entradas no mês:</span>
+              <span className="font-mono font-bold text-emerald-700">{formatarMoeda(resumoMes.entradas)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 font-medium">Saídas no mês:</span>
+              <span className="font-mono font-bold text-red-700">{formatarMoeda(resumoMes.saidas)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 font-medium">Resultado do mês:</span>
+              <span className={`font-mono font-bold ${resumoMes.resultado < 0 ? 'text-red-700' : 'text-slate-900'}`}>{formatarMoeda(resumoMes.resultado)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 font-medium">Saldo do caixa industrial:</span>
+              <span className="font-mono font-bold text-slate-900">{formatarMoeda(caixa.saldo_disponivel_industrial)}</span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[760px]">
+              <thead>
+                <tr className="bg-slate-50/90 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
+                  <th className="py-3 px-6">Data</th>
+                  <th className="py-3 px-4">Origem</th>
+                  <th className="py-3 px-4">Descrição</th>
+                  <th className="py-3 px-4">Fundo</th>
+                  <th className="py-3 px-4 text-right">Valor</th>
+                  <th className="py-3 px-6 text-right">Saldo após</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {movimentosFiltrados.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 px-6 text-center text-slate-400 font-medium">
+                      Nenhuma movimentação no período selecionado.
+                    </td>
+                  </tr>
+                ) : (
+                  movimentosFiltrados.map(m => (
+                    <tr key={m.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-6 font-mono font-semibold text-slate-700 whitespace-nowrap">{formatarDataBR(m.data)}</td>
+                      <td className="py-3 px-4 font-semibold text-slate-600 whitespace-nowrap">{m.origem}</td>
+                      <td className="py-3 px-4 font-medium text-slate-900">{m.descricao}</td>
+                      <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{ROTULO_FUNDO_CAIXA[m.fundo] || m.fundo}</td>
+                      <td className={`py-3 px-4 text-right font-mono font-bold whitespace-nowrap ${m.tipo === 'ENTRADA' ? 'text-emerald-700' : 'text-red-700'}`}>
+                        {m.tipo === 'ENTRADA' ? '+' : '−'} {formatarMoeda(m.valor)}
+                      </td>
+                      <td className="py-3 px-6 text-right font-mono font-semibold text-slate-700 whitespace-nowrap">{formatarMoeda(m.saldo_apos)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 5. TABELA DE PROJETOS DE INVESTIMENTO & MELHORIAS FABRIS */}
         <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div>
@@ -400,6 +593,22 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
                     <option value="CONCLUIDO">Concluído</option>
                   </select>
                 </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Sai de (vira despesa Investimento)
+                  </label>
+                  <select
+                    value={formInvest.fonte}
+                    onChange={(e) => setFormInvest({ ...formInvest, fonte: e.target.value as FundoCaixa | 'NENHUM' })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-slate-900 font-semibold focus:outline-none focus:border-emerald-700 bg-slate-50 cursor-pointer"
+                  >
+                    <option value="saldo_disponivel_industrial">Caixa Industrial (Disp: {formatarMoeda(caixa.saldo_disponivel_industrial)})</option>
+                    <option value="fundo_reserva_safra">Reserva de Safra (Disp: {formatarMoeda(caixa.fundo_reserva_safra)})</option>
+                    <option value="fundo_modernizacao_maquinario">Modernização CAPEX (Disp: {formatarMoeda(caixa.fundo_modernizacao_maquinario)})</option>
+                    <option value="NENHUM">Não debitar agora (só planejamento)</option>
+                  </select>
+                </div>
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
@@ -507,6 +716,105 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
                   className="px-6 py-2.5 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold cursor-pointer shadow-sm transition-all"
                 >
                   Confirmar Transferência
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL SALDO INICIAL / APORTE E AJUSTE */}
+      {modalMovimento && (
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full overflow-hidden my-auto flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white shrink-0">
+              <h3 className="font-bold text-white text-sm sm:text-base">
+                {modalMovimento === 'INICIAL' ? 'Saldo inicial / Aporte' : 'Ajuste de caixa'}
+              </h3>
+              <button
+                onClick={() => setModalMovimento(null)}
+                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarMovimento} className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Fundo</label>
+                  <select
+                    value={formMov.fundo}
+                    onChange={(e) => setFormMov({ ...formMov, fundo: e.target.value as FundoCaixa })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-slate-900 font-semibold bg-slate-50 cursor-pointer"
+                  >
+                    {(Object.keys(ROTULO_FUNDO_CAIXA) as FundoCaixa[]).map(f => (
+                      <option key={f} value={f}>{ROTULO_FUNDO_CAIXA[f]}</option>
+                    ))}
+                  </select>
+                </div>
+                {modalMovimento === 'AJUSTE' && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Tipo</label>
+                    <select
+                      value={formMov.sentido}
+                      onChange={(e) => setFormMov({ ...formMov, sentido: e.target.value as 'ENTRADA' | 'SAIDA' })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 text-slate-900 font-semibold bg-slate-50 cursor-pointer"
+                    >
+                      <option value="ENTRADA">Entrada (soma ao saldo)</option>
+                      <option value="SAIDA">Saída (subtrai do saldo)</option>
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Valor (R$) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    required
+                    value={formMov.valor}
+                    onChange={(e) => setFormMov({ ...formMov, valor: e.target.value })}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono font-bold text-slate-900 bg-slate-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Data</label>
+                  <input
+                    type="date"
+                    value={formMov.data}
+                    onChange={(e) => setFormMov({ ...formMov, data: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono text-slate-900 bg-slate-50"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    {modalMovimento === 'AJUSTE' ? 'Motivo do ajuste *' : 'Descrição'}
+                  </label>
+                  <input
+                    type="text"
+                    required={modalMovimento === 'AJUSTE'}
+                    value={formMov.descricao}
+                    onChange={(e) => setFormMov({ ...formMov, descricao: e.target.value })}
+                    placeholder={modalMovimento === 'AJUSTE' ? 'Ex: conferência do extrato bancário' : 'Ex: Saldo inicial da conta movimento'}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-slate-900 bg-slate-50"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setModalMovimento(null)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold cursor-pointer shadow-sm transition-all"
+                >
+                  Lançar no caixa
                 </button>
               </div>
             </form>

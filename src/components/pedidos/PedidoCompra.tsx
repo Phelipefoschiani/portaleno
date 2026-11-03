@@ -52,6 +52,7 @@ import {
 import {
   carregarCalculosNaRoca,
   definirPagamentoCalculoRoca,
+  excluirCalculoNaRoca,
   adicionarComprovante
 } from '../../data/calculoRocaData';
 import { CampoAnexoComprovante, ArquivoComprovante } from './ComprovantesRoca';
@@ -250,7 +251,7 @@ export function PedidoCompra() {
   const salvarNovoPedido = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const total = parseFloat(valorTotalForm.replace(',', '.')) || (Number(quantidadeForm) * Number(valorUnitarioForm)) || 0;
+    const total = parseFloat(valorTotalForm.includes(',') ? valorTotalForm.replace(/\./g, '').replace(',', '.') : valorTotalForm) || (Number(quantidadeForm) * Number(valorUnitarioForm)) || 0;
 
     let novoPedido: PedidoCompraGeral;
 
@@ -438,7 +439,9 @@ export function PedidoCompra() {
         const despesas = JSON.parse(rawDespesas);
         const parceiroNome = atualizado.tipo_parceiro === 'AGRICULTOR' ? atualizado.agricultor_nome : atualizado.fornecedor_nome;
         const despesasAtualizadas = despesas.map((d: any) => {
-          if (d.id.includes(atualizado.id) || d.pedido_compra_id === atualizado.id) {
+          // Só a despesa PROGRAMADA (legado) acompanha a edição; despesas pagas/adiantamentos já movimentaram
+          // o caixa e só mudam ao redefinir o pagamento (senão o valor e o caixa ficariam divergentes)
+          if (String(d.id || '') === `desp_prog_${atualizado.id}`) {
             return {
               ...d,
               data: atualizado.data,
@@ -549,7 +552,16 @@ export function PedidoCompra() {
     const avisoEstoque = ped?.entrada_estoque ? ' A entrada no estoque de matéria-prima também será estornada.' : '';
     if (window.confirm(`Deseja realmente excluir este pedido de compra? Os lançamentos vinculados no Financeiro serão removidos.${avisoEstoque}`)) {
       const calculo = carregarCalculosNaRoca().find(c => c.pedido_compra_id === id);
-      excluirPedidoCompra(id, calculo ? [calculo.id] : []);
+      if (calculo) {
+        // Pedido gerado pelo Cálculo na Roça: exclui a pesagem junto (bloqueado se já houve pagamento)
+        const res = excluirCalculoNaRoca(calculo.id);
+        setPedidos(carregarPedidosCompra());
+        if (!res.sucesso) alert(res.mensagem);
+        setMensagemSucesso(res.mensagem);
+        setTimeout(() => setMensagemSucesso(null), 5000);
+        return;
+      }
+      excluirPedidoCompra(id);
       setPedidos(carregarPedidosCompra());
       setMensagemSucesso('Pedido de compra e lançamentos vinculados excluídos com sucesso!');
       setTimeout(() => setMensagemSucesso(null), 5000);

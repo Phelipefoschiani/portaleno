@@ -224,7 +224,11 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
     quantidade: number;
     precoUnitario: number;
     unidadesPorFardo?: number;
+    modo?: 'FARDO' | 'UNITARIO'; // cada item pode ser por caixa/fardo ou por unidade (conforme a tabela)
   }>>([]); // itens só entram depois de escolher a tabela de preço
+
+  // Modo do item (caixa/fardo ou unidade); itens antigos seguem o modo geral do formulário
+  const modoItem = (it: { modo?: 'FARDO' | 'UNITARIO' }) => it.modo || modoLancamentoForm;
 
   // Carregar pedidos, produtos e clientes
   const recarregar = () => {
@@ -304,7 +308,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
     const pacotes = new Map<string, number>();
     itensForm.forEach(it => {
       if (!it.produtoId) return;
-      const qtdPacotes = modoLancamentoForm === 'FARDO' ? (Number(it.quantidade) || 0) * fatorItem(it.unidadesPorFardo) : Number(it.quantidade) || 0;
+      const qtdPacotes = modoItem(it) === 'FARDO' ? (Number(it.quantidade) || 0) * fatorItem(it.unidadesPorFardo) : Number(it.quantidade) || 0;
       pacotes.set(it.produtoId, (pacotes.get(it.produtoId) || 0) + qtdPacotes);
     });
     const res = new Map<string, { pedido: number; disponivel: number; falta: number }>();
@@ -362,13 +366,26 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
     // Itens voltam no modo em que foram lançados
     setItensForm(pedido.itens.map(it => {
       const fator = fatorItem(it.unidades_por_fardo);
+      const fatorProduto = fatorItem(produtosDisponiveis.find(p => p.id === it.produto_id)?.unidades_por_fardo ?? it.unidades_por_fardo);
+      // Item gravado como unidade avulsa volta como "unidade" com a embalagem real do produto
+      if (fator <= 1 && fatorProduto > 1) {
+        return {
+          produtoId: it.produto_id,
+          tipoEmbalagem: it.tipo_embalagem,
+          quantidade: it.quantidade,
+          precoUnitario: it.preco_unitario,
+          unidadesPorFardo: fatorProduto,
+          modo: 'UNITARIO' as const
+        };
+      }
       const emUnitario = modo === 'UNITARIO' && fator > 1;
       return {
         produtoId: it.produto_id,
         tipoEmbalagem: it.tipo_embalagem,
         quantidade: emUnitario ? it.quantidade * fator : it.quantidade,
         precoUnitario: emUnitario ? it.preco_unitario / fator : it.preco_unitario,
-        unidadesPorFardo: it.unidades_por_fardo
+        unidadesPorFardo: it.unidades_por_fardo,
+        modo
       };
     }));
     setModalNovo(true);
@@ -411,9 +428,12 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
           return null;
         }
         const fator = fatorItem(it.unidadesPorFardo);
+        // Tabela que obriga um modo converte o item; tabela que aceita os dois mantém o modo do item
+        const modoAtual = modoItem(it);
+        const modoNovo = modoObrigatorioDaTabela(tab) || modoAtual;
         let quantidade = it.quantidade;
-        if (modoAlvo !== modoLancamentoForm) {
-          if (modoAlvo === 'UNITARIO') quantidade = it.quantidade * fator;
+        if (modoNovo !== modoAtual) {
+          if (modoNovo === 'UNITARIO') quantidade = it.quantidade * fator;
           else {
             const fardos = it.quantidade / fator;
             quantidade = Math.max(1, Math.ceil(fardos));
@@ -421,7 +441,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
           }
         }
         const comPrecoTabela = aplicarPrecoDaTabela(prod, tab);
-        return { ...it, quantidade, precoUnitario: parseFloat(precoNoModo(comPrecoTabela, modoAlvo).toFixed(4)) };
+        return { ...it, modo: modoNovo, quantidade, precoUnitario: parseFloat(precoNoModo(comPrecoTabela, modoNovo).toFixed(4)) };
       })
       .filter(Boolean) as typeof itensForm;
     setItensForm(novos);
@@ -442,19 +462,37 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
       return;
     }
     if (novoModo === 'FARDO') {
-      const naoFecha = itensForm.filter(it => it.quantidade % fatorItem(it.unidadesPorFardo) !== 0);
+      const naoFecha = itensForm.filter(it => modoItem(it) === 'UNITARIO' && it.quantidade % fatorItem(it.unidadesPorFardo) !== 0);
       if (naoFecha.length > 0) {
         alert('Algumas quantidades em unidades não fecham fardos/caixas inteiros. Ajuste para múltiplos da embalagem antes de trocar para "Por Fardo".');
         return;
       }
     }
-    setItensForm(itensForm.map(it => {
-      const fator = fatorItem(it.unidadesPorFardo);
-      return novoModo === 'UNITARIO'
-        ? { ...it, quantidade: it.quantidade * fator, precoUnitario: parseFloat((it.precoUnitario / fator).toFixed(4)) }
-        : { ...it, quantidade: it.quantidade / fator, precoUnitario: parseFloat((it.precoUnitario * fator).toFixed(4)) };
-    }));
+    setItensForm(itensForm.map(it => converterItemParaModo(it, novoModo)));
     setModoLancamentoForm(novoModo);
+  };
+
+  // Converte um item para caixa/fardo ou unidade (quantidade e preço)
+  function converterItemParaModo<T extends { quantidade: number; precoUnitario: number; unidadesPorFardo?: number; modo?: 'FARDO' | 'UNITARIO' }>(
+    it: T,
+    novoModo: 'FARDO' | 'UNITARIO'
+  ): T {
+    const atual = modoItem(it);
+    if (atual === novoModo) return { ...it, modo: novoModo };
+    const fator = fatorItem(it.unidadesPorFardo);
+    return novoModo === 'UNITARIO'
+      ? { ...it, modo: novoModo, quantidade: it.quantidade * fator, precoUnitario: parseFloat((it.precoUnitario / fator).toFixed(4)) }
+      : { ...it, modo: novoModo, quantidade: Math.max(1, Math.ceil(it.quantidade / fator)), precoUnitario: parseFloat((it.precoUnitario * fator).toFixed(4)) };
+  }
+
+  // Opções de venda do item conforme a tabela: caixa/fardo, unidade ou as duas
+  const opcoesVendaItem = (fator: number, tipoAcond?: string) => {
+    const obrig = modoObrigatorioForm;
+    const rotuloCaixa = `${tipoAcond && !/unid/i.test(tipoAcond) ? tipoAcond : 'Caixa'}${fator > 1 ? ` c/ ${fator} un` : ''}`;
+    const opcoes: { modo: 'FARDO' | 'UNITARIO'; rotulo: string }[] = [];
+    if (obrig !== 'UNITARIO' && fator > 1) opcoes.push({ modo: 'FARDO', rotulo: rotuloCaixa });
+    if (obrig !== 'FARDO' || fator <= 1) opcoes.push({ modo: 'UNITARIO', rotulo: 'Unidade' });
+    return opcoes;
   };
 
   // Quando abrir o modal de detalhes (Visualizador de Documento)
@@ -681,14 +719,20 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
       alert('Esta tabela de preços não possui produtos vinculados ou disponíveis.');
       return;
     }
+    // Primeira opção que a tabela permite para o produto (caixa/fardo ou unidade)
+    const modoInicial =
+      opcoesVendaItem(fatorItem(defaultProd.unidades_por_fardo), defaultProd.tipo_acondicionamento).find(o => o.modo === modoLancamentoForm)?.modo ||
+      opcoesVendaItem(fatorItem(defaultProd.unidades_por_fardo), defaultProd.tipo_acondicionamento)[0]?.modo ||
+      modoLancamentoForm;
     setItensForm([
       ...itensForm,
       {
         produtoId: defaultProd.id,
         tipoEmbalagem: defaultProd.tipo_embalagem,
-        quantidade: modoLancamentoForm === 'FARDO' ? 1 : fatorItem(defaultProd.unidades_por_fardo),
-        precoUnitario: precoNoModo(defaultProd, modoLancamentoForm),
-        unidadesPorFardo: fatorItem(defaultProd.unidades_por_fardo)
+        quantidade: modoInicial === 'FARDO' ? 1 : fatorItem(defaultProd.unidades_por_fardo),
+        precoUnitario: precoNoModo(defaultProd, modoInicial),
+        unidadesPorFardo: fatorItem(defaultProd.unidades_por_fardo),
+        modo: modoInicial
       }
     ]);
   };
@@ -776,7 +820,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
     const itensBase = modoCliente
       ? itensForm.map(it => {
           const p = produtosFiltradosPorTabela.find(x => x.id === it.produtoId);
-          return p ? { ...it, tipoEmbalagem: p.tipo_embalagem || it.tipoEmbalagem, precoUnitario: precoNoModo(p, modoLancamentoForm) } : it;
+          return p ? { ...it, tipoEmbalagem: p.tipo_embalagem || it.tipoEmbalagem, precoUnitario: precoNoModo(p, modoItem(it)) } : it;
         })
       : itensForm;
     const itensMapeados = itensBase.map(it => {
@@ -789,7 +833,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
       const subtotal = it.quantidade * it.precoUnitario;
 
       // Lançado em unitário: vira fardos quando fecha embalagens inteiras; senão fica avulso (sem arredondar)
-      if (modoLancamentoForm === 'UNITARIO' && fator > 1) {
+      if (modoItem(it) === 'UNITARIO' && fator > 1) {
         if (it.quantidade % fator === 0) {
           qtdReal = it.quantidade / fator;
           precoReal = it.precoUnitario * fator;
@@ -1699,7 +1743,10 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                                   if (newProd) {
                                     updated[idx].tipoEmbalagem = newProd.tipo_embalagem;
                                     updated[idx].unidadesPorFardo = fatorItem(newProd.unidades_por_fardo);
-                                    updated[idx].precoUnitario = precoNoModo(newProd, modoLancamentoForm);
+                                    const opcoes = opcoesVendaItem(fatorItem(newProd.unidades_por_fardo), newProd.tipo_acondicionamento);
+                                    const modoNovo = opcoes.find(o => o.modo === modoItem(updated[idx]))?.modo || opcoes[0]?.modo || modoLancamentoForm;
+                                    updated[idx].modo = modoNovo;
+                                    updated[idx].precoUnitario = precoNoModo(newProd, modoNovo);
                                   }
                                   setItensForm(updated);
                                 }}
@@ -1714,29 +1761,34 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                               </select>
                             </div>
 
-                            <div className="w-36">
-                              <select
-                                value={item.tipoEmbalagem}
-                                onChange={(e) => {
-                                  const updated = [...itensForm];
-                                  updated[idx].tipoEmbalagem = e.target.value as any;
-                                  setItensForm(updated);
-                                }}
-                                disabled={modoCliente}
-                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs cursor-pointer font-semibold text-slate-700 disabled:bg-slate-100 disabled:cursor-default"
-                                title="Apresentação (Fardo, Caixa, Saco, Big Bag)"
-                              >
-                                <option value="Saco 25kg">Saco 25kg</option>
-                                <option value="Big Bag 1000kg">Big Bag 1000kg</option>
-                                <option value="Fardo 10x1kg">Fardo 10x1kg</option>
-                                <option value="Caixa">Caixa</option>
-                                <option value="Granel">Granel</option>
-                              </select>
-                            </div>
+                            {(() => {
+                              // Só o que a tabela permite: caixa/fardo do produto, unidade, ou os dois
+                              const opcoes = opcoesVendaItem(fatorItem(item.unidadesPorFardo), prod?.tipo_acondicionamento);
+                              const atual = modoItem(item);
+                              return (
+                                <div className="w-40">
+                                  <label className="text-[10px] text-slate-400 block -mb-0.5">Vender por</label>
+                                  <select
+                                    value={atual}
+                                    onChange={(e) => {
+                                      const novo = e.target.value as 'FARDO' | 'UNITARIO';
+                                      const updated = [...itensForm];
+                                      updated[idx] = converterItemParaModo(updated[idx], novo);
+                                      setItensForm(updated);
+                                    }}
+                                    disabled={opcoes.length < 2}
+                                    className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs cursor-pointer font-semibold text-slate-700 disabled:bg-slate-100 disabled:cursor-default"
+                                    title={opcoes.length < 2 ? 'A tabela de preço vende este produto só desta forma' : 'Caixa/fardo ou unidade'}
+                                  >
+                                    {opcoes.map(o => <option key={o.modo} value={o.modo}>{o.rotulo}</option>)}
+                                  </select>
+                                </div>
+                              );
+                            })()}
 
                             <div className="w-24">
                               <label className="text-[10px] text-slate-400 block -mb-0.5">
-                                {modoLancamentoForm === 'FARDO' ? 'Qtd (Fardos)' : 'Qtd (Unid/Kg)'}
+                                {modoItem(item) === 'FARDO' ? 'Qtd (Caixas)' : 'Qtd (Unid.)'}
                               </label>
                               <input
                                 type="number"
@@ -1753,7 +1805,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
                             <div className="w-28">
                               <label className="text-[10px] text-slate-400 block -mb-0.5">
-                                {modoLancamentoForm === 'FARDO' ? 'Preço Fardo' : 'Preço Unitário'}
+                                {modoItem(item) === 'FARDO' ? 'Preço Caixa' : 'Preço Unitário'}
                               </label>
                               <input
                                 type="number"
@@ -2131,7 +2183,10 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                       <div>
                         <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6e7470]">Pagamento</div>
                         <div className="text-[12px] font-bold mt-0.5">
-                          {[modalDetalhes.forma_pagamento, modalDetalhes.prazo_pagamento].filter(Boolean).join(' · ') || '-'}
+                          {/* prazo_pagamento já traz a forma ("Boleto Bancário 28 dias"): não repete */}
+                          {(modalDetalhes.forma_pagamento && String(modalDetalhes.prazo_pagamento || '').toLowerCase().includes(modalDetalhes.forma_pagamento.toLowerCase())
+                            ? modalDetalhes.prazo_pagamento
+                            : [modalDetalhes.forma_pagamento, modalDetalhes.prazo_pagamento].filter(Boolean).join(' · ')) || '-'}
                         </div>
                       </div>
                       <div>
@@ -2189,6 +2244,17 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                     </table>
                   </div>
 
+                  {/* Observações (logo após os itens) */}
+                  {modalDetalhes.observacoes && (
+                    <div className="px-6 sm:px-8 pt-4">
+                      <div className="w-10 h-[2px] bg-[#c9a24a] mb-2" />
+                      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#064e3b] mb-1">Observações</div>
+                      <p className="text-[11px] leading-relaxed whitespace-pre-line">{modalDetalhes.observacoes}</p>
+                    </div>
+                  )}
+
+                  {/* Fechamento: peso, valor total, assinaturas e rodapé — no PDF vai sempre ao pé da última página */}
+                  <div data-pdf-final>
                   {/* Totais */}
                   <div className="px-4 sm:px-8 pt-4 pb-5 flex flex-col sm:flex-row sm:items-stretch justify-between gap-3">
                     <div className="flex items-center gap-6 px-4 py-3 bg-[#f3ead3] border-l-[3px] border-[#c9a24a]">
@@ -2212,15 +2278,6 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                     </div>
                   </div>
 
-                  {/* Observações */}
-                  {modalDetalhes.observacoes && (
-                    <div className="px-6 sm:px-8 pb-4">
-                      <div className="w-10 h-[2px] bg-[#c9a24a] mb-2" />
-                      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#064e3b] mb-1">Observações</div>
-                      <p className="text-[11px] leading-relaxed whitespace-pre-line">{modalDetalhes.observacoes}</p>
-                    </div>
-                  )}
-
                   {/* Assinaturas */}
                   <div className="px-6 sm:px-8 pt-8 pb-5 grid grid-cols-2 gap-10 text-center text-[10px] text-[#6e7470]">
                     <div>
@@ -2236,6 +2293,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                   <div className="px-6 sm:px-8 py-3 border-t border-[#ddd6c4] flex flex-wrap items-center justify-between gap-2 text-[10px] text-[#6e7470]">
                     <span>{EMPRESA.razao} · Documento comercial nº {modalDetalhes.numero_pedido}</span>
                     <span className="tabular-nums">Gerado em {new Date().toLocaleDateString('pt-BR')}</span>
+                  </div>
                   </div>
                 </div>
               </div>

@@ -112,7 +112,7 @@ export function FinanceiroLancarReceita({ onNavigate }: Props) {
     setReceitas(ordenar(atualizadas));
     salvarReceitasExtras(atualizadas);
     // Receita lançada já foi recebida: entra no caixa uma única vez
-    registrarBaixaNoCaixa(`receita:${novoLancamento.id}`, novoLancamento.valor);
+    registrarBaixaNoCaixa(`receita:${novoLancamento.id}`, novoLancamento.valor, { descricao: novoLancamento.descricao, data: novoLancamento.data });
     setModalNovo(false);
     setFormData({
       data: hojeISO(),

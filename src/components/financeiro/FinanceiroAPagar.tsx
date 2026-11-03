@@ -103,7 +103,7 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
       );
       salvarTitulosPagar(atualizados);
       // Saída do caixa (uma única vez por título)
-      registrarBaixaNoCaixa(`pagar:${id}`, -alvo.valor);
+      registrarBaixaNoCaixa(`pagar:${id}`, -alvo.valor, { descricao: `Pagamento ${alvo.numero_documento} - ${alvo.favorecido_nome}${alvo.categoria ? ` (${alvo.categoria})` : ''}` });
     }
   };
 

@@ -537,7 +537,9 @@ export function excluirCalculoNaRoca(calculoId: string): { sucesso: boolean; men
   const houvePagamento =
     calculo.situacao_pagamento === 'JA_PAGO' ||
     calculo.situacao_pagamento === 'ADIANTAMENTO_PARCIAL' ||
-    pedido?.status_pedido === 'Pago';
+    pedido?.status_pedido === 'Pago' ||
+    // Título do pedido já baixado no Financeiro (A Pagar quitado depois)
+    lerListaLocal('grupo_eno_financeiro_pagar_v1').some((t: any) => t.pedido_compra_id === calculo.pedido_compra_id && t.status === 'PAGO');
   if (houvePagamento) {
     return {
       sucesso: false,
