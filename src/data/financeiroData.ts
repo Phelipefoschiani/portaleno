@@ -483,6 +483,29 @@ function gravarMovimentoCaixa(mov: Omit<MovimentoCaixa, 'id' | 'registrado_em'>)
  * se a chave já foi aplicada, nada acontece. Retorna true se movimentou.
  * `info` (opcional): descrição legível, origem, data (DD/MM/AAAA ou AAAA-MM-DD) e fundo (padrão: caixa industrial).
  */
+// ============================================================
+// TRAVA DE SALDO: pagamento só sai se o caixa tiver saldo para cobrir
+// ============================================================
+
+/** Valor já debitado no caixa pelas chaves informadas (ex.: pagamento anterior que será refeito). */
+export function valorJaDebitadoNoCaixa(chaves: string[]): number {
+  const baixas = carregarBaixasCaixa();
+  return chaves.reduce((acc, k) => acc + Math.max(0, -numeroSeguro(baixas[k])), 0);
+}
+
+/**
+ * Confere se o fundo tem saldo para pagar `valor`. `devolvido` é o que volta ao caixa antes do
+ * pagamento (ex.: estorno de um pagamento anterior do mesmo lançamento). Retorna mensagem se faltar.
+ */
+export function conferirSaldoParaPagar(valor: number, devolvido = 0, fundo: FundoCaixa = 'saldo_disponivel_industrial'): string | null {
+  const v = numeroSeguro(valor);
+  if (v <= 0) return null;
+  const saldo = numeroSeguro(carregarCaixaInvestimento()[fundo]) + numeroSeguro(devolvido);
+  if (v <= saldo + 0.005) return null;
+  return `Saldo insuficiente no caixa (${ROTULO_FUNDO_CAIXA[fundo]}): disponível ${formatarMoeda(saldo)}, pagamento ${formatarMoeda(v)}. ` +
+    'Lance o saldo inicial ou um aporte em Financeiro → Caixa & Investimento, ou registre como "a pagar".';
+}
+
 export function registrarBaixaNoCaixa(chave: string, delta: number, info?: InfoMovimentoCaixa): boolean {
   if (typeof window === 'undefined') return false;
   const valor = numeroSeguro(delta);

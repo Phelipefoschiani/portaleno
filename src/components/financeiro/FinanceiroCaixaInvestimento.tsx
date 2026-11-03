@@ -30,6 +30,7 @@ import {
   MovimentoCaixa,
   FundoCaixa,
   ROTULO_FUNDO_CAIXA,
+  conferirSaldoParaPagar,
   ORIGENS_MOVIMENTO_CAIXA
 } from '../../data/financeiroData';
 import { hojeISO, paraISO, formatarDataBR, mesAtualKey } from '../../lib/datas';
@@ -118,6 +119,14 @@ export function FinanceiroCaixaInvestimento({ onNavigate }: Props) {
 
     const id = `inv_${Date.now()}`;
     const fonte = formInvest.fonte;
+    // Investimento debitado só sai se o fundo escolhido tiver saldo
+    if (fonte !== 'NENHUM') {
+      const semSaldo = conferirSaldoParaPagar(valor, 0, fonte);
+      if (semSaldo) {
+        alert(semSaldo);
+        return;
+      }
+    }
     const despesaId = fonte !== 'NENHUM' ? `desp_inv_${id}` : undefined;
     const novoProjeto = {
       id,

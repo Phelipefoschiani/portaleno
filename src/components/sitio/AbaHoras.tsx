@@ -14,7 +14,7 @@ import {
 } from '../../data/sitioControleData';
 import { PropsAba, Folha, Campo, Segmentado, ErroBox, BotaoAcao, inputCls, moeda, fmtNum, rotuloMes } from './ui';
 
-type Aplicar = (novo: ControleSitioCompleto, lancamento?: DespesaSitio) => void;
+type Aplicar = (novo: ControleSitioCompleto, lancamento?: DespesaSitio) => boolean;
 
 export function FormApontamento({ estado, aplicar, onFechar }: { estado: ControleSitioCompleto; aplicar: Aplicar; onFechar: () => void }) {
   const ativas = estado.maquinas.filter(m => m.ativo);

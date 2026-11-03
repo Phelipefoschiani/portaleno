@@ -634,7 +634,13 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
       return;
     }
     if (!window.confirm(`Confirmar o pagamento PIX da comissão do pedido ${venda.numero_pedido} (R$ ${venda.valor_comissao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})? O título será baixado no Contas a Pagar e sairá do caixa.`)) return;
-    const pago = baixarTituloComissao(pedido);
+    let pago;
+    try {
+      pago = baixarTituloComissao(pedido);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Não foi possível pagar a comissão.');
+      return;
+    }
     if (!pago) {
       alert('Não há comissão a pagar para este pedido (valor zero ou pedido sem RCA).');
       return;

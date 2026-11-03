@@ -517,6 +517,10 @@ export function PedidoCompra() {
         },
         { item_descricao: itemEfetivado, valor_total: valTotal, categoria: categoriaDef }
       );
+      if (!res.sucesso) {
+        alert(res.mensagem); // ex.: sem saldo no caixa — mantém a janela aberta
+        return;
+      }
       let mensagem = res.mensagem;
       if (res.sucesso && anexoPagamentoDef) {
         const anexo = adicionarComprovante(calculoCorrespondente.id, anexoPagamentoDef);
@@ -538,6 +542,10 @@ export function PedidoCompra() {
         conta_bancaria: contaBancariaDef,
         observacao: obsPagamentoDef
       });
+      if (!res.sucesso) {
+        alert(res.mensagem); // ex.: sem saldo no caixa — mantém a janela aberta
+        return;
+      }
       setMensagemSucesso(res.mensagem);
     }
 

@@ -33,7 +33,8 @@ export interface PropsAba {
   estado: ControleSitioCompleto;
   mes: string;
   /** Grava o novo estado; se houver lançamento com dinheiro, integra ao financeiro. */
-  aplicar: (novo: ControleSitioCompleto, lancamento?: DespesaSitio) => void;
+  /** Devolve false quando não gravou (ex.: pagamento sem saldo no caixa). */
+  aplicar: (novo: ControleSitioCompleto, lancamento?: DespesaSitio) => boolean;
   irPara?: (aba: AbaSitio) => void;
 }
 

@@ -18,7 +18,7 @@ import {
 import { PropsAba, Folha, Campo, ErroBox, BlocoPagamento, BotaoAcao, inputCls, moeda, rotuloMes } from './ui';
 import { ListaLancamentos } from './ListaLancamentos';
 
-type Aplicar = (novo: ControleSitioCompleto, lancamento?: DespesaSitio) => void;
+type Aplicar = (novo: ControleSitioCompleto, lancamento?: DespesaSitio) => boolean;
 
 export function FormDespesa({ estado, aplicar, onFechar }: { estado: ControleSitioCompleto; aplicar: Aplicar; onFechar: () => void }) {
   const [f, setF] = useState({
@@ -41,7 +41,7 @@ export function FormDespesa({ estado, aplicar, onFechar }: { estado: ControleSit
     e.preventDefault();
     const r = registrarDespesa(estado, { ...f, valorTotal: numSitio(f.valorTotal), maquinaId: f.maquinaId || undefined });
     if (!r.ok) return setErro(r.erro);
-    aplicar(r.estado, r.lancamento);
+    if (!aplicar(r.estado, r.lancamento)) return; // sem saldo no caixa: mantém o formulário aberto
     onFechar();
   };
 

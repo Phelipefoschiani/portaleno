@@ -43,6 +43,7 @@ import {
   formatarMoeda,
   numeroSeguro,
   registrarBaixaNoCaixa,
+  conferirSaldoParaPagar,
   estornarBaixaNoCaixa
 } from '../../data/financeiroData';
 import { carregarAgricultores, carregarFornecedores, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
@@ -226,6 +227,12 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       valor: numeroSeguro(formDespesa.valor),
       data: paraISO(formDespesa.data) || hojeISO()
     };
+    // Despesa paga só sai se o caixa tiver saldo
+    const semSaldo = conferirSaldoParaPagar(nova.valor);
+    if (semSaldo) {
+      alert(semSaldo);
+      return;
+    }
     salvarDespesas([nova, ...carregarDespesas()]);
     // Despesa realizada já foi paga: sai do caixa uma única vez
     registrarBaixaNoCaixa(`despesa:${nova.id}`, -nova.valor, { descricao: `${nova.descricao}${nova.categoria ? ` (${nova.categoria})` : ''}`, data: nova.data });
@@ -447,6 +454,15 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       return;
     }
     const dataEfetiva = paraISO(dataFinalizacao) || hojeISO();
+
+    // Pagamento à vista só sai se o caixa tiver saldo (antes de mexer em qualquer lançamento)
+    if (tipoFinalizacao === 'JA_PAGO') {
+      const semSaldo = conferirSaldoParaPagar(valTotal);
+      if (semSaldo) {
+        alert(semSaldo);
+        return;
+      }
+    }
 
     // 1. O lançamento programado anterior (desp_prog_*) deixa de existir
     removerProgramadasDoPedido(pedidoFinalizando.id);

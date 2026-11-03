@@ -21,7 +21,8 @@ import {
   dataNoMesAtual,
   somarValores,
   formatarMoeda,
-  registrarBaixaNoCaixa
+  registrarBaixaNoCaixa,
+  conferirSaldoParaPagar
 } from '../../data/financeiroData';
 import { hojeISO, somarDias, paraISO, formatarDataBR, compararDatas } from '../../lib/datas';
 import { FinanceiroNavTabs } from './FinanceiroNavTabs';
@@ -98,6 +99,12 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
       const armazenados = carregarTitulosPagar();
       const alvo = armazenados.find(t => t.id === id);
       if (!alvo || alvo.status === 'PAGO') return;
+      // Só liquida se o caixa tiver saldo para o pagamento
+      const semSaldo = conferirSaldoParaPagar(alvo.valor);
+      if (semSaldo) {
+        alert(semSaldo);
+        return;
+      }
       const atualizados: TituloPagar[] = armazenados.map(t =>
         t.id === id ? { ...t, status: 'PAGO' as const, data_pagamento: hojeISO() } : t
       );

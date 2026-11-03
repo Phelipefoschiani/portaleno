@@ -16,7 +16,7 @@ import {
 } from '../../data/sitioControleData';
 import { PropsAba, Folha, Campo, Segmentado, ErroBox, BotaoAcao, inputCls, fmtNum } from './ui';
 
-type Aplicar = (novo: ControleSitioCompleto, lancamento?: DespesaSitio) => void;
+type Aplicar = (novo: ControleSitioCompleto, lancamento?: DespesaSitio) => boolean;
 
 const TIPOS: TipoMaquina[] = ['TRATOR', 'CAMINHONETE', 'ROCADEIRA', 'IMPLEMENTO', 'OUTRO'];
 

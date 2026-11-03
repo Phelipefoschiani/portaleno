@@ -10,6 +10,7 @@ import {
   movimentoDe
 } from '../../data/sitioControleData';
 import { integrarDespesaSitioAoFinanceiro } from '../../data/pipelineIntegrado';
+import { conferirSaldoParaPagar } from '../../data/financeiroData';
 import { mesAtualKey } from '../../lib/datas';
 import { AbaSitio, rotuloMes } from '../sitio/ui';
 import { AbaPainel } from '../sitio/AbaPainel';
@@ -52,15 +53,25 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
 
   // Grava o estado e, se o lançamento envolve dinheiro, integra ao financeiro (idempotente no pipeline).
   // Abastecimento do tanque é só consumo: o dinheiro já entrou na compra.
-  const aplicar = useCallback((novo: ControleSitioCompleto, lancamento?: DespesaSitio) => {
+  const aplicar = useCallback((novo: ControleSitioCompleto, lancamento?: DespesaSitio): boolean => {
+    const comDinheiro = lancamento && movimentoDe(lancamento) !== 'ABASTECIMENTO';
+    // Lançamento pago (compra, posto, despesa) só entra se o caixa tiver saldo
+    if (comDinheiro && (lancamento!.situacao || 'PAGO') === 'PAGO') {
+      const semSaldo = conferirSaldoParaPagar(Number(lancamento!.valorTotal) || 0);
+      if (semSaldo) {
+        alert(semSaldo);
+        return false;
+      }
+    }
     salvarControleSitio(novo);
     setDados(normalizarEstadoSitio(novo));
-    if (lancamento && movimentoDe(lancamento) !== 'ABASTECIMENTO') {
-      integrarDespesaSitioAoFinanceiro(lancamento, {
-        situacao: lancamento.situacao || 'PAGO',
-        dataVencimento: lancamento.vencimento
+    if (comDinheiro) {
+      integrarDespesaSitioAoFinanceiro(lancamento!, {
+        situacao: lancamento!.situacao || 'PAGO',
+        dataVencimento: lancamento!.vencimento
       });
     }
+    return true;
   }, []);
 
   const irPara = useCallback((a: AbaSitio) => {

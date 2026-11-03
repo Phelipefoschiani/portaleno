@@ -2,7 +2,7 @@
 import { integrarEntradaMateriaPrima, estornarEntradaMateriaPrima } from './pipelineIntegrado';
 import type { RegistroEntradaMateriaPrima } from './pipelineIntegrado';
 import { hojeISO, paraISO, somarDias } from '../lib/datas';
-import { registrarBaixaNoCaixa, estornarBaixaNoCaixa } from './financeiroData';
+import { registrarBaixaNoCaixa, estornarBaixaNoCaixa, conferirSaldoParaPagar, valorJaDebitadoNoCaixa } from './financeiroData';
 
 export type StatusPedidoCompra = 'A Confirmar' | 'Confirmado' | 'Programado' | 'Orçamento' | 'Entregue (A Pagar)' | 'Pago';
 
@@ -299,6 +299,14 @@ export function efetivarPedidoCompra(pedidoId: string, dados: DadosEfetivacaoCom
 
   const restante = Math.max(0, valorTotal - jaQuitadoEmTitulos);
   const obsBase = `${pedido.item_descricao} - Qtd: ${pedido.quantidade} ${pedido.unidade_medida}${dados.observacao ? ` | ${dados.observacao}` : ''}`;
+
+  // Trava de saldo: o que for pago agora precisa caber no caixa (o pagamento anterior deste pedido volta antes)
+  const valorPagoAgora =
+    dados.tipo === 'JA_PAGO' ? restante
+    : dados.tipo === 'ADIANTAMENTO_PARCIAL' ? Math.min(restante, Math.max(0, Number(dados.valor_pago) || 0))
+    : 0;
+  const semSaldo = conferirSaldoParaPagar(valorPagoAgora, valorJaDebitadoNoCaixa(despesasRemovidas.map((d: any) => `despesa:${d.id}`)));
+  if (semSaldo) return { sucesso: false, mensagem: semSaldo };
 
   if (dados.tipo === 'JA_PAGO') {
     if (restante > 0.009) despesas.unshift(novaDespesa(restante, `[Compra Paga] ${pedido.item_descricao} - ${parceiroNome}`));

@@ -35,7 +35,7 @@ import {
 } from './ui';
 import { ListaLancamentos } from './ListaLancamentos';
 
-type Aplicar = (novo: ControleSitioCompleto, lancamento?: DespesaSitio) => void;
+type Aplicar = (novo: ControleSitioCompleto, lancamento?: DespesaSitio) => boolean;
 
 // ============================================================
 // Compra / entrada no tanque
@@ -73,7 +73,7 @@ export function FormCompra({
     e.preventDefault();
     const r = registrarCompraCombustivel(estado, { ...f, litros, valorTotal: total });
     if (!r.ok) return setErro(r.erro);
-    aplicar(r.estado, r.lancamento);
+    if (!aplicar(r.estado, r.lancamento)) return; // sem saldo no caixa: mantém o formulário aberto
     onFechar();
   };
 
@@ -198,7 +198,7 @@ export function FormAbastecimento({
       valorTotal: numSitio(f.valorTotal)
     });
     if (!r.ok) return setErro(r.erro);
-    aplicar(r.estado, r.lancamento);
+    if (!aplicar(r.estado, r.lancamento)) return; // sem saldo no caixa: mantém o formulário aberto
     onFechar();
   };
 

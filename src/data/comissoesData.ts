@@ -13,6 +13,7 @@ import {
   carregarTitulosPagar,
   salvarTitulosPagar,
   registrarBaixaNoCaixa,
+  conferirSaldoParaPagar,
   TituloPagar
 } from './financeiroData';
 import { hojeISO, paraISO, parseData } from '../lib/datas';
@@ -265,6 +266,9 @@ export function baixarTituloComissao(pedido: PedidoVenda): TituloPagar | null {
   const titulo = gerarTituloComissaoAoFaturar(pedido);
   if (!titulo) return null;
   if (titulo.status === 'PAGO') return titulo;
+  // Só paga se o caixa tiver saldo (a mensagem sobe para a tela)
+  const semSaldo = conferirSaldoParaPagar(titulo.valor);
+  if (semSaldo) throw new Error(semSaldo);
   const pago: TituloPagar = { ...titulo, status: 'PAGO', data_pagamento: hojeISO() };
   salvarTitulosPagar(carregarTitulosPagar().map(t => (t.id === titulo.id ? pago : t)));
   registrarBaixaNoCaixa(`pagar:${titulo.id}`, -titulo.valor);
