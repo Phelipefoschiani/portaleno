@@ -689,7 +689,7 @@ export function obterConsolidadoGeral() {
   // Estoque produtos acabados
   const totalSacosEstoque = produtosEstoque.reduce((acc, p) => acc + (p.estoque_atual_sacos || 0), 0);
   const totalKgEstoque = produtosEstoque.reduce((acc, p) => acc + (p.estoque_atual_kg || 0), 0);
-  const valorEstoqueProdutos = produtosEstoque.reduce((acc, p) => acc + ((p.estoque_atual_sacos || 0) * (p.preco_unitario_venda || 0)), 0);
+  const valorEstoqueProdutos = produtosEstoque.reduce((acc, p) => acc + ((p.estoque_atual_sacos || 0) * (p.custo_total || 0)) /* a custo: preço só nas tabelas */, 0);
 
   // Estoque matéria-prima (só unidades de massa entram em toneladas)
   const totalMateriaPrimaTon = materiasPrimas.reduce((acc, m) => {

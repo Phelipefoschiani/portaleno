@@ -48,7 +48,7 @@ import {
   verificarDisponibilidadeProduto
 } from '../../data/produtosData';
 import { obterRcasLookup, obterRcaPorId, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
-import { calcularPrecoNaTabela, tabelaPrecoAtiva } from '../../data/precosData';
+import { calcularPrecoNaTabela, mostrarPrecoDaTabela, precoUnitarioNaTabela, tabelaPrecoAtiva } from '../../data/precosData';
 import { calcularComissaoPedido, CamposComissaoPedido, removerTituloComissaoDoPedido } from '../../data/comissoesData';
 import { formatarMoeda } from '../../data/financeiroData';
 import { hojeISO, somarDias, formatarDataBR } from '../../lib/datas';
@@ -63,13 +63,22 @@ function aplicarPrecoDaTabela<P extends { id: string; preco_unitario: number; pr
 ): P {
   const calc = calcularPrecoNaTabela({
     id: p.id,
-    preco_unitario_venda: Number(p.preco_unitario_avulso) || 0,
     custo_total: p.custo_total,
     tipo_acondicionamento: p.tipo_acondicionamento,
     unidades_por_acondicionamento: p.unidades_por_fardo
   }, tab);
   return { ...p, preco_unitario: calc.preco_acondicionamento, preco_unitario_avulso: calc.preco };
 }
+
+// Produto é vendido na tabela só quando tem valor nela (em branco = não vendido)
+const vendidoNaTabela = (produtoId: string, tab?: TabelaPreco | null) => !!tab && precoUnitarioNaTabela(tab, produtoId) > 0;
+
+// "Mostrar preço" da tabela define como a venda é lançada: só caixa/fardo, só unitário, ou o vendedor escolhe (null)
+const modoObrigatorioDaTabela = (tab?: TabelaPreco | null): 'FARDO' | 'UNITARIO' | null => {
+  if (!tab) return null;
+  const m = mostrarPrecoDaTabela(tab);
+  return m === 'ACONDICIONAMENTO' ? 'FARDO' : m === 'UNITARIO' ? 'UNITARIO' : null;
+};
 
 // Fator de conversão fardo/caixa -> pacotes (1 quando vendido avulso/saco)
 const fatorItem = (n?: number) => (Number(n) > 0 ? Number(n) : 1);
@@ -162,9 +171,12 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
   const produtosFiltradosPorTabela = useMemo(() => {
     if (!tabelaIdForm) return [];
     const tab = tabelasDisponiveis.find(t => t.id === tabelaIdForm);
-    if (!tab || !tab.produtos_ids) return [];
-    return produtosDisponiveis.filter(p => tab.produtos_ids?.includes(p.id)).map(p => aplicarPrecoDaTabela(p, tab));
+    if (!tab) return [];
+    return produtosDisponiveis.filter(p => vendidoNaTabela(p.id, tab)).map(p => aplicarPrecoDaTabela(p, tab));
   }, [tabelaIdForm, tabelasDisponiveis, produtosDisponiveis]);
+
+  const tabelaSelecionadaForm = tabelasDisponiveis.find(t => t.id === tabelaIdForm) || null;
+  const modoObrigatorioForm = modoObrigatorioDaTabela(tabelaSelecionadaForm);
 
   // Preço de um produto da tabela conforme o modo de lançamento
   const precoNoModo = (prod: any, modo: 'FARDO' | 'UNITARIO') =>
@@ -213,7 +225,11 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     setClienteIdForm(cli?.id || '');
     setRcaIdForm(cli?.rca_id || '');
     if (cli?.prazo) setPrazoPagamentoForm(cli.prazo);
-    if (cli?.tabela_preco_id && tabelasDisponiveis.some(t => t.id === cli.tabela_preco_id)) setTabelaIdForm(cli.tabela_preco_id);
+    const tabCli = cli?.tabela_preco_id ? tabelasDisponiveis.find(t => t.id === cli.tabela_preco_id) : undefined;
+    if (tabCli) {
+      setTabelaIdForm(tabCli.id);
+      setModoLancamentoForm(modoObrigatorioDaTabela(tabCli) || 'FARDO');
+    }
     setModalNovo(true);
   };
 
@@ -225,8 +241,11 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
       setRcaIdForm(cli.rca_id || '');
       if (cli.prazo) setPrazoPagamentoForm(cli.prazo);
       // Tabela de preço do cadastro do cliente (se ativa e nenhum item lançado ainda)
-      if (cli.tabela_preco_id && itensForm.length === 0 && tabelasDisponiveis.some(t => t.id === cli.tabela_preco_id)) {
-        setTabelaIdForm(cli.tabela_preco_id);
+      const tabCli = cli.tabela_preco_id ? tabelasDisponiveis.find(t => t.id === cli.tabela_preco_id) : undefined;
+      if (tabCli && itensForm.length === 0) {
+        setTabelaIdForm(tabCli.id);
+        const obrig = modoObrigatorioDaTabela(tabCli);
+        if (obrig) setModoLancamentoForm(obrig);
       }
     }
   };
@@ -239,27 +258,48 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
       setItensForm([]);
       return;
     }
+    // Tabela só de caixa/fardo ou só de unitário força o modo de lançamento
+    const modoAlvo = modoObrigatorioDaTabela(tab) || modoLancamentoForm;
     const removidos: string[] = [];
+    const arredondados: string[] = [];
     const novos = itensForm
       .map(it => {
         const prod = produtosDisponiveis.find(p => p.id === it.produtoId);
-        if (!prod || !(tab.produtos_ids || []).includes(prod.id)) {
+        if (!prod || !vendidoNaTabela(prod.id, tab)) {
           if (prod) removidos.push(prod.nome);
           return null;
         }
+        const fator = fatorItem(it.unidadesPorFardo);
+        let quantidade = it.quantidade;
+        if (modoAlvo !== modoLancamentoForm) {
+          if (modoAlvo === 'UNITARIO') quantidade = it.quantidade * fator;
+          else {
+            const fardos = it.quantidade / fator;
+            quantidade = Math.max(1, Math.ceil(fardos));
+            if (quantidade !== fardos) arredondados.push(prod.nome);
+          }
+        }
         const comPrecoTabela = aplicarPrecoDaTabela(prod, tab);
-        return { ...it, precoUnitario: parseFloat(precoNoModo(comPrecoTabela, modoLancamentoForm).toFixed(4)) };
+        return { ...it, quantidade, precoUnitario: parseFloat(precoNoModo(comPrecoTabela, modoAlvo).toFixed(4)) };
       })
       .filter(Boolean) as typeof itensForm;
     setItensForm(novos);
+    setModoLancamentoForm(modoAlvo);
     if (removidos.length > 0) {
-      alert(`Itens removidos por não fazerem parte da tabela "${tab.nome}": ${removidos.join(', ')}`);
+      alert(`Itens removidos por não terem preço na tabela "${tab.nome}": ${removidos.join(', ')}`);
+    }
+    if (arredondados.length > 0) {
+      alert(`A tabela "${tab.nome}" vende por caixa/fardo. Quantidade arredondada para caixas/fardos inteiros em: ${arredondados.join(', ')}`);
     }
   };
 
   // Trocar Fardo <-> Unitário convertendo quantidade e preço dos itens já lançados
   const handleTrocarModo = (novoModo: 'FARDO' | 'UNITARIO') => {
     if (novoModo === modoLancamentoForm) return;
+    if (modoObrigatorioForm && novoModo !== modoObrigatorioForm) {
+      alert(`A tabela "${tabelaSelecionadaForm?.nome}" vende só ${modoObrigatorioForm === 'FARDO' ? 'por caixa/fardo' : 'por unidade'}.`);
+      return;
+    }
     if (novoModo === 'FARDO') {
       const naoFecha = itensForm.filter(it => it.quantidade % fatorItem(it.unidadesPorFardo) !== 0);
       if (naoFecha.length > 0) {
@@ -289,8 +329,14 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
     } else {
       setTipoDocumentoVisualizacao('Orçamento');
     }
-    setModoExibicao(pedido.modo_exibicao_padrao || 'FARDO');
+    const obrig = modoObrigatorioDaTabela(carregarTabelasPreco().find(t => t.id === pedido.tabela_id));
+    setModoExibicao(obrig || pedido.modo_exibicao_padrao || 'FARDO');
   };
+
+  // Documento: tabela só de caixa/fardo ou só unitário não alterna a apresentação
+  const modoObrigatorioDocumento = modalDetalhes
+    ? modoObrigatorioDaTabela(tabelasDisponiveis.find(t => t.id === modalDetalhes.tabela_id) || carregarTabelasPreco().find(t => t.id === modalDetalhes.tabela_id))
+    : null;
 
   // Helper para obter valores calculados por Fardo vs Unitário
   const calcularValoresItem = (it: any, modo: 'FARDO' | 'UNITARIO') => {
@@ -1048,12 +1094,13 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                     <button
                       type="button"
                       onClick={() => handleTrocarModo('FARDO')}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold text-xs transition-all cursor-pointer ${
+                      disabled={modoObrigatorioForm === 'UNITARIO'}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold text-xs transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
                         modoLancamentoForm === 'FARDO'
                           ? 'bg-emerald-700 text-white shadow-2xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
-                      title="Lançar valores em Fardos ou Embalagens"
+                      title={modoObrigatorioForm === 'UNITARIO' ? 'Esta tabela vende só por unidade' : 'Lançar valores em Fardos ou Embalagens'}
                     >
                       <Package className="w-3.5 h-3.5" />
                       <span>Por Fardo / Saco</span>
@@ -1061,17 +1108,23 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                     <button
                       type="button"
                       onClick={() => handleTrocarModo('UNITARIO')}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold text-xs transition-all cursor-pointer ${
+                      disabled={modoObrigatorioForm === 'FARDO'}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold text-xs transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
                         modoLancamentoForm === 'UNITARIO'
                           ? 'bg-emerald-700 text-white shadow-2xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
-                      title="Lançar valores por Unidade ou Kg individual"
+                      title={modoObrigatorioForm === 'FARDO' ? 'Esta tabela vende só por caixa/fardo' : 'Lançar valores por Unidade ou Kg individual'}
                     >
                       <Layers className="w-3.5 h-3.5" />
                       <span>Por Unitário / Kg</span>
                     </button>
                   </div>
+                  {modoObrigatorioForm && (
+                    <span className="block text-[10px] text-slate-500 mt-0.5">
+                      Tabela vende só {modoObrigatorioForm === 'FARDO' ? 'por caixa/fardo' : 'por unidade'}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1597,7 +1650,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                   <button
                     type="button"
                     onClick={() => setModoExibicao('FARDO')}
-                    className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                    disabled={modoObrigatorioDocumento === 'UNITARIO'}
+                    className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-30 ${
                       modoExibicao === 'FARDO'
                         ? 'bg-emerald-700 text-white shadow-xs'
                         : 'text-slate-400 hover:text-white'
@@ -1610,7 +1664,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                   <button
                     type="button"
                     onClick={() => setModoExibicao('UNITARIO')}
-                    className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                    disabled={modoObrigatorioDocumento === 'FARDO'}
+                    className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-30 ${
                       modoExibicao === 'UNITARIO'
                         ? 'bg-emerald-700 text-white shadow-xs'
                         : 'text-slate-400 hover:text-white'

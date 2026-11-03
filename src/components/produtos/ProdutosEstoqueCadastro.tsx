@@ -30,10 +30,16 @@ import {
   carregarReceitas,
   calcularStatusProduto,
   vincularReceitaAoProduto,
-  consumoPorPacoteDaReceita
+  consumoPorPacoteDaReceita,
+  calcularImpostosCusto,
+  derivarTipoEmbalagem,
+  carregarTabelasPreco,
+  TabelaPreco
 } from '../../data/produtosData';
-import { carregarPrecosDoProduto, salvarPrecosDoProduto } from '../../data/precosData';
-import { PrecosProdutoTabelas } from './PrecosProdutoTabelas';
+import { calcularPrecoNaTabela, carregarPrecosDoProduto, salvarPrecosDoProduto } from '../../data/precosData';
+import { PrecosProdutoTabelas, tabelasDoCadastroDeProduto } from './PrecosProdutoTabelas';
+import { CategoriaProdutoCampo, useCategoriasProduto } from './CategoriaProdutoCampo';
+import { formatarMoeda } from '../../data/financeiroData';
 import { hojeISO } from '../../lib/datas';
 
 const loteSugerido = () => `LOTE-ENO-${hojeISO().slice(2).replace(/-/g, '')}`;
@@ -54,18 +60,19 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
   const [modoEdicao, setModoEdicao] = useState<ProdutoEstoque | null>(null);
   // Preço do produto em cada tabela de preço (tabelaId -> preço do pacote)
   const [precosTabelas, setPrecosTabelas] = useState<Record<string, number>>({});
+  const categorias = useCategoriasProduto();
+  const [tabelasPreco, setTabelasPreco] = useState<TabelaPreco[]>(() => carregarTabelasPreco());
 
-  // Form State
+  // Form State (preço de venda e embalagem primária não ficam no produto: preço vem das tabelas,
+  // embalagem é derivada do peso unitário)
   const [formData, setFormData] = useState({
     codigo: '',
     nome: '',
-    categoria: 'Mandioca Gourmet' as ProdutoEstoque['categoria'],
-    tipo_embalagem: 'Pacote 1kg' as ProdutoEstoque['tipo_embalagem'],
+    categoria: '' as ProdutoEstoque['categoria'],
     peso_unitario_kg: 1,
     estoque_atual_sacos: 0,
     estoque_minimo_kg: 0,
     localizacao_galpao: '',
-    preco_unitario_venda: 0,
     lote_recente: loteSugerido(),
     // Vínculo com a Receita e Custos
     receita_id: '',
@@ -80,6 +87,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
   const recarregar = () => {
     setProdutos(carregarEstoqueProdutos());
     setReceitas(carregarReceitas());
+    setTabelasPreco(carregarTabelasPreco());
   };
 
   useEffect(() => {
@@ -87,11 +95,28 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
     const handleUpdate = () => recarregar();
     window.addEventListener('produtos_updated', handleUpdate);
     window.addEventListener('receitas_updated', handleUpdate);
+    window.addEventListener('tabelas_preco_updated', handleUpdate);
     return () => {
       window.removeEventListener('produtos_updated', handleUpdate);
       window.removeEventListener('receitas_updated', handleUpdate);
+      window.removeEventListener('tabelas_preco_updated', handleUpdate);
     };
   }, []);
+
+  // Preços do produto nas tabelas (lista): faixa de preço e pior margem líquida
+  const resumoTabelas = (prod: ProdutoEstoque) => {
+    const calcs = tabelasPreco
+      .map(t => calcularPrecoNaTabela(prod, t))
+      .filter(c => c.na_tabela);
+    if (calcs.length === 0) return null;
+    const precos = calcs.map(c => c.preco);
+    return {
+      qtd: calcs.length,
+      min: Math.min(...precos),
+      max: Math.max(...precos),
+      negativas: calcs.filter(c => c.margem_negativa).length
+    };
+  };
 
   // Seleção de Receita no formulário (puxa proporção e custo de insumos automaticamente)
   const handleSelecionarReceita = (receitaId: string) => {
@@ -120,7 +145,6 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
       receita_id: rec.id,
       receita_nome: rec.nome || rec.produto_nome || '',
       nome: prev.nome ? prev.nome : (rec.nome || rec.produto_nome || ''),
-      tipo_embalagem: tipoEmb,
       peso_unitario_kg: peso,
       custo_materia_prima: parseFloat(custoInsumo.toFixed(2)),
       tipo_acondicionamento: acond,
@@ -128,43 +152,23 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
     }));
   };
 
-  // Cálculos do formulário em tempo real (Insumos + Impostos + Margem)
+  // Cálculos do formulário em tempo real. Custo = insumos + operacional + impostos de base Custo/Fixo.
+  // Impostos de base Venda incidem sobre o preço de cada tabela (margem na seção "Preços nas tabelas").
   const calculosFormulario = useMemo(() => {
     const custoMp = formData.custo_materia_prima || 0;
     const custoOp = formData.custo_operacional || 0;
     const baseCusto = custoMp + custoOp;
-    const precoUnit = formData.preco_unitario_venda || 0;
-
-    let totalImpostosValor = 0;
-    formData.impostos.forEach(imp => {
-      let baseCalculo = 0;
-      if (imp.base === 'Venda') baseCalculo = precoUnit;
-      else if (imp.base === 'Custo') baseCalculo = baseCusto;
-      else baseCalculo = 0; // Fixo não depende de base se for Valor, mas se for %? Tratamos abaixo.
-
-      if (imp.tipo === 'Porcentagem') {
-        // Se a base for 'Fixo' e o tipo 'Porcentagem', não faz muito sentido, mas evitamos erro.
-        totalImpostosValor += (baseCalculo * (imp.valor || 0)) / 100;
-      } else {
-        totalImpostosValor += (imp.valor || 0);
-      }
-    });
-
-    const custoTotal = baseCusto + totalImpostosValor;
-    const unidades = formData.unidades_por_acondicionamento || 1;
-    const precoPacoteFechado = precoUnit * unidades;
-    const lucroUnitario = precoUnit - custoTotal;
-    const margemPercentual = precoUnit > 0 ? (lucroUnitario / precoUnit) * 100 : 0;
-
+    const impostosValor = calcularImpostosCusto(formData.impostos, baseCusto);
+    const impostosVenda = formData.impostos.filter(i => i.base === 'Venda');
+    const percentualVenda = impostosVenda.filter(i => i.tipo === 'Porcentagem').reduce((a, i) => a + (Number(i.valor) || 0), 0);
+    const valorFixoVenda = impostosVenda.filter(i => i.tipo !== 'Porcentagem').reduce((a, i) => a + (Number(i.valor) || 0), 0);
     return {
       custoMp,
       custoOp,
-      impostosValor: totalImpostosValor,
-      custoTotal,
-      precoUnit,
-      precoPacoteFechado,
-      lucroUnitario,
-      margemPercentual
+      impostosValor,
+      custoTotal: baseCusto + impostosValor,
+      percentualVenda,
+      valorFixoVenda
     };
   }, [formData]);
 
@@ -194,10 +198,8 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
   const metricas = useMemo(() => {
     const totalItens = produtos.length;
     const volumeTotalKg = produtos.reduce((acc, p) => acc + p.estoque_atual_kg, 0);
-    const valorPatrimonial = produtos.reduce((acc, p) => {
-      const precoUnit = p.tipo_embalagem === 'Big Bag 1000kg' ? p.preco_unitario_venda : (p.preco_unitario_venda / p.peso_unitario_kg) * p.peso_unitario_kg;
-      return acc + (p.estoque_atual_sacos * p.preco_unitario_venda);
-    }, 0);
+    // A custo: o produto não tem preço próprio (cada tabela tem o seu)
+    const valorPatrimonial = produtos.reduce((acc, p) => acc + (Number(p.estoque_atual_sacos) || 0) * (Number(p.custo_total) || 0), 0);
     const criticos = produtos.filter(p => p.status === 'ESTOQUE_BAIXO' || p.status === 'CRITICO').length;
 
     return { totalItens, volumeTotalKg, valorPatrimonial, criticos };
@@ -230,13 +232,11 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
     setFormData({
       codigo: `PRD-${Date.now().toString().slice(-4)}`,
       nome: recPadrao ? (recPadrao.nome || recPadrao.produto_nome || '') : '',
-      categoria: 'Mandioca Gourmet',
-      tipo_embalagem: tipoEmb,
+      categoria: filtroCategoria !== 'TODAS' ? filtroCategoria : categorias.length === 1 ? categorias[0] : '',
       peso_unitario_kg: recPadrao?.peso_por_pacote_kg || 1,
       estoque_atual_sacos: 0,
       estoque_minimo_kg: 0,
       localizacao_galpao: '',
-      preco_unitario_venda: 0,
       lote_recente: loteSugerido(),
       receita_id: recPadrao ? recPadrao.id : '',
       receita_nome: recPadrao ? (recPadrao.nome || recPadrao.produto_nome || '') : '',
@@ -256,12 +256,10 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
       codigo: prod.codigo,
       nome: prod.nome,
       categoria: prod.categoria,
-      tipo_embalagem: prod.tipo_embalagem,
       peso_unitario_kg: prod.peso_unitario_kg,
       estoque_atual_sacos: prod.estoque_atual_sacos,
       estoque_minimo_kg: prod.estoque_minimo_kg,
       localizacao_galpao: prod.localizacao_galpao,
-      preco_unitario_venda: prod.preco_unitario_venda,
       lote_recente: prod.lote_recente,
       receita_id: prod.receita_id || '',
       receita_nome: prod.receita_nome || '',
@@ -289,9 +287,17 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
       custo_total: parseFloat(calculosFormulario.custoTotal.toFixed(2)),
       tipo_acondicionamento: formData.tipo_acondicionamento,
       unidades_por_acondicionamento: formData.unidades_por_acondicionamento,
-      preco_venda_acondicionamento: parseFloat(calculosFormulario.precoPacoteFechado.toFixed(2)),
-      margem_lucro_percentual: parseFloat(calculosFormulario.margemPercentual.toFixed(1))
+      // Embalagem primária derivada do peso (compatibilidade com telas que leem tipo_embalagem)
+      tipo_embalagem: derivarTipoEmbalagem(formData.peso_unitario_kg),
+      // Preço/margem do produto são legados: o preço vem só das tabelas
+      preco_venda_acondicionamento: undefined,
+      margem_lucro_percentual: undefined
     };
+
+    if (!String(formData.categoria || '').trim()) {
+      alert('Escolha a categoria do produto (ou crie uma no botão +).');
+      return;
+    }
 
     // Validação estrita: produto só existe com receita, e a receita precisa ter matéria-prima
     const recVinculada = receitas.find(r => r.id === formData.receita_id);
@@ -328,6 +334,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
       const novo: ProdutoEstoque = {
         id: produtoId,
         ...formData,
+        preco_unitario_venda: 0,
         ...dadosCusto,
         estoque_atual_kg: pesoTotal,
         status
@@ -337,7 +344,8 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
 
     // Vínculo gravado nos dois lados (receita.produto_id) e preços nas tabelas
     vincularReceitaAoProduto(produtoId, formData.nome, formData.receita_id);
-    salvarPrecosDoProduto(produtoId, precosTabelas);
+    // Tabelas com valor passam a ter o produto; tabelas ativas deixadas em branco deixam de vendê-lo
+    salvarPrecosDoProduto(produtoId, precosTabelas, tabelasDoCadastroDeProduto().map(t => t.id));
 
     setModalAberto(false);
   };
@@ -389,7 +397,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
           </div>
           <div className="w-px h-4 bg-slate-200 hidden sm:block" />
           <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Valor Patrimonial Estimado:</span>
+            <span className="text-slate-400 font-medium">Valor em Estoque (a custo):</span>
             <span className="font-mono font-bold text-slate-900">
               {metricas.valorPatrimonial.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </span>
@@ -423,12 +431,9 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
           className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 cursor-pointer focus:outline-none"
         >
           <option value="TODAS">Todas as Categorias</option>
-          <option value="Mandioca Gourmet">Mandioca Gourmet</option>
-          <option value="Féculas Nativas">Féculas Nativas</option>
-          <option value="Féculas Especiais">Féculas Especiais</option>
-          <option value="Polvilhos">Polvilhos</option>
-          <option value="Tapiocas">Tapiocas</option>
-          <option value="Farinhas">Farinhas</option>
+          {categorias.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
         </select>
       </div>
 
@@ -442,8 +447,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                 <th className="py-3 px-3">Categoria</th>
                 <th className="py-3 px-3">Acondicionamento</th>
                 <th className="py-3 px-3 text-right">Custo Total</th>
-                <th className="py-3 px-4 text-right">Preço Venda Unit.</th>
-                <th className="py-3 px-3 text-right">Margem %</th>
+                <th className="py-3 px-4 text-right">Preço nas Tabelas</th>
                 <th className="py-3 px-4">Saldo Estoque</th>
                 <th className="py-3 px-3">Status</th>
                 <th className="py-3 px-5 text-right">Ações</th>
@@ -452,14 +456,14 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
             <tbody className="divide-y divide-slate-100 text-xs">
               {produtosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
                     Nenhum produto encontrado.
                   </td>
                 </tr>
               ) : (
                 produtosFiltrados.map((item) => {
                   const custoTotalUnit = item.custo_total || item.custo_materia_prima || 0;
-                  const margem = item.preco_unitario_venda > 0 ? ((item.preco_unitario_venda - custoTotalUnit) / item.preco_unitario_venda) * 100 : 0;
+                  const resumo = resumoTabelas(item);
                   const acondQtd = item.unidades_por_acondicionamento || 1;
                   const acondTipo = item.tipo_acondicionamento || (item.tipo_embalagem.includes('Fardo') ? 'Fardo' : item.tipo_embalagem.includes('Caixa') ? 'Caixa' : 'Saco');
 
@@ -509,24 +513,32 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                         )}
                       </td>
 
-                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900 text-right">
-                        <div>{item.preco_unitario_venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
-                        {acondQtd > 1 && (
-                          <div className="text-[10px] text-emerald-800 font-normal">
-                            {(item.preco_unitario_venda * acondQtd).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} /{acondTipo}
-                          </div>
+                      <td className="py-3.5 px-4 text-right">
+                        {!resumo ? (
+                          <span className="text-[11px] font-semibold text-amber-700">sem preço em tabela</span>
+                        ) : (
+                          <>
+                            <div className="font-mono font-bold tabular-nums text-slate-900">
+                              {resumo.min === resumo.max
+                                ? formatarMoeda(resumo.min)
+                                : `${formatarMoeda(resumo.min)} – ${formatarMoeda(resumo.max)}`}
+                            </div>
+                            <div className="text-[10px] text-slate-500">
+                              em {resumo.qtd} {resumo.qtd === 1 ? 'tabela' : 'tabelas'}
+                              {resumo.negativas > 0 && (
+                                <span className="ml-1 font-bold text-red-700">• margem negativa em {resumo.negativas}</span>
+                              )}
+                            </div>
+                          </>
                         )}
-                      </td>
-
-                      <td className="py-3.5 px-3 text-right font-mono font-bold">
-                        <span className={margem >= 20 ? 'text-emerald-700' : margem > 0 ? 'text-amber-700' : 'text-red-700'}>
-                          {margem.toFixed(1)}%
-                        </span>
                       </td>
 
                       <td className="py-3.5 px-4 font-mono">
                         <div className="font-bold text-slate-900">
-                          {item.estoque_atual_sacos.toLocaleString('pt-BR')} {item.tipo_embalagem === 'Big Bag 1000kg' ? 'bags' : item.tipo_embalagem.includes('Caixa') ? 'caixas' : item.tipo_embalagem.includes('Fardo') ? 'fardos' : 'sacos'}
+                          {item.estoque_atual_sacos.toLocaleString('pt-BR')} {(() => {
+                            const emb = String(item.tipo_embalagem || '');
+                            return emb.startsWith('Big Bag') ? 'bags' : emb.includes('Caixa') ? 'caixas' : emb.includes('Fardo') ? 'fardos' : emb.startsWith('Saco') ? 'sacos' : 'pacotes';
+                          })()}
                         </div>
                         <div className="text-[10px] text-slate-400">
                           {(item.estoque_atual_kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Ton
@@ -586,7 +598,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                     {modoEdicao ? `Editar Produto: ${formData.nome}` : 'Cadastrar Novo Produto Acabado'}
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Vincule a receita de produção, configure fardo/caixa, impostos e o preço de venda unitário.
+                    Vincule a receita de produção, configure caixa/fardo, impostos e o preço em cada tabela de preço.
                   </p>
                 </div>
               </div>
@@ -779,18 +791,10 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
 
                   <div className="sm:col-span-3">
                     <label className="block font-bold text-slate-700 mb-1">Categoria *</label>
-                    <select
+                    <CategoriaProdutoCampo
                       value={formData.categoria}
-                      onChange={(e) => setFormData({ ...formData, categoria: e.target.value as any })}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-800 font-bold focus:outline-none focus:border-emerald-700 cursor-pointer shadow-2xs"
-                    >
-                      <option value="Mandioca Gourmet">Mandioca Gourmet</option>
-                      <option value="Féculas Nativas">Féculas Nativas</option>
-                      <option value="Féculas Especiais">Féculas Especiais</option>
-                      <option value="Polvilhos">Polvilhos</option>
-                      <option value="Tapiocas">Tapiocas</option>
-                      <option value="Farinhas">Farinhas</option>
-                    </select>
+                      onChange={(categoria) => setFormData(prev => ({ ...prev, categoria }))}
+                    />
                   </div>
                 </div>
               </div>
@@ -807,7 +811,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Acondicionamento *</label>
                     <select
@@ -839,22 +843,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Embalagem Primária</label>
-                    <select
-                      value={formData.tipo_embalagem}
-                      onChange={(e) => setFormData({ ...formData, tipo_embalagem: e.target.value as any })}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-800 font-medium focus:outline-none focus:border-emerald-700 cursor-pointer shadow-2xs"
-                    >
-                      <option value="Pacote 1kg">Pacote 1kg</option>
-                      <option value="Saco 25kg">Saco 25kg</option>
-                      <option value="Fardo 10x1kg">Fardo 10x1kg</option>
-                      <option value="Big Bag 1000kg">Big Bag 1.000kg</option>
-                      <option value="Caixa">Caixa</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Peso Unitário (kg)</label>
+                    <label className="block font-bold text-slate-700 mb-1">Peso de cada unidade (kg)</label>
                     <input
                       type="number"
                       step="any"
@@ -864,7 +853,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                       className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 text-center focus:outline-none focus:border-emerald-700 shadow-2xs"
                     />
                     <span className="text-[10px] text-slate-500 block text-center mt-0.5">
-                      Total: {(formData.peso_unitario_kg * formData.unidades_por_acondicionamento).toFixed(1)} kg por {formData.tipo_acondicionamento.toLowerCase()}
+                      {derivarTipoEmbalagem(formData.peso_unitario_kg)} • {(formData.peso_unitario_kg * formData.unidades_por_acondicionamento).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg por {formData.tipo_acondicionamento.toLowerCase()}
                     </span>
                   </div>
                 </div>
@@ -873,7 +862,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
               {/* 4. CUSTOS, IMPOSTOS SOBRE O PRODUTO E FORMAÇÃO DE PREÇO */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                 <span className="font-bold text-slate-800 uppercase tracking-wider text-xs block">
-                  4. Custos, Impostos & Preço de Venda
+                  4. Custos & Impostos
                 </span>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -954,7 +943,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                               onChange={(e) => handleAtualizarImposto(imp.id, 'base', e.target.value)}
                               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-1.5 text-[11px] font-medium text-slate-700 focus:outline-none focus:border-emerald-600 cursor-pointer"
                             >
-                              <option value="Venda">Preço Venda</option>
+                              <option value="Venda">Preço da tabela</option>
                               <option value="Custo">Custo Prod.</option>
                               <option value="Fixo">Valor Fixo</option>
                             </select>
@@ -982,14 +971,26 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                           </div>
                           <div className="sm:col-span-2 text-right px-1">
                             <div className="text-[9px] font-bold text-slate-400 uppercase">Impacto Un.</div>
-                            <div className="text-[11px] font-mono font-black text-emerald-800">
-                              {(() => {
-                                const baseCusto = formData.custo_materia_prima + formData.custo_operacional;
-                                const baseCalc = imp.base === 'Venda' ? formData.preco_unitario_venda : imp.base === 'Custo' ? baseCusto : 0;
-                                const res = imp.tipo === 'Porcentagem' ? (baseCalc * (imp.valor || 0)) / 100 : (imp.valor || 0);
-                                return res.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-                              })()}
-                            </div>
+                            {imp.base === 'Venda' ? (
+                              <div className="text-[11px] font-mono font-black text-amber-800 leading-tight">
+                                {imp.tipo === 'Porcentagem'
+                                  ? `${(Number(imp.valor) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`
+                                  : formatarMoeda(Number(imp.valor) || 0)}
+                                <span className="block text-[9px] font-sans font-semibold text-slate-500">
+                                  {imp.tipo === 'Porcentagem' ? 'sobre o preço da tabela' : 'por venda (na margem)'}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="text-[11px] font-mono font-black text-emerald-800">
+                                {(() => {
+                                  const baseCusto = formData.custo_materia_prima + formData.custo_operacional;
+                                  const baseCalc = imp.base === 'Custo' ? baseCusto : 0;
+                                  const res = imp.tipo === 'Porcentagem' ? (baseCalc * (imp.valor || 0)) / 100 : (imp.valor || 0);
+                                  return formatarMoeda(res);
+                                })()}
+                                <span className="block text-[9px] font-sans font-semibold text-slate-500">no custo</span>
+                              </div>
+                            )}
                           </div>
                           <div className="sm:col-span-1 text-center pb-1">
                             <button
@@ -1007,18 +1008,28 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                   )}
 
                   {/* Resumo Consolidado de Impostos */}
-                  <div className="pt-2 flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-slate-500">Custo Total de Impostos:</span>
-                    <span className="font-mono font-black text-slate-900 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
-                      {calculosFormulario.impostosValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} / unidade
+                  <div className="pt-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                    <span className="font-bold text-slate-500">Impostos no custo (base Custo/Fixo):</span>
+                    <span className="font-mono font-black tabular-nums text-slate-900 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
+                      {formatarMoeda(calculosFormulario.impostosValor)} / unidade
                     </span>
                   </div>
+                  {(calculosFormulario.percentualVenda > 0 || calculosFormulario.valorFixoVenda > 0) && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                      <span className="font-bold text-slate-500">Impostos sobre a venda (entram na margem de cada tabela):</span>
+                      <span className="font-mono font-black tabular-nums text-amber-900 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200">
+                        {calculosFormulario.percentualVenda > 0 && `${calculosFormulario.percentualVenda.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% do preço da tabela`}
+                        {calculosFormulario.percentualVenda > 0 && calculosFormulario.valorFixoVenda > 0 && ' + '}
+                        {calculosFormulario.valorFixoVenda > 0 && `${formatarMoeda(calculosFormulario.valorFixoVenda)}/un`}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-emerald-900 p-4 rounded-2xl text-white flex items-center justify-between shadow-md">
                   <div>
                     <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">
-                      Custo Final Industrial (Insumos + Operacional + Impostos)
+                      Custo Final Industrial (Insumos + Operacional + Impostos de Custo)
                     </span>
                     <span className="font-mono text-xl font-black text-lime-300">
                       {calculosFormulario.custoTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
@@ -1032,58 +1043,21 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                   </div>
                 </div>
 
-                {/* Preço de Venda Unitário e da Caixa/Fardo Fechado */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-200">
-                  <div>
-                    <label className="block font-bold text-emerald-950 mb-1">Preço de Venda Unitário (R$) *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      required
-                      value={formData.preco_unitario_venda}
-                      onChange={(e) => setFormData({ ...formData, preco_unitario_venda: parseFloat(e.target.value) || 0 })}
-                      className="w-full bg-white border-2 border-emerald-600 rounded-xl px-3 py-2 font-mono font-black text-emerald-950 text-base text-right focus:outline-none focus:border-emerald-700 shadow-xs"
-                    />
-                    <span className="text-[10px] text-emerald-800 font-semibold block text-right mt-0.5">
-                      utilizado no pedido de venda
-                    </span>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-xl border border-slate-300 text-right flex flex-col justify-center shadow-2xs">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-                      Preço {formData.tipo_acondicionamento} Fechado
-                    </span>
-                    <span className="font-mono text-base font-black text-slate-900">
-                      {calculosFormulario.precoPacoteFechado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      {formData.unidades_por_acondicionamento} un x R$ {formData.preco_unitario_venda.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-xl border border-slate-300 text-right flex flex-col justify-center shadow-2xs">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-                      Margem Bruta de Lucro
-                    </span>
-                    <span className={`font-mono text-base font-black ${calculosFormulario.margemPercentual >= 20 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                      {calculosFormulario.margemPercentual.toFixed(1)}%
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      Lucro: +{calculosFormulario.lucroUnitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/un
-                    </span>
-                  </div>
-                </div>
+                <p className="text-[10px] text-slate-500">
+                  O produto não tem preço próprio: o preço de venda é definido em cada tabela de preço, logo abaixo.
+                </p>
               </div>
 
               {/* 4.1 PREÇOS NAS TABELAS DE PREÇO */}
               <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-3">
                 <span className="font-bold text-slate-800 uppercase tracking-wider text-xs block">
-                  Preços nas tabelas
+                  5. Preços nas tabelas
                 </span>
                 <PrecosProdutoTabelas
-                  produtoId={modoEdicao?.id}
                   custoUnitario={calculosFormulario.custoTotal}
-                  precoBase={formData.preco_unitario_venda}
+                  impostos={formData.impostos}
+                  unidades={formData.unidades_por_acondicionamento || 1}
+                  tipoAcondicionamento={formData.tipo_acondicionamento}
                   valor={precosTabelas}
                   onChange={setPrecosTabelas}
                 />

@@ -194,8 +194,8 @@ export function obterProdutosVendaDisponiveis() {
         return produtosEstoque.map(p => {
           const emb = (p.tipo_acondicionamento === 'Caixa' ? 'Caixa' : p.tipo_acondicionamento === 'Fardo' ? 'Fardo 10x1kg' : p.tipo_embalagem) as any;
           const unidades = p.unidades_por_acondicionamento || (p.tipo_acondicionamento === 'Fardo' ? 10 : p.tipo_acondicionamento === 'Caixa' ? 10 : 1);
-          // Preço do fardo ou caixa fechada:
-          const precoAcond = p.preco_venda_acondicionamento || (p.preco_unitario_venda * unidades);
+          // O produto não tem preço próprio: o orçamento aplica o preço da tabela (precosData.calcularPrecoNaTabela)
+          const precoAcond = 0;
           
           return {
             id: p.id,
@@ -204,7 +204,7 @@ export function obterProdutosVendaDisponiveis() {
             tipo_embalagem: emb,
             peso_unitario_kg: p.peso_unitario_kg,
             preco_unitario: precoAcond, // Preço da embalagem de expedição (fardo/caixa/saco)
-            preco_unitario_avulso: p.preco_unitario_venda, // Preço unitário do pacote individual
+            preco_unitario_avulso: 0, // Preço unitário do pacote individual (vem da tabela de preço)
             unidades_por_fardo: unidades,
             tipo_acondicionamento: p.tipo_acondicionamento || 'Caixa',
             categoria: p.categoria,

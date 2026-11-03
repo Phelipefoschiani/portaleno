@@ -33,6 +33,7 @@ const CHAVES_CADASTROS_BASE = new Set<string>([
   'grupo_eno_receitas_v1',
   'grupo_eno_fichas_tecnicas_v1',
   'grupo_eno_tabelas_preco_v1',
+  'grupo_eno_categorias_produto_v1',
   'grupo_eno_custos_v1',
   'grupo_eno_agricultores_v1',
   'grupo_eno_fornecedores_v1'
@@ -48,6 +49,7 @@ const EVENTOS_ATUALIZACAO = [
   'receitas_updated',
   'fichas_tecnicas_updated',
   'tabelas_preco_updated',
+  'categorias_produto_updated',
   'clientes_updated',
   'cadastros_updated',
   'comprovantes_updated',

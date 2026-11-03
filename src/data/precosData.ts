@@ -2,50 +2,62 @@
 // Usada pela tela de Tabelas (visualizar, imprimir, copiar WhatsApp), pelo cadastro de produtos
 // (preço do produto em cada tabela) e pelo orçamento/venda.
 //
-// Modos da tabela:
-//  - ACRESCIMO_DESCONTO: preço base do produto (preco_unitario_venda) ± X% (positivo = acréscimo, negativo = desconto)
-//  - MARGEM_CUSTO: custo atual do produto × (1 + margem%)
-//  - PRECO_FIXO: preço digitado por produto dentro da tabela (precos_fixos)
-// Em qualquer modo, excecoes_preco[produto_id] sobrescreve o preço do pacote daquele produto.
+// A tabela tem só VALOR por produto: precos_fixos[produto_id] = preço da unidade/pacote.
+// Caixa/fardo = unitário × quantidade do acondicionamento do produto. Sem valor = não vendido na tabela.
+// O produto não tem preço próprio (preco_unitario_venda é legado e não forma preço).
+// Margem líquida = preço − custo do produto − impostos de base Venda (calculados sobre o preço da tabela).
+// Tabelas antigas (acréscimo/desconto, margem sobre custo, exceções) são congeladas em valor fixo
+// na leitura (produtosData → carregarTabelasPreco).
 
-import type { ProdutoEstoque, TabelaPreco } from './produtosData';
-import { carregarEstoqueProdutos, carregarTabelasPreco, salvarTabelasPreco } from './produtosData';
+import type { ImpostoProduto, ProdutoEstoque, TabelaPreco } from './produtosData';
+import { calcularImpostosVenda, carregarTabelasPreco, salvarTabelasPreco } from './produtosData';
 import { hojeISO, parseData, formatarDataBR } from '../lib/datas';
 
-export type ModoTabelaPreco = NonNullable<TabelaPreco['modo_preco']>;
+export type MostrarPrecoTabela = NonNullable<TabelaPreco['mostrar_preco']>;
 
-export const MODOS_TABELA_PRECO: { id: ModoTabelaPreco; nome: string; descricao: string }[] = [
-  { id: 'ACRESCIMO_DESCONTO', nome: 'Acréscimo / Desconto', descricao: 'Preço base do produto ± %' },
-  { id: 'MARGEM_CUSTO', nome: 'Margem sobre o Custo', descricao: 'Custo atual do produto + margem %' },
-  { id: 'PRECO_FIXO', nome: 'Preço Fixo por Produto', descricao: 'Preço digitado produto a produto' },
+export const OPCOES_MOSTRAR_PRECO: { id: MostrarPrecoTabela; nome: string; descricao: string }[] = [
+  { id: 'UNITARIO', nome: 'Unitário', descricao: 'Mostra e vende por unidade/pacote' },
+  { id: 'ACONDICIONAMENTO', nome: 'Caixa / Fardo', descricao: 'Mostra e vende por caixa/fardo fechado' },
+  { id: 'AMBOS', nome: 'Ambos', descricao: 'Mostra os dois; o vendedor escolhe na venda' },
 ];
 
-export function nomeModoTabela(modo?: TabelaPreco['modo_preco']): string {
-  return MODOS_TABELA_PRECO.find(m => m.id === (modo || 'ACRESCIMO_DESCONTO'))?.nome || 'Acréscimo / Desconto';
+export function mostrarPrecoDaTabela(t?: Pick<TabelaPreco, 'mostrar_preco'> | null): MostrarPrecoTabela {
+  return t?.mostrar_preco || 'AMBOS';
 }
+
+export function nomeMostrarPreco(t?: Pick<TabelaPreco, 'mostrar_preco'> | null): string {
+  const id = mostrarPrecoDaTabela(t);
+  return OPCOES_MOSTRAR_PRECO.find(o => o.id === id)?.nome || 'Ambos';
+}
+
+export const mostraUnitario = (t?: Pick<TabelaPreco, 'mostrar_preco'> | null) => mostrarPrecoDaTabela(t) !== 'ACONDICIONAMENTO';
+export const mostraAcondicionamento = (t?: Pick<TabelaPreco, 'mostrar_preco'> | null) => mostrarPrecoDaTabela(t) !== 'UNITARIO';
 
 /** Campos do produto usados na precificação (aceita ProdutoEstoque ou objetos equivalentes). */
 export type ProdutoPrecificavel = Pick<ProdutoEstoque, 'id'> &
   Partial<Pick<ProdutoEstoque,
-    'preco_unitario_venda' | 'custo_total' | 'custo_materia_prima' | 'custo_operacional' |
+    'custo_total' | 'custo_materia_prima' | 'custo_operacional' | 'impostos' |
     'tipo_acondicionamento' | 'unidades_por_acondicionamento' | 'tipo_embalagem'>>;
 
 export interface PrecoNaTabela {
-  custo: number; // custo atual do pacote
-  preco_base: number; // preco_unitario_venda do cadastro
-  preco: number; // preço do pacote nesta tabela
-  preco_regra: number; // preço que a regra da tabela daria (sem exceção)
+  na_tabela: boolean; // produto tem valor nesta tabela
+  sem_preco: boolean; // = !na_tabela
+  custo: number; // custo do pacote (insumos + operacional + impostos de base Custo/Fixo)
+  preco: number; // preço da unidade/pacote nesta tabela (0 quando não vendido)
   unidades: number; // pacotes por fardo/caixa (1 = avulso/saco)
   tipo_acondicionamento: string;
   preco_acondicionamento: number; // preço do pacote × unidades
+  impostos_venda: number; // R$ dos impostos de base Venda sobre o preço da tabela (por unidade)
+  margem_liquida: number; // preço − custo − impostos de venda (R$ por unidade)
+  margem_liquida_percentual: number | null; // margem líquida ÷ preço
   margem_percentual: number | null; // (preço − custo) / preço; null quando não há custo apurado
   markup_percentual: number | null; // (preço − custo) / custo
   abaixo_custo: boolean;
-  origem: 'EXCECAO' | ModoTabelaPreco;
-  sem_preco: boolean; // regra não conseguiu formar preço (ex.: margem sem custo, preço fixo não digitado)
+  margem_negativa: boolean; // margem líquida < 0
 }
 
 const r2 = (v: number) => Math.round((Number(v) || 0) * 100) / 100;
+const r6 = (v: number) => Math.round((Number(v) || 0) * 1e6) / 1e6;
 const num = (v: unknown) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -59,7 +71,7 @@ export function custoAtualProduto(p: ProdutoPrecificavel): number {
 }
 
 /** Pacotes por acondicionamento (mesma regra do orçamento: Fardo/Caixa sem número = 10). */
-export function unidadesAcondicionamento(p: ProdutoPrecificavel): number {
+export function unidadesAcondicionamento(p: Pick<ProdutoPrecificavel, 'unidades_por_acondicionamento' | 'tipo_acondicionamento'>): number {
   const n = num(p.unidades_por_acondicionamento);
   if (n > 0) return n;
   if (p.tipo_acondicionamento === 'Fardo' || p.tipo_acondicionamento === 'Caixa') return 10;
@@ -72,60 +84,56 @@ export function tipoAcondicionamento(p: ProdutoPrecificavel): string {
   return emb.includes('Fardo') ? 'Fardo' : emb.includes('Caixa') ? 'Caixa' : 'Saco';
 }
 
-/** Preço que a regra da tabela forma a partir de custo e preço base (sem exceções). */
-export function precoPelaRegra(
-  tabela: Pick<TabelaPreco, 'modo_preco' | 'ajuste_percentual' | 'margem_percentual' | 'desconto_padrao_percentual' | 'precos_fixos'>,
-  custo: number,
-  precoBase: number,
-  produtoId?: string
-): { preco: number; sem_preco: boolean } {
-  const modo = tabela.modo_preco || 'ACRESCIMO_DESCONTO';
-  if (modo === 'MARGEM_CUSTO') {
-    if (custo <= 0) return { preco: r2(precoBase), sem_preco: true };
-    return { preco: r2(custo * (1 + num(tabela.margem_percentual) / 100)), sem_preco: false };
-  }
-  if (modo === 'PRECO_FIXO') {
-    const fixo = produtoId ? num(tabela.precos_fixos?.[produtoId]) : 0;
-    if (fixo > 0) return { preco: r2(fixo), sem_preco: false };
-    return { preco: r2(precoBase), sem_preco: true };
-  }
-  const ajuste = tabela.ajuste_percentual ?? -(num(tabela.desconto_padrao_percentual));
-  return { preco: r2(precoBase * (1 + num(ajuste) / 100)), sem_preco: precoBase <= 0 };
+/** Preço da unidade do produto na tabela (0 = não vendido nesta tabela). */
+export function precoUnitarioNaTabela(tabela: Pick<TabelaPreco, 'precos_fixos'>, produtoId: string): number {
+  const v = num(tabela.precos_fixos?.[produtoId]);
+  return v > 0 ? v : 0;
 }
 
-/** Regra única: preço do produto na tabela (pacote e fardo/caixa), custo e margem resultante. */
-export function calcularPrecoNaTabela(produto: ProdutoPrecificavel, tabela: TabelaPreco): PrecoNaTabela {
-  const custo = r2(custoAtualProduto(produto));
-  const precoBase = r2(num(produto.preco_unitario_venda));
-  const modo = tabela.modo_preco || 'ACRESCIMO_DESCONTO';
-  const regra = precoPelaRegra(tabela, custo, precoBase, produto.id);
-  const excecao = num(tabela.excecoes_preco?.[produto.id]);
-  const preco = excecao > 0 ? r2(excecao) : regra.preco;
-  const unidades = unidadesAcondicionamento(produto);
+/** Análise de um preço unitário para um produto: custo, impostos de venda e margem líquida. */
+export function analisarPreco(
+  preco: number,
+  custo: number,
+  impostos: ImpostoProduto[] | undefined
+): Pick<PrecoNaTabela, 'impostos_venda' | 'margem_liquida' | 'margem_liquida_percentual' | 'margem_percentual' | 'markup_percentual' | 'abaixo_custo' | 'margem_negativa'> {
+  const p = num(preco);
+  const c = num(custo);
+  const impVenda = p > 0 ? r2(calcularImpostosVenda(impostos, p)) : 0;
+  const liquida = r2(p - c - impVenda);
   return {
-    custo,
-    preco_base: precoBase,
-    preco,
-    preco_regra: regra.preco,
-    unidades,
-    tipo_acondicionamento: tipoAcondicionamento(produto),
-    preco_acondicionamento: r2(preco * unidades),
-    margem_percentual: custo > 0 && preco > 0 ? Math.round(((preco - custo) / preco) * 1000) / 10 : null,
-    markup_percentual: custo > 0 ? Math.round(((preco - custo) / custo) * 1000) / 10 : null,
-    abaixo_custo: custo > 0 && preco < custo,
-    origem: excecao > 0 ? 'EXCECAO' : modo,
-    sem_preco: excecao > 0 ? false : regra.sem_preco,
+    impostos_venda: impVenda,
+    margem_liquida: p > 0 ? liquida : 0,
+    margem_liquida_percentual: p > 0 ? Math.round((liquida / p) * 1000) / 10 : null,
+    margem_percentual: c > 0 && p > 0 ? Math.round(((p - c) / p) * 1000) / 10 : null,
+    markup_percentual: c > 0 && p > 0 ? Math.round(((p - c) / c) * 1000) / 10 : null,
+    abaixo_custo: c > 0 && p > 0 && p < c,
+    margem_negativa: p > 0 && liquida < 0,
   };
 }
 
-/** Texto curto da regra da tabela (ex.: "−5% sobre o preço base"). */
-export function descreverRegraTabela(t: TabelaPreco): string {
-  const modo = t.modo_preco || 'ACRESCIMO_DESCONTO';
-  if (modo === 'MARGEM_CUSTO') return `Custo + ${num(t.margem_percentual)}% de margem`;
-  if (modo === 'PRECO_FIXO') return 'Preço fixo por produto';
-  const aj = num(t.ajuste_percentual ?? -(num(t.desconto_padrao_percentual)));
-  if (aj === 0) return 'Preço base (sem ajuste)';
-  return `${aj > 0 ? '+' : '−'}${Math.abs(aj)}% sobre o preço base`;
+/** Regra única: preço do produto na tabela (unidade e fardo/caixa), custo e margem líquida. */
+export function calcularPrecoNaTabela(produto: ProdutoPrecificavel, tabela: Pick<TabelaPreco, 'precos_fixos'>): PrecoNaTabela {
+  const custo = r2(custoAtualProduto(produto));
+  const precoBruto = precoUnitarioNaTabela(tabela, produto.id);
+  const unidades = unidadesAcondicionamento(produto);
+  const na = precoBruto > 0;
+  return {
+    na_tabela: na,
+    sem_preco: !na,
+    custo,
+    // Unidade com até 4 casas (vem da caixa ÷ quantidade); caixa sempre fecha em centavos
+    preco: Math.round(precoBruto * 10000) / 10000,
+    unidades,
+    tipo_acondicionamento: tipoAcondicionamento(produto),
+    preco_acondicionamento: r2(precoBruto * unidades),
+    ...analisarPreco(precoBruto, custo, produto.impostos),
+  };
+}
+
+/** Converte o preço da caixa/fardo digitado em preço unitário (guardado com precisão para fechar a caixa). */
+export function unitarioDaCaixa(precoCaixa: number, unidades: number): number {
+  const u = num(unidades) > 0 ? num(unidades) : 1;
+  return r6(num(precoCaixa) / u);
 }
 
 /** Tabela utilizável na venda: não arquivada e dentro da vigência. */
@@ -139,81 +147,72 @@ export function tabelaPrecoAtiva(t: TabelaPreco): boolean {
   return true;
 }
 
+/** Normaliza precos_fixos (só > 0) e devolve os campos da tabela coerentes (produtos_ids = produtos com valor). */
+export function camposDePreco(precos: Record<string, number>): Pick<TabelaPreco, 'modo_preco' | 'precos_fixos' | 'produtos_ids' | 'excecoes_preco'> {
+  const limpos = Object.fromEntries(
+    Object.entries(precos || {}).filter(([, v]) => num(v) > 0).map(([id, v]) => [id, r6(num(v))])
+  );
+  return { modo_preco: 'PRECO_FIXO', precos_fixos: limpos, produtos_ids: Object.keys(limpos), excecoes_preco: {} };
+}
+
 // ============================================================
 // PREÇO DO PRODUTO EM CADA TABELA (cadastro de produtos)
 // ============================================================
 
-/** tabelaId → preço final do pacote nas tabelas que contêm o produto. */
+/** tabelaId → preço unitário nas tabelas em que o produto tem valor. */
 export function carregarPrecosDoProduto(produtoId: string): Record<string, number> {
   const mapa: Record<string, number> = {};
   if (!produtoId) return mapa;
-  const produto = carregarEstoqueProdutos().find(p => p.id === produtoId);
   carregarTabelasPreco().forEach(t => {
-    if (!(t.produtos_ids || []).includes(produtoId)) return;
-    if (produto) {
-      mapa[t.id] = calcularPrecoNaTabela(produto, t).preco;
-    } else {
-      const fixo = num(t.excecoes_preco?.[produtoId]) || num(t.precos_fixos?.[produtoId]);
-      if (fixo > 0) mapa[t.id] = r2(fixo);
-    }
+    const v = precoUnitarioNaTabela(t, produtoId);
+    if (v > 0) mapa[t.id] = v;
   });
   return mapa;
 }
 
 /**
- * Para cada tabela do mapa: inclui o produto em produtos_ids e grava o preço.
- * PRECO_FIXO → precos_fixos; demais modos → exceção do produto (só quando difere da regra da tabela,
- * para o preço continuar acompanhando o custo/preço base quando o usuário aceitou o sugerido).
- * Tabelas fora do mapa não mudam.
+ * Grava o preço do produto nas tabelas. Tabela do mapa com valor > 0 passa a ter o produto;
+ * tabela listada em `tabelasEditadas` sem valor no mapa deixa de vender o produto.
+ * Tabelas fora dessas listas não mudam.
  */
-export function salvarPrecosDoProduto(produtoId: string, mapa: Record<string, number>): void {
-  if (!produtoId || !mapa) return;
-  const ids = Object.keys(mapa);
-  if (ids.length === 0) return;
-  const produto = carregarEstoqueProdutos().find(p => p.id === produtoId);
-  const tabelas = carregarTabelasPreco();
+export function salvarPrecosDoProduto(
+  produtoId: string,
+  mapa: Record<string, number>,
+  tabelasEditadas: string[] = Object.keys(mapa || {})
+): void {
+  if (!produtoId) return;
+  const ids = new Set([...Object.keys(mapa || {}), ...tabelasEditadas]);
+  if (ids.size === 0) return;
   let alterou = false;
-  const atualizadas = tabelas.map(t => {
-    if (!ids.includes(t.id)) return t;
-    const preco = r2(num(mapa[t.id]));
+  const atualizadas = carregarTabelasPreco().map(t => {
+    if (!ids.has(t.id)) return t;
+    const precos = { ...(t.precos_fixos || {}) };
+    const novo = num(mapa?.[t.id]);
+    const antes = num(precos[produtoId]);
+    if (novo > 0) precos[produtoId] = novo;
+    else delete precos[produtoId];
+    const jaListado = (t.produtos_ids || []).includes(produtoId);
+    if (Math.abs(antes - (novo > 0 ? novo : 0)) < 1e-9 && jaListado === novo > 0) return t;
     alterou = true;
-    const produtos_ids = (t.produtos_ids || []).includes(produtoId) ? t.produtos_ids || [] : [...(t.produtos_ids || []), produtoId];
-    const precos_fixos = { ...(t.precos_fixos || {}) };
-    const excecoes_preco = { ...(t.excecoes_preco || {}) };
-    if ((t.modo_preco || 'ACRESCIMO_DESCONTO') === 'PRECO_FIXO') {
-      if (preco > 0) precos_fixos[produtoId] = preco;
-      delete excecoes_preco[produtoId];
-    } else {
-      const regra = produto
-        ? precoPelaRegra(t, r2(custoAtualProduto(produto)), r2(num(produto.preco_unitario_venda)), produtoId)
-        : { preco: -1, sem_preco: true };
-      if (preco > 0 && (regra.sem_preco || Math.abs(regra.preco - preco) > 0.005)) excecoes_preco[produtoId] = preco;
-      else delete excecoes_preco[produtoId];
-    }
-    return { ...t, produtos_ids, precos_fixos, excecoes_preco };
+    return { ...t, ...camposDePreco(precos) };
   });
   if (alterou) salvarTabelasPreco(atualizadas);
 }
 
-/** Cria e grava uma tabela ativa com vigência a partir de hoje (sem data de término). */
-export function criarTabelaRapida(nome: string, modo: ModoTabelaPreco, percentual?: number): TabelaPreco {
-  const p = num(percentual);
+/** Cria e grava uma tabela ativa (só valor por produto) com vigência a partir de hoje, sem término. */
+export function criarTabelaRapida(nome: string, mostrar_preco: MostrarPrecoTabela = 'AMBOS'): TabelaPreco {
   const nova: TabelaPreco = {
     id: `tab_${Date.now()}`,
     codigo: `TAB-${Date.now().toString().slice(-4)}`,
     nome: String(nome || '').trim() || 'Nova Tabela',
     tipo: 'Atacado / Distribuidor',
-    modo_preco: modo,
-    ajuste_percentual: modo === 'ACRESCIMO_DESCONTO' ? p : 0,
-    margem_percentual: modo === 'MARGEM_CUSTO' ? p : 0,
-    precos_fixos: {},
-    excecoes_preco: {},
+    ...camposDePreco({}),
+    mostrar_preco,
     prazo_padrao: 'Boleto Bancário 28 Dias',
     frete_tipo: 'CIF (Entrega Grupo ENO)',
     vigencia_inicio: formatarDataBR(hojeISO()),
     vigencia_fim: '',
     status: 'VIGENTE',
-    produtos_ids: [],
   };
   salvarTabelasPreco([nova, ...carregarTabelasPreco()]);
   return nova;

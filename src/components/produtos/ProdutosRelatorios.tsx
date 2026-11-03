@@ -60,9 +60,9 @@ export function ProdutosRelatorios({ onNavigate }: Props) {
   }));
 
   const handleExportarCsv = () => {
-    const cabecalho = 'Codigo,Nome,Categoria,Embalagem,Estoque_Sacos,Estoque_Ton,Preco_Unitario\n';
+    const cabecalho = 'Codigo,Nome,Categoria,Embalagem,Estoque_Pacotes,Estoque_Ton,Custo_Unitario\n';
     const linhas = produtos.map(p =>
-      `"${p.codigo}","${p.nome}","${p.categoria}","${p.tipo_embalagem}",${p.estoque_atual_sacos},${(p.estoque_atual_kg / 1000).toFixed(2)},${(p.preco_unitario_venda || 0).toFixed(2)}`
+      `"${p.codigo}","${p.nome}","${p.categoria}","${p.tipo_embalagem}",${p.estoque_atual_sacos},${(p.estoque_atual_kg / 1000).toFixed(2)},${(p.custo_total || 0).toFixed(2)}`
     ).join('\n');
 
     const blob = new Blob([cabecalho + linhas], { type: 'text/csv;charset=utf-8;' });
@@ -184,7 +184,7 @@ export function ProdutosRelatorios({ onNavigate }: Props) {
                 <th className="py-2.5 px-3">Categoria</th>
                 <th className="py-2.5 px-3 text-right">Saldo em Sacos</th>
                 <th className="py-2.5 px-3 text-right">Saldo em Toneladas</th>
-                <th className="py-2.5 px-3 text-right">Valor em Estoque</th>
+                <th className="py-2.5 px-3 text-right">Valor em Estoque (custo)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-mono">
@@ -195,7 +195,7 @@ export function ProdutosRelatorios({ onNavigate }: Props) {
                   <td className="py-2.5 px-3 text-right font-bold text-slate-800">{p.estoque_atual_sacos.toLocaleString('pt-BR')} un</td>
                   <td className="py-2.5 px-3 text-right font-bold text-slate-800">{(p.estoque_atual_kg / 1000).toLocaleString('pt-BR')} Ton</td>
                   <td className="py-2.5 px-3 text-right font-bold text-emerald-800">
-                    {(p.estoque_atual_sacos * p.preco_unitario_venda).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {(p.estoque_atual_sacos * (p.custo_total || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </td>
                 </tr>
               ))}

@@ -4,9 +4,6 @@ import {
   Plus,
   Search,
   CheckCircle2,
-  Calendar,
-  Percent,
-  Truck,
   Edit2,
   Trash2,
   X,
@@ -16,13 +13,11 @@ import {
   Printer,
   Copy,
   Building2,
-  Phone,
-  FileText,
-  BadgePercent
+  AlertCircle,
+  LayoutList
 } from 'lucide-react';
 import {
   TabelaPreco,
-  TABELAS_PRECO_INICIAIS,
   carregarTabelasPreco,
   salvarTabelasPreco,
   carregarEstoqueProdutos,
@@ -30,35 +25,53 @@ import {
 } from '../../data/produtosData';
 import {
   calcularPrecoNaTabela,
-  descreverRegraTabela,
-  nomeModoTabela,
-  MODOS_TABELA_PRECO,
-  ModoTabelaPreco,
+  camposDePreco,
+  MostrarPrecoTabela,
+  OPCOES_MOSTRAR_PRECO,
+  mostraAcondicionamento,
+  mostraUnitario,
+  nomeMostrarPreco,
   tabelaPrecoAtiva
 } from '../../data/precosData';
 import { formatarMoeda } from '../../data/financeiroData';
 import { formatarDataBR, hojeISO } from '../../lib/datas';
 import { ProdutosNavTabs } from './ProdutosNavTabs';
+import { CampoPrecoTabela } from './CampoPrecoTabela';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
 }
 
+const pesoTexto = (p: ProdutoEstoque) =>
+  Number(p.peso_unitario_kg) > 0
+    ? Number(p.peso_unitario_kg) < 1
+      ? `${(Number(p.peso_unitario_kg) * 1000).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} g`
+      : `${Number(p.peso_unitario_kg).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} kg`
+    : '';
+
+const ordenarProdutos = (lista: ProdutoEstoque[]) =>
+  [...lista].sort(
+    (a, b) =>
+      String(a.categoria || '').localeCompare(String(b.categoria || ''), 'pt-BR') ||
+      String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR')
+  );
+
 export function ProdutosTabelaPreco({ onNavigate }: Props) {
   const [tabelas, setTabelas] = useState<TabelaPreco[]>(() => carregarTabelasPreco());
   const [busca, setBusca] = useState('');
-  
+
   // Modais
   const [modalFormAberto, setModalFormAberto] = useState(false);
   const [tabelaEmEdicao, setTabelaEmEdicao] = useState<TabelaPreco | null>(null);
   const [tabelaVisualizar, setTabelaVisualizar] = useState<TabelaPreco | null>(null);
+  const [buscaProdutoForm, setBuscaProdutoForm] = useState('');
 
   // Toast e Cópia
   const [toastMsg, setToastMsg] = useState('');
   const [copiado, setCopiado] = useState(false);
   const [mostrarCustos, setMostrarCustos] = useState(false);
 
-  // Produtos do catálogo de estoque para exibir na tabela comercial
+  // Todos os produtos cadastrados (a grade da tabela lista todos; sem valor = não vendido)
   const [produtosEstoque, setProdutosEstoque] = useState<ProdutoEstoque[]>(() => carregarEstoqueProdutos());
 
   const dispararToast = (msg: string) => {
@@ -79,22 +92,20 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
     };
   }, []);
 
-  const [formData, setFormData] = useState({
-    codigo: '',
+  const formVazio = () => ({
+    codigo: `TAB-${Date.now().toString().slice(-4)}`,
     nome: '',
     tipo: 'Atacado / Distribuidor' as TabelaPreco['tipo'],
-    modo_preco: 'ACRESCIMO_DESCONTO' as ModoTabelaPreco,
-    ajuste_percentual: 0,
-    margem_percentual: 30,
+    mostrar_preco: 'AMBOS' as MostrarPrecoTabela,
     precos_fixos: {} as Record<string, number>,
-    excecoes_preco: {} as Record<string, number>,
     prazo_padrao: 'Boleto Bancário 28 Dias',
     frete_tipo: 'CIF (Entrega Grupo ENO)' as TabelaPreco['frete_tipo'],
-    vigencia_inicio: '01/01/2026',
-    vigencia_fim: '31/12/2026',
-    status: 'VIGENTE' as TabelaPreco['status'],
-    produtos_ids: [] as string[]
+    vigencia_inicio: formatarDataBR(hojeISO()),
+    vigencia_fim: `31/12/${new Date().getFullYear()}`,
+    status: 'VIGENTE' as TabelaPreco['status']
   });
+
+  const [formData, setFormData] = useState(formVazio);
 
   const tabelasFiltradas = tabelas.filter(t =>
     t.nome.toLowerCase().includes(busca.toLowerCase()) ||
@@ -102,48 +113,40 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
     t.tipo.toLowerCase().includes(busca.toLowerCase())
   );
 
+  // Produtos que não têm preço em nenhuma tabela ativa (não podem ser vendidos)
+  const produtosSemTabela = useMemo(() => {
+    const ativas = tabelas.filter(tabelaPrecoAtiva);
+    return produtosEstoque.filter(p => !ativas.some(t => calcularPrecoNaTabela(p, t).na_tabela));
+  }, [tabelas, produtosEstoque]);
+
   const handleAbrirNova = () => {
     setTabelaEmEdicao(null);
-    setFormData({
-      codigo: `TAB-${Date.now().toString().slice(-4)}`,
-      nome: '',
-      tipo: 'Atacado / Distribuidor',
-      modo_preco: 'ACRESCIMO_DESCONTO',
-      ajuste_percentual: 0,
-      margem_percentual: 30,
-      precos_fixos: {},
-      excecoes_preco: {},
-      prazo_padrao: 'Boleto Bancário 28 Dias',
-      frete_tipo: 'CIF (Entrega Grupo ENO)',
-      vigencia_inicio: formatarDataBR(hojeISO()),
-      vigencia_fim: `31/12/${new Date().getFullYear()}`,
-      status: 'VIGENTE',
-      produtos_ids: []
-    });
+    setBuscaProdutoForm('');
+    setFormData(formVazio());
     setModalFormAberto(true);
   };
 
   const handleAbrirEdicao = (tabela: TabelaPreco) => {
     setTabelaEmEdicao(tabela);
+    setBuscaProdutoForm('');
     setFormData({
       codigo: tabela.codigo,
       nome: tabela.nome,
       tipo: tabela.tipo,
-      modo_preco: tabela.modo_preco || 'ACRESCIMO_DESCONTO',
-      ajuste_percentual: Number(tabela.ajuste_percentual) || 0,
-      margem_percentual: Number(tabela.margem_percentual) || 0,
+      mostrar_preco: tabela.mostrar_preco || 'AMBOS',
       precos_fixos: { ...(tabela.precos_fixos || {}) },
-      excecoes_preco: { ...(tabela.excecoes_preco || {}) },
       prazo_padrao: tabela.prazo_padrao,
       frete_tipo: tabela.frete_tipo,
       vigencia_inicio: tabela.vigencia_inicio,
       vigencia_fim: tabela.vigencia_fim,
-      status: tabela.status,
-      produtos_ids: tabela.produtos_ids || []
+      status: tabela.status
     });
     if (tabelaVisualizar) setTabelaVisualizar(null);
     setModalFormAberto(true);
   };
+
+  // Prévia com os dados do formulário (antes de salvar)
+  const previaNoForm = (prod: ProdutoEstoque) => calcularPrecoNaTabela(prod, { precos_fixos: formData.precos_fixos });
 
   const handleSalvar = (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,46 +154,43 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       alert('O nome da tabela é obrigatório.');
       return;
     }
-    
-    if (!formData.produtos_ids || formData.produtos_ids.length === 0) {
-      alert('Não é possível salvar uma tabela de preços sem produtos. Selecione pelo menos um produto abaixo.');
+
+    // Só valem preços de produtos que existem
+    const idsProdutos = new Set(produtosEstoque.map(p => p.id));
+    const precos: Record<string, number> = {};
+    Object.entries(formData.precos_fixos).forEach(([id, v]) => {
+      if (idsProdutos.has(id)) precos[id] = Number(v) || 0;
+    });
+    const campos = camposDePreco(precos);
+
+    if ((campos.produtos_ids || []).length === 0 &&
+      !window.confirm('Nenhum produto tem preço nesta tabela, então nada poderá ser vendido por ela. Salvar mesmo assim?')) {
       return;
     }
 
-    if (formData.modo_preco === 'PRECO_FIXO') {
-      const semPreco = produtosEstoque.filter(p =>
-        formData.produtos_ids.includes(p.id) && !(Number(formData.precos_fixos[p.id]) > 0) && !(Number(formData.excecoes_preco[p.id]) > 0)
-      );
-      if (semPreco.length > 0) {
-        alert(`Tabela de preço fixo: digite o preço de ${semPreco.map(p => p.nome).join(', ')}.`);
-        return;
-      }
-    }
-
-    const abaixoCusto = produtosEstoque.filter(p => formData.produtos_ids.includes(p.id) && previaNoForm(p).abaixo_custo);
-    if (abaixoCusto.length > 0 && !window.confirm(`Atenção: preço abaixo do custo em ${abaixoCusto.map(p => p.nome).join(', ')}. Salvar mesmo assim?`)) {
+    const negativos = produtosEstoque.filter(p => previaNoForm(p).margem_negativa);
+    if (negativos.length > 0 && !window.confirm(`Atenção: margem líquida negativa em ${negativos.map(p => p.nome).join(', ')}. Salvar mesmo assim?`)) {
       return;
     }
 
-    // Mantém só os preços dos produtos que estão na tabela; o desconto legado deixa de valer
-    const soDaTabela = (m: Record<string, number>) =>
-      Object.fromEntries(Object.entries(m).filter(([id, v]) => formData.produtos_ids.includes(id) && Number(v) > 0));
     const dadosTabela = {
-      ...formData,
-      precos_fixos: soDaTabela(formData.precos_fixos),
-      excecoes_preco: soDaTabela(formData.excecoes_preco),
-      desconto_padrao_percentual: undefined
+      codigo: formData.codigo,
+      nome: formData.nome,
+      tipo: formData.tipo,
+      mostrar_preco: formData.mostrar_preco,
+      prazo_padrao: formData.prazo_padrao,
+      frete_tipo: formData.frete_tipo,
+      vigencia_inicio: formData.vigencia_inicio,
+      vigencia_fim: formData.vigencia_fim,
+      status: formData.status,
+      ...campos
     };
 
     if (tabelaEmEdicao) {
       const atualizadas = tabelas.map(t => {
-        if (t.id === tabelaEmEdicao.id) {
-          return {
-            ...t,
-            ...dadosTabela
-          };
-        }
-        return t;
+        if (t.id !== tabelaEmEdicao.id) return t;
+        const { ajuste_percentual, margem_percentual, desconto_padrao_percentual, ...resto } = t;
+        return { ...resto, ...dadosTabela };
       });
       salvarTabelasPreco(atualizadas);
       setTabelas(atualizadas);
@@ -219,18 +219,14 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
     }
   };
 
-  // Somente os produtos vinculados à tabela (produtos_ids); tabela antiga sem lista mostra todos
+  // Produtos com valor na tabela (os vendidos por ela)
   const produtosDaTabelaPreco = (tab: TabelaPreco) =>
-    Array.isArray(tab.produtos_ids) ? produtosEstoque.filter(p => tab.produtos_ids!.includes(p.id)) : produtosEstoque;
-
-  // Prévia do preço com os dados do formulário (antes de salvar)
-  const previaNoForm = (prod: ProdutoEstoque) =>
-    calcularPrecoNaTabela(prod, { id: tabelaEmEdicao?.id || 'nova', ...formData } as TabelaPreco);
+    ordenarProdutos(produtosEstoque.filter(p => calcularPrecoNaTabela(p, tab).na_tabela));
 
   const textoVigencia = (tab: TabelaPreco) =>
     `${tab.vigencia_inicio || '-'} a ${tab.vigencia_fim || 'sem término'}`;
 
-  // Copiar resumo formatado para WhatsApp ou texto
+  // Copiar resumo formatado para WhatsApp ou texto (respeita "Mostrar preço" da tabela)
   const handleCopiarTabela = (tab: TabelaPreco) => {
     let texto = `*GRUPO ENO - TABELA DE PREÇOS OFICIAL*\n`;
     texto += `*Tabela:* ${tab.nome} (${tab.codigo})\n`;
@@ -239,17 +235,17 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
     texto += `*PRODUTOS & PREÇOS:*\n`;
 
     const produtosDaTabela = produtosDaTabelaPreco(tab);
-    if (produtosDaTabela.length === 0) texto += `(Nenhum produto vinculado a esta tabela)
-`;
+    if (produtosDaTabela.length === 0) texto += `(Nenhum produto com preço nesta tabela)\n`;
     produtosDaTabela.forEach(p => {
       const calc = calcularPrecoNaTabela(p, tab);
-
-      texto += `• *${p.nome}* (${p.tipo_embalagem})\n`;
-      texto += `  Preço Un: ${formatarMoeda(calc.preco)}`;
-      if (calc.unidades > 1) {
-        texto += ` | ${calc.tipo_acondicionamento} c/ ${calc.unidades}: ${formatarMoeda(calc.preco_acondicionamento)}`;
+      const peso = pesoTexto(p);
+      texto += `• *${p.nome}*${peso ? ` (${peso})` : ''}\n`;
+      const partes: string[] = [];
+      if (mostraUnitario(tab) || calc.unidades <= 1) partes.push(`Unidade: ${formatarMoeda(calc.preco)}`);
+      if (mostraAcondicionamento(tab) && calc.unidades > 1) {
+        partes.push(`${calc.tipo_acondicionamento} c/ ${calc.unidades}: ${formatarMoeda(calc.preco_acondicionamento)}`);
       }
-      texto += `\n`;
+      texto += `  ${partes.join(' | ')}\n`;
     });
 
     texto += `\n*Observações:* Pedidos sujeitos a confirmação de estoque e crédito.\nContato Comercial: (44) 3639-8200`;
@@ -260,9 +256,22 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
     });
   };
 
+  const produtosNoForm = useMemo(() => {
+    const q = buscaProdutoForm.trim().toLowerCase();
+    const lista = ordenarProdutos(produtosEstoque);
+    if (!q) return lista;
+    return lista.filter(p =>
+      p.nome.toLowerCase().includes(q) ||
+      String(p.codigo || '').toLowerCase().includes(q) ||
+      String(p.categoria || '').toLowerCase().includes(q)
+    );
+  }, [produtosEstoque, buscaProdutoForm]);
+
+  const comPrecoNoForm = produtosEstoque.filter(p => Number(formData.precos_fixos[p.id]) > 0).length;
+
   return (
     <div className="relative h-full w-full flex flex-col bg-[#f8faf8] text-slate-800 overflow-hidden">
-      
+
       {/* 1. NAVEGAÇÃO DE PRODUTOS */}
       <ProdutosNavTabs activeTab="produtos_tabela_preco" onNavigate={onNavigate} />
 
@@ -273,11 +282,11 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
               <span>Tabelas de Preços & Condições Comerciais</span>
               <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
-                {tabelas.length} ativas
+                {tabelas.filter(tabelaPrecoAtiva).length} ativas
               </span>
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              Políticas de preços para distribuidores, grandes indústrias alimentícias e condições especiais com visualização para foto/PDF.
+              Cada tabela tem o valor de cada produto. Produto sem valor na tabela não é vendido por ela.
             </p>
           </div>
 
@@ -294,17 +303,22 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
 
         {/* STAT BAR MINIMALISTA EM LINHA */}
         <div className="flex flex-wrap items-center gap-6 pt-3 mt-3 border-t border-slate-100 text-xs">
-          {MODOS_TABELA_PRECO.map((m, i) => (
-            <React.Fragment key={m.id}>
-              {i > 0 && <div className="w-px h-4 bg-slate-200 hidden sm:block" />}
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400 font-medium">{m.nome}:</span>
-                <span className="font-mono font-bold text-slate-900">
-                  {tabelas.filter(t => (t.modo_preco || 'ACRESCIMO_DESCONTO') === m.id).length} tabela(s)
-                </span>
-              </div>
-            </React.Fragment>
-          ))}
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 font-medium">Produtos cadastrados:</span>
+            <span className="font-mono font-bold text-slate-900 tabular-nums">{produtosEstoque.length}</span>
+          </div>
+          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
+          <div className="flex items-center gap-2" title={produtosSemTabela.map(p => p.nome).join(', ')}>
+            <span className="text-slate-400 font-medium">Sem preço em nenhuma tabela ativa:</span>
+            <span className={`font-mono font-bold tabular-nums ${produtosSemTabela.length > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+              {produtosSemTabela.length}
+            </span>
+            {produtosSemTabela.length > 0 && (
+              <span className="text-[11px] text-amber-700 truncate max-w-[320px]">
+                ({produtosSemTabela.slice(0, 3).map(p => p.nome).join(', ')}{produtosSemTabela.length > 3 ? '…' : ''})
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -317,7 +331,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
 
       {/* 3. BARRA DE BUSCA */}
       <div className="bg-[#f1f5f2] px-6 py-2.5 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex-1 min-w-[260px] max-w-sm relative">
+        <div className="flex-1 min-w-[220px] max-w-sm relative">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -335,13 +349,13 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
 
       {/* 4. TABELA LIMPA EM LINHAS */}
       <div className="flex-1 p-6 overflow-y-auto">
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-x-auto">
+          <table className="w-full min-w-[860px] text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/90 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
                 <th className="py-3 px-5">Tabela & Código</th>
                 <th className="py-3 px-4">Segmento de Mercado</th>
-                <th className="py-3 px-3 text-center">Regra de Preço</th>
+                <th className="py-3 px-3 text-center">Produtos / Mostra</th>
                 <th className="py-3 px-4">Condição de Pagamento</th>
                 <th className="py-3 px-4">Frete</th>
                 <th className="py-3 px-4">Vigência</th>
@@ -357,7 +371,10 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                   </td>
                 </tr>
               ) : (
-                tabelasFiltradas.map((item) => (
+                tabelasFiltradas.map((item) => {
+                  const qtd = produtosEstoque.filter(p => calcularPrecoNaTabela(p, item).na_tabela).length;
+                  const negativos = produtosEstoque.filter(p => calcularPrecoNaTabela(p, item).margem_negativa).length;
+                  return (
                   <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3.5 px-5">
                       <div className="font-bold text-slate-900">{item.nome}</div>
@@ -369,12 +386,14 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                     </td>
 
                     <td className="py-3.5 px-3 text-center">
-                      <div className="text-[10px] font-bold uppercase text-slate-400">{nomeModoTabela(item.modo_preco)}</div>
-                      <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-bold border border-emerald-200 font-mono">
-                        {descreverRegraTabela(item)}
+                      <div className="font-mono font-black tabular-nums text-slate-900">
+                        {qtd}<span className="text-slate-400 font-bold">/{produtosEstoque.length}</span>
+                      </div>
+                      <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-bold border border-emerald-200 text-[10px] uppercase tracking-wide">
+                        {nomeMostrarPreco(item)}
                       </span>
-                      {Object.keys(item.excecoes_preco || {}).length > 0 && (
-                        <div className="text-[10px] text-amber-700 mt-0.5">{Object.keys(item.excecoes_preco || {}).length} exceção(ões) por produto</div>
+                      {negativos > 0 && (
+                        <div className="text-[10px] text-red-700 font-bold mt-0.5">{negativos} com margem negativa</div>
                       )}
                     </td>
 
@@ -432,7 +451,8 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -442,7 +462,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       {/* 5. MODAL FORM: CRIAR / EDITAR TABELA DE PREÇO */}
       {modalFormAberto && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
+          <div className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)]">
             <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
               <div className="flex items-center gap-2.5">
                 <Tag className="w-5 h-5 text-emerald-400" />
@@ -497,51 +517,30 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                 </div>
               </div>
 
-              {/* COMO A TABELA FORMA O PREÇO */}
+              {/* MOSTRAR PREÇO: UNITÁRIO, CAIXA/FARDO OU AMBOS */}
               <div className="p-3 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-2">
-                <label className="block font-bold text-slate-700">Como esta tabela forma o preço</label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {MODOS_TABELA_PRECO.map(m => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, modo_preco: m.id })}
-                      className={`text-left p-2.5 rounded-lg border transition-colors cursor-pointer ${formData.modo_preco === m.id ? 'bg-emerald-900 border-emerald-900 text-white' : 'bg-white border-slate-200 text-slate-700 hover:border-emerald-400'}`}
-                    >
-                      <div className="font-bold">{m.nome}</div>
-                      <div className={`text-[10px] ${formData.modo_preco === m.id ? 'text-emerald-200' : 'text-slate-400'}`}>{m.descricao}</div>
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <label className="block font-bold text-slate-700">Mostrar preço</label>
+                  <span className="text-[10px] text-slate-500">Vale para visualizar, imprimir, copiar no WhatsApp e para a venda nesta tabela</span>
                 </div>
-                {formData.modo_preco === 'ACRESCIMO_DESCONTO' && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-slate-700">Ajuste sobre o preço base (%)</span>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={formData.ajuste_percentual}
-                      onChange={(e) => setFormData({ ...formData, ajuste_percentual: parseFloat(e.target.value) || 0 })}
-                      className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-1.5 font-mono font-bold text-center text-slate-800 focus:outline-none focus:border-emerald-700"
-                    />
-                    <span className="text-[10px] text-slate-500">positivo = acréscimo • negativo = desconto (ex.: −5)</span>
-                  </div>
-                )}
-                {formData.modo_preco === 'MARGEM_CUSTO' && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-slate-700">Margem sobre o custo atual (%)</span>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={formData.margem_percentual}
-                      onChange={(e) => setFormData({ ...formData, margem_percentual: parseFloat(e.target.value) || 0 })}
-                      className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-1.5 font-mono font-bold text-center text-slate-800 focus:outline-none focus:border-emerald-700"
-                    />
-                    <span className="text-[10px] text-slate-500">preço = custo do produto (receita + operacional + impostos) × (1 + margem)</span>
-                  </div>
-                )}
-                {formData.modo_preco === 'PRECO_FIXO' && (
-                  <p className="text-[10px] text-slate-500">Digite o preço do pacote de cada produto na lista abaixo.</p>
-                )}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="radiogroup">
+                  {OPCOES_MOSTRAR_PRECO.map(o => {
+                    const ativo = formData.mostrar_preco === o.id;
+                    return (
+                      <button
+                        key={o.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={ativo}
+                        onClick={() => setFormData({ ...formData, mostrar_preco: o.id })}
+                        className={`text-left p-2.5 rounded-lg border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40 ${ativo ? 'bg-emerald-900 border-emerald-900 text-white' : 'bg-white border-slate-200 text-slate-700 hover:border-emerald-400'}`}
+                      >
+                        <div className="font-bold">{o.nome}</div>
+                        <div className={`text-[10px] ${ativo ? 'text-emerald-200' : 'text-slate-400'}`}>{o.descricao}</div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -609,91 +608,112 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-200">
-                <label className="block font-bold text-slate-700 mb-2 text-sm">Produtos Selecionados</label>
-                <div className="space-y-2 max-h-[300px] overflow-y-auto p-1">
-                  {produtosEstoque.length === 0 ? (
-                    <p className="text-slate-400 italic">Nenhum produto cadastrado no estoque para adicionar à tabela.</p>
-                  ) : (
-                    produtosEstoque.map((prod) => {
-                      const selecionado = formData.produtos_ids.includes(prod.id);
-                      const calc = previaNoForm(prod);
-                      const ehFixo = formData.modo_preco === 'PRECO_FIXO';
-                      const mapaCampo = ehFixo ? formData.precos_fixos : formData.excecoes_preco;
-                      const valorCampo = mapaCampo[prod.id];
-                      const alterarCampo = (texto: string) => {
-                        const n = parseFloat(texto.replace(',', '.'));
-                        const novo = { ...mapaCampo };
-                        if (texto === '' || !Number.isFinite(n) || n <= 0) delete novo[prod.id];
-                        else novo[prod.id] = n;
-                        setFormData(prev => ehFixo ? { ...prev, precos_fixos: novo } : { ...prev, excecoes_preco: novo });
-                      };
-                      return (
-                      <div key={prod.id} className={`flex flex-wrap items-center gap-3 p-2.5 rounded-lg border transition-colors ${selecionado && calc.abaixo_custo ? 'bg-red-50 border-red-300' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
-                        <input
-                          type="checkbox" 
-                          id={`prod-${prod.id}`}
-                          className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
-                          checked={formData.produtos_ids.includes(prod.id)}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setFormData(prev => ({
-                              ...prev,
-                              produtos_ids: checked 
-                                ? [...prev.produtos_ids, prod.id] 
-                                : prev.produtos_ids.filter(id => id !== prod.id)
-                            }));
-                          }}
-                        />
-                        <label htmlFor={`prod-${prod.id}`} className="flex-1 min-w-[160px] font-bold text-slate-800 cursor-pointer">
-                          {prod.nome}
-                          <span className="ml-2 text-[10px] text-slate-500 font-normal uppercase tracking-wide">({prod.tipo_embalagem})</span>
-                          {selecionado && calc.abaixo_custo && (
-                            <span className="block text-[10px] text-red-700 font-bold">⚠️ Preço abaixo do custo</span>
-                          )}
-                          {selecionado && calc.sem_preco && formData.modo_preco === 'MARGEM_CUSTO' && (
-                            <span className="block text-[10px] text-amber-700 font-bold">Sem custo apurado: usando o preço base</span>
-                          )}
-                        </label>
-                        <div className="text-right w-20">
-                          <div className="text-[10px] text-slate-400 font-bold uppercase">Custo</div>
-                          <div className="font-mono font-bold text-slate-600">{calc.custo > 0 ? formatarMoeda(calc.custo) : '—'}</div>
-                        </div>
-                        <div className="text-right w-20">
-                          <div className="text-[10px] text-slate-400 font-bold uppercase">Preço Base</div>
-                          <div className="font-mono font-bold text-slate-600">{formatarMoeda(calc.preco_base)}</div>
-                        </div>
-                        <div className="text-right w-24">
-                          <div className="text-[10px] text-slate-400 font-bold uppercase">{ehFixo ? 'Preço Fixo' : 'Exceção'}</div>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            disabled={!selecionado}
-                            value={valorCampo ?? ''}
-                            placeholder={ehFixo ? 'digitar' : 'regra'}
-                            onChange={(e) => alterarCampo(e.target.value)}
-                            title={ehFixo ? 'Preço do pacote nesta tabela' : 'Preço específico deste produto (sobrescreve a regra da tabela)'}
-                            className="w-full bg-white border border-slate-200 rounded px-1.5 py-0.5 text-right font-mono font-bold text-slate-900 disabled:bg-slate-100 focus:outline-none focus:border-emerald-700"
-                          />
-                        </div>
-                        <div className="text-right w-24">
-                          <div className="text-[10px] text-slate-400 font-bold uppercase">Na Tabela</div>
-                          <div className={`font-mono font-black ${calc.abaixo_custo ? 'text-red-700' : 'text-emerald-800'}`}>{formatarMoeda(calc.preco)}</div>
-                        </div>
-                        <div className="text-right w-16">
-                          <div className="text-[10px] text-slate-400 font-bold uppercase">Margem</div>
-                          <div className={`font-mono font-bold ${calc.markup_percentual === null ? 'text-slate-300' : calc.abaixo_custo ? 'text-red-700' : 'text-slate-800'}`}>
-                            {calc.markup_percentual === null ? '—' : `${calc.markup_percentual.toFixed(1)}%`}
-                          </div>
-                        </div>
-                      </div>
-                      );
-                    })
+              {/* GRADE: TODOS OS PRODUTOS (BRANCO = NÃO VENDIDO NESTA TABELA) */}
+              <div className="pt-4 border-t border-slate-200 space-y-2">
+                <div className="flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <label className="block font-bold text-slate-700 text-sm flex items-center gap-1.5">
+                      <LayoutList className="w-4 h-4 text-emerald-700" />
+                      Valor de cada produto nesta tabela
+                    </label>
+                    <span className="text-[11px] text-slate-500">
+                      <span className="font-mono font-bold tabular-nums text-emerald-800">{comPrecoNoForm}</span> de{' '}
+                      <span className="font-mono font-bold tabular-nums">{produtosEstoque.length}</span> produtos com preço • em branco = não vendido nesta tabela
+                    </span>
+                  </div>
+                  {produtosEstoque.length > 8 && (
+                    <div className="relative w-full sm:w-64">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={buscaProdutoForm}
+                        onChange={(e) => setBuscaProdutoForm(e.target.value)}
+                        placeholder="Filtrar produto ou categoria"
+                        className="w-full pl-7 pr-2 py-1.5 rounded-lg bg-white border border-slate-200 text-xs focus:outline-none focus:border-emerald-700"
+                      />
+                    </div>
                   )}
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Margem = (preço na tabela − custo) ÷ custo. {formData.modo_preco === 'PRECO_FIXO' ? '' : 'Exceção: preencha só se este produto tiver preço diferente da regra da tabela.'}
+
+                {produtosEstoque.length === 0 ? (
+                  <p className="text-slate-400 italic">Nenhum produto cadastrado. Cadastre em Produtos Acabados.</p>
+                ) : (
+                  <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-[380px] overflow-y-auto">
+                    <table className="w-full min-w-[720px] text-left border-collapse">
+                      <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                        <tr>
+                          <th className="py-2 px-3">Produto</th>
+                          <th className="py-2 px-3 w-[230px]">Preço na tabela</th>
+                          <th className="py-2 px-3 text-right">Custo</th>
+                          <th className="py-2 px-3 text-right">Imp. venda</th>
+                          <th className="py-2 px-3 text-right">Margem líquida</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {produtosNoForm.map(prod => {
+                          const calc = previaNoForm(prod);
+                          const unitario = Number(formData.precos_fixos[prod.id]) || 0;
+                          const alterar = (v: number | undefined) =>
+                            setFormData(prev => {
+                              const novo = { ...prev.precos_fixos };
+                              if (v === undefined) delete novo[prod.id];
+                              else novo[prod.id] = v;
+                              return { ...prev, precos_fixos: novo };
+                            });
+                          return (
+                            <tr key={prod.id} className={calc.margem_negativa ? 'bg-red-50/70' : calc.na_tabela ? '' : 'bg-slate-50/40'}>
+                              <td className="py-2 px-3">
+                                <div className={`font-bold ${calc.na_tabela ? 'text-slate-900' : 'text-slate-500'}`}>{prod.nome}</div>
+                                <div className="text-[10px] text-slate-400">
+                                  <span className="font-mono">{prod.codigo}</span>
+                                  {prod.categoria && <> • {prod.categoria}</>}
+                                  {' • '}
+                                  {calc.unidades > 1 ? `${calc.tipo_acondicionamento} c/ ${calc.unidades}` : calc.tipo_acondicionamento}
+                                </div>
+                              </td>
+                              <td className="py-2 px-3">
+                                <CampoPrecoTabela
+                                  unitario={unitario > 0 ? unitario : undefined}
+                                  unidades={calc.unidades}
+                                  tipoAcondicionamento={calc.tipo_acondicionamento}
+                                  mostrarUnitario={formData.mostrar_preco !== 'ACONDICIONAMENTO'}
+                                  mostrarCaixa={formData.mostrar_preco !== 'UNITARIO'}
+                                  alerta={calc.margem_negativa}
+                                  onChange={alterar}
+                                />
+                              </td>
+                              <td className="py-2 px-3 text-right font-mono tabular-nums text-slate-600">
+                                {calc.custo > 0 ? formatarMoeda(calc.custo) : '—'}
+                              </td>
+                              <td className="py-2 px-3 text-right font-mono tabular-nums text-slate-600">
+                                {calc.na_tabela ? formatarMoeda(calc.impostos_venda) : '—'}
+                              </td>
+                              <td className="py-2 px-3 text-right font-mono tabular-nums font-bold">
+                                {!calc.na_tabela ? (
+                                  <span className="text-slate-300 font-normal font-sans text-[10px]">não vendido</span>
+                                ) : (
+                                  <span className={calc.margem_negativa ? 'text-red-700 inline-flex items-center gap-1' : (calc.margem_liquida_percentual ?? 0) < 10 ? 'text-amber-700' : 'text-emerald-800'}>
+                                    {calc.margem_negativa && <AlertCircle className="w-3 h-3" />}
+                                    {formatarMoeda(calc.margem_liquida)}
+                                    <span className="text-[10px] font-semibold ml-1">({(calc.margem_liquida_percentual ?? 0).toFixed(1)}%)</span>
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {produtosNoForm.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="py-6 text-center text-slate-400">Nenhum produto encontrado para "{buscaProdutoForm}".</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <p className="text-[10px] text-slate-400">
+                  Digite o valor unitário ou o da caixa/fardo (o outro acompanha pela quantidade do acondicionamento do produto).
+                  Margem líquida = preço − custo do produto − impostos de venda do produto, por unidade.
                 </p>
               </div>
 
@@ -804,12 +824,9 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                 </div>
 
                 <div className="mt-3 pt-3 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span className="text-emerald-900 font-bold flex items-center gap-1.5">
-                    <BadgePercent className="w-4 h-4 text-emerald-700" />
-                    Regra de preço desta tabela ({nomeModoTabela(tabelaVisualizar.modo_preco)}):
-                  </span>
-                  <span className="font-mono font-black text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded border border-emerald-300">
-                    {descreverRegraTabela(tabelaVisualizar)}
+                  <span className="text-emerald-900 font-bold">Preços apresentados:</span>
+                  <span className="font-black text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded border border-emerald-300 uppercase tracking-wide text-[11px]">
+                    {nomeMostrarPreco(tabelaVisualizar)}
                   </span>
                 </div>
               </div>
@@ -831,76 +848,85 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                   </label>
                 </div>
 
-                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                {(() => {
+                  const verUn = mostraUnitario(tabelaVisualizar);
+                  const verCx = mostraAcondicionamento(tabelaVisualizar);
+                  const lista = produtosDaTabelaPreco(tabelaVisualizar);
+                  return (
+                <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-2xs">
                   <table className="w-full text-left border-collapse">
                     <thead className="bg-slate-100/80 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
                       <tr>
                         <th className="py-2.5 px-4">Código / Produto</th>
-                        <th className="py-2.5 px-3">Embalagem Individual</th>
-                        <th className="py-2.5 px-3">Acondicionamento</th>
+                        <th className="py-2.5 px-3">Peso / Acondicionamento</th>
                         {mostrarCustos && <th className="py-2.5 px-3 text-right print:hidden">Custo</th>}
-                        {mostrarCustos && <th className="py-2.5 px-3 text-right print:hidden">Preço Base</th>}
-                        <th className="py-2.5 px-3 text-right text-emerald-800">Preço Pacote</th>
-                        {mostrarCustos && <th className="py-2.5 px-3 text-right print:hidden">Margem s/ Custo</th>}
-                        <th className="py-2.5 px-4 text-right">Preço Fardo / Caixa Fechada</th>
+                        {mostrarCustos && <th className="py-2.5 px-3 text-right print:hidden">Imp. venda</th>}
+                        {mostrarCustos && <th className="py-2.5 px-3 text-right print:hidden">Margem líquida</th>}
+                        {verUn && <th className="py-2.5 px-3 text-right text-emerald-800">Preço Unitário</th>}
+                        {verCx && <th className="py-2.5 px-4 text-right text-emerald-800">Preço Caixa / Fardo</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
-                      {produtosDaTabelaPreco(tabelaVisualizar).map((p) => {
+                      {lista.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-slate-400">Nenhum produto com preço nesta tabela.</td>
+                        </tr>
+                      )}
+                      {lista.map((p) => {
                         const calc = calcularPrecoNaTabela(p, tabelaVisualizar);
-
                         return (
-                          <tr key={p.id} className={`transition-colors ${mostrarCustos && calc.abaixo_custo ? 'bg-red-50/70' : 'hover:bg-slate-50/60'}`}>
+                          <tr key={p.id} className={`transition-colors ${mostrarCustos && calc.margem_negativa ? 'bg-red-50/70' : 'hover:bg-slate-50/60'}`}>
                             <td className="py-3 px-4">
                               <div className="font-bold text-slate-900">{p.nome}</div>
                               <div className="text-[10px] text-slate-400 font-mono mt-0.5">{p.codigo}</div>
                             </td>
 
-                            <td className="py-3 px-3 font-medium text-slate-700">
-                              {p.tipo_embalagem}
-                            </td>
-
                             <td className="py-3 px-3">
+                              <span className="text-slate-600 font-medium mr-1.5">{pesoTexto(p)}</span>
                               <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-bold text-[10px] border border-slate-200">
                                 {calc.tipo_acondicionamento} {calc.unidades > 1 ? `c/ ${calc.unidades} un` : 'Avulso'}
                               </span>
                             </td>
 
                             {mostrarCustos && (
-                              <td className="py-3 px-3 text-right font-mono text-slate-600 print:hidden">
+                              <td className="py-3 px-3 text-right font-mono tabular-nums text-slate-600 print:hidden">
                                 {calc.custo > 0 ? formatarMoeda(calc.custo) : '—'}
                               </td>
                             )}
                             {mostrarCustos && (
-                              <td className="py-3 px-3 text-right font-mono text-slate-600 print:hidden">
-                                {formatarMoeda(calc.preco_base)}
+                              <td className="py-3 px-3 text-right font-mono tabular-nums text-slate-600 print:hidden">
+                                {formatarMoeda(calc.impostos_venda)}
                               </td>
                             )}
-
-                            <td className="py-3 px-3 text-right font-mono font-black text-emerald-950 bg-emerald-50/40">
-                              {formatarMoeda(calc.preco)}
-                              {mostrarCustos && calc.origem === 'EXCECAO' && (
-                                <span className="block text-[9px] font-sans font-bold text-amber-700 print:hidden">exceção</span>
-                              )}
-                            </td>
-
                             {mostrarCustos && (
-                              <td className={`py-3 px-3 text-right font-mono font-bold print:hidden ${calc.abaixo_custo ? 'text-red-700' : 'text-slate-800'}`}>
-                                {calc.markup_percentual === null ? '—' : `${calc.markup_percentual.toFixed(1)}%`}
-                                {calc.abaixo_custo && <span className="block text-[9px] font-sans">abaixo do custo</span>}
+                              <td className={`py-3 px-3 text-right font-mono tabular-nums font-bold print:hidden ${calc.margem_negativa ? 'text-red-700' : 'text-slate-800'}`}>
+                                {formatarMoeda(calc.margem_liquida)}
+                                <span className="block text-[9px] font-sans">
+                                  {calc.margem_negativa ? 'margem negativa' : `${(calc.margem_liquida_percentual ?? 0).toFixed(1)}%`}
+                                </span>
                               </td>
                             )}
 
-                            <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
-                              {formatarMoeda(calc.preco_acondicionamento)}
-                              <span className="text-[10px] text-slate-400 font-normal font-sans ml-1">/{calc.tipo_acondicionamento}</span>
-                            </td>
+                            {verUn && (
+                              <td className="py-3 px-3 text-right font-mono tabular-nums font-black text-emerald-950 bg-emerald-50/40">
+                                {formatarMoeda(calc.preco)}
+                              </td>
+                            )}
+
+                            {verCx && (
+                              <td className="py-3 px-4 text-right font-mono tabular-nums font-bold text-slate-900">
+                                {formatarMoeda(calc.preco_acondicionamento)}
+                                <span className="text-[10px] text-slate-400 font-normal font-sans ml-1">/{calc.unidades > 1 ? calc.tipo_acondicionamento : 'un'}</span>
+                              </td>
+                            )}
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
                 </div>
+                  );
+                })()}
               </div>
 
               {/* Condições Gerais e Observações Comerciais */}

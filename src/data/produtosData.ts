@@ -55,6 +55,7 @@ export interface ProdutoEstoque {
   estoque_atual_kg: number;
   estoque_minimo_kg: number;
   localizacao_galpao: string;
+  /** Legado: o preço de venda agora vem só das Tabelas de Preço (src/data/precosData.ts). Não usar para formar preço. */
   preco_unitario_venda: number;
   lote_recente: string;
   status: 'EM_ESTOQUE' | 'ESTOQUE_BAIXO' | 'CRITICO';
@@ -62,15 +63,15 @@ export interface ProdutoEstoque {
   receita_id?: string;
   receita_nome?: string;
   custo_materia_prima?: number; // Custo dos insumos vindo direto da receita
-  impostos?: ImpostoProduto[]; // Nova lista de impostos dinâmicos
+  impostos?: ImpostoProduto[]; // Base Custo/Fixo entram no custo; base Venda incidem sobre o preço de cada tabela
   impostos_percentual?: number; // % Impostos (total consolidado para legado)
-  impostos_valor?: number; // R$ Impostos (total consolidado)
+  impostos_valor?: number; // R$ dos impostos que entram no custo (base Custo/Fixo)
   custo_operacional?: number; // Outros custos operacionais (mão de obra, energia)
-  custo_total?: number; // Custo Total = Insumos + Impostos + Operacional
+  custo_total?: number; // Custo Total = Insumos + Operacional + Impostos de base Custo/Fixo
   tipo_acondicionamento?: 'Fardo' | 'Caixa' | 'Saco' | 'Avulso' | string; // se é Fardo ou Caixa
   unidades_por_acondicionamento?: number; // quantos que vai (ex: 10 ou 12)
-  preco_venda_acondicionamento?: number; // Preço do fardo ou caixa fechada
-  margem_lucro_percentual?: number; // Margem bruta (%)
+  preco_venda_acondicionamento?: number; // Legado (o preço agora vem das tabelas)
+  margem_lucro_percentual?: number; // Legado (a margem agora é por tabela)
 }
 
 export interface MateriaPrimaEstoque {
@@ -121,16 +122,21 @@ export interface TabelaPreco {
   codigo: string;
   nome: string;
   tipo: 'Atacado / Distribuidor' | 'Grandes Indústrias (Carga Fechada)' | 'Varejo / Padarias' | 'Pagamento à Vista (FOB)';
-  /** Como a tabela forma o preço (regra em src/data/precosData.ts → calcularPrecoNaTabela) */
+  /**
+   * A tabela tem só valor por produto: sempre 'PRECO_FIXO'. Os modos antigos (acréscimo/desconto e
+   * margem sobre o custo) são convertidos na leitura em valor fixo pelo preço que davam (congelados).
+   */
   modo_preco?: 'ACRESCIMO_DESCONTO' | 'MARGEM_CUSTO' | 'PRECO_FIXO';
-  /** ACRESCIMO_DESCONTO: % sobre o preço base (positivo = acréscimo, negativo = desconto) */
+  /** Legado (modo antigo ACRESCIMO_DESCONTO) */
   ajuste_percentual?: number;
-  /** MARGEM_CUSTO: % de margem aplicada sobre o custo atual do produto */
+  /** Legado (modo antigo MARGEM_CUSTO) */
   margem_percentual?: number;
-  /** PRECO_FIXO: preço do pacote digitado por produto (produto_id → preço) */
+  /** Preço da unidade/pacote por produto (produto_id → preço). Sem valor = produto não vendido nesta tabela. */
   precos_fixos?: Record<string, number>;
-  /** Exceção por produto em qualquer modo (produto_id → preço do pacote) */
+  /** Legado: exceções por produto (incorporadas em precos_fixos na migração) */
   excecoes_preco?: Record<string, number>;
+  /** O que a tabela mostra e vende: só unitário, só caixa/fardo ou ambos (padrão AMBOS) */
+  mostrar_preco?: 'UNITARIO' | 'ACONDICIONAMENTO' | 'AMBOS';
   /** Legado: tabelas antigas (migradas para ACRESCIMO_DESCONTO com −desconto) */
   desconto_padrao_percentual?: number;
   prazo_padrao: string;
@@ -238,7 +244,40 @@ export function recalcularCustoReceita(receita: ReceitaIndustrial, materias: Mat
   };
 }
 
-// Soma dos impostos de um produto (mesma regra do cadastro de produtos)
+// Impostos de base Venda incidem sobre o preço da tabela; os demais (Custo/Fixo) entram no custo do produto.
+export const impostoSobreVenda = (imp: ImpostoProduto) => imp.base === 'Venda';
+
+/** R$ dos impostos que entram no custo (base Custo ou Fixo). */
+export function calcularImpostosCusto(impostos: ImpostoProduto[] | undefined, baseCusto: number): number {
+  return (impostos || []).filter(i => !impostoSobreVenda(i)).reduce((acc, imp) => {
+    if (imp.tipo === 'Porcentagem') return acc + (imp.base === 'Custo' ? (baseCusto * (Number(imp.valor) || 0)) / 100 : 0);
+    return acc + (Number(imp.valor) || 0);
+  }, 0);
+}
+
+/** R$ dos impostos de base Venda sobre um preço de tabela (percentual × preço; tipo Valor soma o valor). */
+export function calcularImpostosVenda(impostos: ImpostoProduto[] | undefined, preco: number): number {
+  return (impostos || []).filter(impostoSobreVenda).reduce((acc, imp) => {
+    if (imp.tipo === 'Porcentagem') return acc + ((Number(preco) || 0) * (Number(imp.valor) || 0)) / 100;
+    return acc + (Number(imp.valor) || 0);
+  }, 0);
+}
+
+/**
+ * Embalagem primária derivada do peso unitário (o campo saiu do formulário; mantido para as telas que
+ * leem tipo_embalagem). Ex.: 1 → "Pacote 1kg", 0,5 → "Pacote 500g", 25 → "Saco 25kg", 1000 → "Big Bag 1000kg".
+ */
+export function derivarTipoEmbalagem(pesoKg: number): string {
+  const peso = Number(pesoKg) || 0;
+  if (peso <= 0) return 'Pacote';
+  const fmt = (n: number) => String(Math.round(n * 1000) / 1000).replace('.', ',');
+  if (peso >= 1000) return `Big Bag ${fmt(peso)}kg`;
+  if (peso >= 5) return `Saco ${fmt(peso)}kg`;
+  if (peso < 1) return `Pacote ${fmt(peso * 1000)}g`;
+  return `Pacote ${fmt(peso)}kg`;
+}
+
+// Legado: soma de todos os impostos (base Venda sobre precoUnitario). Preferir calcularImpostosCusto/Venda.
 export function calcularImpostosProduto(impostos: ImpostoProduto[] | undefined, precoUnitario: number, baseCusto: number): number {
   return (impostos || []).reduce((acc, imp) => {
     if (imp.tipo === 'Porcentagem') {
@@ -250,32 +289,39 @@ export function calcularImpostosProduto(impostos: ImpostoProduto[] | undefined, 
 }
 
 // Recalcula custo/margem do produto a partir da receita atual. Receita excluída não deixa vínculo órfão.
+// Custo do produto = insumos + operacional + impostos de base Custo/Fixo. Impostos de base Venda ficam
+// para a margem de cada tabela de preço (calculados sobre o preço da tabela).
 export function recalcularCustoProduto(
   produto: ProdutoEstoque,
   receitas: ReceitaIndustrial[],
   materias: MateriaPrimaEstoque[]
 ): ProdutoEstoque {
-  if (!produto.receita_id) return produto;
-  const rec = receitas.find(r => r.id === produto.receita_id);
-  if (!rec) {
-    // Receita foi excluída: remove o vínculo e mantém o último custo conhecido
-    return { ...produto, receita_id: undefined, receita_nome: undefined };
+  let base: ProdutoEstoque = produto;
+  if (produto.receita_id) {
+    const rec = receitas.find(r => r.id === produto.receita_id);
+    if (!rec) {
+      // Receita foi excluída: remove o vínculo e mantém o último custo conhecido
+      return { ...produto, receita_id: undefined, receita_nome: undefined };
+    }
+    const recAtual = recalcularCustoReceita(rec, materias);
+    base = {
+      ...produto,
+      receita_nome: rec.nome || rec.produto_nome || produto.receita_nome,
+      custo_materia_prima: arred(recAtual.custo_por_pacote || 0, 2)
+    };
+  } else if (!(produto.impostos && produto.impostos.length > 0)) {
+    return produto;
   }
-  const recAtual = recalcularCustoReceita(rec, materias);
-  const custoMp = arred(recAtual.custo_por_pacote || 0, 2);
-  const custoOp = Number(produto.custo_operacional) || 0;
-  const preco = Number(produto.preco_unitario_venda) || 0;
-  const impostosValor = produto.impostos && produto.impostos.length > 0
-    ? calcularImpostosProduto(produto.impostos, preco, custoMp + custoOp)
-    : (Number(produto.impostos_valor) || 0);
-  const custoTotal = custoMp + custoOp + impostosValor;
+  const custoMp = Number(base.custo_materia_prima) || 0;
+  const custoOp = Number(base.custo_operacional) || 0;
+  if (!base.receita_id && custoMp + custoOp <= 0) return base; // sem dados para recompor: mantém o custo gravado
+  const impostosCusto = base.impostos && base.impostos.length > 0
+    ? calcularImpostosCusto(base.impostos, custoMp + custoOp)
+    : (Number(base.impostos_valor) || 0);
   return {
-    ...produto,
-    receita_nome: rec.nome || rec.produto_nome || produto.receita_nome,
-    custo_materia_prima: custoMp,
-    impostos_valor: arred(impostosValor, 2),
-    custo_total: arred(custoTotal, 2),
-    margem_lucro_percentual: preco > 0 ? arred(((preco - custoTotal) / preco) * 100, 1) : 0
+    ...base,
+    impostos_valor: arred(impostosCusto, 2),
+    custo_total: arred(custoMp + custoOp + impostosCusto, 2)
   };
 }
 
@@ -595,15 +641,75 @@ export function salvarFichasTecnicas(dados: FichaTecnica[]): void {
 // STORAGE HELPERS PARA TABELAS DE PREÇO
 const STORAGE_KEY_TABELAS_PRECO = 'grupo_eno_tabelas_preco_v1';
 
-// Migração: tabela antiga (só desconto_padrao_percentual) vira ACRESCIMO_DESCONTO com −desconto
-function migrarTabelaPreco(t: TabelaPreco): TabelaPreco {
-  if (!t || t.modo_preco) return t;
-  const desconto = Number(t.desconto_padrao_percentual) || 0;
-  return { ...t, modo_preco: 'ACRESCIMO_DESCONTO', ajuste_percentual: desconto ? -desconto : 0 };
+const precisaMigrarTabela = (t: TabelaPreco) =>
+  !!t && (
+    t.modo_preco !== 'PRECO_FIXO' ||
+    Object.keys(t.excecoes_preco || {}).length > 0 ||
+    !t.mostrar_preco ||
+    !Array.isArray(t.produtos_ids) ||
+    t.ajuste_percentual !== undefined ||
+    t.margem_percentual !== undefined ||
+    t.desconto_padrao_percentual !== undefined
+  );
+
+/**
+ * Migração para "tabela só com valor": congela o preço que cada modo antigo formava (mesma regra da
+ * antiga calcularPrecoNaTabela, inclusive o custo antigo que somava os impostos de venda).
+ * Exceções por produto prevalecem. Produto sem preço formado sai da tabela (branco = não vendido).
+ */
+function migrarTabelaPreco(t: TabelaPreco, produtos: ProdutoEstoque[] | null): TabelaPreco {
+  if (!precisaMigrarTabela(t)) return t;
+  const r2 = (v: number) => Math.round((Number(v) || 0) * 100) / 100;
+  const modo = t.modo_preco || 'ACRESCIMO_DESCONTO';
+  const ajuste = t.ajuste_percentual ?? -(Number(t.desconto_padrao_percentual) || 0);
+  // Tabela antiga sem lista de produtos mostrava todos
+  const ids = Array.isArray(t.produtos_ids) ? t.produtos_ids : (produtos || []).map(p => p.id);
+  const precos: Record<string, number> = {};
+  ids.forEach(id => {
+    const excecao = Number(t.excecoes_preco?.[id]) || 0;
+    const fixo = Number(t.precos_fixos?.[id]) || 0;
+    const p = produtos?.find(x => x.id === id);
+    const precoBase = r2(Number(p?.preco_unitario_venda) || 0);
+    let preco = 0;
+    if (excecao > 0) preco = excecao;
+    else if (modo === 'PRECO_FIXO') preco = fixo > 0 ? fixo : precoBase;
+    else if (modo === 'MARGEM_CUSTO') {
+      const mp = Number(p?.custo_materia_prima) || 0;
+      const op = Number(p?.custo_operacional) || 0;
+      const custoAntigo = p && p.impostos && p.impostos.length > 0
+        ? mp + op + calcularImpostosProduto(p.impostos, Number(p.preco_unitario_venda) || 0, mp + op)
+        : Number(p?.custo_total) || mp + op;
+      preco = custoAntigo > 0 ? r2(custoAntigo) * (1 + (Number(t.margem_percentual) || 0) / 100) : precoBase;
+    } else preco = precoBase * (1 + (Number(ajuste) || 0) / 100);
+    if (preco > 0) precos[id] = r2(preco);
+  });
+  return {
+    ...t,
+    modo_preco: 'PRECO_FIXO',
+    precos_fixos: precos,
+    excecoes_preco: {},
+    produtos_ids: Object.keys(precos),
+    mostrar_preco: t.mostrar_preco || 'AMBOS',
+    ajuste_percentual: undefined,
+    margem_percentual: undefined,
+    desconto_padrao_percentual: undefined
+  };
 }
 
 export function carregarTabelasPreco(): TabelaPreco[] {
-  return lerTabelasPrecoBruto().map(migrarTabelaPreco);
+  const brutas = lerTabelasPrecoBruto();
+  if (!brutas.some(precisaMigrarTabela)) return brutas;
+  const produtos = typeof window === 'undefined' ? null : carregarEstoqueProdutos();
+  const migradas = brutas.map(t => migrarTabelaPreco(t, produtos));
+  // Congela uma vez só (grava sem evento para não gerar laço nas telas que escutam a atualização)
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY_TABELAS_PRECO, JSON.stringify(migradas));
+    } catch {
+      /* sem espaço: segue com a versão migrada em memória */
+    }
+  }
+  return migradas;
 }
 
 function lerTabelasPrecoBruto(): TabelaPreco[] {

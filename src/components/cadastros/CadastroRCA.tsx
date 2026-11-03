@@ -63,19 +63,20 @@ import {
 } from '../../data/cadastrosData';
 import { carregarClientes, salvarClientes } from '../../data/clientesData';
 import { carregarPedidosVenda } from '../../data/pedidosVendaData';
-import { carregarEstoqueProdutos, carregarTabelasPreco } from '../../data/produtosData';
+import { carregarTabelasPreco } from '../../data/produtosData';
+import { carregarCategoriasProduto, EVENTO_CATEGORIAS_PRODUTO } from '../../data/categoriasProdutoData';
 import { baixarTituloComissao, sincronizarTitulosComissao, DIA_VENCIMENTO_COMISSAO_PADRAO } from '../../data/comissoesData';
 import { useListaPersistida } from '../../lib/useListaPersistida';
 import { formatarDataBR, hojeISO } from '../../lib/datas';
 import { ultimosMesesReferencia } from '../../lib/mesesReferencia';
 
 /**
- * Grupos de Produto para comissão = categorias reais do cadastro de produtos (ProdutoEstoque.categoria).
- * O id do grupo é a própria categoria (é o que o cálculo da comissão compara).
+ * Grupos de Produto para comissão = lista de categorias de produto (cadastro de produtos: botão + / gerenciar),
+ * que já inclui as categorias em uso pelos produtos. O id do grupo é a própria categoria
+ * (é o que o cálculo da comissão compara).
  */
 export function obterGruposProdutoComissao(): { id: string; nome: string }[] {
-  const cats = Array.from(new Set(carregarEstoqueProdutos().map(p => String(p.categoria || '').trim()).filter(Boolean)));
-  return cats.sort((a, b) => a.localeCompare(b, 'pt-BR')).map(c => ({ id: c, nome: c }));
+  return carregarCategoriasProduto().map(c => ({ id: c, nome: c }));
 }
 
 /** Tabelas de Preço reais (Produtos > Tabelas de Preço) */
@@ -110,7 +111,9 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
     window.addEventListener('sistema_reset_updated', h);
     window.addEventListener('financeiro_updated', h);
     window.addEventListener('produtos_updated', h);
+    window.addEventListener(EVENTO_CATEGORIAS_PRODUTO, h);
     return () => {
+      window.removeEventListener(EVENTO_CATEGORIAS_PRODUTO, h);
       window.removeEventListener('clientes_updated', h);
       window.removeEventListener('pedidos_venda_updated', h);
       window.removeEventListener('sistema_reset_updated', h);
@@ -294,7 +297,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
   const handleAdicionarComissaoGrupo = () => {
     const grupo = gruposProduto.find(g => g.id === (novoGrupoId || gruposProduto[0]?.id));
     if (!grupo) {
-      alert('Cadastre a categoria nos produtos para usar comissão por grupo.');
+      alert('Cadastre uma categoria de produto (cadastro de produtos, botão + ao lado de Categoria) para usar comissão por grupo.');
       return;
     }
     

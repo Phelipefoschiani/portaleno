@@ -1,53 +1,55 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Tag, AlertCircle, X, Check, Wand2 } from 'lucide-react';
-import { carregarTabelasPreco, TabelaPreco } from '../../data/produtosData';
+import { Plus, Tag, AlertCircle, X, Check } from 'lucide-react';
+import { carregarTabelasPreco, ImpostoProduto, TabelaPreco } from '../../data/produtosData';
 import {
-  MODOS_TABELA_PRECO,
-  ModoTabelaPreco,
+  OPCOES_MOSTRAR_PRECO,
+  MostrarPrecoTabela,
+  analisarPreco,
   criarTabelaRapida,
-  descreverRegraTabela,
-  nomeModoTabela,
-  precoPelaRegra,
+  mostraAcondicionamento,
+  mostraUnitario,
+  nomeMostrarPreco,
   tabelaPrecoAtiva
 } from '../../data/precosData';
 import { formatarMoeda } from '../../data/financeiroData';
+import { CampoPrecoTabela } from './CampoPrecoTabela';
 
 interface Props {
-  produtoId?: string;
   custoUnitario: number;
-  precoBase: number;
+  impostos: ImpostoProduto[];
+  unidades: number;
+  tipoAcondicionamento: string;
   valor: Record<string, number>;
   onChange: (mapa: Record<string, number>) => void;
 }
 
+/** Tabelas que aparecem no cadastro do produto (as ativas). O salvar do produto usa a mesma lista. */
+export const tabelasDoCadastroDeProduto = () => carregarTabelasPreco().filter(tabelaPrecoAtiva);
+
 /**
  * Preço do produto em cada tabela de preço ativa (usado no cadastro de produtos).
  * Não grava sozinho: só chama onChange. O salvar do produto chama salvarPrecosDoProduto.
- * Tabela com campo em branco não recebe o produto.
+ * Tabela com campo em branco não vende o produto.
  */
-export function PrecosProdutoTabelas({ produtoId, custoUnitario, precoBase, valor, onChange }: Props) {
-  const [tabelas, setTabelas] = useState<TabelaPreco[]>(() => carregarTabelasPreco().filter(tabelaPrecoAtiva));
+export function PrecosProdutoTabelas({ custoUnitario, impostos, unidades, tipoAcondicionamento, valor, onChange }: Props) {
+  const [tabelas, setTabelas] = useState<TabelaPreco[]>(() => tabelasDoCadastroDeProduto());
   const [criando, setCriando] = useState(false);
   const [novoNome, setNovoNome] = useState('');
-  const [novoModo, setNovoModo] = useState<ModoTabelaPreco>('MARGEM_CUSTO');
-  const [novoPercentual, setNovoPercentual] = useState<number>(30);
+  const [novoMostrar, setNovoMostrar] = useState<MostrarPrecoTabela>('AMBOS');
 
   useEffect(() => {
-    const h = () => setTabelas(carregarTabelasPreco().filter(tabelaPrecoAtiva));
+    const h = () => setTabelas(tabelasDoCadastroDeProduto());
     window.addEventListener('tabelas_preco_updated', h);
     return () => window.removeEventListener('tabelas_preco_updated', h);
   }, []);
 
   const custo = Number(custoUnitario) || 0;
-  const base = Number(precoBase) || 0;
+  const un = unidades > 0 ? unidades : 1;
 
-  const sugerido = (t: TabelaPreco) => precoPelaRegra(t, custo, base, produtoId);
-
-  const alterarPreco = (tabelaId: string, texto: string) => {
+  const alterarPreco = (tabelaId: string, unitario: number | undefined) => {
     const mapa = { ...valor };
-    const n = parseFloat(String(texto).replace(',', '.'));
-    if (texto === '' || !Number.isFinite(n)) delete mapa[tabelaId];
-    else mapa[tabelaId] = n;
+    if (unitario === undefined) delete mapa[tabelaId];
+    else mapa[tabelaId] = unitario;
     onChange(mapa);
   };
 
@@ -56,50 +58,38 @@ export function PrecosProdutoTabelas({ produtoId, custoUnitario, precoBase, valo
       alert('Informe o nome da nova tabela de preço.');
       return;
     }
-    const nova = criarTabelaRapida(novoNome, novoModo, novoPercentual);
-    setTabelas(carregarTabelasPreco().filter(tabelaPrecoAtiva));
-    const preco = precoPelaRegra(nova, custo, base, produtoId).preco;
-    if (preco > 0) onChange({ ...valor, [nova.id]: preco });
+    criarTabelaRapida(novoNome, novoMostrar);
+    setTabelas(tabelasDoCadastroDeProduto());
     setCriando(false);
     setNovoNome('');
+    setNovoMostrar('AMBOS');
   };
 
   const formNovaTabela = (
     <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg grid grid-cols-1 sm:grid-cols-12 gap-2 items-end text-xs">
-      <div className="sm:col-span-5">
+      <div className="sm:col-span-6">
         <label className="block font-bold text-slate-700 mb-1">Nome da tabela</label>
         <input
           type="text"
+          autoFocus
           value={novoNome}
           onChange={(e) => setNovoNome(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCriar(); } }}
           placeholder="Ex: Atacado Região Sul"
           className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
         />
       </div>
-      <div className="sm:col-span-4">
-        <label className="block font-bold text-slate-700 mb-1">Como forma o preço</label>
+      <div className="sm:col-span-5">
+        <label className="block font-bold text-slate-700 mb-1">Mostrar preço</label>
         <select
-          value={novoModo}
-          onChange={(e) => setNovoModo(e.target.value as ModoTabelaPreco)}
+          value={novoMostrar}
+          onChange={(e) => setNovoMostrar(e.target.value as MostrarPrecoTabela)}
           className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:outline-none focus:border-emerald-700 cursor-pointer"
         >
-          {MODOS_TABELA_PRECO.map(m => (
-            <option key={m.id} value={m.id}>{m.nome}</option>
+          {OPCOES_MOSTRAR_PRECO.map(o => (
+            <option key={o.id} value={o.id}>{o.nome}</option>
           ))}
         </select>
-      </div>
-      <div className="sm:col-span-2">
-        <label className="block font-bold text-slate-700 mb-1">
-          {novoModo === 'MARGEM_CUSTO' ? 'Margem %' : novoModo === 'ACRESCIMO_DESCONTO' ? '± %' : '—'}
-        </label>
-        <input
-          type="number"
-          step="0.5"
-          disabled={novoModo === 'PRECO_FIXO'}
-          value={novoModo === 'PRECO_FIXO' ? '' : novoPercentual}
-          onChange={(e) => setNovoPercentual(parseFloat(e.target.value) || 0)}
-          className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono font-bold text-center text-slate-800 focus:outline-none focus:border-emerald-700 disabled:bg-slate-100"
-        />
       </div>
       <div className="sm:col-span-1 flex gap-1">
         <button
@@ -119,11 +109,14 @@ export function PrecosProdutoTabelas({ produtoId, custoUnitario, precoBase, valo
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
-      {novoModo === 'ACRESCIMO_DESCONTO' && (
-        <p className="sm:col-span-12 text-[10px] text-slate-500">Positivo = acréscimo sobre o preço base; negativo = desconto.</p>
-      )}
+      <p className="sm:col-span-12 text-[10px] text-slate-500">A tabela é criada vigente a partir de hoje; digite o preço deste produto nela logo abaixo.</p>
     </div>
   );
+
+  const algumaNegativa = tabelas.some(t => {
+    const v = Number(valor[t.id]) || 0;
+    return v > 0 && analisarPreco(v, custo, impostos).margem_negativa;
+  });
 
   return (
     <div className="space-y-2 text-xs">
@@ -148,7 +141,7 @@ export function PrecosProdutoTabelas({ produtoId, custoUnitario, precoBase, valo
 
       {tabelas.length === 0 && !criando ? (
         <div className="p-3 bg-slate-50 border border-dashed border-slate-300 rounded-lg flex flex-wrap items-center justify-between gap-2">
-          <span className="text-slate-500 font-medium">Nenhuma tabela de preço — crie a primeira.</span>
+          <span className="text-slate-500 font-medium">Nenhuma tabela de preço ativa. O produto só é vendido com preço em uma tabela.</span>
           <button
             type="button"
             onClick={() => setCriando(true)}
@@ -160,65 +153,53 @@ export function PrecosProdutoTabelas({ produtoId, custoUnitario, precoBase, valo
         </div>
       ) : (
         tabelas.length > 0 && (
-          <div className="border border-slate-200 rounded-lg overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
+          <div className="border border-slate-200 rounded-lg overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left border-collapse">
+              <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
                 <tr>
-                  <th className="py-2 px-3">Tabela / Regra</th>
-                  <th className="py-2 px-3 text-right">Sugerido</th>
-                  <th className="py-2 px-3 text-right">Preço na tabela</th>
-                  <th className="py-2 px-3 text-right">Margem s/ custo</th>
+                  <th className="py-2 px-3">Tabela</th>
+                  <th className="py-2 px-3 w-[220px]">Preço na tabela</th>
+                  <th className="py-2 px-3 text-right">Custo</th>
+                  <th className="py-2 px-3 text-right">Imp. venda</th>
+                  <th className="py-2 px-3 text-right">Margem líquida</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {tabelas.map(t => {
-                  const sug = sugerido(t);
-                  const atual = valor[t.id];
-                  const temValor = atual !== undefined && Number.isFinite(atual);
-                  const precoEfetivo = temValor ? Number(atual) : 0;
-                  const margem = custo > 0 && precoEfetivo > 0 ? ((precoEfetivo - custo) / custo) * 100 : null;
-                  const abaixo = custo > 0 && temValor && precoEfetivo < custo;
+                  const atual = Number(valor[t.id]) || 0;
+                  const tem = atual > 0;
+                  const a = analisarPreco(atual, custo, impostos);
                   return (
-                    <tr key={t.id} className={abaixo ? 'bg-red-50/60' : ''}>
+                    <tr key={t.id} className={tem && a.margem_negativa ? 'bg-red-50/60' : ''}>
                       <td className="py-2 px-3">
                         <div className="font-bold text-slate-900">{t.nome}</div>
-                        <div className="text-[10px] text-slate-400">{nomeModoTabela(t.modo_preco)} • {descreverRegraTabela(t)}</div>
+                        <div className="text-[10px] text-slate-400">Mostra: {nomeMostrarPreco(t)}</div>
                       </td>
-                      <td className="py-2 px-3 text-right font-mono text-slate-600">
-                        {sug.sem_preco && t.modo_preco !== 'ACRESCIMO_DESCONTO' ? (
-                          <span className="text-[10px] text-amber-700 font-sans">
-                            {t.modo_preco === 'MARGEM_CUSTO' ? 'sem custo apurado' : 'digite o preço'}
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => onChange({ ...valor, [t.id]: sug.preco })}
-                            className="inline-flex items-center gap-1 hover:text-emerald-800 cursor-pointer"
-                            title="Usar o preço sugerido pela regra da tabela"
-                          >
-                            <Wand2 className="w-3 h-3" />
-                            {formatarMoeda(sug.preco)}
-                          </button>
-                        )}
-                      </td>
-                      <td className="py-2 px-3 text-right">
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={temValor ? atual : ''}
-                          placeholder="não vende"
-                          onChange={(e) => alterarPreco(t.id, e.target.value)}
-                          className={`w-28 bg-white border rounded px-2 py-1 text-right font-mono font-bold focus:outline-none focus:border-emerald-700 ${abaixo ? 'border-red-400 text-red-700' : 'border-slate-200 text-slate-900'}`}
+                      <td className="py-2 px-3">
+                        <CampoPrecoTabela
+                          unitario={tem ? atual : undefined}
+                          unidades={un}
+                          tipoAcondicionamento={tipoAcondicionamento}
+                          mostrarUnitario={mostraUnitario(t)}
+                          mostrarCaixa={mostraAcondicionamento(t)}
+                          alerta={tem && a.margem_negativa}
+                          onChange={(v) => alterarPreco(t.id, v)}
                         />
                       </td>
-                      <td className="py-2 px-3 text-right font-mono font-bold">
-                        {margem === null ? (
-                          <span className="text-slate-300 font-normal">—</span>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums text-slate-600">
+                        {custo > 0 ? formatarMoeda(custo) : '—'}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums text-slate-600">
+                        {tem ? formatarMoeda(a.impostos_venda) : '—'}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono tabular-nums font-bold">
+                        {!tem ? (
+                          <span className="text-slate-300 font-normal font-sans text-[10px]">não vendido</span>
                         ) : (
-                          <span className={abaixo ? 'text-red-700 inline-flex items-center gap-1' : margem < 10 ? 'text-amber-700' : 'text-emerald-800'}>
-                            {abaixo && <AlertCircle className="w-3 h-3" />}
-                            {margem.toFixed(1)}%
+                          <span className={a.margem_negativa ? 'text-red-700 inline-flex items-center gap-1' : (a.margem_liquida_percentual ?? 0) < 10 ? 'text-amber-700' : 'text-emerald-800'}>
+                            {a.margem_negativa && <AlertCircle className="w-3 h-3" />}
+                            {formatarMoeda(a.margem_liquida)}
+                            <span className="text-[10px] font-semibold ml-1">({(a.margem_liquida_percentual ?? 0).toFixed(1)}%)</span>
                           </span>
                         )}
                       </td>
@@ -232,14 +213,16 @@ export function PrecosProdutoTabelas({ produtoId, custoUnitario, precoBase, valo
       )}
 
       {custo <= 0 && tabelas.length > 0 && (
-        <p className="text-[10px] text-amber-700">Produto sem custo apurado: a margem não pode ser calculada.</p>
+        <p className="text-[10px] text-amber-700">Produto sem custo apurado: a margem considera custo zero.</p>
       )}
-      {Object.keys(valor).some(id => custo > 0 && Number(valor[id]) < custo) && (
+      {algumaNegativa && (
         <p className="text-[10px] text-red-700 font-bold flex items-center gap-1">
-          <AlertCircle className="w-3 h-3" /> Há tabela com preço abaixo do custo do produto.
+          <AlertCircle className="w-3 h-3" /> Há tabela com margem líquida negativa (preço não cobre custo + impostos de venda).
         </p>
       )}
-      <p className="text-[10px] text-slate-400">Deixe o preço em branco nas tabelas em que o produto não é vendido.</p>
+      <p className="text-[10px] text-slate-400">
+        Margem líquida = preço − custo − impostos de venda (por unidade). Deixe em branco nas tabelas em que o produto não é vendido.
+      </p>
     </div>
   );
 }
