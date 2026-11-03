@@ -1,5 +1,6 @@
 // Comissões de RCA do Grupo ENO
-// - Cálculo por item conforme o modelo do RCA (geral, por grupo, por cliente, misto: cliente > grupo > padrão).
+// - Cálculo por item conforme o modelo do RCA (geral = pela venda, por produto, por grupo, por cliente,
+//   misto: cliente > grupo > padrão). Por produto: % do produto; produto sem regra usa o % padrão.
 //   Grupo de produto = categoria do produto (ProdutoEstoque.categoria).
 // - Ao FATURAR o pedido a comissão vira Conta a Pagar ao RCA (um título por pedido: 'pag_com_<pedidoId>').
 // - Pagamento ("Pago (PIX)") baixa o título e movimenta o caixa ('pagar:<id>').
@@ -16,7 +17,7 @@ import {
 } from './financeiroData';
 import { hojeISO, paraISO, parseData } from '../lib/datas';
 
-export type RegraComissao = 'Por Cliente' | 'Por Grupo' | 'Taxa Geral';
+export type RegraComissao = 'Por Cliente' | 'Por Grupo' | 'Por Produto' | 'Taxa Geral';
 export type RegraComissaoPedido = RegraComissao | 'Mista' | 'Sem RCA';
 
 export interface ItemParaComissao {
@@ -48,6 +49,13 @@ export interface CamposComissaoPedido {
   comissao_itens?: ComissaoItemCalculada[];
 }
 
+/** Rótulo de tela da regra gravada ('Taxa Geral' = comissão pela venda). */
+export function rotuloRegraComissao(regra?: string): string {
+  if (!regra || regra === 'Taxa Geral') return 'Pela venda';
+  if (regra === 'Mista') return 'Mista (mais de uma regra)';
+  return regra;
+}
+
 export const PREFIXO_TITULO_COMISSAO = 'pag_com_';
 export const DIA_VENCIMENTO_COMISSAO_PADRAO = 10;
 
@@ -74,6 +82,14 @@ export function calcularComissaoItem(
   let percentual = padrao;
   let regra: RegraComissao = 'Taxa Geral';
   const modelo = rca.modelo_comissao || 'geral';
+  if (modelo === 'por_produto') {
+    const regraProduto = (rca.comissoes_por_produto || []).find(p => String(p.produto_id) === String(item.produto_id));
+    if (regraProduto) {
+      percentual = Number(regraProduto.percentual) || 0;
+      regra = 'Por Produto';
+    }
+    return { produto_id: item.produto_id, grupo, base, percentual, valor: r2((base * percentual) / 100), regra };
+  }
   const usarCliente = (modelo === 'por_cliente' || modelo === 'misto') && !!regraCliente;
   const usarGrupo = !usarCliente && (modelo === 'por_grupo' || modelo === 'misto') && !!regraGrupo;
   if (usarCliente) {

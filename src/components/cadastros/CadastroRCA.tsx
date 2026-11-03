@@ -57,15 +57,16 @@ import {
   ModeloComissao,
   ComissaoGrupo,
   ComissaoCliente,
+  ComissaoProduto,
   ClienteVinculado,
   RCA,
   VendaComissaoRCA,
 } from '../../data/cadastrosData';
 import { carregarClientes, salvarClientes } from '../../data/clientesData';
 import { carregarPedidosVenda } from '../../data/pedidosVendaData';
-import { carregarTabelasPreco } from '../../data/produtosData';
+import { carregarTabelasPreco, carregarEstoqueProdutos } from '../../data/produtosData';
 import { carregarCategoriasProduto, EVENTO_CATEGORIAS_PRODUTO } from '../../data/categoriasProdutoData';
-import { baixarTituloComissao, sincronizarTitulosComissao, DIA_VENCIMENTO_COMISSAO_PADRAO } from '../../data/comissoesData';
+import { baixarTituloComissao, sincronizarTitulosComissao, DIA_VENCIMENTO_COMISSAO_PADRAO, rotuloRegraComissao } from '../../data/comissoesData';
 import { useListaPersistida } from '../../lib/useListaPersistida';
 import { formatarDataBR, hojeISO } from '../../lib/datas';
 import { ultimosMesesReferencia } from '../../lib/mesesReferencia';
@@ -87,6 +88,7 @@ export type {
   ModeloComissao,
   ComissaoGrupo,
   ComissaoCliente,
+  ComissaoProduto,
   ClienteVinculado,
   RCA,
   VendaComissaoRCA,
@@ -127,6 +129,12 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
     sincronizarTitulosComissao(pedidosVenda);
   }, [pedidosVenda]);
   const gruposProduto = useMemo(() => obterGruposProdutoComissao(), [versaoDados]);
+  const produtosCadastrados = useMemo(
+    () => carregarEstoqueProdutos()
+      .map(p => ({ id: String(p.id), nome: p.nome || String(p.id), codigo: p.codigo || '' }))
+      .sort((a, b) => a.nome.localeCompare(b.nome)),
+    [versaoDados]
+  );
   const clientesDisponiveis = useMemo<ClienteVinculado[]>(
     () => montarClientesVinculados(carregarClientes(), pedidosVenda),
     [versaoDados, pedidosVenda]
@@ -153,6 +161,9 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
   const [novoGrupoPercentual, setNovoGrupoPercentual] = useState<number>(3.5);
   const [novoClienteId, setNovoClienteId] = useState<string>('');
   const [novoClientePercentual, setNovoClientePercentual] = useState<number>(3.0);
+  const [novoProdutoId, setNovoProdutoId] = useState<string>('');
+  const [novoProdutoPercentual, setNovoProdutoPercentual] = useState<number>(3.0);
+  const [mostrarModelosAvancados, setMostrarModelosAvancados] = useState(false);
 
   // Formulário de Edição / Criação
   const [formData, setFormData] = useState<Partial<RCA>>({
@@ -264,6 +275,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
       comissao_padrao_percentual: 3.5,
       comissoes_por_grupo: [],
       comissoes_por_cliente: [],
+      comissoes_por_produto: [],
       clientes_vinculados_ids: [],
       tipo_chave_pix: 'CPF',
       estados_atuacao: ['PR'],
@@ -278,6 +290,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
         complemento: ''
       }
     });
+    setMostrarModelosAvancados(false);
     setIsCreating(true);
     setIsEditing(true);
   };
@@ -287,11 +300,42 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
       ...rca,
       comissoes_por_grupo: [...(rca.comissoes_por_grupo || [])],
       comissoes_por_cliente: [...(rca.comissoes_por_cliente || [])],
+      comissoes_por_produto: [...(rca.comissoes_por_produto || [])],
       clientes_vinculados_ids: clientesDisponiveis.filter(c => c.vendedor_id === rca.id).map(c => c.id),
       endereco: { ...rca.endereco }
     });
+    setMostrarModelosAvancados(['por_grupo', 'por_cliente', 'misto'].includes(rca.modelo_comissao));
     setIsCreating(false);
     setIsEditing(true);
+  };
+
+  const handleAdicionarComissaoProduto = () => {
+    const prod = produtosCadastrados.find(p => p.id === (novoProdutoId || produtosCadastrados.find(x => !(formData.comissoes_por_produto || []).some(c => String(c.produto_id) === x.id))?.id));
+    if (!prod) {
+      alert('Cadastre produtos (Produtos > Estoque) para usar comissão por produto.');
+      return;
+    }
+    if ((formData.comissoes_por_produto || []).some(c => String(c.produto_id) === prod.id)) {
+      alert('Este produto já possui comissão cadastrada. Ajuste o % na lista.');
+      return;
+    }
+    const nova: ComissaoProduto = { produto_id: prod.id, produto_nome: prod.nome, percentual: Number(novoProdutoPercentual) || 0 };
+    setFormData(prev => ({ ...prev, comissoes_por_produto: [...(prev.comissoes_por_produto || []), nova] }));
+    setNovoProdutoId('');
+  };
+
+  const handleAlterarPercentualProduto = (produtoId: string, percentual: number) => {
+    setFormData(prev => ({
+      ...prev,
+      comissoes_por_produto: (prev.comissoes_por_produto || []).map(c => (c.produto_id === produtoId ? { ...c, percentual } : c))
+    }));
+  };
+
+  const handleRemoverComissaoProduto = (produtoId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      comissoes_por_produto: (prev.comissoes_por_produto || []).filter(c => c.produto_id !== produtoId)
+    }));
   };
 
   const handleAdicionarComissaoGrupo = () => {
@@ -411,6 +455,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
         comissao_padrao_percentual: Number(formData.comissao_padrao_percentual) || 3.5,
         comissoes_por_grupo: formData.comissoes_por_grupo || [],
         comissoes_por_cliente: formData.comissoes_por_cliente || [],
+        comissoes_por_produto: formData.comissoes_por_produto || [],
         clientes_vinculados_ids: formData.clientes_vinculados_ids || [],
         chave_pix: formData.chave_pix || '',
         dia_vencimento_comissao: formData.dia_vencimento_comissao ?? DIA_VENCIMENTO_COMISSAO_PADRAO,
@@ -443,6 +488,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
         comissao_padrao_percentual: Number(formData.comissao_padrao_percentual),
         comissoes_por_grupo: formData.comissoes_por_grupo || [],
         comissoes_por_cliente: formData.comissoes_por_cliente || [],
+        comissoes_por_produto: formData.comissoes_por_produto || [],
         clientes_vinculados_ids: formData.clientes_vinculados_ids || []
       } as RCA;
 
@@ -525,11 +571,12 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
   // Helper para rotular o modelo de comissão
   const getNomeModeloComissao = (modelo: ModeloComissao) => {
     switch (modelo) {
-      case 'geral': return 'Taxa Geral Única';
+      case 'geral': return 'Pela venda (% sobre o total)';
+      case 'por_produto': return 'Por produto';
       case 'por_grupo': return 'Por Grupo de Produto';
       case 'por_cliente': return 'Por Cliente';
       case 'misto': return 'Misto (Cliente > Grupo > Geral)';
-      default: return 'Geral';
+      default: return 'Pela venda (% sobre o total)';
     }
   };
 
@@ -928,30 +975,85 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                   <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-amber-900 text-xs mb-4 flex items-start gap-2.5">
                     <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                     <div>
-                      <span className="font-bold">Regra de Resolução & Prioridade Única:</span> O administrador pode definir comissões por cliente, grupo de produto ou geral. Um produto <strong>nunca receberá duas comissões</strong>. A regra mais específica tem prioridade: 
-                      <span className="font-mono font-bold text-amber-800 ml-1">1º Comissão do Cliente &gt; 2º Comissão do Grupo de Produto &gt; 3º Comissão Geral Base</span>.
+                      <span className="font-bold">Regra de Resolução & Prioridade Única:</span> Escolha <strong>Pela venda</strong> (um % sobre o total) ou <strong>Por produto</strong> (um % para cada produto; produto sem regra usa o % padrão). Um item <strong>nunca recebe duas comissões</strong>. Nos modelos avançados vale a regra mais específica:
+                      <span className="font-mono font-bold text-amber-800 ml-1">1º Cliente &gt; 2º Grupo de Produto &gt; 3º Padrão</span>.
                     </div>
                   </div>
 
-                  {/* Seleção do Modo de Comissionamento */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Modelo de Comissionamento do RCA</label>
-                      <select
-                        value={formData.modelo_comissao || 'geral'}
-                        onChange={(e) => setFormData({ ...formData, modelo_comissao: e.target.value as ModeloComissao })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
-                      >
-                        <option value="geral">Taxa Única Geral (Comissão Fixa)</option>
-                        <option value="por_grupo">Diferenciada por Grupo de Produto</option>
-                        <option value="por_cliente">Diferenciada por Cliente</option>
-                        <option value="misto">Misto (Personalizado com Prioridade Anti-Duplicidade)</option>
-                      </select>
+                  {/* Modelo de comissão: Pela venda | Por produto em destaque; os demais ficam em "avançados" */}
+                  <div className="mb-4">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 block mb-2">Como o RCA ganha comissão</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {([
+                        { valor: 'geral' as ModeloComissao, titulo: 'Pela venda', desc: '% sobre o total da venda', Icone: DollarSign },
+                        { valor: 'por_produto' as ModeloComissao, titulo: 'Por produto', desc: '% definido para cada produto', Icone: Package },
+                      ]).map(({ valor, titulo, desc, Icone }) => {
+                        const ativo = (formData.modelo_comissao || 'geral') === valor;
+                        return (
+                          <button
+                            key={valor}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, modelo_comissao: valor })}
+                            aria-pressed={ativo}
+                            className={`text-left rounded-xl px-4 py-3 border-2 transition-all duration-200 flex items-center gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ${
+                              ativo
+                                ? 'border-emerald-700 bg-gradient-to-br from-emerald-800 to-emerald-950 text-white shadow-[0_10px_30px_-12px_rgba(6,78,59,0.8)]'
+                                : 'border-slate-200 bg-white text-slate-800 hover:border-emerald-400'
+                            }`}
+                          >
+                            <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${ativo ? 'bg-white/15 text-emerald-100' : 'bg-emerald-50 text-emerald-700'}`}>
+                              <Icone className="w-4 h-4" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-sm font-black tracking-tight">{titulo}</span>
+                              <span className={`block text-[11px] ${ativo ? 'text-emerald-100/80' : 'text-slate-500'}`}>{desc}</span>
+                            </span>
+                            {ativo && <CheckCircle2 className="w-4 h-4 ml-auto shrink-0 text-emerald-300" />}
+                          </button>
+                        );
+                      })}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setMostrarModelosAvancados(v => !v)}
+                      aria-expanded={mostrarModelosAvancados}
+                      className="mt-2 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1"
+                    >
+                      {mostrarModelosAvancados ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      Modelos avançados (por grupo, por cliente, misto)
+                    </button>
+                    {mostrarModelosAvancados && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {([
+                          { valor: 'por_grupo' as ModeloComissao, titulo: 'Por grupo de produto' },
+                          { valor: 'por_cliente' as ModeloComissao, titulo: 'Por cliente' },
+                          { valor: 'misto' as ModeloComissao, titulo: 'Misto (cliente > grupo > padrão)' },
+                        ]).map(op => {
+                          const ativo = formData.modelo_comissao === op.valor;
+                          return (
+                            <button
+                              key={op.valor}
+                              type="button"
+                              onClick={() => setFormData({ ...formData, modelo_comissao: op.valor })}
+                              aria-pressed={ativo}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                                ativo ? 'bg-emerald-800 text-white border-emerald-800' : 'bg-white text-slate-700 border-slate-300 hover:border-emerald-500'
+                              }`}
+                            >
+                              {op.titulo}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
 
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Comissão Base / Padrão Geral (%)</label>
-                      <div className="relative">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                        {(formData.modelo_comissao || 'geral') === 'geral' ? 'Comissão sobre o total da venda (%)' : 'Comissão padrão — itens sem regra própria (%)'}
+                      </label>
+                      <div className="relative max-w-[12rem]">
                         <input
                           type="number"
                           step="0.1"
@@ -978,6 +1080,98 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                       </div>
                     </div>
                   </div>
+
+                  {/* Subseção: Comissão por Produto */}
+                  {formData.modelo_comissao === 'por_produto' && (
+                    <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <div className="flex items-center justify-between mb-2 gap-2">
+                        <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Package className="w-3.5 h-3.5 text-emerald-600" />
+                          Comissão por Produto
+                        </h4>
+                        <span className="text-[10px] text-slate-500 font-medium text-right">
+                          Produto sem regra: {Number(formData.comissao_padrao_percentual ?? 0)}% (padrão)
+                        </span>
+                      </div>
+
+                      {(formData.comissoes_por_produto || []).length > 0 ? (
+                        <div className="space-y-1.5 mb-3">
+                          {formData.comissoes_por_produto?.map(cp => (
+                            <div key={cp.produto_id} className="flex items-center justify-between gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200 text-xs">
+                              <span className="font-semibold text-slate-800 min-w-0 truncate">
+                                {cp.produto_nome}
+                                {!produtosCadastrados.some(p => p.id === String(cp.produto_id)) && (
+                                  <span className="ml-2 text-[10px] font-bold text-red-600">produto não encontrado no cadastro</span>
+                                )}
+                              </span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <div className="w-20 relative">
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    min="0"
+                                    value={cp.percentual}
+                                    onChange={(e) => handleAlterarPercentualProduto(cp.produto_id, Number(e.target.value))}
+                                    aria-label={`Comissão de ${cp.produto_nome} (%)`}
+                                    className="w-full bg-emerald-50 border border-emerald-200 rounded px-2 py-1 text-xs font-mono font-bold text-emerald-800 tabular-nums"
+                                  />
+                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-emerald-600">%</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoverComissaoProduto(cp.produto_id)}
+                                  className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                                  aria-label={`Remover regra de ${cp.produto_nome}`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 italic mb-3">Nenhum produto com % próprio: todos usam o % padrão até você adicionar.</p>
+                      )}
+
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <select
+                          value={novoProdutoId}
+                          onChange={(e) => setNovoProdutoId(e.target.value)}
+                          className="flex-1 min-w-0 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-medium"
+                        >
+                          <option value="">{produtosCadastrados.length === 0 ? 'Nenhum produto cadastrado' : 'Selecione o produto…'}</option>
+                          {produtosCadastrados.map(p => (
+                            <option key={p.id} value={p.id} disabled={(formData.comissoes_por_produto || []).some(c => String(c.produto_id) === p.id)}>
+                              {p.codigo ? `${p.codigo} • ` : ''}{p.nome}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 relative">
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              value={novoProdutoPercentual}
+                              onChange={(e) => setNovoProdutoPercentual(Number(e.target.value))}
+                              className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-slate-900"
+                              placeholder="%"
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleAdicionarComissaoProduto}
+                            disabled={!novoProdutoId}
+                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold flex items-center gap-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Adicionar</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Subseção A: Comissões por Grupo de Produto */}
                   {(formData.modelo_comissao === 'por_grupo' || formData.modelo_comissao === 'misto') && (
@@ -1503,7 +1697,24 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                     <p className="text-[11px] text-slate-500 mt-1">Aplicada quando não houver regra específica de grupo ou cliente.</p>
                   </div>
 
-                  {/* Regras por Grupo */}
+                  {/* Regras por Produto (modelo 'por_produto' substitui o card de grupo) */}
+                  {selectedRca.modelo_comissao === 'por_produto' ? (
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                    <span className="text-[10px] font-bold uppercase text-emerald-800 block mb-1">2. Por Produto ({selectedRca.comissoes_por_produto?.length || 0})</span>
+                    {selectedRca.comissoes_por_produto && selectedRca.comissoes_por_produto.length > 0 ? (
+                      <div className="space-y-1.5 mt-2 max-h-40 overflow-y-auto">
+                        {selectedRca.comissoes_por_produto.map(cp => (
+                          <div key={cp.produto_id} className="flex items-center justify-between text-xs bg-white p-1.5 rounded border border-slate-200">
+                            <span className="line-clamp-1 text-slate-700 font-medium">{cp.produto_nome}</span>
+                            <span className="font-mono font-bold text-emerald-700 ml-2 tabular-nums">{cp.percentual}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic mt-2">Nenhum produto com % próprio: todos usam a taxa padrão.</p>
+                    )}
+                  </div>
+                  ) : (
                   <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                     <span className="text-[10px] font-bold uppercase text-emerald-800 block mb-1">2. Por Grupo de Produto ({selectedRca.comissoes_por_grupo?.length || 0})</span>
                     {selectedRca.comissoes_por_grupo && selectedRca.comissoes_por_grupo.length > 0 ? (
@@ -1519,6 +1730,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                       <p className="text-xs text-slate-400 italic mt-2">Nenhuma taxa de grupo customizada.</p>
                     )}
                   </div>
+                  )}
 
                   {/* Regras por Cliente */}
                   <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
@@ -1684,10 +1896,11 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                                 v.tipo_regra_aplicada === 'Por Cliente' ? 'bg-amber-50 text-amber-800 border-amber-200' :
                                 v.tipo_regra_aplicada === 'Por Grupo' ? 'bg-blue-50 text-blue-800 border-blue-200' :
+                                v.tipo_regra_aplicada === 'Por Produto' ? 'bg-teal-50 text-teal-800 border-teal-200' :
                                 v.tipo_regra_aplicada === 'Mista' ? 'bg-purple-50 text-purple-800 border-purple-200' :
                                 'bg-slate-100 text-slate-700 border-slate-200'
                               }`}>
-                                {v.tipo_regra_aplicada}
+                                {rotuloRegraComissao(v.tipo_regra_aplicada)}
                               </span>
                             </td>
                             <td className="py-3 px-3 text-right font-mono text-slate-900 font-bold">

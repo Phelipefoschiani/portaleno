@@ -36,7 +36,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { carregarClientes, salvarClientes, Cliente } from '../../data/clientesData';
-import { carregarRcas, EVENTO_CADASTROS_ATUALIZADOS, RCA } from '../../data/cadastrosData';
+import { carregarRcas, EVENTO_CADASTROS_ATUALIZADOS, RCA, sincronizarEspelhoClienteRca } from '../../data/cadastrosData';
 import { carregarPedidosVenda, PedidoVenda } from '../../data/pedidosVendaData';
 import { carregarTitulosReceber } from '../../data/financeiroData';
 import { carregarTabelasPreco } from '../../data/produtosData';
@@ -45,10 +45,12 @@ import { formatarDataBR } from '../../lib/datas';
 import { lerCondicao, normalizarDias, textoCondicao } from '../../lib/prazoPagamento';
 
 // Converte os pedidos de venda reais do cliente para a estrutura do histórico
-function montarHistoricoCompras(clienteId: string): CompraCliente[] {
+// rcaId (Portal do RCA): só os pedidos feitos por aquele RCA
+function montarHistoricoCompras(clienteId: string, rcaId?: string): CompraCliente[] {
   const titulos = carregarTitulosReceber();
   return carregarPedidosVenda()
     .filter((p: PedidoVenda) => p.cliente_id === clienteId && p.tipo === 'PEDIDO_VENDA' && p.etapa !== 'ORCAMENTO')
+    .filter((p: PedidoVenda) => !rcaId || p.rca_id === rcaId)
     .map((p: PedidoVenda): CompraCliente => {
       const titulosPedido = titulos.filter(t => t.pedido_venda_id === p.id);
       const statusFin: CompraCliente['status_financeiro'] =
@@ -144,10 +146,31 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
 
 export interface CadastroClientesProps {
   clienteIdInicial?: string | null;
+  /**
+   * Portal do RCA: só os clientes com vendedor_id === rcaFixoId; novos clientes já nascem
+   * vinculados a ele e o representante não pode ser trocado.
+   */
+  rcaFixoId?: string;
+  /** Quando muda (> 0), abre o formulário de novo cliente (atalho do portal do RCA). */
+  abrirNovoSinal?: number;
 }
 
-export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {}) {
-  const [clientes, setClientes] = useState<Cliente[]>(() => carregarClientes());
+const soDigitos = (s?: string) => String(s || '').replace(/\D/g, '');
+
+export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }: CadastroClientesProps = {}) {
+  const modoRca = !!rcaFixoId;
+  const abrirNovoRef = React.useRef<() => void>(() => {});
+  abrirNovoRef.current = () => abrirFormularioNovo(); // definido mais abaixo; chamado só depois do render
+  React.useEffect(() => {
+    if (abrirNovoSinal) abrirNovoRef.current();
+  }, [abrirNovoSinal]);
+  const [todosClientes, setClientes] = useState<Cliente[]>(() => carregarClientes());
+  // No Portal do RCA a tela só enxerga a carteira dele
+  const clientes = useMemo(
+    () => (rcaFixoId ? todosClientes.filter(c => c.vendedor_id === rcaFixoId) : todosClientes),
+    [todosClientes, rcaFixoId]
+  );
+  const ehDoRca = (c?: Cliente | null) => !modoRca || (!!c && c.vendedor_id === rcaFixoId);
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'PJ' | 'PF'>('TODOS');
   const [filtroStatus, setFiltroStatus] = useState<'TODOS' | 'ATIVOS' | 'INATIVOS'>('TODOS');
@@ -258,14 +281,15 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
       forma_pagamento_id: 'fp_1',
       prazo_pagamento_id: 'livre',
       prazo_dias: '',
-      vendedor_id: '',
-      tabela_preco_id: '',
+      vendedor_id: rcaFixoId || '',
+      tabela_preco_id: modoRca ? (rcasCadastrados.find(r => r.id === rcaFixoId)?.tabela_preco_padrao_id || '') : '',
       ativo: true,
     });
     setModo('formulario');
   };
 
   const abrirFormularioEditar = (cliente: Cliente) => {
+    if (!ehDoRca(cliente)) return;
     setClienteSelecionado(cliente);
     setFormData({
       tipo_pessoa: cliente.tipo_pessoa,
@@ -300,7 +324,9 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
   };
 
   const alternarStatusCliente = (id: string) => {
-    const atualizados = clientes.map(c => c.id === id ? { ...c, ativo: !c.ativo } : c);
+    const base = carregarClientes();
+    if (!ehDoRca(base.find(c => c.id === id))) return; // RCA só altera cliente da própria carteira
+    const atualizados = base.map(c => c.id === id ? { ...c, ativo: !c.ativo } : c);
     setClientes(atualizados);
     salvarClientes(atualizados);
   };
@@ -316,13 +342,34 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
     const fp = FORMAS_PAGAMENTO_OPTIONS.find(f => f.id === formData.forma_pagamento_id);
     // Prazo digitado livremente (ex.: 28 ou 28/35/42); vazio = à vista
     const pp = { nome: textoCondicao(fp?.nome || 'Boleto Bancário', formData.prazo_dias) };
-    const rcaSel = rcasCadastrados.find(r => r.id === formData.vendedor_id);
+    // Portal do RCA: o representante é sempre o RCA logado
+    const rcaSel = rcasCadastrados.find(r => r.id === (rcaFixoId || formData.vendedor_id));
+    if (modoRca && !rcaSel) {
+      alert('Seu cadastro de RCA não foi encontrado. Fale com o administrador.');
+      return;
+    }
     const vend = rcaSel ? { nome: rcaSel.nome_fantasia || rcaSel.nome_completo } : undefined;
     const tab = opcoesTabelasPreco().find(t => t.id === formData.tabela_preco_id);
+    // Sempre grava sobre a lista atual do armazenamento (no portal a tela só tem a carteira do RCA)
+    const base = carregarClientes();
+
+    if (modoRca) {
+      if (clienteSelecionado && !ehDoRca(base.find(c => c.id === clienteSelecionado.id))) {
+        alert('Este cliente não está mais na sua carteira.');
+        setModo('lista');
+        return;
+      }
+      const doc = soDigitos(formData.cpf_cnpj);
+      const duplicado = doc && base.some(c => c.id !== clienteSelecionado?.id && soDigitos(c.cpf_cnpj) === doc);
+      if (duplicado) {
+        alert('Já existe um cliente cadastrado com este CPF/CNPJ. Peça ao administrador para vinculá-lo à sua carteira.');
+        return;
+      }
+    }
 
     if (clienteSelecionado) {
       // UPDATE
-      const atualizados = clientes.map(c => c.id === clienteSelecionado.id ? {
+      const atualizados = base.map(c => c.id === clienteSelecionado.id ? {
         ...c,
         tipo_pessoa: formData.tipo_pessoa,
         razao_nome: formData.razao_nome,
@@ -352,6 +399,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
       } : c);
       setClientes(atualizados);
       salvarClientes(atualizados);
+      sincronizarEspelhoClienteRca(clienteSelecionado.id, rcaSel?.id);
     } else {
       // INSERT
       const novo: Cliente = {
@@ -384,9 +432,10 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
         ativo: formData.ativo,
         criado_em: new Date().toISOString(),
       };
-      const atualizados = [novo, ...clientes];
+      const atualizados = [novo, ...base];
       setClientes(atualizados);
       salvarClientes(atualizados);
+      sincronizarEspelhoClienteRca(novo.id, rcaSel?.id);
     }
 
     setModo('lista');
@@ -427,8 +476,8 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
   // Compras do cliente selecionado
   const comprasDoCliente = useMemo(() => {
     if (!clienteSelecionado) return [];
-    return montarHistoricoCompras(clienteSelecionado.id);
-  }, [clienteSelecionado, versaoPedidos]);
+    return montarHistoricoCompras(clienteSelecionado.id, rcaFixoId);
+  }, [clienteSelecionado, versaoPedidos, rcaFixoId]);
 
   const totalComprado = useMemo(() => {
     return comprasDoCliente.reduce((acc, curr) => acc + curr.valor_total, 0);
@@ -468,10 +517,10 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
               <div>
                 <div className="flex items-center gap-2.5">
                   <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                    Clientes
+                    {modoRca ? 'Meus Clientes' : 'Clientes'}
                   </h2>
                   <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    {clientes.length} Cadastrados
+                    {clientes.length} {modoRca ? 'na carteira' : 'Cadastrados'}
                   </span>
                 </div>
               </div>
@@ -488,13 +537,13 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
               "
             >
               <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Novo Cadastro de Cliente</span>
+              <span>{modoRca ? 'Adicionar Cliente' : 'Novo Cadastro de Cliente'}</span>
             </button>
           </div>
 
           {/* BARRA DE BUSCA E FILTROS */}
           <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 border-b border-slate-100 bg-white">
-            <div className="relative flex-1 min-w-[280px] max-w-md">
+            <div className={`relative flex-1 max-w-md ${modoRca ? 'min-w-[220px]' : 'min-w-[280px]'}`}>
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
@@ -511,7 +560,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
             </div>
 
             {/* Filtros rápidos */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
                 <button
                   onClick={() => setFiltroTipo('TODOS')}
@@ -556,8 +605,45 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
             </div>
           </div>
 
+          {/* PORTAL DO RCA NO CELULAR: lista em cartões (sem rolagem lateral) */}
+          {modoRca && (
+            <div className="sm:hidden flex-1 overflow-y-auto divide-y divide-slate-100">
+              {clientesFiltrados.length === 0 ? (
+                <div className="py-12 px-6 text-center text-sm text-slate-500">
+                  {clientes.length === 0 ? 'Sua carteira ainda está vazia. Toque em "Adicionar Cliente" para cadastrar o primeiro.' : 'Nenhum cliente com esses filtros.'}
+                </div>
+              ) : clientesFiltrados.map(cli => (
+                <div key={cli.id} className="px-4 py-3.5 flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-slate-900 text-sm truncate">{cli.razao_nome}</span>
+                      {!cli.ativo && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-800">Inativo</span>}
+                    </div>
+                    {cli.fantasia && <div className="text-[11px] text-slate-500 truncate">{cli.fantasia}</div>}
+                    <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">{cli.endereco.municipio}/{cli.endereco.uf} · {cli.telefone || 'sem telefone'}</div>
+                    <div className="text-[11px] text-emerald-800 font-semibold mt-0.5 truncate">{cli.tabela_preco_nome || 'Tabela padrão'} · {cli.prazo_pagamento_nome}</div>
+                  </div>
+                  <div className="flex flex-col gap-1.5 shrink-0">
+                    <button
+                      onClick={() => abrirFormularioEditar(cli)}
+                      className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1 active:bg-slate-100"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" /> Editar
+                    </button>
+                    <button
+                      onClick={() => abrirHistorico(cli)}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-1 active:bg-emerald-100"
+                    >
+                      <History className="w-3.5 h-3.5" /> Compras
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* TABELA DE CLIENTES */}
-          <div className="flex-1 overflow-auto">
+          <div className={`flex-1 overflow-auto ${modoRca ? 'hidden sm:block' : ''}`}>
             <table className="w-full text-left border-collapse">
               <thead className="sticky top-0 bg-slate-100/90 backdrop-blur-md z-10 border-b border-slate-200 text-[11px] font-black uppercase tracking-wider text-slate-600">
                 <tr>
@@ -731,7 +817,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
         <form onSubmit={salvarCliente} className="flex-1 w-full h-full flex flex-col overflow-hidden">
           
           {/* CABEÇALHO DO FORMULÁRIO */}
-          <div className="flex flex-wrap items-center justify-between gap-4 px-8 py-3.5 border-b border-slate-200 bg-slate-50/90">
+          <div className="flex flex-wrap items-center justify-between gap-4 px-4 sm:px-8 py-3.5 border-b border-slate-200 bg-slate-50/90">
             <div className="flex items-center gap-4">
               <button
                 type="button"
@@ -797,11 +883,11 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
           </div>
 
           {/* CORPO DO FORMULÁRIO */}
-          <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6 bg-slate-50/40">
+          <div className="flex-1 overflow-y-auto px-3 sm:px-8 py-4 sm:py-6 space-y-6 bg-slate-50/40">
             
             {/* SEÇÃO 1: CLASSIFICAÇÃO & DOCUMENTOS */}
-            <div className="p-6 rounded-2xl bg-white border border-slate-200/90 shadow-sm space-y-5">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="p-4 sm:p-6 rounded-2xl bg-white border border-slate-200/90 shadow-sm space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2 text-emerald-950 font-black text-sm uppercase tracking-wide">
                   <FileText className="w-4 h-4 text-emerald-700" />
                   <span>1. Classificação e Documentos Oficiais</span>
@@ -933,7 +1019,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
             </div>
 
             {/* SEÇÃO 2: ENDEREÇO DE ENTREGA E COBRANÇA */}
-            <div className="p-6 rounded-2xl bg-white border border-slate-200/90 shadow-sm space-y-5">
+            <div className="p-4 sm:p-6 rounded-2xl bg-white border border-slate-200/90 shadow-sm space-y-5">
               <div className="pb-3 border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-emerald-950 font-black text-sm uppercase tracking-wide">
                   <MapPin className="w-4 h-4 text-emerald-700" />
@@ -1053,7 +1139,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
             </div>
 
             {/* SEÇÃO 3: POLÍTICAS COMERCIAIS & CARTEIRA */}
-            <div className="p-6 rounded-2xl bg-emerald-50/60 border border-emerald-200/80 shadow-sm space-y-5">
+            <div className="p-4 sm:p-6 rounded-2xl bg-emerald-50/60 border border-emerald-200/80 shadow-sm space-y-5">
               <div className="pb-3 border-b border-emerald-200/60 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-emerald-950 font-black text-sm uppercase tracking-wide">
                   <CreditCard className="w-4 h-4 text-emerald-800" />
@@ -1072,6 +1158,17 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
                       Representante Responsável (RCA)
                       <span className="text-[10px] text-slate-400 font-mono ml-1.5">(vendedor_id)</span>
                     </label>
+                    {modoRca ? (
+                      (() => {
+                        const eu = rcasCadastrados.find(r => r.id === rcaFixoId);
+                        return (
+                          <div className="w-full px-3 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs sm:text-sm font-bold text-emerald-900 flex items-center gap-2">
+                            <UserCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                            <span className="truncate">{eu ? `${eu.codigo_rca} · ${eu.nome_fantasia || eu.nome_completo}` : 'Você'}</span>
+                          </div>
+                        );
+                      })()
+                    ) : (
                     <select
                       value={formData.vendedor_id}
                       onChange={(e) => setFormData({ ...formData, vendedor_id: e.target.value })}
@@ -1084,9 +1181,10 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
                         </option>
                       ))}
                     </select>
+                    )}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-2">
-                    Usuário com acesso comercial vinculado a este cliente
+                    {modoRca ? 'Clientes cadastrados por você entram automaticamente na sua carteira' : 'Usuário com acesso comercial vinculado a este cliente'}
                   </p>
                 </div>
 
@@ -1169,7 +1267,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
           </div>
 
           {/* RODAPÉ DO FORMULÁRIO */}
-          <div className="flex items-center justify-between px-8 py-3.5 border-t border-slate-200 bg-white">
+          <div className="flex items-center justify-between gap-2 px-4 sm:px-8 py-3.5 border-t border-slate-200 bg-white">
             <button
               type="button"
               onClick={() => setModo('lista')}
@@ -1203,7 +1301,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
         <div className="flex-1 w-full h-full flex flex-col overflow-hidden bg-slate-50/60">
           
           {/* CABEÇALHO LIMPO: SEM CNPJ NO TOPO E SEM SUBTÍTULOS TÉCNICOS */}
-          <div className="flex flex-wrap items-center justify-between gap-4 px-8 py-4 border-b border-slate-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-4 px-4 sm:px-8 py-4 border-b border-slate-200 bg-white">
             <div className="flex items-center gap-4">
               <button
                 type="button"
@@ -1331,7 +1429,7 @@ export function CadastroClientes({ clienteIdInicial }: CadastroClientesProps = {
           </div>
 
           {/* LISTA EM LINHAS DOS PEDIDOS: CLIQUE ABRE MAIS INFORMAÇÕES DE PRODUTOS */}
-          <div className="flex-1 overflow-y-auto px-8 py-6">
+          <div className="flex-1 overflow-y-auto px-3 sm:px-8 py-4 sm:py-6">
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               
               <div className="px-6 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">

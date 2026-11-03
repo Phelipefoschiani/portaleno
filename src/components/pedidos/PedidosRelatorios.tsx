@@ -44,6 +44,7 @@ import {
 import { converterQuantidade, normalizarUnidade } from '../../data/produtosData';
 import { hojeISO, formatarDataBR } from '../../lib/datas';
 import { montarVendasComissaoRca, VendaComissaoRCA } from '../../data/cadastrosData';
+import { rotuloRegraComissao } from '../../data/comissoesData';
 import { formatarMoeda } from '../../data/financeiroData';
 import {
   PedidoCompraGeral,
@@ -222,7 +223,7 @@ export function PedidosRelatorios({ onNavigate }: Props) {
     if (relatorioAtivo === 'COMISSOES') {
       cabecalho = 'Pedido,Data_Faturamento,RCA,Cliente,Regra,Valor_Faturado,Percentual,Comissao,Status_Titulo,Vencimento,Pagamento\n';
       linhas = comissoes.map(c =>
-        `"${c.numero_pedido}","${c.data}","${pedidosVenda.find(p => p.id === c.pedido_id)?.rca_nome || c.rca_id}","${c.cliente_nome}","${c.tipo_regra_aplicada}",${c.valor_faturado.toFixed(2)},${c.percentual_comissao},${c.valor_comissao.toFixed(2)},"${c.status_comissao === 'Pago (PIX)' ? 'PAGO' : c.titulo_status || 'SEM_TITULO'}","${c.titulo_vencimento || ''}","${c.data_pagamento_pix || ''}"`
+        `"${c.numero_pedido}","${c.data}","${pedidosVenda.find(p => p.id === c.pedido_id)?.rca_nome || c.rca_id}","${c.cliente_nome}","${rotuloRegraComissao(c.tipo_regra_aplicada)}",${c.valor_faturado.toFixed(2)},${c.percentual_comissao},${c.valor_comissao.toFixed(2)},"${c.status_comissao === 'Pago (PIX)' ? 'PAGO' : c.titulo_status || 'SEM_TITULO'}","${c.titulo_vencimento || ''}","${c.data_pagamento_pix || ''}"`
       ).join('\n');
     } else if (relatorioAtivo === 'COMPRAS') {
       cabecalho = 'Data,Item/Produto,Categoria,Parceiro/Fornecedor,Local_Compra,Comprador,Quantidade,Unidade,Valor_Unitario,Valor_Total,Status\n';
@@ -635,7 +636,7 @@ export function PedidosRelatorios({ onNavigate }: Props) {
                           <div className="font-bold text-slate-900">{pedidosVenda.find(p => p.id === c.pedido_id)?.rca_nome || '-'}</div>
                           <div className="text-[10px] text-slate-500">{c.cliente_nome}</div>
                         </td>
-                        <td className="py-2.5 px-4 text-slate-700">{c.tipo_regra_aplicada}</td>
+                        <td className="py-2.5 px-4 text-slate-700">{rotuloRegraComissao(c.tipo_regra_aplicada)}</td>
                         <td className="py-2.5 px-4 font-mono text-right">{formatarMoeda(c.valor_faturado)}</td>
                         <td className="py-2.5 px-4 font-mono text-right">{c.percentual_comissao}%</td>
                         <td className="py-2.5 px-4 font-mono font-bold text-right text-emerald-900">{formatarMoeda(c.valor_comissao)}</td>

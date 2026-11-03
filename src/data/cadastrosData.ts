@@ -133,7 +133,17 @@ export function definirFornecedorDaMateriaPrima(mp: MateriaPrimaRef, fornecedorI
 // RCAs (Representantes Comerciais) e vendas/comissões
 // =====================================================================
 
-export type ModeloComissao = 'geral' | 'por_grupo' | 'por_cliente' | 'misto';
+/**
+ * 'geral' = Pela venda (% sobre o total); 'por_produto' = % por produto (produto sem regra usa o padrão).
+ * 'por_grupo' | 'por_cliente' | 'misto' continuam como modelos avançados.
+ */
+export type ModeloComissao = 'geral' | 'por_produto' | 'por_grupo' | 'por_cliente' | 'misto';
+
+export interface ComissaoProduto {
+  produto_id: string;
+  produto_nome: string;
+  percentual: number;
+}
 
 export interface ComissaoGrupo {
   id: string;
@@ -180,6 +190,8 @@ export interface RCA {
   comissao_padrao_percentual: number;
   comissoes_por_grupo: ComissaoGrupo[];
   comissoes_por_cliente: ComissaoCliente[];
+  /** Usado quando modelo_comissao === 'por_produto' */
+  comissoes_por_produto?: ComissaoProduto[];
   chave_pix: string;
   tipo_chave_pix: 'CPF' | 'CNPJ' | 'Celular' | 'E-mail' | 'Aleatória';
   /** Dia do mês seguinte ao faturamento em que a comissão vence no Contas a Pagar (padrão 10) */
@@ -205,7 +217,7 @@ export interface VendaComissaoRCA {
   cliente_nome: string;
   cliente_cidade: string;
   grupo_produto_nome?: string;
-  tipo_regra_aplicada: 'Por Cliente' | 'Por Grupo' | 'Taxa Geral' | 'Mista';
+  tipo_regra_aplicada: 'Por Cliente' | 'Por Grupo' | 'Por Produto' | 'Taxa Geral' | 'Mista';
   data: string;
   mes_referencia: string;
   valor_faturado: number;
@@ -231,6 +243,30 @@ export function salvarRcas(lista: RCA[]): void {
 export function obterRcaPorId(id?: string | null): RCA | undefined {
   if (!id) return undefined;
   return carregarRcas().find(r => r.id === id);
+}
+
+/**
+ * Mantém o espelho RCA.clientes_vinculados_ids coerente com Cliente.vendedor_id (fonte da verdade):
+ * o cliente fica só na carteira do RCA informado (ou de nenhum, se rcaId vazio).
+ */
+export function sincronizarEspelhoClienteRca(clienteId: string, rcaId?: string | null): void {
+  if (!clienteId) return;
+  const rcas = carregarRcas();
+  let alterou = false;
+  const atualizados = rcas.map(r => {
+    const ids = r.clientes_vinculados_ids || [];
+    const tem = ids.includes(clienteId);
+    if (r.id === rcaId && !tem) {
+      alterou = true;
+      return { ...r, clientes_vinculados_ids: [...ids, clienteId] };
+    }
+    if (r.id !== rcaId && tem) {
+      alterou = true;
+      return { ...r, clientes_vinculados_ids: ids.filter(id => id !== clienteId) };
+    }
+    return r;
+  });
+  if (alterou) salvarRcas(atualizados);
 }
 
 /** Lista simplificada de RCAs para selects (id real do cadastro). */
@@ -282,7 +318,7 @@ export function montarVendasComissaoRca(pedidos: PedidoVenda[], vendasSalvas: Ve
       const total = Number(p.valor_total) || 0;
       const regraPedido = (p as PedidoVenda & { comissao_regra?: string }).comissao_regra;
       const regra: VendaComissaoRCA['tipo_regra_aplicada'] =
-        regraPedido === 'Por Cliente' || regraPedido === 'Por Grupo' || regraPedido === 'Mista' ? regraPedido : 'Taxa Geral';
+        regraPedido === 'Por Cliente' || regraPedido === 'Por Grupo' || regraPedido === 'Por Produto' || regraPedido === 'Mista' ? regraPedido : 'Taxa Geral';
       const percentual = total > 0 && Number(p.comissao_valor) > 0
         ? Math.round(((Number(p.comissao_valor) / total) * 100) * 100) / 100
         : Number(p.comissao_percentual) || 0;
