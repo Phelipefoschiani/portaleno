@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas-pro';
+import { gerarPdfDeElemento } from '../../lib/pdfDeElemento';
 import {
   FileText,
   Plus,
@@ -456,40 +456,13 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
         await new Promise(r => setTimeout(r, 60));
       }
 
-      const canvas = await html2canvas(printRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff'
-      });
+      // Documento inteiro, com quebra de página entre os itens
+      const pdf = await gerarPdfDeElemento(printRef.current);
 
       if (zoomSalvo !== 100) {
         setZoomDocumento(zoomSalvo);
       }
 
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-      const imgWidth = 210; // largura A4 mm
-      const pageHeight = 297; // altura A4 mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      if (imgHeight <= pageHeight) {
-        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-      } else {
-        let position = 0;
-        let heightLeft = imgHeight;
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-        while (heightLeft > 0) {
-          position = heightLeft - imgHeight;
-          pdf.addPage();
-          pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
-        }
-      }
       const modoTag = modoExibicao === 'FARDO' ? 'Fardo' : 'Unitario';
       const nomeArquivo = `${tipoDocumentoVisualizacao.replace(/\s+/g, '_')}_${pedido.numero_pedido}_${modoTag}.pdf`;
       pdf.save(nomeArquivo);
