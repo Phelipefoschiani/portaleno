@@ -1,6 +1,46 @@
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
 
+/* ============================================================
+   Tokens do sistema interno (mesma identidade dos documentos:
+   verde-escuro, dourado como detalhe, papel creme e tinta quente)
+   Uso: bg-papel, text-tinta, border-linha, text-ouro, bg-eno-900...
+   ============================================================ */
+@theme {
+  --color-eno-950: #031a0f;
+  --color-eno-900: #042013;
+  --color-eno-800: #0b3d24;
+  --color-eno-700: #13502f;
+  --color-eno-600: #1f6b43;
+  --color-eno-100: #e3eee5;
+  --color-eno-50: #f0f5ef;
+
+  --color-ouro: #c9a24a;
+  --color-ouro-escuro: #9c7a2e;
+  --color-ouro-claro: #e2c27a;
+
+  --color-papel: #fbfaf5;      /* superfícies (tabelas, faixas) */
+  --color-papel-2: #f6f3ea;    /* fundo da área de trabalho */
+  --color-papel-3: #f3ead3;    /* realce quente (hover, seleção) */
+  --color-linha: #e6e0d0;      /* hairlines */
+  --color-linha-forte: #d5ccb6;
+
+  --color-tinta: #171e1a;      /* texto principal */
+  --color-tinta-2: #3a423d;    /* texto secundário forte */
+  --color-cinza: #6e7470;      /* rótulos e apoio */
+  --color-cinza-claro: #9a9d97;
+
+  /* Status com significado (nunca decorativo) */
+  --color-st-vencido: #a8321f;
+  --color-st-vencido-bg: #f8e4dc;
+  --color-st-pago: #1f6b43;
+  --color-st-pago-bg: #e1eedf;
+  --color-st-aguardando: #8a5a0b;
+  --color-st-aguardando-bg: #f6e7c4;
+  --color-st-producao: #1c5f66;
+  --color-st-producao-bg: #dcecea;
+}
+
 @layer base {
   html, body {
     margin: 0;
@@ -43,6 +83,11 @@
 
 .aloe-glow-box {
   box-shadow: 0 10px 30px -10px rgba(46, 111, 64, 0.4), 0 0 20px 0 rgba(134, 197, 156, 0.15);
+}
+
+/* Filete dourado (mesma régua da faixa dos documentos) */
+.filete-ouro {
+  background: linear-gradient(90deg, #9c7a2e, #e2c27a, #9c7a2e);
 }
 
 /* Custom scrollbar suppression */

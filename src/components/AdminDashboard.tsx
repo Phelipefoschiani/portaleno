@@ -1,16 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  LayoutDashboard, 
-  LogOut, 
-  Building2, 
-  Users, 
-  ShoppingBag, 
-  Package, 
-  DollarSign, 
-  ChevronDown,
-  Eye
-} from 'lucide-react';
-import { isModoLimpoAtivo } from '../data/sistemaReset';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { LogOut, ChevronDown, ChevronRight, Menu, X } from 'lucide-react';
 import { CadastroClientes } from './cadastros/CadastroClientes';
 import { CadastroFornecedores } from './cadastros/CadastroFornecedores';
 import { CadastroAgricultores } from './cadastros/CadastroAgricultores';
@@ -44,6 +33,11 @@ import { VisaoGeralDashboard } from './visao_geral/VisaoGeralDashboard';
 import { PortalControleSitio } from './portais/PortalControleSitio';
 import { UsuariosAcessos } from './cadastros/UsuariosAcessos';
 import { obterSessao } from '../lib/auth';
+import { EMPRESA } from '../lib/empresa';
+import { carregarPedidosVenda } from '../data/pedidosVendaData';
+import { carregarOrdensProducao, EVENTO_OPS } from '../data/ordensProducaoData';
+import { carregarTitulosReceber, carregarTitulosPagar } from '../data/financeiroData';
+import { DentroDoShell } from './ui/ShellContext';
 
 type AdminDashboardProps = {
   onLogout: () => void;
@@ -55,467 +49,505 @@ type AdminDashboardProps = {
 type MenuItem = {
   id: string;
   label: string;
+  /** Coluna do menu (agrupa itens relacionados). */
+  secao: string;
 };
 
 type MenuGroup = {
   id: string;
   label: string;
-  icon: React.ReactNode;
   items: MenuItem[];
 };
 
-export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: AdminDashboardProps) {
-  const getInitialPageState = () => {
-    if (initialPageId === 'cadastro_agricultores') {
-      return { id: 'cadastro_agricultores', groupLabel: 'Cadastros', pageLabel: 'Cadastro de Agricultores' };
-    }
-    if (initialPageId === 'cadastro_rca') {
-      return { id: 'cadastro_rca', groupLabel: 'Cadastros', pageLabel: 'Cadastro de RCA' };
-    }
-    if (initialPageId === 'cadastro_provisorio_portifolio') {
-      return { id: 'cadastro_provisorio_portifolio', groupLabel: 'Cadastros', pageLabel: 'Cadastro Provisório Portifólio' };
-    }
-    if (initialPageId === 'cadastro_producao_usuarios') {
-      return { id: 'cadastro_producao_usuarios', groupLabel: 'Cadastros', pageLabel: 'Cadastro Produção' };
-    }
-    if (initialPageId === 'cadastro_controle_sitio') {
-      return { id: 'cadastro_controle_sitio', groupLabel: 'Cadastros', pageLabel: 'Cadastro Controle do Sítio' };
-    }
+type PaginaAtiva = { id: string; groupLabel: string; pageLabel: string };
+
+const VISAO_GERAL: PaginaAtiva = { id: 'visao_geral', groupLabel: 'Visão Geral', pageLabel: 'Visão Geral' };
+
+// Contadores mostrados no submenu (só aparecem quando > 0)
+function useContagensSubmenu() {
+  const ler = () => {
+    const pedidos = carregarPedidosVenda();
+    const porEtapa = (e: string) => pedidos.filter(p => p.etapa === e).length;
     return {
-      id: 'visao_geral',
-      groupLabel: 'Sistema',
-      pageLabel: 'Visão Geral',
-    };
+      pedidos_orcamentos_sugestivo: porEtapa('ORCAMENTO'),
+      pedidos_em_producao: porEtapa('EM_PRODUCAO'),
+      pedidos_ordens_producao: carregarOrdensProducao().filter(o => o.status === 'PLANEJADA' || o.status === 'EM_PRODUCAO').length,
+      pedidos_a_faturar: porEtapa('A_FATURAR'),
+      pedidos_faturados: porEtapa('FATURADO'),
+      pedidos_entregues: porEtapa('ENTREGUE'),
+      financeiro_a_receber: carregarTitulosReceber().filter(t => t.status !== 'PAGO').length,
+      financeiro_a_pagar: carregarTitulosPagar().filter(t => t.status !== 'PAGO').length,
+    } as Record<string, number>;
   };
-
-  const [activePage, setActivePage] = useState<{
-    id: string;
-    groupLabel: string;
-    pageLabel: string;
-  }>(getInitialPageState);
-
-  const [selectedClienteIdForNavigation, setSelectedClienteIdForNavigation] = useState<string | null>(null);
-
-  const handleNavigateToCliente = (clienteId: string) => {
-    setSelectedClienteIdForNavigation(clienteId);
-    setActivePage({
-      id: 'cadastro_clientes',
-      groupLabel: 'Cadastros',
-      pageLabel: 'Cadastro de Clientes',
-    });
-  };
-
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
+  const [contagens, setContagens] = useState(ler);
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setOpenDropdown(null);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const h = () => setContagens(ler());
+    const eventos = ['pedidos_venda_updated', EVENTO_OPS, 'financeiro_updated', 'sistema_reset_updated'];
+    eventos.forEach(ev => window.addEventListener(ev, h));
+    return () => eventos.forEach(ev => window.removeEventListener(ev, h));
   }, []);
+  return contagens;
+}
 
-  const menuGroups: MenuGroup[] = [
+// Itens cujo número pede ação (cor âmbar no submenu)
+const CONTAGEM_PEDE_ACAO = new Set(['pedidos_orcamentos_sugestivo', 'pedidos_a_faturar']);
+
+const PERFIL_ROTULO: Record<string, string> = {
+  ADMIN: 'Administrador',
+  RCA: 'Representante',
+  CLIENTE: 'Cliente',
+  AGRICULTOR: 'Agricultor',
+  PRODUCAO: 'Produção',
+  SITIO: 'Sítio',
+  PROVISORIO: 'Provisório',
+};
+
+export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: AdminDashboardProps) {
+  const sessao = obterSessao();
+  const ehAdmin = sessao?.perfil === 'ADMIN';
+
+  const menuGroups: MenuGroup[] = useMemo(() => [
     {
       id: 'cadastros',
       label: 'Cadastros',
-      icon: <Users className="w-4.5 h-4.5 shrink-0" />,
       items: [
-        { id: 'cadastro_clientes', label: 'Cadastro de Clientes' },
-        { id: 'cadastro_fornecedores', label: 'Cadastro de Fornecedores' },
-        { id: 'cadastro_agricultores', label: 'Cadastro de Agricultores' },
-        { id: 'cadastro_rca', label: 'Cadastro de RCA' },
-        { id: 'cadastro_provisorio_portifolio', label: 'Cadastro Provisório Portifólio' },
-        { id: 'cadastro_producao_usuarios', label: 'Cadastro Produção' },
-        { id: 'cadastro_controle_sitio', label: 'Cadastro Controle do Sítio' },
+        { id: 'cadastro_clientes', label: 'Clientes', secao: 'Comercial' },
+        { id: 'cadastro_rca', label: 'Representantes (RCA)', secao: 'Comercial' },
+        { id: 'cadastro_provisorio_portifolio', label: 'Cadastro provisório', secao: 'Comercial' },
+        { id: 'cadastro_fornecedores', label: 'Fornecedores', secao: 'Suprimentos' },
+        { id: 'cadastro_agricultores', label: 'Agricultores', secao: 'Suprimentos' },
+        { id: 'cadastro_producao_usuarios', label: 'Equipe de produção', secao: 'Operação' },
+        { id: 'cadastro_controle_sitio', label: 'Controle do sítio', secao: 'Operação' },
         // Gestão de logins: somente ADMIN
-        ...(obterSessao()?.perfil === 'ADMIN' ? [{ id: 'usuarios_acessos', label: 'Usuários e Acessos' }] : []),
+        ...(ehAdmin ? [{ id: 'usuarios_acessos', label: 'Usuários e acessos', secao: 'Operação' }] : []),
       ],
     },
     {
       id: 'pedidos',
       label: 'Pedidos',
-      icon: <ShoppingBag className="w-4.5 h-4.5 shrink-0" />,
       items: [
-        { id: 'calculo_na_roca', label: 'Cálculo na Roça' },
-        { id: 'pedidos_compra', label: 'Pedido de Compra' },
-        { id: 'pedidos_orcamentos_sugestivo', label: 'Vendas' },
-        { id: 'pedidos_em_producao', label: 'Em Produção' },
-        { id: 'pedidos_ordens_producao', label: 'Ordens de Produção' },
-        { id: 'pedidos_a_faturar', label: 'A Faturar' },
-        { id: 'pedidos_faturados', label: 'Faturados' },
-        { id: 'pedidos_entregues', label: 'Entregues' },
-        { id: 'pedidos_relatorios', label: 'Relatórios' },
+        { id: 'pedidos_orcamentos_sugestivo', label: 'Vendas', secao: 'Venda' },
+        { id: 'pedidos_em_producao', label: 'Em produção', secao: 'Venda' },
+        { id: 'pedidos_ordens_producao', label: 'Ordens de produção', secao: 'Venda' },
+        { id: 'pedidos_a_faturar', label: 'A faturar', secao: 'Expedição' },
+        { id: 'pedidos_faturados', label: 'Faturados', secao: 'Expedição' },
+        { id: 'pedidos_entregues', label: 'Entregues', secao: 'Expedição' },
+        { id: 'calculo_na_roca', label: 'Cálculo na roça', secao: 'Compra' },
+        { id: 'pedidos_compra', label: 'Pedido de compra', secao: 'Compra' },
+        { id: 'pedidos_relatorios', label: 'Relatórios', secao: 'Compra' },
       ],
     },
     {
       id: 'produtos',
       label: 'Produtos',
-      icon: <Package className="w-4.5 h-4.5 shrink-0" />,
       items: [
-        { id: 'produtos_estoque_cadastro', label: 'Produtos (Estoque e Cadastro)' },
-        { id: 'produtos_receita', label: 'Receita' },
-        { id: 'produtos_materia_prima', label: 'Matéria Prima (Estoque e Cadastro)' },
-        { id: 'produtos_relatorios', label: 'Relatórios' },
-        { id: 'produtos_ficha_tecnica', label: 'Ficha Técnica' },
-        { id: 'produtos_tabela_preco', label: 'Tabela de Preço' },
-        { id: 'produtos_etiqueta', label: 'Etiqueta' },
+        { id: 'produtos_estoque_cadastro', label: 'Produtos acabados', secao: 'Estoque' },
+        { id: 'produtos_materia_prima', label: 'Matéria-prima', secao: 'Estoque' },
+        { id: 'produtos_receita', label: 'Receitas', secao: 'Engenharia' },
+        { id: 'produtos_ficha_tecnica', label: 'Ficha técnica', secao: 'Engenharia' },
+        { id: 'produtos_tabela_preco', label: 'Tabela de preço', secao: 'Comercial' },
+        { id: 'produtos_etiqueta', label: 'Etiquetas', secao: 'Comercial' },
+        { id: 'produtos_relatorios', label: 'Relatórios', secao: 'Comercial' },
       ],
     },
     {
       id: 'financeiro',
       label: 'Financeiro',
-      icon: <DollarSign className="w-4.5 h-4.5 shrink-0" />,
       items: [
-        { id: 'financeiro_a_receber', label: 'A Receber' },
-        { id: 'financeiro_a_pagar', label: 'A Pagar' },
-        { id: 'financeiro_lancar_despesas', label: 'Lançar Despesas' },
-        { id: 'financeiro_notas_saida', label: 'Nota Fiscais Saída' },
-        { id: 'financeiro_notas_entrada', label: 'Nota Fiscais Entrada' },
-        { id: 'financeiro_lancar_receita', label: 'Lançar Receita' },
-        { id: 'financeiro_caixa_investimento', label: 'Caixa Investimento' },
+        { id: 'financeiro_a_receber', label: 'A receber', secao: 'Títulos' },
+        { id: 'financeiro_a_pagar', label: 'A pagar', secao: 'Títulos' },
+        { id: 'financeiro_caixa_investimento', label: 'Caixa e investimento', secao: 'Títulos' },
+        { id: 'financeiro_lancar_receita', label: 'Lançar receita', secao: 'Lançamentos' },
+        { id: 'financeiro_lancar_despesas', label: 'Lançar despesas', secao: 'Lançamentos' },
+        { id: 'financeiro_notas_saida', label: 'Notas fiscais de saída', secao: 'Fiscal' },
+        { id: 'financeiro_notas_entrada', label: 'Notas fiscais de entrada', secao: 'Fiscal' },
       ],
     },
-  ];
+  ], [ehAdmin]);
 
-  const handleSelectPage = (groupLabel: string, item: MenuItem) => {
-    setActivePage({
-      id: item.id,
-      groupLabel: groupLabel,
-      pageLabel: item.label,
-    });
-    setOpenDropdown(null);
-  };
-
-  const handleSelectVisaoGeral = () => {
-    setActivePage({
-      id: 'visao_geral',
-      groupLabel: 'Sistema',
-      pageLabel: 'Visão Geral',
-    });
-    setOpenDropdown(null);
-  };
-
-  const handleSelectPedidosPage = (tabId: string) => {
-    const itemMap: Record<string, string> = {
-      'calculo_na_roca': 'Cálculo na Roça',
-      'pedidos_compra': 'Pedido de Compra',
-      'pedidos_orcamentos_sugestivo': 'Vendas',
-      'pedidos_em_producao': 'Em Produção',
-      'pedidos_ordens_producao': 'Ordens de Produção',
-      'pedidos_a_faturar': 'A Faturar',
-      'pedidos_faturados': 'Faturados',
-      'pedidos_entregues': 'Entregues',
-      'pedidos_relatorios': 'Relatórios',
-    };
-    setActivePage({
-      id: tabId,
-      groupLabel: 'Pedidos',
-      pageLabel: itemMap[tabId] || 'Pedidos',
-    });
-  };
-
-  const handleSelectProdutosPage = (tabId: string) => {
-    const itemMap: Record<string, string> = {
-      'produtos_estoque_cadastro': 'Produtos (Estoque e Cadastro)',
-      'produtos_receita': 'Receita',
-      'produtos_materia_prima': 'Matéria Prima (Estoque e Cadastro)',
-      'produtos_relatorios': 'Relatórios',
-      'produtos_ficha_tecnica': 'Ficha Técnica',
-      'produtos_tabela_preco': 'Tabela de Preço',
-      'produtos_etiqueta': 'Etiqueta',
-    };
-    setActivePage({
-      id: tabId,
-      groupLabel: 'Produtos',
-      pageLabel: itemMap[tabId] || 'Produtos',
-    });
-  };
-
-  const handleSelectFinanceiroPage = (tabId: string) => {
-    const itemMap: Record<string, string> = {
-      'financeiro_a_receber': 'A Receber',
-      'financeiro_a_pagar': 'A Pagar',
-      'financeiro_lancar_despesas': 'Lançar Despesas',
-      'financeiro_notas_saida': 'Nota Fiscais Saída',
-      'financeiro_notas_entrada': 'Nota Fiscais Entrada',
-      'financeiro_lancar_receita': 'Lançar Receita',
-      'financeiro_caixa_investimento': 'Caixa Investimento',
-    };
-    setActivePage({
-      id: tabId,
-      groupLabel: 'Financeiro',
-      pageLabel: itemMap[tabId] || 'Financeiro',
-    });
-  };
-
-  const handleNavigateUniversal = (pageId: string) => {
+  const paginaPorId = (pageId?: string): PaginaAtiva | null => {
     for (const group of menuGroups) {
       const item = group.items.find(i => i.id === pageId);
-      if (item) {
-        setActivePage({
-          id: item.id,
-          groupLabel: group.label,
-          pageLabel: item.label,
-        });
-        return;
-      }
+      if (item) return { id: item.id, groupLabel: group.label, pageLabel: item.label };
     }
-    handleSelectVisaoGeral();
+    return null;
   };
 
+  const [activePage, setActivePage] = useState<PaginaAtiva>(() => paginaPorId(initialPageId) || VISAO_GERAL);
+  const [selectedClienteIdForNavigation, setSelectedClienteIdForNavigation] = useState<string | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [menuMovelAberto, setMenuMovelAberto] = useState(false);
+  const navRef = useRef<HTMLDivElement>(null);
+  const contagens = useContagensSubmenu();
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (navRef.current && !navRef.current.contains(event.target as Node)) setOpenDropdown(null);
+    }
+    function handleEsc(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpenDropdown(null);
+        setMenuMovelAberto(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, []);
+
+  const irPara = (pagina: PaginaAtiva) => {
+    setActivePage(pagina);
+    setOpenDropdown(null);
+    setMenuMovelAberto(false);
+  };
+
+  const handleSelectVisaoGeral = () => irPara(VISAO_GERAL);
+
+  // Navegação universal por id (usada pela Visão Geral e pelas abas internas de cada módulo)
+  const handleNavigateUniversal = (pageId: string) => {
+    const pagina = paginaPorId(pageId);
+    irPara(pagina || VISAO_GERAL);
+  };
+
+  const handleNavigateToCliente = (clienteId: string) => {
+    setSelectedClienteIdForNavigation(clienteId);
+    handleNavigateUniversal('cadastro_clientes');
+  };
+
+  const grupoAtivo = menuGroups.find(g => g.label === activePage.groupLabel) || null;
+
+  // Itens agrupados por coluna (mega-menu)
+  const colunas = (group: MenuGroup) => {
+    const mapa = new Map<string, MenuItem[]>();
+    group.items.forEach(i => mapa.set(i.secao, [...(mapa.get(i.secao) || []), i]));
+    return [...mapa.entries()];
+  };
+
+  const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  const seletorPortal = (classe: string) =>
+    onAbrirPortal && (
+      <label className={classe}>
+        <span className="sr-only">Ver portal como</span>
+        <select
+          value=""
+          onChange={e => {
+            const v = e.target.value as 'RCA' | 'CLIENTE' | 'AGRICULTOR' | '';
+            if (v) onAbrirPortal(v);
+          }}
+          className="bg-transparent outline-none cursor-pointer appearance-none pr-4"
+          title="Abrir um portal para visualizar como o usuário"
+        >
+          <option value="" className="text-tinta">Ver portal…</option>
+          <option value="CLIENTE" className="text-tinta">Portal do Cliente</option>
+          <option value="RCA" className="text-tinta">Portal do RCA</option>
+          <option value="AGRICULTOR" className="text-tinta">Portal do Agricultor</option>
+        </select>
+        <ChevronDown className="w-3 h-3 -ml-3.5 pointer-events-none opacity-70" />
+      </label>
+    );
+
+  const itemNavClasse = (ativo: boolean) =>
+    `relative flex h-full items-center gap-1 px-3 text-[13.5px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ouro ${
+      ativo ? 'text-white' : 'text-white/70 hover:text-white'
+    }`;
+
+  const filete = <span className="absolute inset-x-3 bottom-0 h-[3px] rounded-t-sm filete-ouro" aria-hidden />;
+
   return (
-    <div className="relative h-screen w-screen bg-[#f4f8f5] text-slate-800 flex flex-col select-none overflow-hidden">
-      
+    <div className="relative h-dvh w-full bg-papel-2 text-tinta flex flex-col overflow-hidden">
+
       {/* ========================================================= */}
-      {/* 1. FAIXA SUPERIOR DO TÍTULO                               */}
+      {/* 1. BARRA SUPERIOR: marca + módulos + usuário              */}
       {/* ========================================================= */}
-      <header className="relative z-40 w-full bg-gradient-to-r from-[#01140b] via-[#032b17] to-[#01140b] text-white border-b border-emerald-900/40 shadow-md">
-        <div className="mx-auto flex h-[64px] sm:h-[68px] w-full max-w-[1700px] items-center justify-between px-6 sm:px-10">
-          
-          {/* Nome do Portal */}
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-800/80 border border-emerald-600/40 text-emerald-200 shadow-inner">
-              <Building2 className="w-5 h-5 text-emerald-300" />
-            </div>
-            <span className="text-[24px] sm:text-[28px] font-black tracking-[-0.035em] text-white leading-none">
-              Grupo ENO
+      <header ref={navRef} className="relative z-40 shrink-0 bg-[linear-gradient(100deg,#042013_0%,#0b3d24_100%)] text-white">
+        <div className="mx-auto flex h-14 w-full max-w-[1700px] items-stretch px-3 sm:px-5">
+          {/* Marca */}
+          <button
+            type="button"
+            onClick={handleSelectVisaoGeral}
+            className="flex items-center gap-2.5 pr-4 lg:pr-6 lg:mr-2 lg:border-r lg:border-white/10 cursor-pointer"
+            title="Ir para a Visão Geral"
+          >
+            <img src={EMPRESA.logo} alt="" className="h-8 w-8 object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]" />
+            <span className="leading-none text-left">
+              <span className="block text-[15px] font-extrabold tracking-[-0.01em]">Grupo ENO</span>
+              <span className="block mt-1 text-[9.5px] font-bold uppercase tracking-[0.2em] text-ouro">Gestão</span>
             </span>
-          </div>
+          </button>
 
-          {/* Perfil (Administrador), Controles de Teste e Botão Sair */}
-          <div className="flex items-center gap-2.5">
-            {/* Visualizar um portal como o usuário dele (RCA, cliente, agricultor) */}
-            {onAbrirPortal && (
-              <label className="hidden sm:flex items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-xl bg-emerald-900/60 border border-emerald-700/60 text-emerald-100 text-xs font-bold">
-                <Eye className="w-4 h-4 text-emerald-300" />
-                <span className="sr-only">Ver portal como</span>
-                <select
-                  value=""
-                  onChange={e => {
-                    const v = e.target.value as 'RCA' | 'CLIENTE' | 'AGRICULTOR' | '';
-                    if (v) onAbrirPortal(v);
-                  }}
-                  className="bg-transparent text-emerald-50 font-bold outline-none cursor-pointer pr-1"
-                  title="Abrir um portal para visualizar como o usuário"
-                >
-                  <option value="" className="text-slate-900">Ver portal...</option>
-                  <option value="CLIENTE" className="text-slate-900">Portal do Cliente</option>
-                  <option value="RCA" className="text-slate-900">Portal do RCA</option>
-                  <option value="AGRICULTOR" className="text-slate-900">Portal do Agricultor</option>
-                </select>
-              </label>
-            )}
-            {/* Botão Sair Vermelho */}
-            <button
-              onClick={onLogout}
-              className="
-                flex items-center gap-2 px-3.5 py-1.5 rounded-xl
-                bg-red-600 text-white border border-red-500 text-xs sm:text-sm font-extrabold
-                hover:bg-red-700 hover:border-red-400
-                transition-colors cursor-pointer shadow-md active:bg-red-800
-              "
-              title="Sair do Sistema"
-            >
-              <LogOut className="w-4 h-4 stroke-[2.5]" />
-              <span>Sair</span>
+          {/* Módulos (desktop) */}
+          <nav className="hidden lg:flex items-stretch" aria-label="Módulos">
+            <button type="button" onClick={handleSelectVisaoGeral} className={itemNavClasse(activePage.id === 'visao_geral')}>
+              Visão Geral
+              {activePage.id === 'visao_geral' && filete}
             </button>
-          </div>
-
-        </div>
-      </header>
-
-      {/* ========================================================= */}
-      {/* 2. FAIXA DE MENUS COM DROPDOWNS DE FONTE AMPLIADA         */}
-      {/* ========================================================= */}
-      <nav 
-        ref={dropdownRef}
-        className="relative z-30 w-full bg-[#022013] text-white border-b border-emerald-900/60 shadow-[0_6px_20px_rgba(0,0,0,0.25)]"
-      >
-        <div className="mx-auto flex h-[52px] w-full max-w-[1700px] items-center px-4 sm:px-8">
-          <div className="flex items-center gap-2">
-            
-            {/* Botão Visão Geral */}
-            <button
-              onClick={handleSelectVisaoGeral}
-              className={`
-                flex items-center gap-2 px-4 py-2 rounded-lg text-sm sm:text-[15px] font-bold border transition-colors cursor-pointer text-white
-                ${activePage.id === 'visao_geral'
-                  ? 'bg-emerald-800 text-white border-emerald-500 shadow-sm'
-                  : 'bg-transparent border-transparent hover:bg-emerald-900/60 hover:border-emerald-800/40'
-                }
-              `}
-            >
-              <LayoutDashboard className="w-4.5 h-4.5 text-white" />
-              <span>Visão Geral</span>
-            </button>
-
-            {/* Grupos de Menus */}
-            {menuGroups.map((group) => {
+            {menuGroups.map(group => {
               const isOpen = openDropdown === group.id;
-              const isGroupActive = activePage.groupLabel === group.label;
-
+              const ativo = activePage.groupLabel === group.label;
+              const cols = colunas(group);
               return (
-                <div key={group.id} className="relative">
+                <div key={group.id} className="relative flex">
                   <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    aria-haspopup="true"
                     onClick={() => setOpenDropdown(isOpen ? null : group.id)}
-                    className={`
-                      flex items-center gap-2 px-4 py-2 rounded-lg text-sm sm:text-[15px] font-bold border transition-colors cursor-pointer text-white
-                      ${isGroupActive || isOpen
-                        ? 'bg-emerald-800 text-white border-emerald-500 shadow-sm'
-                        : 'bg-transparent border-transparent hover:bg-emerald-900/60 hover:border-emerald-800/40'
-                      }
-                    `}
+                    className={`${itemNavClasse(ativo || isOpen)} ${isOpen ? 'bg-white/[0.06]' : ''}`}
                   >
-                    <span className="text-white">{group.icon}</span>
-                    <span>{group.label}</span>
-                    <ChevronDown className={`w-4 h-4 text-white transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`} />
+                    {group.label}
+                    <ChevronDown className={`w-3.5 h-3.5 opacity-60 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`} />
+                    {ativo && filete}
                   </button>
 
-                  {/* Dropdown Box Ampliado com Fonte Maior e Excelente Leitura */}
                   {isOpen && (
-                    <div className="absolute left-0 top-[calc(100%+6px)] z-50 min-w-[310px] rounded-2xl bg-[#011a0f] border border-emerald-600/70 p-2.5 shadow-[0_20px_50px_rgba(0,0,0,0.65)]">
-                      
-                      {/* Título do grupo no Dropdown */}
-                      <div className="px-4 py-2 text-xs font-extrabold uppercase tracking-wider text-emerald-300 border-b border-emerald-800/70 mb-1.5 flex items-center justify-between">
-                        <span>{group.label}</span>
-                        <span className="text-[10px] text-emerald-400/80 font-normal">Selecione</span>
-                      </div>
-
-                      {/* Lista de Opções do Dropdown com Fonte Maior */}
-                      <div className="space-y-1">
-                        {group.items.map((item) => {
-                          const isItemSelected = activePage.id === item.id;
-                          return (
-                            <button
-                              key={item.id}
-                              onClick={() => handleSelectPage(group.label, item)}
-                              className={`
-                                flex w-full items-center justify-between px-4 py-3 rounded-xl text-[14px] sm:text-[15px] font-bold transition-colors cursor-pointer text-left text-white leading-tight
-                                ${isItemSelected
-                                  ? 'bg-emerald-700 text-white font-extrabold border border-emerald-500/80 shadow-md'
-                                  : 'bg-transparent hover:bg-emerald-800/90'
-                                }
-                              `}
-                            >
-                              <span>{item.label}</span>
-                              {isItemSelected && (
-                                <span className="h-2.5 w-2.5 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,1)] shrink-0 ml-3" />
-                              )}
-                            </button>
-                          );
-                        })}
+                    <div
+                      className="absolute left-0 top-full z-50 mt-px rounded-b-md bg-papel text-tinta border border-linha border-t-0 shadow-[0_18px_40px_-12px_rgba(4,32,19,0.45)] overflow-hidden"
+                      role="menu"
+                    >
+                      <div className="h-[2px] filete-ouro" aria-hidden />
+                      <div className={`grid gap-x-1 p-2 ${cols.length >= 3 ? 'grid-cols-3 w-[600px]' : 'grid-cols-2 w-[420px]'}`}>
+                        {cols.map(([secao, itens]) => (
+                          <div key={secao} className="py-1">
+                            <div className="px-3 pt-1.5 pb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-cinza">{secao}</div>
+                            {itens.map(item => {
+                              const sel = activePage.id === item.id;
+                              const n = contagens[item.id];
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={() => irPara({ id: item.id, groupLabel: group.label, pageLabel: item.label })}
+                                  className={`relative flex w-full items-center justify-between gap-3 rounded-[5px] px-3 py-2 text-left text-[13.5px] transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro ${
+                                    sel ? 'bg-papel-3 font-bold text-tinta' : 'font-medium text-tinta-2 hover:bg-papel-2 hover:text-tinta'
+                                  }`}
+                                >
+                                  {sel && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-ouro" aria-hidden />}
+                                  <span>{item.label}</span>
+                                  {n > 0 && <span className="text-[12px] tabular-nums text-cinza">{n}</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
                 </div>
               );
             })}
+          </nav>
 
+          {/* Direita: portal, usuário, sair */}
+          <div className="ml-auto flex items-center gap-1 sm:gap-3">
+            {seletorPortal('hidden lg:flex items-center gap-1 h-8 px-2.5 rounded-md border border-white/15 text-[12.5px] font-medium text-white/75 hover:text-white hover:border-white/30 transition-colors')}
+            {sessao && (
+              <div className="hidden sm:block text-right leading-tight pl-1">
+                <div className="text-[13px] font-semibold text-white truncate max-w-[180px]">{sessao.nome || sessao.usuario}</div>
+                <div className="text-[10.5px] text-white/50">{PERFIL_ROTULO[sessao.perfil] || sessao.perfil}</div>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={onLogout}
+              className="hidden lg:inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[12.5px] font-medium text-white/70 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+              title="Sair do sistema"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Sair
+            </button>
+            {/* Celular / tablet: botão de menu */}
+            <button
+              type="button"
+              onClick={() => setMenuMovelAberto(v => !v)}
+              aria-expanded={menuMovelAberto}
+              aria-label={menuMovelAberto ? 'Fechar menu' : 'Abrir menu'}
+              className="lg:hidden inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-white/20 text-[13px] font-semibold text-white cursor-pointer"
+            >
+              {menuMovelAberto ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+              Menu
+            </button>
           </div>
         </div>
-      </nav>
+
+        {/* Painel do menu no celular */}
+        {menuMovelAberto && (
+          <div className="lg:hidden absolute inset-x-0 top-full z-50 max-h-[calc(100dvh-3.5rem)] overflow-y-auto bg-eno-900 border-t border-white/10 shadow-[0_24px_40px_-10px_rgba(0,0,0,0.6)]">
+            <div className="px-4 py-3">
+              <button
+                type="button"
+                onClick={handleSelectVisaoGeral}
+                className={`w-full text-left py-2.5 text-[15px] font-bold ${activePage.id === 'visao_geral' ? 'text-ouro' : 'text-white'}`}
+              >
+                Visão Geral
+              </button>
+              {menuGroups.map(group => (
+                <div key={group.id} className="border-t border-white/10 py-2.5">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45 mb-1">{group.label}</div>
+                  <div className="grid grid-cols-2 gap-x-3">
+                    {group.items.map(item => {
+                      const sel = activePage.id === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => irPara({ id: item.id, groupLabel: group.label, pageLabel: item.label })}
+                          className={`text-left py-2 text-[14px] ${sel ? 'text-ouro font-bold' : 'text-white/85 font-medium'}`}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              <div className="border-t border-white/10 pt-3 mt-1 flex flex-wrap items-center justify-between gap-3 text-[13px]">
+                <div className="text-white/80">
+                  {sessao?.nome || sessao?.usuario}
+                  <span className="text-white/45"> · {PERFIL_ROTULO[sessao?.perfil || ''] || ''}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {seletorPortal('flex items-center gap-1 h-8 px-2.5 rounded-md border border-white/20 text-white/80')}
+                  <button type="button" onClick={onLogout} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-white/20 text-white/80">
+                    <LogOut className="w-3.5 h-3.5" /> Sair
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </header>
 
       {/* ========================================================= */}
-      {/* 3. CONTEÚDO DA PÁGINA (ESPAÇO COMPLETO E LIBERADO)       */}
+      {/* 2. FAIXA DA SEÇÃO: breadcrumb + submenu                   */}
       {/* ========================================================= */}
-      <main className="relative flex-1 flex flex-col w-full h-full p-2 sm:p-3 overflow-hidden">
-        
-        {/* CONTAINER DA JANELA: OCUPA LARGURA E ALTURA TOTAL */}
-        <div className="w-full h-full flex-1 flex flex-col overflow-hidden">
-          {activePage.id === 'visao_geral' ? (
-            <VisaoGeralDashboard onNavigate={handleNavigateUniversal} />
-          ) : activePage.id === 'calculo_na_roca' ? (
-            <CalculoNaRocaComponent onNavigate={handleSelectPedidosPage} />
-          ) : activePage.id === 'cadastro_clientes' ? (
-            <CadastroClientes clienteIdInicial={selectedClienteIdForNavigation} />
-          ) : activePage.id === 'cadastro_fornecedores' ? (
-            <CadastroFornecedores />
-          ) : activePage.id === 'cadastro_agricultores' ? (
-            <CadastroAgricultores />
-          ) : activePage.id === 'cadastro_rca' ? (
-            <CadastroRCA onNavigateToCliente={handleNavigateToCliente} />
-          ) : activePage.id === 'cadastro_provisorio_portifolio' ? (
-            <CadastroProvisorioPortifolio onNavigateToCliente={handleNavigateToCliente} />
-          ) : activePage.id === 'cadastro_producao_usuarios' ? (
-            <CadastroProducao />
-          ) : activePage.id === 'usuarios_acessos' && obterSessao()?.perfil === 'ADMIN' ? (
-            <UsuariosAcessos />
-          ) : activePage.id === 'cadastro_controle_sitio' ? (
-            <PortalControleSitio onVoltar={handleSelectVisaoGeral} />
-          ) : activePage.id === 'pedidos_compra' ? (
-            <PedidoCompra />
-          ) : activePage.id === 'pedidos_orcamentos_sugestivo' ? (
-            <PedidosOrcamentosSugestivo onNavigate={handleSelectPedidosPage} />
-          ) : activePage.id === 'pedidos_em_producao' ? (
-            <PedidosEmProducao onNavigate={handleSelectPedidosPage} />
-          ) : activePage.id === 'pedidos_ordens_producao' ? (
-            <OrdensProducaoPainel modo="ADMIN" onNavigate={handleSelectPedidosPage} />
-          ) : activePage.id === 'pedidos_a_faturar' ? (
-            <PedidosAFaturar onNavigate={handleSelectPedidosPage} />
-          ) : activePage.id === 'pedidos_faturados' ? (
-            <PedidosFaturados onNavigate={handleSelectPedidosPage} />
-          ) : activePage.id === 'pedidos_entregues' ? (
-            <PedidosEntregues onNavigate={handleSelectPedidosPage} />
-          ) : activePage.id === 'pedidos_relatorios' ? (
-            <PedidosRelatorios onNavigate={handleSelectPedidosPage} />
-          ) : activePage.id === 'produtos_estoque_cadastro' ? (
-            <ProdutosEstoqueCadastro onNavigate={handleSelectProdutosPage} />
-          ) : activePage.id === 'produtos_receita' ? (
-            <ProdutosReceita onNavigate={handleSelectProdutosPage} />
-          ) : activePage.id === 'produtos_materia_prima' ? (
-            <ProdutosMateriaPrima onNavigate={handleSelectProdutosPage} />
-          ) : activePage.id === 'produtos_relatorios' ? (
-            <ProdutosRelatorios onNavigate={handleSelectProdutosPage} />
-          ) : activePage.id === 'produtos_ficha_tecnica' ? (
-            <ProdutosFichaTecnica onNavigate={handleSelectProdutosPage} />
-          ) : activePage.id === 'produtos_tabela_preco' ? (
-            <ProdutosTabelaPreco onNavigate={handleSelectProdutosPage} />
-          ) : activePage.id === 'produtos_etiqueta' ? (
-            <ProdutosEtiqueta onNavigate={handleSelectProdutosPage} />
-          ) : activePage.id === 'financeiro_a_receber' ? (
-            <FinanceiroAReceber onNavigate={handleSelectFinanceiroPage} />
-          ) : activePage.id === 'financeiro_a_pagar' ? (
-            <FinanceiroAPagar onNavigate={handleSelectFinanceiroPage} />
-          ) : activePage.id === 'financeiro_lancar_despesas' ? (
-            <FinanceiroLancarDespesas onNavigate={handleSelectFinanceiroPage} />
-          ) : activePage.id === 'financeiro_notas_saida' ? (
-            <FinanceiroNotasSaida onNavigate={handleSelectFinanceiroPage} />
-          ) : activePage.id === 'financeiro_notas_entrada' ? (
-            <FinanceiroNotasEntrada onNavigate={handleSelectFinanceiroPage} />
-          ) : activePage.id === 'financeiro_lancar_receita' ? (
-            <FinanceiroLancarReceita onNavigate={handleSelectFinanceiroPage} />
-          ) : activePage.id === 'financeiro_caixa_investimento' ? (
-            <FinanceiroCaixaInvestimento onNavigate={handleSelectFinanceiroPage} />
+      <div className="relative z-30 shrink-0 bg-papel border-b border-linha">
+        <div className="mx-auto flex w-full max-w-[1700px] flex-col md:flex-row md:items-stretch md:h-11 px-3 sm:px-5">
+          <div className="flex items-center gap-1.5 h-9 md:h-auto pr-5 md:mr-1 md:border-r md:border-linha text-[12.5px] whitespace-nowrap">
+            {grupoAtivo ? (
+              <>
+                <span className="text-cinza">{grupoAtivo.label}</span>
+                <ChevronRight className="w-3.5 h-3.5 text-cinza-claro" />
+                <span className="font-bold text-tinta">{activePage.pageLabel}</span>
+              </>
+            ) : (
+              <span className="font-bold text-tinta">Visão Geral</span>
+            )}
+          </div>
+
+          {grupoAtivo ? (
+            <nav className="-mx-3 px-3 md:mx-0 md:px-0 flex items-stretch overflow-x-auto h-10 md:h-auto" aria-label={`Telas de ${grupoAtivo.label}`}>
+              {grupoAtivo.items.map((item, idx) => {
+                const sel = activePage.id === item.id;
+                const n = contagens[item.id];
+                const novaSecao = idx > 0 && grupoAtivo.items[idx - 1].secao !== item.secao;
+                return (
+                  <React.Fragment key={item.id}>
+                    {novaSecao && <span className="self-center mx-1.5 h-4 w-px bg-linha-forte shrink-0" aria-hidden />}
+                    <button
+                      type="button"
+                      onClick={() => irPara({ id: item.id, groupLabel: grupoAtivo.label, pageLabel: item.label })}
+                      aria-current={sel ? 'page' : undefined}
+                      className={`relative shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 text-[13px] transition-colors cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ouro ${
+                        sel ? 'font-bold text-tinta' : 'font-medium text-cinza hover:text-tinta'
+                      }`}
+                    >
+                      {item.label}
+                      {n > 0 && (
+                        <span className={`tabular-nums text-[11.5px] ${CONTAGEM_PEDE_ACAO.has(item.id) ? 'font-bold text-st-aguardando' : 'text-cinza-claro'}`}>{n}</span>
+                      )}
+                      {sel && <span className="absolute inset-x-2 bottom-0 h-[2px] bg-eno-800" aria-hidden />}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+            </nav>
           ) : (
-            /* Telas ainda não implementadas exibem a marca d'água */
-            <div className="relative flex-1 flex items-center justify-center select-none overflow-hidden">
-              <span 
-                className="
-                  text-[13vw] sm:text-[11vw] lg:text-[10vw]
-                  font-black tracking-tighter
-                  text-emerald-950/[0.045]
-                  uppercase
-                  whitespace-nowrap
-                  leading-none
-                "
-              >
-                Grupo ENO
-              </span>
-            </div>
+            <div className="hidden md:flex items-center ml-auto text-[12.5px] text-cinza first-letter:uppercase">{dataHoje}</div>
           )}
         </div>
+      </div>
 
+      {/* ========================================================= */}
+      {/* 3. CONTEÚDO DA PÁGINA                                     */}
+      {/* ========================================================= */}
+      <main className="relative flex-1 min-h-0 flex flex-col w-full overflow-hidden">
+        <DentroDoShell.Provider value={true}>
+          <div className="w-full h-full flex-1 flex flex-col overflow-hidden">
+            {activePage.id === 'visao_geral' ? (
+              <VisaoGeralDashboard onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'calculo_na_roca' ? (
+              <CalculoNaRocaComponent onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'cadastro_clientes' ? (
+              <CadastroClientes clienteIdInicial={selectedClienteIdForNavigation} />
+            ) : activePage.id === 'cadastro_fornecedores' ? (
+              <CadastroFornecedores />
+            ) : activePage.id === 'cadastro_agricultores' ? (
+              <CadastroAgricultores />
+            ) : activePage.id === 'cadastro_rca' ? (
+              <CadastroRCA onNavigateToCliente={handleNavigateToCliente} />
+            ) : activePage.id === 'cadastro_provisorio_portifolio' ? (
+              <CadastroProvisorioPortifolio onNavigateToCliente={handleNavigateToCliente} />
+            ) : activePage.id === 'cadastro_producao_usuarios' ? (
+              <CadastroProducao />
+            ) : activePage.id === 'usuarios_acessos' && ehAdmin ? (
+              <UsuariosAcessos />
+            ) : activePage.id === 'cadastro_controle_sitio' ? (
+              <PortalControleSitio onVoltar={handleSelectVisaoGeral} />
+            ) : activePage.id === 'pedidos_compra' ? (
+              <PedidoCompra />
+            ) : activePage.id === 'pedidos_orcamentos_sugestivo' ? (
+              <PedidosOrcamentosSugestivo onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'pedidos_em_producao' ? (
+              <PedidosEmProducao onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'pedidos_ordens_producao' ? (
+              <OrdensProducaoPainel modo="ADMIN" onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'pedidos_a_faturar' ? (
+              <PedidosAFaturar onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'pedidos_faturados' ? (
+              <PedidosFaturados onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'pedidos_entregues' ? (
+              <PedidosEntregues onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'pedidos_relatorios' ? (
+              <PedidosRelatorios onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'produtos_estoque_cadastro' ? (
+              <ProdutosEstoqueCadastro onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'produtos_receita' ? (
+              <ProdutosReceita onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'produtos_materia_prima' ? (
+              <ProdutosMateriaPrima onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'produtos_relatorios' ? (
+              <ProdutosRelatorios onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'produtos_ficha_tecnica' ? (
+              <ProdutosFichaTecnica onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'produtos_tabela_preco' ? (
+              <ProdutosTabelaPreco onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'produtos_etiqueta' ? (
+              <ProdutosEtiqueta onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'financeiro_a_receber' ? (
+              <FinanceiroAReceber onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'financeiro_a_pagar' ? (
+              <FinanceiroAPagar onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'financeiro_lancar_despesas' ? (
+              <FinanceiroLancarDespesas onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'financeiro_notas_saida' ? (
+              <FinanceiroNotasSaida onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'financeiro_notas_entrada' ? (
+              <FinanceiroNotasEntrada onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'financeiro_lancar_receita' ? (
+              <FinanceiroLancarReceita onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'financeiro_caixa_investimento' ? (
+              <FinanceiroCaixaInvestimento onNavigate={handleNavigateUniversal} />
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-[13px] text-cinza">Tela não disponível.</div>
+            )}
+          </div>
+        </DentroDoShell.Provider>
       </main>
-
-      {/* RODAPÉ */}
-      <footer className="relative z-20 w-full bg-[#01140b] text-emerald-300/60 py-2 px-6 border-t border-emerald-900/40 text-[11px] text-center font-mono">
-        © 2026 Grupo ENO · Agroindústria & Mandiocultura
-      </footer>
-
     </div>
   );
 }

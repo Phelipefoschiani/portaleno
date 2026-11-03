@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useDentroDoShell } from '../ui/ShellContext';
 import {
   FileText,
   Factory,
@@ -17,6 +18,8 @@ export interface PedidosNavTabsProps {
 }
 
 export function PedidosNavTabs({ activeTab, onNavigate }: PedidosNavTabsProps) {
+  // Dentro do shell administrativo o submenu da seção já aparece na faixa superior
+  const dentroDoShell = useDentroDoShell();
   const [counts, setCounts] = useState({
     orcamentos: 0,
     producao: 0,
@@ -93,6 +96,8 @@ export function PedidosNavTabs({ activeTab, onNavigate }: PedidosNavTabsProps) {
       icon: <BarChart3 className="w-3.5 h-3.5" />
     }
   ];
+
+  if (dentroDoShell) return null;
 
   return (
     <div className="w-full bg-white border-b border-slate-200/80 px-6 py-2 flex items-center gap-1.5 overflow-x-auto shrink-0 select-none no-scrollbar">

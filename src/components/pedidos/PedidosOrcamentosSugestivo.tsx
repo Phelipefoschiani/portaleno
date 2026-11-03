@@ -89,6 +89,12 @@ const modoObrigatorioDaTabela = (tab?: TabelaPreco | null): 'FARDO' | 'UNITARIO'
 // Fator de conversão fardo/caixa -> pacotes (1 quando vendido avulso/saco)
 const fatorItem = (n?: number) => (Number(n) > 0 ? Number(n) : 1);
 import { PedidosNavTabs } from './PedidosNavTabs';
+import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
+import { BarraFiltros, Segmentado, CampoBusca, SeletorFiltro } from '../ui/BarraFiltros';
+import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
+import { StatusChip } from '../ui/StatusChip';
+import { EstadoVazio } from '../ui/EstadoVazio';
+import { TOM_ETAPA_VENDA } from './etapaVenda';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -995,456 +1001,355 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
     }
   };
 
-  return (
-    <div className={`relative w-full flex flex-col bg-[#f8faf8] text-slate-800 ${modoPortal ? 'rounded-2xl border border-slate-200 overflow-hidden' : 'h-full overflow-hidden'}`}>
+  // Rótulo do tipo da venda (mesma regra usada nos filtros)
+  const subtipoDe = (item: PedidoVenda) =>
+    item.subtipo_venda || (item.origem === 'Sugestão Reposição' ? 'Pedido Sugestivo' : item.tipo === 'PEDIDO_VENDA' ? 'Pedido' : 'Orçamento');
+  const ROTULO_SUBTIPO: Record<string, string> = { 'Pedido Sugestivo': 'Pedido sugestivo', Pedido: 'Pedido de venda', 'Orçamento': 'Orçamento' };
+  const filtrosAtivos = busca.trim() !== '' || filtroOrigem !== 'TODAS' || filtroSubtipo !== 'TODOS';
+  const limparFiltros = () => {
+    setBusca('');
+    setFiltroOrigem('TODAS');
+    setFiltroSubtipo('TODOS');
+  };
+  const hojeLista = hojeISO();
+  const validadeVencida = (d?: string) => !!d && d < hojeLista;
+  const moedaBR = (v: unknown) => formatarMoeda(v);
+  const vazioPorFiltro = filtrosAtivos && pedidosNaEtapa.length > 0;
 
-      {/* 1. NAVEGAÇÃO DE ESTEIRA UNIFICADA (só admin) */}
+  const semNenhuma = pedidosNaEtapa.length === 0 && !filtrosAtivos;
+  const resumoCabecalho = semNenhuma && !modoPortal ? (
+    <span>Nenhuma venda em negociação</span>
+  ) : modoCliente ? (
+    <span>{metricas.total} {filtroEtapa === 'TODAS' ? (metricas.total === 1 ? 'pedido no histórico' : 'pedidos no histórico') : 'nesta situação'}</span>
+  ) : (
+    <>
+      <span className="font-semibold text-tinta-2">
+        {metricas.total} {modoPortal ? (filtroEtapa === 'ORCAMENTO' ? 'aguardando aprovação' : 'nesta situação') : metricas.total === 1 ? 'venda em negociação' : 'vendas em negociação'}
+      </span>
+      <span> · {moedaBR(metricas.valorTotal)}</span>
+      {metricas.volumeTotalKg > 0 && <span> · {textoPeso(metricas.volumeTotalKg)}</span>}
+    </>
+  );
+
+  const estadoVazio = (
+    <EstadoVazio
+      titulo={
+        vazioPorFiltro
+          ? 'Nenhuma venda com esses filtros'
+          : modoPortal
+          ? pedidos.length === 0 ? 'Você ainda não enviou pedidos' : 'Nenhum pedido nesta situação'
+          : 'Nenhuma venda ainda'
+      }
+      texto={
+        vazioPorFiltro
+          ? 'Mude o tipo, a origem ou a busca para ver as outras vendas.'
+          : modoCliente
+          ? 'Clique em "Fazer pedido" para escolher os produtos da sua tabela de preço.'
+          : modoPortal
+          ? 'Clique em "Fazer pedido" para montar um orçamento ou pedido para um cliente da sua carteira.'
+          : 'Orçamentos, pedidos sugestivos e pedidos de venda ficam aqui até serem aprovados para a produção.'
+      }
+      acao={
+        vazioPorFiltro ? (
+          <BotaoSecundario onClick={limparFiltros}>Limpar filtros</BotaoSecundario>
+        ) : (
+          <BotaoPrimario onClick={() => abrirNovaVenda()}>
+            <Plus className="w-4 h-4" />
+            {modoPortal ? 'Fazer pedido' : 'Nova venda'}
+          </BotaoPrimario>
+        )
+      }
+    />
+  );
+
+  return (
+    <div className={`relative w-full flex flex-col text-tinta ${modoPortal ? 'bg-papel rounded-md border border-linha overflow-hidden' : 'h-full overflow-hidden bg-papel-2'}`}>
+
+      {/* Abas antigas do fluxo: só fora do shell (dentro dele o submenu fica na faixa superior) */}
       {!modoPortal && <PedidosNavTabs activeTab="pedidos_orcamentos_sugestivo" onNavigate={onNavigate} />}
 
-      {/* 2. CABEÇALHO COMPACTO & MINIMALISTA COM NOME "VENDAS" */}
-      <div className={`bg-white border-b border-slate-200/80 py-3.5 shrink-0 ${modoPortal ? 'px-4 sm:px-6' : 'px-6'}`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>{modoPortal ? 'Meus Pedidos' : 'Vendas'}</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
-                {metricas.total} {modoPortal ? (filtroEtapa === 'ORCAMENTO' ? 'aguardando aprovação' : 'nesta visão') : 'propostas ativas'}
-              </span>
-            </h1>
-            {modoPortal && (
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                {modoCliente
-                  ? 'Seu pedido fica aguardando a aprovação da fábrica. Até lá você pode alterar; depois, só acompanhar.'
-                  : 'Pedidos enviados ficam aguardando a aprovação da fábrica. Depois de aprovados, só leitura.'}
-              </p>
+      {/* 1. CABEÇALHO DA PÁGINA */}
+      <div className={modoPortal ? '' : 'mx-auto w-full max-w-[1700px]'}>
+        <CabecalhoPagina
+          titulo={modoPortal ? 'Meus pedidos' : 'Vendas'}
+          resumo={resumoCabecalho}
+          className={modoPortal ? 'pt-4' : ''}
+          acoes={
+            // Lista vazia: a ação fica só no estado vazio (uma ação primária por área)
+            semNenhuma ? undefined : (
+            <BotaoPrimario onClick={() => abrirNovaVenda()} className={modoPortal ? 'w-full sm:w-auto h-10 sm:h-9' : ''}>
+              <Plus className="w-4 h-4" />
+              {modoPortal ? 'Fazer pedido' : 'Nova venda'}
+            </BotaoPrimario>
+            )
+          }
+        >
+          {modoPortal && (
+            <p className="text-[12px] text-cinza mt-2 max-w-2xl">
+              {modoCliente
+                ? 'Seu pedido fica aguardando a aprovação da fábrica. Até lá você pode alterar; depois, só acompanhar.'
+                : 'Pedidos enviados ficam aguardando a aprovação da fábrica. Depois de aprovados, só leitura.'}
+            </p>
+          )}
+          {/* Portal: situação dos pedidos */}
+          {modoPortal && (
+            <Segmentado<FiltroEtapaRca>
+              className="mt-3 w-full sm:w-fit"
+              rotuloAria="Situação dos pedidos"
+              valor={filtroEtapa}
+              onChange={setFiltroEtapa}
+              opcoes={([
+                ['ORCAMENTO', 'Aguardando aprovação'],
+                ['EM_PRODUCAO', 'Em produção'],
+                ['A_FATURAR', 'A faturar'],
+                ['FATURADO', 'Faturados'],
+                ['ENTREGUE', 'Entregues'],
+                ['TODAS', 'Todos'],
+              ] as [FiltroEtapaRca, string][]).map(([v, r]) => ({ valor: v, rotulo: r, contagem: contagemEtapas[v] || 0 }))}
+            />
+          )}
+        </CabecalhoPagina>
+
+        {/* 2. FILTROS EM UMA LINHA: tipo · busca · origem */}
+        <BarraFiltros>
+          {!modoCliente ? (
+            <Segmentado<'TODOS' | 'Orçamento' | 'Pedido Sugestivo' | 'Pedido'>
+              rotuloAria="Tipo de venda"
+              valor={filtroSubtipo}
+              onChange={setFiltroSubtipo}
+              opcoes={[
+                { valor: 'TODOS', rotulo: 'Todas', contagem: metricas.total },
+                { valor: 'Orçamento', rotulo: 'Orçamentos', contagem: metricas.orcamentos },
+                { valor: 'Pedido Sugestivo', rotulo: 'Sugestivos', contagem: metricas.sugestivos },
+                { valor: 'Pedido', rotulo: 'Pedidos de venda', contagem: metricas.pedidosVenda },
+              ]}
+            />
+          ) : (
+            <span className="hidden md:block" />
+          )}
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <CampoBusca
+              valor={busca}
+              onChange={setBusca}
+              placeholder={modoCliente ? 'Buscar nº do pedido' : 'Buscar venda, cliente ou RCA'}
+              className="flex-1 md:flex-none md:w-72"
+            />
+            {!modoPortal && (
+              <SeletorFiltro value={filtroOrigem} onChange={e => setFiltroOrigem(e.target.value)} aria-label="Origem da venda" className="max-w-[46%] md:max-w-none">
+                <option value="TODAS">Todas as origens</option>
+                <option value="RCA">Portal do RCA</option>
+                <option value="Admin">Admin (com RCA)</option>
+                <option value="Venda Direta">Venda direta</option>
+                <option value="Sugestão Reposição">Sugestão de reposição</option>
+                <option value="Portal Portfólio VIP">Portal VIP</option>
+                <option value="Portal do Cliente">Portal do Cliente</option>
+              </SeletorFiltro>
             )}
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                abrirNovaVenda();
-              }}
-              className={`
-                flex items-center justify-center gap-2 px-4 py-2 rounded-xl
-                bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs
-                shadow-xs transition-all cursor-pointer ${modoPortal ? 'w-full sm:w-auto py-2.5' : ''}
-              `}
-            >
-              <Plus className="w-4 h-4" />
-              <span>{modoPortal ? 'Fazer Pedido' : 'Nova Venda / Proposta'}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Portal do RCA: situação dos pedidos */}
-        {modoPortal && (
-          <div className="flex gap-1.5 overflow-x-auto pt-3 mt-3 border-t border-slate-100 -mx-1 px-1 pb-0.5" role="tablist" aria-label="Situação dos pedidos">
-            {([
-              ['ORCAMENTO', 'Aguardando aprovação'],
-              ['EM_PRODUCAO', 'Em produção'],
-              ['A_FATURAR', 'A faturar'],
-              ['FATURADO', 'Faturados'],
-              ['ENTREGUE', 'Entregues'],
-              ['TODAS', 'Todos'],
-            ] as [FiltroEtapaRca, string][]).map(([valor, rotulo]) => (
-              <button
-                key={valor}
-                type="button"
-                role="tab"
-                aria-selected={filtroEtapa === valor}
-                onClick={() => setFiltroEtapa(valor)}
-                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
-                  filtroEtapa === valor ? 'bg-emerald-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {rotulo} <span className="tabular-nums opacity-70">({contagemEtapas[valor] || 0})</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* STAT BAR MINIMALISTA EM LINHA */}
-        <div className={`flex-wrap items-center gap-6 pt-3 mt-3 border-t border-slate-100 text-xs ${modoCliente ? 'hidden' : modoPortal ? 'hidden sm:flex' : 'flex'}`}>
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Total em Negociação:</span>
-            <span className="font-mono font-bold text-slate-900 text-sm">
-              {metricas.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Volume Físico:</span>
-            <span className="font-mono font-bold text-slate-900">
-              {textoPeso(metricas.volumeTotalKg)}
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Orçamentos:</span>
-            <span className="font-mono font-bold text-emerald-800">
-              {metricas.orcamentos}
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Pedidos Sugestivos:</span>
-            <span className="font-mono font-bold text-amber-700">
-              {metricas.sugestivos}
-            </span>
-          </div>
-          <div className="w-px h-4 bg-slate-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Pedidos de Venda:</span>
-            <span className="font-mono font-bold text-blue-700">
-              {metricas.pedidosVenda}
-            </span>
-          </div>
-        </div>
+        </BarraFiltros>
       </div>
 
-      {/* 3. BARRA DE BUSCA E FILTROS DE TIPO (ORÇAMENTO / SUGESTIVO / PEDIDO) */}
-      <div className={`bg-[#f1f5f2] py-2.5 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 shrink-0 ${modoPortal ? 'px-4 sm:px-6' : 'px-6'}`}>
-        
-        {/* Pílulas de filtro por tipo de venda */}
-        <div className={`flex items-center gap-1.5 overflow-x-auto ${modoCliente ? 'hidden' : ''} ${modoPortal ? 'w-full sm:w-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap' : ''}`}>
-          <button
-            onClick={() => setFiltroSubtipo('TODOS')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              filtroSubtipo === 'TODOS'
-                ? 'bg-slate-900 text-white shadow-2xs'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            Todas as Vendas ({metricas.total})
-          </button>
-          <button
-            onClick={() => setFiltroSubtipo('Orçamento')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              filtroSubtipo === 'Orçamento'
-                ? 'bg-emerald-800 text-white shadow-2xs'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            Orçamentos ({metricas.orcamentos})
-          </button>
-          <button
-            onClick={() => setFiltroSubtipo('Pedido Sugestivo')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              filtroSubtipo === 'Pedido Sugestivo'
-                ? 'bg-amber-600 text-white shadow-2xs'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            Pedidos Sugestivos ({metricas.sugestivos})
-          </button>
-          <button
-            onClick={() => setFiltroSubtipo('Pedido')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              filtroSubtipo === 'Pedido'
-                ? 'bg-blue-700 text-white shadow-2xs'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            Pedidos de Venda ({metricas.pedidosVenda})
-          </button>
-        </div>
-
-        <div className={`flex items-center gap-2 ${modoPortal ? 'w-full sm:w-auto' : ''}`}>
-          <div className={`relative ${modoPortal ? 'flex-1 sm:flex-none sm:w-64' : 'w-56 sm:w-64'}`}>
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder={modoCliente ? 'Buscar nº do pedido...' : 'Buscar Venda, Cliente, RCA...'}
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-700 font-medium"
-            />
-          </div>
-
-          {!modoPortal && (
-          <select
-            value={filtroOrigem}
-            onChange={(e) => setFiltroOrigem(e.target.value)}
-            className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-emerald-700 cursor-pointer"
-          >
-            <option value="TODAS">Todas as Origens</option>
-            <option value="RCA">RCA (portal do RCA)</option>
-            <option value="Admin">Admin (com RCA)</option>
-            <option value="Venda Direta">Venda Direta</option>
-            <option value="Sugestão Reposição">Sugestão de Reposição</option>
-            <option value="Portal Portfólio VIP">Portal VIP</option>
-            <option value="Portal do Cliente">Portal do Cliente</option>
-          </select>
-          )}
-        </div>
-      </div>
-
-      {/* 4. TABELA COM ACESSO DIRETO AO VISUALIZADOR PELO OLHO / LINHA */}
-      <div className={modoPortal ? 'p-3 sm:p-6' : 'flex-1 p-6 overflow-y-auto'}>
-        {/* Portal do RCA no celular: cartões em vez de tabela */}
-        {modoPortal && (
-          <div className="sm:hidden space-y-2.5">
-            {pedidosFiltrados.length === 0 ? (
-              <div className="bg-white rounded-xl border border-slate-200 p-6 text-center">
-                <p className="text-sm font-bold text-slate-800">
-                  {pedidos.length === 0 ? 'Você ainda não enviou pedidos.' : 'Nenhum pedido nesta situação.'}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">
-                  {modoCliente
-                    ? 'Toque em "Fazer Pedido" para escolher os produtos da sua tabela.'
-                    : 'Toque em "Fazer Pedido" para montar um orçamento ou pedido para um cliente da sua carteira.'}
-                </p>
-              </div>
-            ) : pedidosFiltrados.map(item => {
-              const subtipoLabel = item.subtipo_venda || (item.origem === 'Sugestão Reposição' ? 'Pedido Sugestivo' : item.tipo === 'PEDIDO_VENDA' ? 'Pedido' : 'Orçamento');
-              const editavel = podeAlterar(item);
-              return (
-                <div key={item.id} className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs">
-                  <button type="button" onClick={() => abrirVisualizacao(item)} className="w-full text-left">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="font-mono text-[11px] font-bold text-slate-500">{item.numero_pedido} · {subtipoLabel}</div>
-                        {modoCliente ? (
-                          <div className="text-xs font-semibold text-slate-800 line-clamp-2">
-                            {item.itens.map(i => `${i.quantidade}x ${i.produto_nome}`).join(' · ')}
+      {/* 3. LISTA: cartões no celular, tabela densa a partir de sm */}
+      <div className={modoPortal ? 'px-3 pb-4 sm:px-6 sm:pb-6' : 'flex-1 min-h-0 overflow-y-auto'}>
+        <div className={modoPortal ? '' : 'mx-auto w-full max-w-[1700px] px-4 sm:px-6 pb-6'}>
+          {pedidosFiltrados.length === 0 ? (
+            <div className="bg-papel border border-linha rounded-md">{estadoVazio}</div>
+          ) : (
+            <>
+              {/* Celular: cartões */}
+              <ul className="sm:hidden bg-papel border border-linha rounded-md">
+                {pedidosFiltrados.map(item => {
+                  const editavel = podeAlterar(item);
+                  return (
+                    <li key={item.id} className="px-3.5 py-3 border-b border-linha last:border-b-0">
+                      <button type="button" onClick={() => abrirVisualizacao(item)} className="w-full text-left">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[11.5px] text-cinza tabular-nums">{item.numero_pedido} · {ROTULO_SUBTIPO[subtipoDe(item)] || subtipoDe(item)}</div>
+                            {modoCliente ? (
+                              <div className="text-[13px] font-semibold text-tinta line-clamp-2">
+                                {item.itens.map(i => `${i.quantidade}x ${i.produto_nome}`).join(' · ')}
+                              </div>
+                            ) : (
+                              <>
+                                <div className="text-[14px] font-bold text-tinta truncate">{item.cliente_nome}</div>
+                                <div className="text-[11.5px] text-cinza truncate">{item.cliente_cidade_uf}{!modoPortal && item.rca_nome ? ` · ${item.rca_nome}` : ''}</div>
+                              </>
+                            )}
                           </div>
-                        ) : (
-                          <>
-                            <div className="font-black text-slate-900 text-sm truncate">{item.cliente_nome}</div>
-                            <div className="text-[11px] text-slate-500">{item.cliente_cidade_uf}</div>
-                          </>
+                          {modoPortal && (
+                            <StatusChip tom={TOM_ETAPA_VENDA[item.etapa] || 'neutro'} className="shrink-0">{ROTULO_ETAPA[item.etapa]}</StatusChip>
+                          )}
+                        </div>
+                        <div className="flex items-end justify-between mt-2">
+                          <span className="text-[11.5px] text-cinza tabular-nums">{formatarDataBR(item.data_emissao)} · {item.prazo_pagamento}</span>
+                          <span className="text-[17px] font-extrabold tracking-[-0.01em] tabular-nums text-tinta">{moedaBR(item.valor_total)}</span>
+                        </div>
+                      </button>
+                      <div className="flex gap-2 mt-2.5">
+                        {!modoPortal && (
+                          <button
+                            type="button"
+                            onClick={() => handleAprovarParaProducao(item.id, item.numero_pedido)}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-md bg-eno-800 text-white text-[12.5px] font-semibold"
+                          >
+                            <Check className="w-3.5 h-3.5" /> Aprovar
+                          </button>
                         )}
-                      </div>
-                      <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold border ${COR_ETAPA[item.etapa]}`}>
-                        {ROTULO_ETAPA[item.etapa]}
-                      </span>
-                    </div>
-                    <div className="flex items-end justify-between mt-2">
-                      <span className="text-[11px] text-slate-500">{formatarDataBR(item.data_emissao)} · {item.prazo_pagamento}</span>
-                      <span className="text-lg font-black tracking-tight tabular-nums text-emerald-900">{formatarMoeda(item.valor_total)}</span>
-                    </div>
-                  </button>
-                  <div className="flex gap-2 mt-3">
-                    {editavel && (
-                      <button
-                        onClick={() => abrirEdicaoVenda(item)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-slate-300 text-slate-800 font-bold text-xs active:bg-slate-100"
-                      >
-                        <Pencil className="w-3.5 h-3.5" /> Editar
-                      </button>
-                    )}
-                    <button
-                      onClick={() => abrirVisualizacao(item)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-900 font-bold text-xs active:bg-emerald-100"
-                    >
-                      <Eye className="w-3.5 h-3.5" /> Ver / PDF
-                    </button>
-                    {editavel && (
-                      <button
-                        onClick={() => handleExcluir(item.id)}
-                        className="px-3 py-2 rounded-lg border border-slate-200 text-slate-500 active:bg-red-50 active:text-red-600"
-                        aria-label={`Excluir ${item.numero_pedido}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        <div className={`bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden ${modoPortal ? 'hidden sm:block overflow-x-auto' : ''}`}>
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/90 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
-                <th className="py-3 px-5">Venda / Proposta</th>
-                <th className="py-3 px-4">Tipo</th>
-                <th className="py-3 px-4">Cliente / Praça</th>
-                <th className="py-3 px-4">{modoPortal ? 'Situação' : 'RCA'}</th>
-                <th className="py-3 px-4">Produtos / Volume</th>
-                <th className="py-3 px-4">Valor Total</th>
-                <th className="py-3 px-4">Validade</th>
-                <th className="py-3 px-5 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {pedidosFiltrados.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-10 px-6 text-center">
-                    <div className="max-w-xl mx-auto bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 text-center">
-                      <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto border border-emerald-200">
-                        <Sparkles className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-slate-900 text-base">
-                          {modoPortal ? (pedidos.length === 0 ? 'Você ainda não enviou pedidos' : 'Nenhum pedido nesta situação') : 'Modo Novo Usuário - Sistema Limpo para Teste'}
-                        </h3>
-                        <p className="text-slate-500 text-xs mt-1">
-                          {modoCliente
-                            ? 'Clique em "Fazer Pedido" para escolher os produtos da sua tabela de preço.'
-                            : modoPortal
-                            ? 'Clique em "Fazer Pedido" para montar um orçamento ou pedido para um cliente da sua carteira.'
-                            : 'Nenhuma proposta ou venda cadastrada ainda. Clique em "Nova Venda / Proposta" para formular o primeiro orçamento.'}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                        {editavel && (
+                          <button
+                            type="button"
+                            onClick={() => abrirEdicaoVenda(item)}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-md border border-linha-forte text-tinta-2 text-[12.5px] font-semibold active:bg-papel-3"
+                          >
+                            <Pencil className="w-3.5 h-3.5" /> Editar
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => {
-                            abrirNovaVenda();
-                          }}
-                          className="px-4 py-2 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                          onClick={() => abrirVisualizacao(item)}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-md border border-linha-forte text-tinta-2 text-[12.5px] font-semibold active:bg-papel-3"
                         >
-                          <Plus className="w-4 h-4" />
-                          <span>{modoPortal ? '+ Fazer Pedido' : '+ Nova Venda / Proposta'}</span>
+                          <Eye className="w-3.5 h-3.5" /> Ver / PDF
                         </button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                pedidosFiltrados.map((item) => {
-                  const itensResumo = item.itens.map(i => `${i.quantidade}x ${i.tipo_embalagem}`).join(' + ');
-                  const subtipoLabel = item.subtipo_venda || (item.origem === 'Sugestão Reposição' ? 'Pedido Sugestivo' : item.tipo === 'PEDIDO_VENDA' ? 'Pedido' : 'Orçamento');
-                  
-                  return (
-                    <tr
-                      key={item.id}
-                      onClick={() => abrirVisualizacao(item)}
-                      className="hover:bg-emerald-50/40 transition-colors cursor-pointer group"
-                      title="Clique para abrir o visualizador oficial do documento"
-                    >
-                      <td className="py-3.5 px-5">
-                        <div className="font-mono font-bold text-slate-900 group-hover:text-emerald-900">
-                          {item.numero_pedido}
-                        </div>
-                        {item.origem === 'Portal do Cliente' && !modoCliente ? (
-                          <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded-md text-[10px] font-black bg-sky-100 text-sky-900 border border-sky-300 whitespace-nowrap">
-                            <User className="w-3 h-3" />
-                            Portal do Cliente
-                          </span>
-                        ) : (
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${item.origem === 'Sugestão Reposição' ? 'bg-amber-500' : 'bg-emerald-600'}`} />
-                          <span className="text-[10px] text-slate-400 font-medium">{ROTULO_ORIGEM[origemEfetiva(item)] || origemEfetiva(item)}</span>
-                        </div>
-                        )}
-                      </td>
-
-                      {/* Tipo do Documento */}
-                      <td className="py-3.5 px-4">
-                        {subtipoLabel === 'Pedido Sugestivo' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                            Pedido Sugestivo
-                          </span>
-                        ) : subtipoLabel === 'Pedido' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                            Pedido de Venda
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            Orçamento
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900">{item.cliente_nome}</div>
-                        <div className="text-[11px] text-slate-400">{item.cliente_cidade_uf}</div>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-slate-700 font-medium">
-                        {modoPortal ? (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${COR_ETAPA[item.etapa]}`}>
-                            {ROTULO_ETAPA[item.etapa]}
-                          </span>
-                        ) : item.rca_nome}
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <div className="font-medium text-slate-800 truncate max-w-xs" title={itensResumo}>
-                          {itensResumo}
-                        </div>
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          {textoPeso(item.peso_total_kg)}
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                        {item.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        <div className="text-[10px] text-slate-400 font-normal font-sans">{item.prazo_pagamento}</div>
-                      </td>
-
-                      <td className="py-3.5 px-4 font-mono text-slate-600">
-                        {item.data_validade_orcamento?.split('-').reverse().join('/') || '-'}
-                      </td>
-
-                      <td className="py-3.5 px-5 text-right">
-                        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          {!modoPortal && (
+                        {editavel && (
                           <button
-                            onClick={() => handleAprovarParaProducao(item.id, item.numero_pedido)}
-                            className="
-                              flex items-center gap-1 px-3 py-1.5 rounded-lg
-                              bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs
-                              shadow-2xs transition-colors cursor-pointer
-                            "
-                            title="Aprovar e Enviar para Produção"
-                          >
-                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                            <span>Aprovar</span>
-                          </button>
-                          )}
-
-                          {podeAlterar(item) && (
-                          <button
-                            onClick={() => abrirEdicaoVenda(item)}
-                            className="
-                              flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                              bg-white hover:bg-slate-50 text-slate-800 border border-slate-300
-                              font-bold text-xs transition-colors cursor-pointer shadow-2xs
-                            "
-                            title="Editar itens, cliente, tabela e condições"
-                          >
-                            <Pencil className="w-3.5 h-3.5 text-slate-600" />
-                            <span>Editar</span>
-                          </button>
-                          )}
-
-                          {/* BOTÃO DO OLHO: VER / EXPORTAR */}
-                          <button
-                            onClick={() => abrirVisualizacao(item)}
-                            className="
-                              flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                              bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300
-                              font-bold text-xs transition-colors cursor-pointer shadow-2xs
-                            "
-                            title="Abrir o visualizador do documento para ver antes de exportar"
-                          >
-                            <Eye className="w-4 h-4 text-emerald-800" />
-                            <span>Ver / Exportar</span>
-                          </button>
-
-                          {podeAlterar(item) && (
-                          <button
+                            type="button"
                             onClick={() => handleExcluir(item.id)}
-                            className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-                            title="Excluir"
+                            className="px-3 h-9 rounded-md border border-linha-forte text-cinza active:bg-st-vencido-bg active:text-st-vencido"
+                            aria-label={`Excluir ${item.numero_pedido}`}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                        )}
+                      </div>
+                    </li>
                   );
-                })
-              )}
-            </tbody>
-          </table>
+                })}
+              </ul>
+
+              {/* A partir de sm: tabela densa */}
+              <TabelaDados className="hidden sm:block">
+                <thead className={tabela.thead}>
+                  <tr>
+                    <Th>Venda</Th>
+                    {!modoCliente && <Th>Cliente</Th>}
+                    <Th>{modoPortal ? 'Situação' : 'RCA'}</Th>
+                    <Th>Itens</Th>
+                    <Th>Validade</Th>
+                    <Th numero>Valor</Th>
+                    <Th className="text-right">Ações</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pedidosFiltrados.map(item => {
+                    const itensResumo = item.itens.map(i => `${i.quantidade}x ${i.tipo_embalagem}`).join(' + ');
+                    const origem = ROTULO_ORIGEM[origemEfetiva(item)] || origemEfetiva(item);
+                    const vencida = item.etapa === 'ORCAMENTO' && validadeVencida(item.data_validade_orcamento);
+                    return (
+                      <tr
+                        key={item.id}
+                        onClick={() => abrirVisualizacao(item)}
+                        className={`${tabela.tr} cursor-pointer group`}
+                        title="Clique para abrir o documento"
+                      >
+                        <Td>
+                          <div className="font-semibold text-tinta tabular-nums whitespace-nowrap group-hover:text-eno-700">{item.numero_pedido}</div>
+                          <div className="text-[11.5px] text-cinza whitespace-nowrap">
+                            {ROTULO_SUBTIPO[subtipoDe(item)] || subtipoDe(item)}
+                            {!modoCliente && (
+                              <>
+                                {' · '}
+                                <span className={item.origem === 'Portal do Cliente' ? 'text-st-producao font-semibold' : ''}>{origem}</span>
+                              </>
+                            )}
+                          </div>
+                        </Td>
+                        {!modoCliente && (
+                          <Td className="max-w-[260px]">
+                            <div className="font-semibold text-tinta truncate">{item.cliente_nome}</div>
+                            <div className="text-[11.5px] text-cinza truncate">{item.cliente_cidade_uf}</div>
+                          </Td>
+                        )}
+                        <Td className="whitespace-nowrap">
+                          {modoPortal ? (
+                            <StatusChip tom={TOM_ETAPA_VENDA[item.etapa] || 'neutro'}>{ROTULO_ETAPA[item.etapa]}</StatusChip>
+                          ) : (
+                            item.rca_nome || <span className="text-cinza-claro">Sem RCA</span>
+                          )}
+                        </Td>
+                        <Td className="max-w-[240px]">
+                          <div className="truncate" title={itensResumo}>{itensResumo}</div>
+                          <div className="text-[11.5px] text-cinza tabular-nums">{textoPeso(item.peso_total_kg)}</div>
+                        </Td>
+                        <Td className="whitespace-nowrap tabular-nums">
+                          {item.data_validade_orcamento ? (
+                            vencida ? (
+                              <StatusChip tom="vencido">Venceu {formatarDataBR(item.data_validade_orcamento)}</StatusChip>
+                            ) : (
+                              formatarDataBR(item.data_validade_orcamento)
+                            )
+                          ) : (
+                            <span className="text-cinza-claro">—</span>
+                          )}
+                        </Td>
+                        <Td numero>
+                          <div className="font-bold text-tinta text-[13.5px]">{moedaBR(item.valor_total)}</div>
+                          <div className="text-[11.5px] text-cinza font-normal">{item.prazo_pagamento}</div>
+                        </Td>
+                        <Td className="text-right">
+                          <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                            {!modoPortal && (
+                              <button
+                                type="button"
+                                onClick={() => handleAprovarParaProducao(item.id, item.numero_pedido)}
+                                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[5px] bg-eno-800 hover:bg-eno-900 text-white text-[12px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                                title="Aprovar e enviar para produção"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                Aprovar
+                              </button>
+                            )}
+                            {podeAlterar(item) && (
+                              <button
+                                type="button"
+                                onClick={() => abrirEdicaoVenda(item)}
+                                className="inline-flex items-center gap-1 h-7 px-2 rounded-[5px] text-tinta-2 hover:bg-papel-3 text-[12px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                                title="Editar itens, cliente, tabela e condições"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                                Editar
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => abrirVisualizacao(item)}
+                              className="inline-flex items-center gap-1 h-7 px-2 rounded-[5px] text-tinta-2 hover:bg-papel-3 text-[12px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                              title="Abrir o documento para ver antes de exportar"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              Ver
+                            </button>
+                            {podeAlterar(item) && (
+                              <button
+                                type="button"
+                                onClick={() => handleExcluir(item.id)}
+                                className="inline-flex items-center justify-center h-7 w-7 rounded-[5px] text-cinza-claro hover:bg-st-vencido-bg hover:text-st-vencido transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                                title="Excluir"
+                                aria-label={`Excluir ${item.numero_pedido}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </TabelaDados>
+            </>
+          )}
         </div>
       </div>
 

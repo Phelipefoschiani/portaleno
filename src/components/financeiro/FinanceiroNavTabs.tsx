@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useDentroDoShell } from '../ui/ShellContext';
 import {
   DollarSign,
   CreditCard,
@@ -23,6 +24,8 @@ export interface FinanceiroNavTabsProps {
 }
 
 export function FinanceiroNavTabs({ activeTab, onNavigate }: FinanceiroNavTabsProps) {
+  // Dentro do shell administrativo o submenu da seção já aparece na faixa superior
+  const dentroDoShell = useDentroDoShell();
   const [counts, setCounts] = useState({
     aReceber: 0,
     aPagar: 0
@@ -83,6 +86,8 @@ export function FinanceiroNavTabs({ activeTab, onNavigate }: FinanceiroNavTabsPr
       icon: <Landmark className="w-3.5 h-3.5" />
     }
   ];
+
+  if (dentroDoShell) return null;
 
   return (
     <div className="w-full bg-white border-b border-slate-200/80 px-6 py-2 flex items-center gap-1.5 overflow-x-auto shrink-0 select-none no-scrollbar">

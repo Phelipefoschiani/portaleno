@@ -1,4 +1,5 @@
 import React from 'react';
+import { useDentroDoShell } from '../ui/ShellContext';
 import {
   FlaskConical,
   Calculator,
@@ -23,6 +24,8 @@ export interface ProdutosNavTabsProps {
 }
 
 export function ProdutosNavTabs({ activeTab, onNavigate }: ProdutosNavTabsProps) {
+  // Dentro do shell administrativo o submenu da seção já aparece na faixa superior
+  const dentroDoShell = useDentroDoShell();
   const tabs = [
     {
       id: 'produtos_estoque_cadastro',
@@ -60,6 +63,8 @@ export function ProdutosNavTabs({ activeTab, onNavigate }: ProdutosNavTabsProps)
       icon: <BarChart3 className="w-3.5 h-3.5" />
     }
   ];
+
+  if (dentroDoShell) return null;
 
   return (
     <div className="w-full bg-white border-b border-slate-200/80 px-6 py-2 flex items-center gap-1.5 overflow-x-auto shrink-0 select-none no-scrollbar">

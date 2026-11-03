@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Package, Boxes, ClipboardList, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { Painel } from '../ui/Painel';
 import {
   carregarEstoqueProdutos,
   carregarMateriaPrima,
@@ -47,80 +47,65 @@ export function AlertasEstoqueProducao({ onNavigate }: Props) {
 
   const total = dados.produtos.length + dados.materias.length + dados.opsFalta.length;
 
-  const badge = (critico: boolean) =>
-    critico
-      ? 'bg-red-100 text-red-800 border-red-200'
-      : 'bg-amber-100 text-amber-800 border-amber-200';
+  // Sem alerta: a Visão Geral já mostra "Tudo em dia" nas pendências
+  if (total === 0) return null;
+
+  const valorClasse = (critico: boolean) =>
+    `shrink-0 text-[12px] font-semibold tabular-nums ${critico ? 'text-st-vencido' : 'text-st-aguardando'}`;
+
+  const Coluna = ({ titulo, qtd, destino, children }: { titulo: string; qtd: number; destino: string; children: React.ReactNode }) => (
+    <div className="min-w-0">
+      <button
+        type="button"
+        onClick={() => onNavigate(destino)}
+        className="w-full flex items-baseline justify-between gap-2 pb-1.5 mb-1 border-b border-linha text-left cursor-pointer group"
+      >
+        <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cinza group-hover:text-eno-700">{titulo}</span>
+        <span className="text-[12px] tabular-nums text-cinza">{qtd}</span>
+      </button>
+      {qtd === 0 ? <div className="py-1.5 text-[12.5px] text-cinza-claro">Nenhum.</div> : children}
+    </div>
+  );
 
   return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm">
-      <div className="flex items-center justify-between mb-3.5">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-          <AlertTriangle className={`w-4 h-4 ${total > 0 ? 'text-red-600' : 'text-slate-400'}`} />
-          <span>Alertas de Estoque e Produção</span>
-          {total > 0 && <span className="px-1.5 py-0.5 rounded-full bg-red-600 text-white font-mono text-[10px]">{total}</span>}
-        </h2>
+    <Painel titulo="Estoque e produção" contexto="itens abaixo do mínimo e faltas das OPs">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-8 gap-y-5">
+        <Coluna titulo="Produtos acabados" qtd={dados.produtos.length} destino="produtos_estoque_cadastro">
+          {dados.produtos.slice(0, 6).map(({ p, status }) => (
+            <div key={p.id} className="flex items-baseline justify-between gap-3 py-1.5 text-[13px]">
+              <span className="truncate text-tinta">{p.nome}</span>
+              <span className={valorClasse(status === 'CRITICO')}>
+                {fmt(p.estoque_atual_kg)} <span className="text-cinza font-normal">/ {fmt(p.estoque_minimo_kg)} kg</span>
+              </span>
+            </div>
+          ))}
+        </Coluna>
+
+        <Coluna titulo="Matéria-prima" qtd={dados.materias.length} destino="produtos_materia_prima">
+          {dados.materias.slice(0, 6).map(({ m, status }) => (
+            <div key={m.id} className="flex items-baseline justify-between gap-3 py-1.5 text-[13px]">
+              <span className="truncate text-tinta">{m.nome}</span>
+              <span className={valorClasse(status === 'CRITICO')}>
+                {fmt(m.estoque_atual)} <span className="text-cinza font-normal">/ {fmt(m.estoque_minimo)} {m.unidade_medida}</span>
+              </span>
+            </div>
+          ))}
+        </Coluna>
+
+        <Coluna titulo="OPs com falta de matéria-prima" qtd={dados.opsFalta.length} destino="pedidos_ordens_producao">
+          {dados.opsFalta.slice(0, 6).map(({ o, faltas }) => (
+            <div key={o.id} className="py-1.5 text-[13px]">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="truncate text-tinta font-semibold">{o.numero} · {o.produto_nome}</span>
+                <span className="shrink-0 text-[12px] tabular-nums text-cinza">{fmt(o.quantidade_planejada_pacotes)} pct</span>
+              </div>
+              <div className="text-[12px] text-st-vencido">
+                Falta {faltas.map(f => `${fmt(f.falta)} ${f.unidade} de ${f.materia_prima_nome}`).join(' · ')}
+              </div>
+            </div>
+          ))}
+        </Coluna>
       </div>
-
-      {total === 0 ? (
-        <div className="text-xs text-emerald-800 font-semibold flex items-center gap-1.5">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>Nenhum produto ou matéria-prima abaixo do mínimo e nenhuma OP com falta de matéria-prima.</span>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 text-xs">
-          <div className="space-y-1.5">
-            <button onClick={() => onNavigate('produtos_estoque_cadastro')} className="w-full flex items-center justify-between font-bold text-slate-800 hover:text-emerald-800 cursor-pointer">
-              <span className="flex items-center gap-1.5"><Package className="w-3.5 h-3.5 text-emerald-700" /> Produtos abaixo do mínimo ({dados.produtos.length})</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-            {dados.produtos.length === 0 && <div className="text-slate-400">Nenhum.</div>}
-            {dados.produtos.slice(0, 6).map(({ p, status }) => (
-              <div key={p.id} className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-slate-50 border border-slate-100">
-                <span className="truncate font-semibold text-slate-800">{p.nome}</span>
-                <span className={`shrink-0 px-1.5 py-0.5 rounded border font-mono text-[10px] font-bold ${badge(status === 'CRITICO')}`}>
-                  {fmt(p.estoque_atual_kg)} / {fmt(p.estoque_minimo_kg)} kg
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <div className="space-y-1.5">
-            <button onClick={() => onNavigate('produtos_materia_prima')} className="w-full flex items-center justify-between font-bold text-slate-800 hover:text-emerald-800 cursor-pointer">
-              <span className="flex items-center gap-1.5"><Boxes className="w-3.5 h-3.5 text-emerald-700" /> Matérias-primas abaixo do mínimo ({dados.materias.length})</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-            {dados.materias.length === 0 && <div className="text-slate-400">Nenhuma.</div>}
-            {dados.materias.slice(0, 6).map(({ m, status }) => (
-              <div key={m.id} className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-slate-50 border border-slate-100">
-                <span className="truncate font-semibold text-slate-800">{m.nome}</span>
-                <span className={`shrink-0 px-1.5 py-0.5 rounded border font-mono text-[10px] font-bold ${badge(status === 'CRITICO')}`}>
-                  {fmt(m.estoque_atual)} / {fmt(m.estoque_minimo)} {m.unidade_medida}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <div className="space-y-1.5">
-            <button onClick={() => onNavigate('pedidos_ordens_producao')} className="w-full flex items-center justify-between font-bold text-slate-800 hover:text-emerald-800 cursor-pointer">
-              <span className="flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5 text-emerald-700" /> OPs com falta de matéria-prima ({dados.opsFalta.length})</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-            {dados.opsFalta.length === 0 && <div className="text-slate-400">Nenhuma.</div>}
-            {dados.opsFalta.slice(0, 6).map(({ o, faltas }) => (
-              <div key={o.id} className="p-1.5 rounded-lg bg-red-50/60 border border-red-100">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-semibold text-slate-800">{o.numero} · {o.produto_nome}</span>
-                  <span className="shrink-0 font-mono text-[10px] text-slate-500">{fmt(o.quantidade_planejada_pacotes)} pct</span>
-                </div>
-                <div className="text-[10px] text-red-700 font-semibold">
-                  Falta: {faltas.map(f => `${fmt(f.falta)} ${f.unidade} ${f.materia_prima_nome}`).join(' · ')}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+    </Painel>
   );
 }
