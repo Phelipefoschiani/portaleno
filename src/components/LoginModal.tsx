@@ -205,7 +205,7 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
           <p className="mt-2 text-xs text-slate-500">
             {primeiroAcesso
               ? 'Primeiro acesso: nenhum usuário cadastrado. Defina o usuário e a senha do administrador do sistema.'
-              : 'Digite seu usuário e senha. Você será direcionado ao painel do seu perfil.'}
+              : 'Digite seu usuário (ou e-mail) e senha. Você entra direto no portal do seu perfil.'}
           </p>
         </div>
 
@@ -222,7 +222,7 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
           {/* Campo Usuário */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Usuário
+              Usuário ou e-mail
             </label>
             <div className="relative flex items-center">
               <div className="absolute left-3.5 pointer-events-none text-slate-400">
@@ -232,7 +232,7 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder={primeiroAcesso ? 'Defina o usuário do administrador' : 'Seu usuário de acesso'}
+                placeholder={primeiroAcesso ? 'Defina o usuário do administrador' : 'Seu usuário ou e-mail de acesso'}
                 autoComplete="username"
                 autoFocus
                 className="

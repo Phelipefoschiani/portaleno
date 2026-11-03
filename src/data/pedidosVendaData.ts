@@ -119,7 +119,7 @@ export interface PedidoVenda {
     arquivo_conteudo?: string;
   };
   observacoes?: string;
-  origem: 'Venda Direta' | 'RCA' | 'Portal Portfólio VIP' | 'Sugestão Reposição';
+  origem: 'Venda Direta' | 'RCA' | 'Portal Portfólio VIP' | 'Sugestão Reposição' | 'Portal do Cliente';
   subtipo_venda?: 'Orçamento' | 'Pedido Sugestivo' | 'Pedido';
   modo_exibicao_padrao?: 'FARDO' | 'UNITARIO';
   tabela_id?: string;

@@ -5,7 +5,7 @@
 // Observação: por ser 100% local, quem tem acesso ao navegador com ferramentas de desenvolvedor
 // consegue alterar os dados. Quando houver servidor, a autenticação deve ser feita no backend.
 
-export type PerfilUsuario = 'ADMIN' | 'AGRICULTOR' | 'RCA' | 'PROVISORIO' | 'PRODUCAO' | 'SITIO';
+export type PerfilUsuario = 'ADMIN' | 'AGRICULTOR' | 'RCA' | 'PROVISORIO' | 'PRODUCAO' | 'SITIO' | 'CLIENTE';
 
 export const PERFIS_USUARIO: { id: PerfilUsuario; rotulo: string }[] = [
   { id: 'ADMIN', rotulo: 'Administrador (Painel Geral)' },
@@ -14,6 +14,7 @@ export const PERFIS_USUARIO: { id: PerfilUsuario; rotulo: string }[] = [
   { id: 'PROVISORIO', rotulo: 'Cadastro Provisório (Portfólio VIP)' },
   { id: 'PRODUCAO', rotulo: 'Produção (Chão de Fábrica)' },
   { id: 'SITIO', rotulo: 'Controle do Sítio' },
+  { id: 'CLIENTE', rotulo: 'Cliente (Portal do Cliente)' },
 ];
 
 interface UsuarioArmazenado {
@@ -128,12 +129,31 @@ function validarSenha(senha: string): void {
   }
 }
 
+const RE_EMAIL = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
+
+/** Login: nome de usuário simples ou e-mail (sempre minúsculo e único na base). */
 function validarNomeUsuario(usuario: string, lista: UsuarioArmazenado[], ignorarId?: string): string {
   const u = normalizarUsuario(usuario);
   if (u.length < 3) throw new Error('O usuário deve ter no mínimo 3 caracteres.');
-  if (!/^[a-z0-9._@-]+$/.test(u)) throw new Error('Use apenas letras, números, ponto, hífen, @ ou sublinhado no usuário.');
-  if (lista.some(x => x.usuario === u && x.id !== ignorarId)) throw new Error('Já existe um usuário com esse nome de acesso.');
+  if (u.includes('@')) {
+    if (!RE_EMAIL.test(u)) throw new Error('E-mail de login inválido.');
+  } else if (!/^[a-z0-9._-]+$/.test(u)) {
+    throw new Error('Use apenas letras, números, ponto, hífen ou sublinhado no usuário (ou um e-mail).');
+  }
+  if (lista.some(x => x.usuario === u && x.id !== ignorarId)) throw new Error('Já existe um usuário com esse login.');
   return u;
+}
+
+/** Valida um login (nome ou e-mail) contra a base atual, sem gravar. Lança erro se inválido/duplicado. */
+export function validarLogin(usuario: string, ignorarId?: string): string {
+  return validarNomeUsuario(usuario, lerUsuarios(), ignorarId);
+}
+
+/** Usuário vinculado a um cadastro (ex.: RCA ou cliente) com o perfil indicado. */
+export function obterUsuarioPorVinculo(perfil: PerfilUsuario, vinculoId?: string | null): UsuarioSistema | undefined {
+  if (!vinculoId) return undefined;
+  const u = lerUsuarios().find(x => x.perfil === perfil && x.vinculo_id === vinculoId);
+  return u ? publico(u) : undefined;
 }
 
 // ---------- tentativas / bloqueio ----------
@@ -336,7 +356,10 @@ export function atualizarUsuario(
   const atual = lista[idx];
   const atualizado: UsuarioArmazenado = {
     ...atual,
-    usuario: dados.usuario !== undefined ? validarNomeUsuario(dados.usuario, lista, id) : atual.usuario,
+    // Login sem alteração não é revalidado (preserva logins antigos fora da regra atual)
+    usuario: dados.usuario !== undefined && normalizarUsuario(dados.usuario) !== atual.usuario
+      ? validarNomeUsuario(dados.usuario, lista, id)
+      : atual.usuario,
     nome: dados.nome !== undefined ? (dados.nome.trim() || atual.usuario) : atual.nome,
     perfil: dados.perfil ?? atual.perfil,
     vinculo_id: dados.vinculo_id !== undefined ? (dados.vinculo_id || undefined) : atual.vinculo_id,

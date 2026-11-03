@@ -33,6 +33,7 @@ import {
   carregarCadastrosProvisorios,
   EVENTO_CADASTROS_ATUALIZADOS,
 } from '../../data/cadastrosData';
+import { carregarClientes } from '../../data/clientesData';
 import { formatarDataBR } from '../../lib/datas';
 import {
   baixarBackup,
@@ -44,7 +45,14 @@ import {
   DIAS_LEMBRETE_BACKUP,
 } from '../../lib/backup';
 
-const PERFIS_COM_VINCULO: PerfilUsuario[] = ['AGRICULTOR', 'RCA', 'PROVISORIO'];
+const PERFIS_COM_VINCULO: PerfilUsuario[] = ['AGRICULTOR', 'RCA', 'PROVISORIO', 'CLIENTE'];
+
+const ROTULO_VINCULO: Partial<Record<PerfilUsuario, string>> = {
+  AGRICULTOR: 'Agricultor vinculado',
+  RCA: 'RCA vinculado',
+  PROVISORIO: 'Cadastro provisório vinculado',
+  CLIENTE: 'Cliente vinculado',
+};
 
 type FormUsuario = {
   usuario: string;
@@ -86,9 +94,11 @@ export function UsuariosAcessos() {
     const atualizarCadastros = () => setVersaoCadastros(v => v + 1);
     window.addEventListener(EVENTO_AUTH_ATUALIZADO, atualizarUsuarios);
     window.addEventListener(EVENTO_CADASTROS_ATUALIZADOS, atualizarCadastros);
+    window.addEventListener('clientes_updated', atualizarCadastros);
     return () => {
       window.removeEventListener(EVENTO_AUTH_ATUALIZADO, atualizarUsuarios);
       window.removeEventListener(EVENTO_CADASTROS_ATUALIZADOS, atualizarCadastros);
+      window.removeEventListener('clientes_updated', atualizarCadastros);
     };
   }, []);
 
@@ -97,7 +107,8 @@ export function UsuariosAcessos() {
     const agricultores = carregarAgricultores().map(a => ({ id: a.id, rotulo: `${a.nome_completo}${a.nome_propriedade ? ` · ${a.nome_propriedade}` : ''}` }));
     const rcas = carregarRcas().map(r => ({ id: r.id, rotulo: `${r.codigo_rca} · ${r.nome_fantasia || r.nome_completo}` }));
     const provisorios = carregarCadastrosProvisorios().map(c => ({ id: c.id, rotulo: `${c.nome_convidado} · ${c.empresa_solicitante}` }));
-    return { AGRICULTOR: agricultores, RCA: rcas, PROVISORIO: provisorios } as Record<string, { id: string; rotulo: string }[]>;
+    const clientes = carregarClientes().map(c => ({ id: c.id, rotulo: `${c.fantasia || c.razao_nome}${c.endereco?.municipio ? ` · ${c.endereco.municipio}/${c.endereco.uf}` : ''}` }));
+    return { AGRICULTOR: agricultores, RCA: rcas, PROVISORIO: provisorios, CLIENTE: clientes } as Record<string, { id: string; rotulo: string }[]>;
   }, [versaoCadastros]);
 
   const rotuloVinculo = (u: UsuarioSistema) => {
@@ -252,7 +263,7 @@ export function UsuariosAcessos() {
           </div>
           <div>
             <h2 className="text-lg font-black text-slate-900">Usuários e Acessos</h2>
-            <p className="text-xs text-slate-500">Logins do sistema, perfis de acesso e vínculo com agricultor, RCA ou cadastro provisório.</p>
+            <p className="text-xs text-slate-500">Logins do sistema, perfis de acesso e vínculo com agricultor, RCA, cliente ou cadastro provisório. Login de RCA e cliente também pode ser criado no próprio cadastro.</p>
           </div>
         </div>
         <button
@@ -401,7 +412,7 @@ export function UsuariosAcessos() {
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Usuário (login) *</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Usuário ou e-mail (login) *</label>
                       <input className={inputCls} value={form.usuario} onChange={e => setForm({ ...form, usuario: e.target.value })} autoComplete="off" required />
                     </div>
                     <div>
@@ -418,7 +429,7 @@ export function UsuariosAcessos() {
                   {precisaVinculo && (
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        {form.perfil === 'AGRICULTOR' ? 'Agricultor vinculado' : form.perfil === 'RCA' ? 'RCA vinculado' : 'Cadastro provisório vinculado'}
+                        {ROTULO_VINCULO[form.perfil] || 'Vínculo'}
                       </label>
                       <select className={inputCls} value={form.vinculo_id} onChange={e => setForm({ ...form, vinculo_id: e.target.value })}>
                         <option value="">Sem vínculo (o portal não mostrará dados)</option>

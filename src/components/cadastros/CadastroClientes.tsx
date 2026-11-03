@@ -24,7 +24,8 @@ import {
   ChevronUp,
   ReceiptText,
   UserCheck,
-  Tag
+  Tag,
+  KeyRound
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -43,6 +44,14 @@ import { carregarTabelasPreco } from '../../data/produtosData';
 import { mesReferenciaDe, ultimosMesesReferencia } from '../../lib/mesesReferencia';
 import { formatarDataBR } from '../../lib/datas';
 import { lerCondicao, normalizarDias, textoCondicao } from '../../lib/prazoPagamento';
+import { obterSessao, obterUsuarioPorVinculo, listarUsuarios, EVENTO_AUTH_ATUALIZADO, UsuarioSistema } from '../../lib/auth';
+import {
+  AcessoPortalSecao,
+  EstadoAcessoPortal,
+  estadoAcessoInicial,
+  planejarAcessoPortal,
+  aplicarAcessoPortal,
+} from './AcessoPortalSecao';
 
 // Converte os pedidos de venda reais do cliente para a estrutura do histórico
 // rcaId (Portal do RCA): só os pedidos feitos por aquele RCA
@@ -179,6 +188,25 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
   const [modo, setModo] = useState<'lista' | 'formulario' | 'historico'>('lista');
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
 
+  // Acesso opcional ao Portal do Cliente (somente administrador cria/edita logins)
+  const podeGerirAcesso = !modoRca && obterSessao()?.perfil === 'ADMIN';
+  const [acessoEstado, setAcessoEstado] = useState<EstadoAcessoPortal>(() => estadoAcessoInicial());
+  const [acessoExistente, setAcessoExistente] = useState<UsuarioSistema | undefined>(undefined);
+  const [salvandoCliente, setSalvandoCliente] = useState(false);
+  const [versaoAuth, setVersaoAuth] = useState(0);
+  React.useEffect(() => {
+    const h = () => setVersaoAuth(v => v + 1);
+    window.addEventListener(EVENTO_AUTH_ATUALIZADO, h);
+    return () => window.removeEventListener(EVENTO_AUTH_ATUALIZADO, h);
+  }, []);
+  // Clientes com login no portal (badge na lista do admin)
+  const acessosClientes = useMemo(() => {
+    const m = new Map<string, UsuarioSistema>();
+    if (!podeGerirAcesso) return m;
+    listarUsuarios().forEach(u => { if (u.perfil === 'CLIENTE' && u.vinculo_id) m.set(u.vinculo_id, u); });
+    return m;
+  }, [versaoAuth, podeGerirAcesso]);
+
   // RCAs cadastrados (Cadastro de RCA) para o vínculo vendedor_id do cliente
   const [rcasCadastrados, setRcasCadastrados] = useState<RCA[]>(() => carregarRcas());
   React.useEffect(() => {
@@ -285,6 +313,8 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
       tabela_preco_id: modoRca ? (rcasCadastrados.find(r => r.id === rcaFixoId)?.tabela_preco_padrao_id || '') : '',
       ativo: true,
     });
+    setAcessoExistente(undefined);
+    setAcessoEstado(estadoAcessoInicial());
     setModo('formulario');
   };
 
@@ -313,6 +343,9 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
       tabela_preco_id: cliente.tabela_preco_id || '',
       ativo: cliente.ativo,
     });
+    const usuarioCliente = podeGerirAcesso ? obterUsuarioPorVinculo('CLIENTE', cliente.id) : undefined;
+    setAcessoExistente(usuarioCliente);
+    setAcessoEstado(estadoAcessoInicial(usuarioCliente));
     setModo('formulario');
   };
 
@@ -331,13 +364,37 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
     salvarClientes(atualizados);
   };
 
-  const salvarCliente = (e: React.FormEvent) => {
+  // Login do portal gravado depois do cadastro (o cliente já fica salvo mesmo se o acesso falhar)
+  const gravarAcessoCliente = async (plano: ReturnType<typeof planejarAcessoPortal> | null, clienteId: string, nome: string) => {
+    if (!plano || !('plano' in plano)) return;
+    try {
+      const msg = await aplicarAcessoPortal(plano.plano, { perfil: 'CLIENTE', vinculoId: clienteId, nome });
+      if (msg) alert(msg);
+    } catch (err) {
+      alert(`O cliente foi salvo, mas o acesso ao portal não foi gravado: ${err instanceof Error ? err.message : 'erro desconhecido'}`);
+    }
+  };
+
+  const salvarCliente = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (salvandoCliente) return;
 
     if (!formData.razao_nome.trim() || !formData.cpf_cnpj.trim()) {
       alert('A Razão Social/Nome e o CPF/CNPJ são campos obrigatórios para o cadastro.');
       return;
     }
+
+    // Acesso ao Portal do Cliente (opcional, só admin): valida antes de gravar
+    let planoAcesso: ReturnType<typeof planejarAcessoPortal> | null = null;
+    if (podeGerirAcesso) {
+      planoAcesso = planejarAcessoPortal(acessoEstado, acessoExistente, formData.email);
+      if ('erro' in planoAcesso) {
+        alert(planoAcesso.erro);
+        return;
+      }
+      if (planoAcesso.plano.acao === 'remover' && !window.confirm('Remover o acesso deste cliente ao portal? O login será excluído.')) return;
+    }
+    const nomeAcesso = formData.fantasia?.trim() || formData.razao_nome.trim();
 
     const fp = FORMAS_PAGAMENTO_OPTIONS.find(f => f.id === formData.forma_pagamento_id);
     // Prazo digitado livremente (ex.: 28 ou 28/35/42); vazio = à vista
@@ -400,6 +457,12 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
       setClientes(atualizados);
       salvarClientes(atualizados);
       sincronizarEspelhoClienteRca(clienteSelecionado.id, rcaSel?.id);
+      setSalvandoCliente(true);
+      try {
+        await gravarAcessoCliente(planoAcesso, clienteSelecionado.id, nomeAcesso);
+      } finally {
+        setSalvandoCliente(false);
+      }
     } else {
       // INSERT
       const novo: Cliente = {
@@ -436,6 +499,12 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
       setClientes(atualizados);
       salvarClientes(atualizados);
       sincronizarEspelhoClienteRca(novo.id, rcaSel?.id);
+      setSalvandoCliente(true);
+      try {
+        await gravarAcessoCliente(planoAcesso, novo.id, nomeAcesso);
+      } finally {
+        setSalvandoCliente(false);
+      }
     }
 
     setModo('lista');
@@ -715,6 +784,17 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                           <Mail className="w-3 h-3 text-slate-400" />
                           <span>{cli.email}</span>
                         </div>
+                        {acessosClientes.has(cli.id) && (
+                          <div
+                            className={`mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-black border ${
+                              acessosClientes.get(cli.id)?.ativo ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}
+                            title={`Login do Portal do Cliente: ${acessosClientes.get(cli.id)?.usuario}`}
+                          >
+                            <KeyRound className="w-3 h-3" />
+                            {acessosClientes.get(cli.id)?.ativo ? 'Acessa o portal' : 'Portal desativado'}
+                          </div>
+                        )}
                       </td>
 
                       {/* Cidade / UF */}
@@ -1263,6 +1343,26 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                 </div>
               </div>
             </div>
+
+            {/* SEÇÃO 4: ACESSO AO PORTAL DO CLIENTE (opcional, só administrador) */}
+            {podeGerirAcesso ? (
+              <AcessoPortalSecao
+                titulo="4. Acesso ao portal do cliente (opcional)"
+                descricao={acessoExistente
+                  ? 'Este cliente já entra no Portal do Cliente para fazer pedidos e ver o histórico.'
+                  : 'Com login e senha o cliente faz pedidos direto pelo portal (entram para sua aprovação) e acompanha o histórico.'}
+                existente={acessoExistente}
+                estado={acessoEstado}
+                onChange={setAcessoEstado}
+                emailSugerido={formData.email}
+                permitirRemover
+              />
+            ) : modoRca ? (
+              <div className="flex items-start gap-2.5 p-3.5 rounded-2xl border border-slate-200 bg-white text-xs text-slate-600">
+                <KeyRound className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                <span>O acesso do cliente ao Portal do Cliente (pedidos pela internet) é liberado pela fábrica. Peça ao administrador se o cliente quiser comprar direto.</span>
+              </div>
+            ) : null}
 
           </div>
 

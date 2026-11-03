@@ -47,7 +47,8 @@ import { gerarTituloComissaoAoFaturar } from './comissoesData';
 
 import {
   carregarControleSitio,
-  DespesaSitio
+  DespesaSitio,
+  CATEGORIA_FINANCEIRO as CATEGORIA_FINANCEIRO_SITIO
 } from './sitioControleData';
 
 import { hojeISO, paraISO, somarDias } from '../lib/datas';
@@ -561,7 +562,8 @@ function despesaSitioJaPaga(formaPagamento?: string): boolean {
   return true;
 }
 
-function categoriaSitio(tipo: DespesaSitio['tipo']): string {
+function categoriaSitio(tipo: DespesaSitio['tipo'], categoria?: DespesaSitio['categoria']): string {
+  if (categoria && CATEGORIA_FINANCEIRO_SITIO[categoria]) return CATEGORIA_FINANCEIRO_SITIO[categoria];
   if (tipo === 'COMBUSTIVEL' || tipo === 'LUBRIFICANTE') return 'Combustível & Lubrificantes';
   if (tipo === 'PECA' || tipo === 'MANUTENCAO') return 'Manutenção & Peças';
   return 'Outros';
@@ -589,7 +591,7 @@ export function integrarDespesaSitioAoFinanceiro(
     const formaPagamento = despesa.notaFiscal?.formaPagamento || '';
     const pago = opcoes?.situacao ? opcoes.situacao === 'PAGO' : despesaSitioJaPaga(formaPagamento);
     const data = paraISO(despesa.data) || hojeISO();
-    const categoria = categoriaSitio(despesa.tipo);
+    const categoria = categoriaSitio(despesa.tipo, despesa.categoria);
 
     if (pago) {
       const novaDespesa: DespesaOperacional & Record<string, any> = {

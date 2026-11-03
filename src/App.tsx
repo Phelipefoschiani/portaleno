@@ -3,6 +3,7 @@ import { LoginModal, DestinoAcesso } from './components/LoginModal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { PortalAgricultor } from './components/portais/PortalAgricultor';
 import { PortalRCA } from './components/portais/PortalRCA';
+import { PortalCliente } from './components/portais/PortalCliente';
 import { PortalConvidadoExclusivo } from './components/portfolio/PortalConvidadoExclusivo';
 import { PortalControleSitio } from './components/portais/PortalControleSitio';
 import { PortalProducao } from './components/producao/PortalProducao';
@@ -29,7 +30,7 @@ import {
 
 export type PaginaInstitucional = 'PROPOSITO' | 'NEGOCIOS' | 'FORNECEDORES' | 'TRABALHE' | 'SUSTENTABILIDADE' | 'CONTATO';
 
-const PORTAIS: DestinoAcesso[] = ['ADMIN', 'AGRICULTOR', 'RCA', 'PROVISORIO', 'PRODUCAO', 'SITIO'];
+const PORTAIS: DestinoAcesso[] = ['ADMIN', 'AGRICULTOR', 'RCA', 'PROVISORIO', 'PRODUCAO', 'SITIO', 'CLIENTE'];
 const ehPortal = (t: string): t is DestinoAcesso => (PORTAIS as string[]).includes(t);
 
 export default function App() {
@@ -129,6 +130,8 @@ export default function App() {
 
   const autorizado = (d: DestinoAcesso) => podeAcessar(sessao, d);
   const ehAdmin = sessao?.perfil === 'ADMIN';
+  // Admin "visualizando como" volta ao painel; os demais perfis saem do sistema
+  const sairDoPortal = ehAdmin ? () => setTelaAtiva('ADMIN') : handleSair;
 
   // Cadastro do Portal VIP: o vínculo da sessão; o ADMIN pode escolher qual visualizar
   const cadastroVipId = ehAdmin ? cadastroVipAdminId : (sessao?.vinculo_id || '');
@@ -159,7 +162,7 @@ export default function App() {
       {/* 1. Portal dos Agricultores (Fornecedores de Mandioca) */}
       {telaAtiva === 'AGRICULTOR' && autorizado('AGRICULTOR') && (
         <PortalAgricultor
-          onVoltar={handleSair}
+          onVoltar={sairDoPortal}
           agricultorId={sessao?.perfil === 'AGRICULTOR' ? sessao.vinculo_id : undefined}
           permitirSelecaoAdmin={ehAdmin}
         />
@@ -168,8 +171,17 @@ export default function App() {
       {/* 2. Portal do RCA (Representante Comercial Autônomo) */}
       {telaAtiva === 'RCA' && autorizado('RCA') && (
         <PortalRCA
-          onVoltar={handleSair}
+          onVoltar={sairDoPortal}
           rcaId={sessao?.perfil === 'RCA' ? sessao.vinculo_id : undefined}
+          permitirSelecaoAdmin={ehAdmin}
+        />
+      )}
+
+      {/* 2b. Portal do Cliente (pedidos e histórico do próprio cliente) */}
+      {telaAtiva === 'CLIENTE' && autorizado('CLIENTE') && (
+        <PortalCliente
+          onVoltar={sairDoPortal}
+          clienteId={sessao?.perfil === 'CLIENTE' ? sessao.vinculo_id : undefined}
           permitirSelecaoAdmin={ehAdmin}
         />
       )}
@@ -246,7 +258,9 @@ export default function App() {
       {telaAtiva === 'SITIO' && autorizado('SITIO') && <PortalControleSitio onVoltar={handleSair} />}
 
       {/* 6. Painel Geral Administrativo (Visão Geral, Pedidos, Produtos, Financeiro, etc.) */}
-      {telaAtiva === 'ADMIN' && autorizado('ADMIN') && <AdminDashboard onLogout={handleSair} />}
+      {telaAtiva === 'ADMIN' && autorizado('ADMIN') && (
+        <AdminDashboard onLogout={handleSair} onAbrirPortal={destino => setTelaAtiva(destino)} />
+      )}
 
       {/* TELA INICIAL (Landing Page Corporativa) */}
       {(telaAtiva === 'HOME' || (ehPortal(telaAtiva) && !autorizado(telaAtiva))) && (

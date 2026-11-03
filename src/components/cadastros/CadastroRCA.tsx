@@ -70,6 +70,14 @@ import { baixarTituloComissao, sincronizarTitulosComissao, DIA_VENCIMENTO_COMISS
 import { useListaPersistida } from '../../lib/useListaPersistida';
 import { formatarDataBR, hojeISO } from '../../lib/datas';
 import { ultimosMesesReferencia } from '../../lib/mesesReferencia';
+import { obterUsuarioPorVinculo, excluirUsuario, EVENTO_AUTH_ATUALIZADO, UsuarioSistema } from '../../lib/auth';
+import {
+  AcessoPortalSecao,
+  EstadoAcessoPortal,
+  estadoAcessoInicial,
+  planejarAcessoPortal,
+  aplicarAcessoPortal,
+} from './AcessoPortalSecao';
 
 /**
  * Grupos de Produto para comissão = lista de categorias de produto (cadastro de produtos: botão + / gerenciar),
@@ -164,6 +172,21 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
   const [novoProdutoId, setNovoProdutoId] = useState<string>('');
   const [novoProdutoPercentual, setNovoProdutoPercentual] = useState<number>(3.0);
   const [mostrarModelosAvancados, setMostrarModelosAvancados] = useState(false);
+
+  // Acesso ao portal do RCA (usuário perfil 'RCA' com vinculo_id = id do RCA)
+  const [acessoEstado, setAcessoEstado] = useState<EstadoAcessoPortal>(() => estadoAcessoInicial());
+  const [acessoExistente, setAcessoExistente] = useState<UsuarioSistema | undefined>(undefined);
+  const [salvandoRca, setSalvandoRca] = useState(false);
+  const [versaoAuth, setVersaoAuth] = useState(0);
+  React.useEffect(() => {
+    const h = () => setVersaoAuth(v => v + 1);
+    window.addEventListener(EVENTO_AUTH_ATUALIZADO, h);
+    return () => window.removeEventListener(EVENTO_AUTH_ATUALIZADO, h);
+  }, []);
+  const acessoDoSelecionado = useMemo(
+    () => (selectedRcaId ? obterUsuarioPorVinculo('RCA', selectedRcaId) : undefined),
+    [selectedRcaId, versaoAuth]
+  );
 
   // Formulário de Edição / Criação
   const [formData, setFormData] = useState<Partial<RCA>>({
@@ -291,6 +314,8 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
       }
     });
     setMostrarModelosAvancados(false);
+    setAcessoExistente(undefined);
+    setAcessoEstado(estadoAcessoInicial());
     setIsCreating(true);
     setIsEditing(true);
   };
@@ -305,6 +330,9 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
       endereco: { ...rca.endereco }
     });
     setMostrarModelosAvancados(['por_grupo', 'por_cliente', 'misto'].includes(rca.modelo_comissao));
+    const usuarioRca = obterUsuarioPorVinculo('RCA', rca.id);
+    setAcessoExistente(usuarioRca);
+    setAcessoEstado(estadoAcessoInicial(usuarioRca));
     setIsCreating(false);
     setIsEditing(true);
   };
@@ -417,13 +445,46 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
     }
   };
 
-  const handleSalvar = (e: React.FormEvent) => {
+  // Grava o login do portal depois do cadastro (o RCA já fica salvo mesmo se o acesso falhar)
+  const gravarAcessoRca = async (plano: ReturnType<typeof planejarAcessoPortal>, rca: RCA) => {
+    if (!('plano' in plano)) return;
+    try {
+      const msg = await aplicarAcessoPortal(plano.plano, {
+        perfil: 'RCA',
+        vinculoId: rca.id,
+        nome: rca.nome_fantasia || rca.nome_completo,
+      });
+      if (msg) alert(msg);
+    } catch (err) {
+      alert(`O RCA foi salvo, mas o acesso ao portal não foi gravado: ${err instanceof Error ? err.message : 'erro desconhecido'}`);
+    }
+  };
+
+  const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (salvandoRca) return;
     if (!formData.nome_completo || !formData.cpf_cnpj) {
       alert('Por favor, preencha o Nome e o CPF/CNPJ do RCA.');
       return;
     }
 
+    // Acesso ao portal: valida antes de gravar qualquer coisa
+    const planoAcesso = planejarAcessoPortal(acessoEstado, acessoExistente, formData.email);
+    if ('erro' in planoAcesso) {
+      alert(planoAcesso.erro);
+      return;
+    }
+    if (isCreating && planoAcesso.plano.acao === 'nenhuma') {
+      const pular = window.confirm(
+        'Este RCA ficará SEM acesso ao Portal do RCA (não conseguirá entrar no sistema).\n\n' +
+        'Para liberar, cancele e preencha login e senha em "Acesso ao portal". Deseja salvar mesmo assim, sem acesso?'
+      );
+      if (!pular) return;
+    }
+    if (planoAcesso.plano.acao === 'remover' && !window.confirm('Remover o acesso deste RCA ao portal? O login será excluído.')) return;
+
+    setSalvandoRca(true);
+    try {
     if (isCreating) {
       const novoRca: RCA = {
         id: `rca_${Date.now()}`,
@@ -476,6 +537,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
       setSelectedRca(novoRca);
       setIsEditing(false);
       setIsCreating(false);
+      await gravarAcessoRca(planoAcesso, novoRca);
     } else if (selectedRca) {
       const rcaAtualizado: RCA = {
         ...selectedRca,
@@ -496,6 +558,10 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
       sincronizarClientesDoRca(rcaAtualizado);
       setSelectedRca(rcaAtualizado);
       setIsEditing(false);
+      await gravarAcessoRca(planoAcesso, rcaAtualizado);
+    }
+    } finally {
+      setSalvandoRca(false);
     }
   };
 
@@ -530,7 +596,15 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
   };
 
   const handleExcluirRca = (rca: RCA) => {
-    if (!window.confirm('Excluir o RCA "' + rca.nome_completo + '"? Os clientes da carteira ficarão sem representante.')) return;
+    const usuarioRca = obterUsuarioPorVinculo('RCA', rca.id);
+    if (!window.confirm('Excluir o RCA "' + rca.nome_completo + '"? Os clientes da carteira ficarão sem representante.' + (usuarioRca ? ` O login "${usuarioRca.usuario}" do portal também será excluído.` : ''))) return;
+    if (usuarioRca) {
+      try {
+        excluirUsuario(usuarioRca.id);
+      } catch (err) {
+        alert(`Não foi possível excluir o login do portal: ${err instanceof Error ? err.message : 'erro'}. Remova em Usuários e Acessos.`);
+      }
+    }
     sincronizarClientesDoRca(rca, true);
     setRcas(prev => prev.filter(r => r.id !== rca.id));
     setSelectedRcaId(null);
@@ -802,7 +876,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                     className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
                   >
                     <Save className="w-4 h-4" />
-                    <span>Salvar RCA</span>
+                    <span>{salvandoRca ? 'Salvando...' : 'Salvar RCA'}</span>
                   </button>
                 </div>
               </div>
@@ -957,6 +1031,19 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                     </div>
                   </div>
                 </div>
+
+                {/* ACESSO AO PORTAL DO RCA (login = e-mail) */}
+                <AcessoPortalSecao
+                  titulo="Acesso ao portal"
+                  descricao={acessoExistente
+                    ? 'Este RCA já entra no Portal do RCA. Troque o login, redefina a senha ou desative o acesso.'
+                    : 'Login e senha que o RCA usa para entrar no Portal do RCA (pedidos, carteira e comissões).'}
+                  existente={acessoExistente}
+                  estado={acessoEstado}
+                  onChange={setAcessoEstado}
+                  emailSugerido={formData.email || ''}
+                  obrigatorio={isCreating}
+                />
 
                 {/* 2. SISTEMA DE COMISSÕES FLEXÍVEIS (ANTI-DUPLICIDADE) */}
                 <div className="pt-4 border-t border-slate-200">
@@ -1603,6 +1690,19 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                       <span className="flex items-center gap-1">
                         <Mail className="w-3.5 h-3.5 text-slate-400" />
                         {selectedRca.email}
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black border ${
+                          acessoDoSelecionado
+                            ? acessoDoSelecionado.ativo ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-100 text-slate-600 border-slate-300'
+                            : 'bg-amber-100 text-amber-900 border-amber-300'
+                        }`}
+                        title={acessoDoSelecionado ? `Login do portal: ${acessoDoSelecionado.usuario}` : 'Edite o RCA para criar o login do portal'}
+                      >
+                        <ShieldCheck className="w-3 h-3" />
+                        {acessoDoSelecionado
+                          ? `Portal: ${acessoDoSelecionado.usuario}${acessoDoSelecionado.ativo ? '' : ' (desativado)'}`
+                          : 'Sem acesso ao portal'}
                       </span>
                       <span className="flex items-center gap-1">
                         <MapPin className="w-3.5 h-3.5 text-emerald-600" />

@@ -7,7 +7,8 @@ import {
   ShoppingBag, 
   Package, 
   DollarSign, 
-  ChevronDown
+  ChevronDown,
+  Eye
 } from 'lucide-react';
 import { isModoLimpoAtivo } from '../data/sistemaReset';
 import { CadastroClientes } from './cadastros/CadastroClientes';
@@ -47,6 +48,8 @@ import { obterSessao } from '../lib/auth';
 type AdminDashboardProps = {
   onLogout: () => void;
   initialPageId?: string;
+  /** Abre um portal externo para o administrador "visualizar como" */
+  onAbrirPortal?: (destino: 'RCA' | 'CLIENTE' | 'AGRICULTOR') => void;
 };
 
 type MenuItem = {
@@ -61,7 +64,7 @@ type MenuGroup = {
   items: MenuItem[];
 };
 
-export function AdminDashboard({ onLogout, initialPageId }: AdminDashboardProps) {
+export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: AdminDashboardProps) {
   const getInitialPageState = () => {
     if (initialPageId === 'cadastro_agricultores') {
       return { id: 'cadastro_agricultores', groupLabel: 'Cadastros', pageLabel: 'Cadastro de Agricultores' };
@@ -285,6 +288,27 @@ export function AdminDashboard({ onLogout, initialPageId }: AdminDashboardProps)
 
           {/* Perfil (Administrador), Controles de Teste e Botão Sair */}
           <div className="flex items-center gap-2.5">
+            {/* Visualizar um portal como o usuário dele (RCA, cliente, agricultor) */}
+            {onAbrirPortal && (
+              <label className="hidden sm:flex items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-xl bg-emerald-900/60 border border-emerald-700/60 text-emerald-100 text-xs font-bold">
+                <Eye className="w-4 h-4 text-emerald-300" />
+                <span className="sr-only">Ver portal como</span>
+                <select
+                  value=""
+                  onChange={e => {
+                    const v = e.target.value as 'RCA' | 'CLIENTE' | 'AGRICULTOR' | '';
+                    if (v) onAbrirPortal(v);
+                  }}
+                  className="bg-transparent text-emerald-50 font-bold outline-none cursor-pointer pr-1"
+                  title="Abrir um portal para visualizar como o usuário"
+                >
+                  <option value="" className="text-slate-900">Ver portal...</option>
+                  <option value="CLIENTE" className="text-slate-900">Portal do Cliente</option>
+                  <option value="RCA" className="text-slate-900">Portal do RCA</option>
+                  <option value="AGRICULTOR" className="text-slate-900">Portal do Agricultor</option>
+                </select>
+              </label>
+            )}
             {/* Botão Sair Vermelho */}
             <button
               onClick={onLogout}

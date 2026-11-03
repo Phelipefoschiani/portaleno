@@ -55,6 +55,7 @@ import { obterRcasLookup, obterRcaPorId, EVENTO_CADASTROS_ATUALIZADOS } from '..
 import { calcularPrecoNaTabela, mostrarPrecoDaTabela, precoUnitarioNaTabela, tabelaPrecoAtiva } from '../../data/precosData';
 import { calcularComissaoPedido, CamposComissaoPedido, removerTituloComissaoDoPedido, rotuloRegraComissao } from '../../data/comissoesData';
 import { formatarMoeda } from '../../data/financeiroData';
+import { carregarClientes } from '../../data/clientesData';
 import { hojeISO, somarDias, formatarDataBR } from '../../lib/datas';
 
 // Tabela utilizável na venda: não arquivada e dentro da vigência
@@ -96,11 +97,23 @@ interface Props {
    * do admin e sem custo/receita interna.
    */
   rcaFixoId?: string;
+  /**
+   * Portal do Cliente: cliente fixo, RCA = vendedor do cliente (comissão continua calculada), tabela do
+   * cliente travada, lista só os pedidos desse cliente; sem comissão, custos, estoque ou ações do admin.
+   * O pedido entra como 'Pedido' na etapa ORCAMENTO (aguardando aprovação), origem 'Portal do Cliente'.
+   */
+  clienteFixoId?: string;
   /** Quando muda (> 0), abre o formulário de novo pedido (atalho do portal do RCA). */
   abrirNovoSinal?: number;
 }
 
 type FiltroEtapaRca = 'ORCAMENTO' | 'EM_PRODUCAO' | 'A_FATURAR' | 'FATURADO' | 'ENTREGUE' | 'TODAS';
+
+// Peso legível: abaixo de 1 tonelada mostra em kg
+const textoPeso = (kg: number) =>
+  (Number(kg) || 0) >= 1000
+    ? `${((Number(kg) || 0) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} t`
+    : `${(Number(kg) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg`;
 
 const ROTULO_ETAPA: Record<PedidoVenda['etapa'], string> = {
   ORCAMENTO: 'Aguardando aprovação',
@@ -118,16 +131,23 @@ const COR_ETAPA: Record<PedidoVenda['etapa'], string> = {
   ENTREGUE: 'bg-slate-200 text-slate-800 border-slate-300',
 };
 
-export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSinal }: Props) {
-  const modoRca = !!rcaFixoId;
+export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoId, abrirNovoSinal }: Props) {
+  const modoCliente = !!clienteFixoId;
+  const modoRca = !!rcaFixoId && !modoCliente;
+  // Portal (RCA ou Cliente): sem aprovação, sem navegação do admin, sem custos internos
+  const modoPortal = modoRca || modoCliente;
   const abrirNovoRef = useRef<() => void>(() => {});
   abrirNovoRef.current = () => abrirNovaVenda(); // definido mais abaixo; chamado só depois do render
   useEffect(() => {
     if (abrirNovoSinal) abrirNovoRef.current();
   }, [abrirNovoSinal]);
-  const [filtroEtapa, setFiltroEtapa] = useState<FiltroEtapaRca>('ORCAMENTO');
+  // Cliente abre no histórico completo; RCA abre nos que aguardam aprovação
+  const [filtroEtapa, setFiltroEtapa] = useState<FiltroEtapaRca>(modoCliente ? 'TODAS' : 'ORCAMENTO');
   // Pedido do RCA só pode ser alterado/excluído enquanto aguarda aprovação (etapa ORCAMENTO) e se for dele
-  const podeAlterar = (p: PedidoVenda) => !modoRca || (p.rca_id === rcaFixoId && p.etapa === 'ORCAMENTO');
+  // Cliente: só os pedidos dele que ainda aguardam aprovação
+  const podeAlterar = (p: PedidoVenda) =>
+    !modoPortal ||
+    (p.etapa === 'ORCAMENTO' && (modoCliente ? p.cliente_id === clienteFixoId : p.rca_id === rcaFixoId));
   const [pedidos, setPedidos] = useState<PedidoVenda[]>([]);
   const [busca, setBusca] = useState('');
   const [filtroOrigem, setFiltroOrigem] = useState<string>('TODAS');
@@ -141,16 +161,29 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
   // Portal do RCA: só a carteira dele (vendedor_id) e só ele como RCA
   const clientesDoEscopo = () => {
     const todos = obterClientesDisponiveis();
-    return rcaFixoId ? todos.filter(c => c.rca_id === rcaFixoId) : todos;
+    if (modoCliente) return todos.filter(c => c.id === clienteFixoId);
+    return modoRca ? todos.filter(c => c.rca_id === rcaFixoId) : todos;
   };
   const rcasDoEscopo = () => {
     const todos = obterRcasLookup();
+    // Portal do Cliente: só o representante (vendedor) do cliente
+    if (modoCliente) {
+      const cli = obterClientesDisponiveis().find(c => c.id === clienteFixoId);
+      return cli?.rca_id ? todos.filter(r => r.id === cli.rca_id) : [];
+    }
     // Admin: todos (o select mostra os ativos + o RCA já gravado no pedido, mesmo inativo)
-    return rcaFixoId ? todos.filter(r => r.id === rcaFixoId) : todos;
+    return modoRca ? todos.filter(r => r.id === rcaFixoId) : todos;
+  };
+  // Portal do Cliente: só a tabela de preço do cadastro do cliente
+  const tabelasDoEscopo = () => {
+    const ativas = carregarTabelasPreco().filter(tabelaPrecoUtilizavel);
+    if (!modoCliente) return ativas;
+    const cli = obterClientesDisponiveis().find(c => c.id === clienteFixoId);
+    return cli?.tabela_preco_id ? ativas.filter(t => t.id === cli.tabela_preco_id) : [];
   };
   const [clientesDisponiveis, setClientesDisponiveis] = useState(() => clientesDoEscopo());
   const [produtosDisponiveis, setProdutosDisponiveis] = useState(() => obterProdutosVendaDisponiveis());
-  const [tabelasDisponiveis, setTabelasDisponiveis] = useState(() => carregarTabelasPreco().filter(tabelaPrecoUtilizavel));
+  const [tabelasDisponiveis, setTabelasDisponiveis] = useState(() => tabelasDoEscopo());
   const [rcasDisponiveis, setRcasDisponiveis] = useState(() => rcasDoEscopo());
 
   // Form State
@@ -159,7 +192,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
   const [clienteIdForm, setClienteIdForm] = useState(() => clientesDoEscopo()[0]?.id || '');
   const [tabelaIdForm, setTabelaIdForm] = useState('');
   const [rcaIdFormLivre, setRcaIdForm] = useState('');
-  const rcaIdForm = rcaFixoId || rcaIdFormLivre;
+  const rcaIdForm = modoRca ? (rcaFixoId || '') : modoCliente ? (rcasDisponiveis[0]?.id || '') : rcaIdFormLivre;
   const [tipoFreteForm, setTipoFreteForm] = useState<'FOB (Retira na Fábrica)' | 'CIF (Entrega Grupo ENO)'>('CIF (Entrega Grupo ENO)');
   // Condição de pagamento: forma + dias digitados (ex.: 28 ou 28/35/42)
   const [formaPagamentoForm, setFormaPagamentoForm] = useState(FORMAS_PAGAMENTO[0]);
@@ -197,10 +230,17 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
   const recarregar = () => {
     const todos = carregarPedidosVenda();
     // Admin: só a etapa de vendas (ORCAMENTO). RCA: todos os pedidos dele, em qualquer etapa.
-    setPedidos(rcaFixoId ? todos.filter(p => p.rca_id === rcaFixoId) : todos.filter(p => p.etapa === 'ORCAMENTO'));
+    // Cliente: todos os pedidos dele, em qualquer etapa (nunca de outro cliente)
+    setPedidos(
+      modoCliente
+        ? todos.filter(p => p.cliente_id === clienteFixoId)
+        : modoRca
+        ? todos.filter(p => p.rca_id === rcaFixoId)
+        : todos.filter(p => p.etapa === 'ORCAMENTO')
+    );
     const prods = obterProdutosVendaDisponiveis();
     const clis = clientesDoEscopo();
-    const tabs = carregarTabelasPreco().filter(tabelaPrecoUtilizavel);
+    const tabs = tabelasDoEscopo();
     setProdutosDisponiveis(prods);
     setClientesDisponiveis(clis);
     setTabelasDisponiveis(tabs);
@@ -281,7 +321,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
     setDiasValidadeForm('7');
     setFormaPagamentoForm(FORMAS_PAGAMENTO[0]);
     setDiasPagamentoForm('28');
-    setSubtipoForm('Orçamento');
+    setSubtipoForm(modoCliente ? 'Pedido' : 'Orçamento');
     setModoLancamentoForm('FARDO');
     setTabelaIdForm('');
     setItensForm([]);
@@ -587,8 +627,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
     return c;
   }, [pedidos]);
   const pedidosNaEtapa = useMemo(
-    () => (modoRca && filtroEtapa !== 'TODAS' ? pedidos.filter(p => p.etapa === filtroEtapa) : pedidos),
-    [pedidos, modoRca, filtroEtapa]
+    () => (modoPortal && filtroEtapa !== 'TODAS' ? pedidos.filter(p => p.etapa === filtroEtapa) : pedidos),
+    [pedidos, modoPortal, filtroEtapa]
   );
 
   // Métricas
@@ -686,7 +726,33 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
       return;
     }
     const rcaSel = rcasDisponiveis.find(r => r.id === rcaIdForm);
-    if (modoRca) {
+    if (modoCliente) {
+      if (clienteSel.id !== clienteFixoId) {
+        alert('Pedido inválido para este cadastro.');
+        return;
+      }
+      if (carregarClientes().find(c => c.id === clienteFixoId)?.ativo === false) {
+        alert('Seu cadastro está inativo. Fale com a fábrica para liberar novos pedidos.');
+        return;
+      }
+      if (!tabelasDisponiveis.some(t => t.id === tabelaIdForm)) {
+        alert('A tabela de preço deste pedido não está disponível para o seu cadastro. Fale com seu representante.');
+        return;
+      }
+      if (itensForm.some(it => !produtosFiltradosPorTabela.some(p => p.id === it.produtoId))) {
+        alert('Há itens que não fazem parte da sua tabela de preço. Remova-os para continuar.');
+        return;
+      }
+      if (pedidoEmEdicao) {
+        const atual = carregarPedidosVenda().find(p => p.id === pedidoEmEdicao.id);
+        if (!atual || !podeAlterar(atual)) {
+          alert('Este pedido já foi aprovado pela fábrica e não pode mais ser alterado.');
+          setPedidoEmEdicao(null);
+          setModalNovo(false);
+          return;
+        }
+      }
+    } else if (modoPortal) {
       if (!rcaSel) {
         alert('Seu cadastro de RCA não foi encontrado. Fale com o administrador.');
         return;
@@ -706,7 +772,14 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
     const dataHojeStr = pedidoEmEdicao?.data_emissao || hojeISO();
     const dataValidadeStr = somarDias(dataHojeStr, parseInt(diasValidadeForm) || 7);
 
-    const itensMapeados = itensForm.map(it => {
+    // Portal do Cliente: o preço é sempre o da tabela (não editável)
+    const itensBase = modoCliente
+      ? itensForm.map(it => {
+          const p = produtosFiltradosPorTabela.find(x => x.id === it.produtoId);
+          return p ? { ...it, tipoEmbalagem: p.tipo_embalagem || it.tipoEmbalagem, precoUnitario: precoNoModo(p, modoLancamentoForm) } : it;
+        })
+      : itensForm;
+    const itensMapeados = itensBase.map(it => {
       const prod = produtosFiltradosPorTabela.find(p => p.id === it.produtoId) || produtosDisponiveis.find(p => p.id === it.produtoId);
       if (!prod) return null;
       let fator = fatorItem(it.unidadesPorFardo || prod.unidades_por_fardo);
@@ -800,7 +873,10 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
       forma_pagamento: formaPagamentoForm,
       prazo_pagamento: prazoPagamentoForm,
       tipo_frete: tipoFreteForm,
-      origem: subtipoForm === 'Pedido Sugestivo' ? 'Sugestão Reposição' : 'RCA',
+      // Pedido feito pelo cliente segue identificado como 'Portal do Cliente' (também quando o admin edita)
+      origem: modoCliente || pedidoEmEdicao?.origem === 'Portal do Cliente'
+        ? 'Portal do Cliente'
+        : subtipoForm === 'Pedido Sugestivo' ? 'Sugestão Reposição' : 'RCA',
       observacoes: observacoesForm
     };
 
@@ -815,7 +891,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
 
   // Ação Rápida: Aprovar e Enviar para Produção
   const handleAprovarParaProducao = (pedidoId: string, numero: string) => {
-    if (modoRca) return; // aprovação é exclusiva do administrador
+    if (modoPortal) return; // aprovação é exclusiva do administrador
     if (confirm(`Aprovar a venda / proposta ${numero} e enviar diretamente para a FILA DE PRODUÇÃO?`)) {
       moverPedidoEtapa(pedidoId, 'EM_PRODUCAO');
       if (onNavigate) onNavigate('pedidos_em_producao');
@@ -826,7 +902,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
   const handleExcluir = (pedidoId: string) => {
     const alvo = carregarPedidosVenda().find(p => p.id === pedidoId);
     if (!alvo || !podeAlterar(alvo)) {
-      if (modoRca) alert('Só é possível excluir pedidos seus que ainda aguardam aprovação.');
+      if (modoPortal) alert('Só é possível excluir pedidos seus que ainda aguardam aprovação.');
       return;
     }
     if (confirm('Deseja realmente remover esta venda/cotação?')) {
@@ -838,24 +914,26 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
   };
 
   return (
-    <div className={`relative w-full flex flex-col bg-[#f8faf8] text-slate-800 ${modoRca ? 'rounded-2xl border border-slate-200 overflow-hidden' : 'h-full overflow-hidden'}`}>
+    <div className={`relative w-full flex flex-col bg-[#f8faf8] text-slate-800 ${modoPortal ? 'rounded-2xl border border-slate-200 overflow-hidden' : 'h-full overflow-hidden'}`}>
 
       {/* 1. NAVEGAÇÃO DE ESTEIRA UNIFICADA (só admin) */}
-      {!modoRca && <PedidosNavTabs activeTab="pedidos_orcamentos_sugestivo" onNavigate={onNavigate} />}
+      {!modoPortal && <PedidosNavTabs activeTab="pedidos_orcamentos_sugestivo" onNavigate={onNavigate} />}
 
       {/* 2. CABEÇALHO COMPACTO & MINIMALISTA COM NOME "VENDAS" */}
-      <div className={`bg-white border-b border-slate-200/80 py-3.5 shrink-0 ${modoRca ? 'px-4 sm:px-6' : 'px-6'}`}>
+      <div className={`bg-white border-b border-slate-200/80 py-3.5 shrink-0 ${modoPortal ? 'px-4 sm:px-6' : 'px-6'}`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>{modoRca ? 'Meus Pedidos' : 'Vendas'}</span>
+              <span>{modoPortal ? 'Meus Pedidos' : 'Vendas'}</span>
               <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
-                {metricas.total} {modoRca ? (filtroEtapa === 'ORCAMENTO' ? 'aguardando aprovação' : 'nesta visão') : 'propostas ativas'}
+                {metricas.total} {modoPortal ? (filtroEtapa === 'ORCAMENTO' ? 'aguardando aprovação' : 'nesta visão') : 'propostas ativas'}
               </span>
             </h1>
-            {modoRca && (
+            {modoPortal && (
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Pedidos enviados ficam aguardando a aprovação da fábrica. Depois de aprovados, só leitura.
+                {modoCliente
+                  ? 'Seu pedido fica aguardando a aprovação da fábrica. Até lá você pode alterar; depois, só acompanhar.'
+                  : 'Pedidos enviados ficam aguardando a aprovação da fábrica. Depois de aprovados, só leitura.'}
               </p>
             )}
           </div>
@@ -868,17 +946,17 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
               className={`
                 flex items-center justify-center gap-2 px-4 py-2 rounded-xl
                 bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs
-                shadow-xs transition-all cursor-pointer ${modoRca ? 'w-full sm:w-auto py-2.5' : ''}
+                shadow-xs transition-all cursor-pointer ${modoPortal ? 'w-full sm:w-auto py-2.5' : ''}
               `}
             >
               <Plus className="w-4 h-4" />
-              <span>{modoRca ? 'Fazer Pedido' : 'Nova Venda / Proposta'}</span>
+              <span>{modoPortal ? 'Fazer Pedido' : 'Nova Venda / Proposta'}</span>
             </button>
           </div>
         </div>
 
         {/* Portal do RCA: situação dos pedidos */}
-        {modoRca && (
+        {modoPortal && (
           <div className="flex gap-1.5 overflow-x-auto pt-3 mt-3 border-t border-slate-100 -mx-1 px-1 pb-0.5" role="tablist" aria-label="Situação dos pedidos">
             {([
               ['ORCAMENTO', 'Aguardando aprovação'],
@@ -905,7 +983,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
         )}
 
         {/* STAT BAR MINIMALISTA EM LINHA */}
-        <div className={`flex-wrap items-center gap-6 pt-3 mt-3 border-t border-slate-100 text-xs ${modoRca ? 'hidden sm:flex' : 'flex'}`}>
+        <div className={`flex-wrap items-center gap-6 pt-3 mt-3 border-t border-slate-100 text-xs ${modoCliente ? 'hidden' : modoPortal ? 'hidden sm:flex' : 'flex'}`}>
           <div className="flex items-center gap-2">
             <span className="text-slate-400 font-medium">Total em Negociação:</span>
             <span className="font-mono font-bold text-slate-900 text-sm">
@@ -916,7 +994,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
           <div className="flex items-center gap-2">
             <span className="text-slate-400 font-medium">Volume Físico:</span>
             <span className="font-mono font-bold text-slate-900">
-              {(metricas.volumeTotalKg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Toneladas
+              {textoPeso(metricas.volumeTotalKg)}
             </span>
           </div>
           <div className="w-px h-4 bg-slate-200 hidden sm:block" />
@@ -944,10 +1022,10 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
       </div>
 
       {/* 3. BARRA DE BUSCA E FILTROS DE TIPO (ORÇAMENTO / SUGESTIVO / PEDIDO) */}
-      <div className={`bg-[#f1f5f2] py-2.5 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 shrink-0 ${modoRca ? 'px-4 sm:px-6' : 'px-6'}`}>
+      <div className={`bg-[#f1f5f2] py-2.5 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 shrink-0 ${modoPortal ? 'px-4 sm:px-6' : 'px-6'}`}>
         
         {/* Pílulas de filtro por tipo de venda */}
-        <div className={`flex items-center gap-1.5 overflow-x-auto ${modoRca ? 'w-full sm:w-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap' : ''}`}>
+        <div className={`flex items-center gap-1.5 overflow-x-auto ${modoCliente ? 'hidden' : ''} ${modoPortal ? 'w-full sm:w-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap' : ''}`}>
           <button
             onClick={() => setFiltroSubtipo('TODOS')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -990,19 +1068,19 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
           </button>
         </div>
 
-        <div className={`flex items-center gap-2 ${modoRca ? 'w-full sm:w-auto' : ''}`}>
-          <div className={`relative ${modoRca ? 'flex-1 sm:flex-none sm:w-64' : 'w-56 sm:w-64'}`}>
+        <div className={`flex items-center gap-2 ${modoPortal ? 'w-full sm:w-auto' : ''}`}>
+          <div className={`relative ${modoPortal ? 'flex-1 sm:flex-none sm:w-64' : 'w-56 sm:w-64'}`}>
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar Venda, Cliente, RCA..."
+              placeholder={modoCliente ? 'Buscar nº do pedido...' : 'Buscar Venda, Cliente, RCA...'}
               className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-700 font-medium"
             />
           </div>
 
-          {!modoRca && (
+          {!modoPortal && (
           <select
             value={filtroOrigem}
             onChange={(e) => setFiltroOrigem(e.target.value)}
@@ -1013,22 +1091,27 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
             <option value="Venda Direta">Venda Direta</option>
             <option value="Sugestão Reposição">Sugestão de Reposição</option>
             <option value="Portal Portfólio VIP">Portal VIP</option>
+            <option value="Portal do Cliente">Portal do Cliente</option>
           </select>
           )}
         </div>
       </div>
 
       {/* 4. TABELA COM ACESSO DIRETO AO VISUALIZADOR PELO OLHO / LINHA */}
-      <div className={modoRca ? 'p-3 sm:p-6' : 'flex-1 p-6 overflow-y-auto'}>
+      <div className={modoPortal ? 'p-3 sm:p-6' : 'flex-1 p-6 overflow-y-auto'}>
         {/* Portal do RCA no celular: cartões em vez de tabela */}
-        {modoRca && (
+        {modoPortal && (
           <div className="sm:hidden space-y-2.5">
             {pedidosFiltrados.length === 0 ? (
               <div className="bg-white rounded-xl border border-slate-200 p-6 text-center">
                 <p className="text-sm font-bold text-slate-800">
                   {pedidos.length === 0 ? 'Você ainda não enviou pedidos.' : 'Nenhum pedido nesta situação.'}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">Toque em "Fazer Pedido" para montar um orçamento ou pedido para um cliente da sua carteira.</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {modoCliente
+                    ? 'Toque em "Fazer Pedido" para escolher os produtos da sua tabela.'
+                    : 'Toque em "Fazer Pedido" para montar um orçamento ou pedido para um cliente da sua carteira.'}
+                </p>
               </div>
             ) : pedidosFiltrados.map(item => {
               const subtipoLabel = item.subtipo_venda || (item.origem === 'Sugestão Reposição' ? 'Pedido Sugestivo' : item.tipo === 'PEDIDO_VENDA' ? 'Pedido' : 'Orçamento');
@@ -1039,8 +1122,16 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="font-mono text-[11px] font-bold text-slate-500">{item.numero_pedido} · {subtipoLabel}</div>
-                        <div className="font-black text-slate-900 text-sm truncate">{item.cliente_nome}</div>
-                        <div className="text-[11px] text-slate-500">{item.cliente_cidade_uf}</div>
+                        {modoCliente ? (
+                          <div className="text-xs font-semibold text-slate-800 line-clamp-2">
+                            {item.itens.map(i => `${i.quantidade}x ${i.produto_nome}`).join(' · ')}
+                          </div>
+                        ) : (
+                          <>
+                            <div className="font-black text-slate-900 text-sm truncate">{item.cliente_nome}</div>
+                            <div className="text-[11px] text-slate-500">{item.cliente_cidade_uf}</div>
+                          </>
+                        )}
                       </div>
                       <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold border ${COR_ETAPA[item.etapa]}`}>
                         {ROTULO_ETAPA[item.etapa]}
@@ -1082,14 +1173,14 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
           </div>
         )}
 
-        <div className={`bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden ${modoRca ? 'hidden sm:block overflow-x-auto' : ''}`}>
+        <div className={`bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden ${modoPortal ? 'hidden sm:block overflow-x-auto' : ''}`}>
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/90 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
                 <th className="py-3 px-5">Venda / Proposta</th>
                 <th className="py-3 px-4">Tipo</th>
                 <th className="py-3 px-4">Cliente / Praça</th>
-                <th className="py-3 px-4">{modoRca ? 'Situação' : 'RCA'}</th>
+                <th className="py-3 px-4">{modoPortal ? 'Situação' : 'RCA'}</th>
                 <th className="py-3 px-4">Produtos / Volume</th>
                 <th className="py-3 px-4">Valor Total</th>
                 <th className="py-3 px-4">Validade</th>
@@ -1106,10 +1197,12 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                       </div>
                       <div>
                         <h3 className="font-bold text-slate-900 text-base">
-                          {modoRca ? (pedidos.length === 0 ? 'Você ainda não enviou pedidos' : 'Nenhum pedido nesta situação') : 'Modo Novo Usuário - Sistema Limpo para Teste'}
+                          {modoPortal ? (pedidos.length === 0 ? 'Você ainda não enviou pedidos' : 'Nenhum pedido nesta situação') : 'Modo Novo Usuário - Sistema Limpo para Teste'}
                         </h3>
                         <p className="text-slate-500 text-xs mt-1">
-                          {modoRca
+                          {modoCliente
+                            ? 'Clique em "Fazer Pedido" para escolher os produtos da sua tabela de preço.'
+                            : modoPortal
                             ? 'Clique em "Fazer Pedido" para montar um orçamento ou pedido para um cliente da sua carteira.'
                             : 'Nenhuma proposta ou venda cadastrada ainda. Clique em "Nova Venda / Proposta" para formular o primeiro orçamento.'}
                         </p>
@@ -1123,7 +1216,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                           className="px-4 py-2 rounded-xl bg-emerald-900 hover:bg-emerald-950 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                         >
                           <Plus className="w-4 h-4" />
-                          <span>{modoRca ? '+ Fazer Pedido' : '+ Nova Venda / Proposta'}</span>
+                          <span>{modoPortal ? '+ Fazer Pedido' : '+ Nova Venda / Proposta'}</span>
                         </button>
                       </div>
                     </div>
@@ -1145,10 +1238,17 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                         <div className="font-mono font-bold text-slate-900 group-hover:text-emerald-900">
                           {item.numero_pedido}
                         </div>
+                        {item.origem === 'Portal do Cliente' && !modoCliente ? (
+                          <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded-md text-[10px] font-black bg-sky-100 text-sky-900 border border-sky-300 whitespace-nowrap">
+                            <User className="w-3 h-3" />
+                            Portal do Cliente
+                          </span>
+                        ) : (
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className={`w-1.5 h-1.5 rounded-full ${item.origem === 'Sugestão Reposição' ? 'bg-amber-500' : 'bg-emerald-600'}`} />
                           <span className="text-[10px] text-slate-400 font-medium">{item.origem}</span>
                         </div>
+                        )}
                       </td>
 
                       {/* Tipo do Documento */}
@@ -1174,7 +1274,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                       </td>
 
                       <td className="py-3.5 px-4 text-slate-700 font-medium">
-                        {modoRca ? (
+                        {modoPortal ? (
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${COR_ETAPA[item.etapa]}`}>
                             {ROTULO_ETAPA[item.etapa]}
                           </span>
@@ -1186,7 +1286,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                           {itensResumo}
                         </div>
                         <div className="text-[11px] text-slate-500 font-mono">
-                          {(item.peso_total_kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Ton
+                          {textoPeso(item.peso_total_kg)}
                         </div>
                       </td>
 
@@ -1201,7 +1301,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
 
                       <td className="py-3.5 px-5 text-right">
                         <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          {!modoRca && (
+                          {!modoPortal && (
                           <button
                             onClick={() => handleAprovarParaProducao(item.id, item.numero_pedido)}
                             className="
@@ -1274,12 +1374,14 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                 <FileText className="w-5 h-5 text-emerald-400" />
                 <div>
                   <h3 className="font-bold text-sm sm:text-base text-white">
-                    {pedidoEmEdicao ? `Editar ${pedidoEmEdicao.numero_pedido}` : 'Nova Venda / Proposta Comercial'}
+                    {pedidoEmEdicao ? `Editar ${pedidoEmEdicao.numero_pedido}` : modoCliente ? 'Novo pedido' : 'Nova Venda / Proposta Comercial'}
                   </h3>
                   <p className="text-[11px] text-slate-400">
                     {pedidoEmEdicao
-                      ? 'Altere itens, cliente, tabela ou condições. O número e a data de emissão são mantidos.'
-                      : modoRca
+                      ? (modoCliente ? 'Altere itens e quantidades. O número e a data do pedido são mantidos.' : 'Altere itens, cliente, tabela ou condições. O número e a data de emissão são mantidos.')
+                      : modoCliente
+                      ? 'Escolha os produtos da sua tabela. O pedido segue para aprovação da fábrica.'
+                      : modoPortal
                       ? 'Monte o pedido para um cliente da sua carteira. Ele segue para aprovação da fábrica.'
                       : 'Cadastre um novo Orçamento, Pedido Sugestivo ou Pedido de Venda.'}
                   </p>
@@ -1294,6 +1396,12 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
               
               {/* Escolha do Tipo de Documento e Modo de Lançamento */}
               <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                {modoCliente ? (
+                  <div>
+                    <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Documento</span>
+                    <span className="block text-sm font-black text-slate-900">Pedido de compra</span>
+                  </div>
+                ) : (
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Tipo de Documento Comercial *</label>
                   <div className="inline-flex flex-wrap rounded-lg bg-white p-1 border border-slate-200">
@@ -1332,6 +1440,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                     </button>
                   </div>
                 </div>
+                )}
 
                 {/* Alternador de Modo de Preenchimento: Fardo vs Unitário */}
                 <div>
@@ -1375,7 +1484,16 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
               </div>
 
               {/* Verificação se existem produtos cadastrados */}
-              {produtosDisponiveis.length === 0 && (
+              {modoCliente && (tabelasDisponiveis.length === 0 || (tabelaIdForm && produtosFiltradosPorTabela.length === 0)) && (
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2.5 text-amber-900">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-700" />
+                  <span className="text-[12px] font-medium">
+                    Sua tabela de preço ainda não está liberada para pedidos pelo portal. Fale com seu representante ou com a fábrica.
+                  </span>
+                </div>
+              )}
+
+              {produtosDisponiveis.length === 0 && !modoCliente && (
                 <div className="p-3.5 bg-orange-50 border-2 border-orange-300 rounded-xl space-y-2">
                   <div className="flex items-start gap-2.5">
                     <Package className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
@@ -1386,7 +1504,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                       </p>
                     </div>
                   </div>
-                  <div className={`flex flex-wrap gap-2 pt-1 ${modoRca ? 'hidden' : ''}`}>
+                  <div className={`flex flex-wrap gap-2 pt-1 ${modoPortal ? 'hidden' : ''}`}>
                     <button
                       type="button"
                       onClick={() => {
@@ -1404,12 +1522,16 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Cliente Solicitante *</label>
-                  {clientesDisponiveis.length === 0 ? (
+                  <label className="block font-bold text-slate-700 mb-1">{modoCliente ? 'Cliente' : 'Cliente Solicitante *'}</label>
+                  {modoCliente ? (
+                    <div className="w-full bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-emerald-900 font-bold truncate" title={clientesDisponiveis[0]?.nome}>
+                      {clientesDisponiveis[0]?.nome || 'Cadastro não encontrado'}
+                    </div>
+                  ) : clientesDisponiveis.length === 0 ? (
                     <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-[11px] text-amber-900 space-y-1.5">
                       <div className="flex items-center gap-1.5 font-bold">
                         <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                        <span>{modoRca ? 'Sua carteira não tem clientes ativos.' : 'Falta Cadastrar Cliente!'}</span>
+                        <span>{modoPortal ? 'Sua carteira não tem clientes ativos.' : 'Falta Cadastrar Cliente!'}</span>
                       </div>
                       <div className="flex flex-wrap gap-1">
                         <button
@@ -1420,7 +1542,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                           }}
                           className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] cursor-pointer"
                         >
-                          {modoRca ? '+ Adicionar em Meus Clientes' : '+ Cadastrar Cliente'}
+                          {modoPortal ? '+ Adicionar em Meus Clientes' : '+ Cadastrar Cliente'}
                         </button>
                       </div>
                     </div>
@@ -1439,7 +1561,11 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Tabela de Preço *</label>
-                  {tabelasDisponiveis.length === 0 ? (
+                  {modoCliente ? (
+                    <div className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-bold truncate" title="Tabela do seu cadastro">
+                      {tabelasDisponiveis.find(t => t.id === tabelaIdForm)?.nome || 'Tabela não liberada'}
+                    </div>
+                  ) : tabelasDisponiveis.length === 0 ? (
                     <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-[11px] text-amber-900">
                       <div className="flex items-center gap-1.5 font-bold">
                         <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
@@ -1463,10 +1589,10 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">RCA Responsável</label>
-                  {modoRca ? (
+                  <label className="block font-bold text-slate-700 mb-1">{modoCliente ? 'Seu representante' : 'RCA Responsável'}</label>
+                  {modoPortal ? (
                     <div className="w-full bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-emerald-900 font-bold truncate">
-                      {rcasDisponiveis[0]?.nome || 'Você'}
+                      {rcasDisponiveis[0]?.nome || (modoCliente ? 'Atendimento direto da fábrica' : 'Você')}
                     </div>
                   ) : (
                   <select
@@ -1496,6 +1622,12 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Pagamento</label>
+                  {modoCliente ? (
+                    <div className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-bold truncate" title="Condição do seu cadastro">
+                      {prazoPagamentoForm}
+                    </div>
+                  ) : (
+                  <>
                   <div className="flex gap-2">
                     <select
                       value={formaPagamentoForm}
@@ -1519,6 +1651,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                     </div>
                   </div>
                   <span className="block mt-1 text-[10px] text-slate-500">{prazoPagamentoForm} · use "/" para parcelas</span>
+                  </>
+                  )}
                 </div>
               </div>
 
@@ -1547,8 +1681,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                     itensForm.map((item, idx) => {
                       const prod = produtosDisponiveis.find(p => p.id === item.produtoId);
                       // Receita/custo são dados internos da fábrica: o RCA não vê esses avisos
-                      const faltaReceita = !modoRca && prod && !prod.receita_id;
-                      const faltaCusto = !modoRca && prod && (!prod.custo_total || prod.custo_total <= 0);
+                      const faltaReceita = !modoPortal && prod && !prod.receita_id;
+                      const faltaCusto = !modoPortal && prod && (!prod.custo_total || prod.custo_total <= 0);
                       const comissaoItem = comissaoForm.itens[idx];
                       const estoqueItem = item.produtoId ? faltaEstoquePorProduto.get(item.produtoId) : undefined;
 
@@ -1588,7 +1722,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                                   updated[idx].tipoEmbalagem = e.target.value as any;
                                   setItensForm(updated);
                                 }}
-                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs cursor-pointer font-semibold text-slate-700"
+                                disabled={modoCliente}
+                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs cursor-pointer font-semibold text-slate-700 disabled:bg-slate-100 disabled:cursor-default"
                                 title="Apresentação (Fardo, Caixa, Saco, Big Bag)"
                               >
                                 <option value="Saco 25kg">Saco 25kg</option>
@@ -1624,18 +1759,20 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                                 type="number"
                                 step="0.01"
                                 value={item.precoUnitario}
+                                readOnly={modoCliente}
                                 onChange={(e) => {
+                                  if (modoCliente) return;
                                   const updated = [...itensForm];
                                   updated[idx].precoUnitario = parseFloat(e.target.value) || 0;
                                   setItensForm(updated);
                                 }}
-                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-center font-mono font-bold"
+                                className={`w-full border border-slate-200 rounded px-2 py-1 text-center font-mono font-bold ${modoCliente ? 'bg-slate-100 text-slate-700' : 'bg-white'}`}
                               />
                             </div>
 
                             <div className="w-32 text-right font-mono font-bold text-slate-900">
                               {(item.quantidade * item.precoUnitario).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                              {rcaIdForm && comissaoItem && (
+                              {rcaIdForm && comissaoItem && !modoCliente && (
                                 <div className="text-[10px] font-sans font-medium text-indigo-700" title={`Regra aplicada: ${comissaoItem.regra}${comissaoItem.grupo ? ` • Grupo: ${comissaoItem.grupo}` : ''}`}>
                                   Comissão {comissaoItem.percentual}% • {formatarMoeda(comissaoItem.valor)}
                                   <span className="block text-indigo-400">{rotuloRegraComissao(comissaoItem.regra)}</span>
@@ -1655,7 +1792,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                           </div>
 
                           {/* ESTOQUE: avisa quanto falta (não bloqueia a venda) */}
-                          {estoqueItem && estoqueItem.falta > 0 && (
+                          {!modoCliente && estoqueItem && estoqueItem.falta > 0 && (
                             <div className="p-2 bg-red-50 border border-red-300 rounded-md text-[11px] text-red-900 flex items-center gap-1.5 font-medium">
                               <AlertCircle className="w-3.5 h-3.5 text-red-700 shrink-0" />
                               <span>
@@ -1729,7 +1866,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
 
                 return (
                   <>
-                  {rcaIdForm && itensForm.length > 0 && (
+                  {rcaIdForm && itensForm.length > 0 && !modoCliente && (
                     <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
                       <span className="font-bold text-indigo-900">
                         Comissão estimada do RCA ({rotuloRegraComissao(comissaoForm.regra)}):
@@ -1747,22 +1884,29 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                       <span className={clienteIdForm ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
                         {clienteIdForm ? '✓ Cliente OK' : '❌ Falta Cliente'}
                       </span>
-                      {!modoRca && (
+                      {!modoPortal && (
                       <span className={temAlgumaFaltaReceita ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
                         {temAlgumaFaltaReceita ? '⚠️ Receita Pendente' : '✓ Receita OK'}
                       </span>
                       )}
-                      {!modoRca && (
+                      {!modoPortal && (
                       <span className={temAlgumaFaltaCusto ? 'text-orange-400 font-bold' : 'text-emerald-400 font-bold'}>
                         {temAlgumaFaltaCusto ? '⚠️ Custo Pendente' : '✓ Custo OK'}
                       </span>
                       )}
+                      {!modoCliente && (
                       <span className={temFaltaEstoque ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}>
                         {temFaltaEstoque ? '⚠️ Estoque Insuficiente' : '✓ Estoque OK'}
                       </span>
+                      )}
+                      {modoCliente && (
+                        <span className={itensForm.length > 0 ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                          {itensForm.length > 0 ? `✓ ${itensForm.length} ${itensForm.length === 1 ? 'item' : 'itens'}` : 'Adicione itens'}
+                        </span>
+                      )}
                     </div>
                     <p className="text-[10px] text-slate-400 italic">
-                      {modoRca
+                      {modoPortal
                         ? 'Ao salvar, o pedido fica aguardando a aprovação da fábrica.'
                         : temAlgumaFaltaReceita || temAlgumaFaltaCusto
                         ? 'Você pode salvar como orçamento. O sistema emitirá alertas quando enviado para produção.'
@@ -1774,7 +1918,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
               })()}
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Observações da Proposta Comercial</label>
+                <label className="block font-bold text-slate-700 mb-1">{modoCliente ? 'Observações (entrega, horário, contato...)' : 'Observações da Proposta Comercial'}</label>
                 <textarea
                   rows={2}
                   value={observacoesForm}
@@ -1784,7 +1928,15 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                 />
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-end gap-2">
+                {modoCliente && (
+                  <div className="mr-auto">
+                    <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Total do pedido</span>
+                    <span className="block text-xl font-black tracking-tight tabular-nums text-emerald-900">
+                      {formatarMoeda(itensForm.reduce((acc, it) => acc + (Number(it.quantidade) || 0) * (Number(it.precoUnitario) || 0), 0))}
+                    </span>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => setModalNovo(false)}
@@ -1797,7 +1949,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
                   className="px-5 py-2 rounded-lg bg-emerald-900 hover:bg-emerald-950 text-white font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Save className="w-4 h-4" />
-                  <span>{modoRca ? `Enviar ${subtipoForm} p/ aprovação` : `Salvar ${subtipoForm}`}</span>
+                  <span>{modoCliente ? (pedidoEmEdicao ? 'Salvar alterações' : 'Enviar pedido') : modoPortal ? `Enviar ${subtipoForm} p/ aprovação` : `Salvar ${subtipoForm}`}</span>
                 </button>
               </div>
             </form>
@@ -1846,7 +1998,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
             <div className="bg-slate-900 px-5 py-2.5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 shrink-0 text-xs">
               
               {/* Escolha do Nome do Documento */}
-              <div className="flex flex-wrap items-center gap-2">
+              <div className={`flex-wrap items-center gap-2 ${modoCliente ? 'hidden' : 'flex'}`}>
                 <span className="font-bold text-[11px] uppercase tracking-wider text-slate-400">
                   Nome do Documento:
                 </span>
@@ -2136,7 +2288,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, abrirNovoSin
               </div>
 
               {/* Botão de Enviar Direto para Em Produção (só admin, só etapa de vendas) */}
-              {modoRca ? (
+              {modoPortal ? (
                 <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${COR_ETAPA[modalDetalhes.etapa]}`}>
                   {ROTULO_ETAPA[modalDetalhes.etapa]}
                 </span>
