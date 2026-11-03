@@ -2,9 +2,8 @@
 // Mesmo desenho da visualização na tela: faixa verde-escura com filete dourado, produtos por categoria.
 
 import { jsPDF } from 'jspdf';
-
-// Mesmo logo usado no site (public/logo.jpg)
-const logoUrl = '/logo.jpg?v=3';
+import { carregarLogoPng, desenharFaixaMarca } from './marcaEnoPdf';
+import { EMPRESA } from './empresa';
 
 export interface LinhaTabelaPrecoPdf {
   categoria: string;
@@ -40,48 +39,14 @@ const ZEBRA: [number, number, number] = [246, 243, 234];
 const TINTA: [number, number, number] = [23, 30, 26];
 const CINZA: [number, number, number] = [110, 116, 112];
 
-const EMPRESA = {
-  nome: 'GRUPO ENO',
-  subtitulo: 'Agroindústria · Fecularia & Mandioca Gourmet',
-  contato: 'Rodovia PR-482, km 14  ·  CNPJ 14.882.910/0001-44  ·  (44) 3639-8200  ·  comercial@grupoeno.com.br'
-};
-
 const moeda = (v: number) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-// Carrega o logo já reduzido (240px) para o PDF ficar leve
-async function carregarLogo(): Promise<string | null> {
-  return new Promise(resolve => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const lado = 240;
-        const canvas = document.createElement('canvas');
-        canvas.width = lado;
-        canvas.height = lado;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return resolve(null);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, lado, lado);
-        const escala = Math.min(lado / img.width, lado / img.height);
-        const w = img.width * escala;
-        const h = img.height * escala;
-        ctx.drawImage(img, (lado - w) / 2, (lado - h) / 2, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.85));
-      } catch (e) {
-        resolve(null);
-      }
-    };
-    img.onerror = () => resolve(null);
-    img.src = logoUrl;
-  });
-}
 
 export async function gerarPdfTabelaPreco(dados: DadosTabelaPrecoPdf): Promise<jsPDF> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const L = 210;
   const A = 297;
   const M = 14; // margem lateral
-  const logo = await carregarLogo();
+  const logo = await carregarLogoPng();
   const emitida = new Date().toLocaleDateString('pt-BR');
 
   // Colunas
@@ -95,54 +60,12 @@ export async function gerarPdfTabelaPreco(dados: DadosTabelaPrecoPdf): Promise<j
   };
 
   const cabecalhoCompleto = () => {
-    // Faixa verde em degradê (faixas finas do escuro para o médio)
-    const altura = 46;
-    const passos = 24;
-    for (let i = 0; i < passos; i++) {
-      const t = i / (passos - 1);
-      doc.setFillColor(
-        Math.round(VERDE_ESCURO[0] + (VERDE_MEDIO[0] - VERDE_ESCURO[0]) * t),
-        Math.round(VERDE_ESCURO[1] + (VERDE_MEDIO[1] - VERDE_ESCURO[1]) * t),
-        Math.round(VERDE_ESCURO[2] + (VERDE_MEDIO[2] - VERDE_ESCURO[2]) * t)
-      );
-      doc.rect((L / passos) * i, 0, L / passos + 0.3, altura, 'F');
-    }
-    doc.setFillColor(...DOURADO);
-    doc.rect(0, altura, L, 1.2, 'F');
-
-    // Selo do logo
-    if (logo) {
-      doc.setFillColor(255, 255, 255);
-      doc.roundedRect(M, 10, 26, 26, 3, 3, 'F');
-      try { doc.addImage(logo, 'JPEG', M + 2, 12, 22, 22); } catch (e) { /* sem logo */ }
-    }
-    const xTexto = logo ? M + 32 : M;
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(19);
-    doc.text(EMPRESA.nome, xTexto, 21);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(167, 214, 186);
-    doc.text(EMPRESA.subtitulo, xTexto, 27);
-
-    // Lado direito: nome da tabela
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(...DOURADO);
-    doc.text('T A B E L A   D E   P R E Ç O S', L - M, 15, { align: 'right' });
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(dados.nome.length > 22 ? 15 : 20);
-    doc.text(dados.nome.toUpperCase(), L - M, 25, { align: 'right', maxWidth: 95 });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(167, 214, 186);
-    doc.text(`Código ${dados.codigo}  ·  Emitida em ${emitida}`, L - M, 32, { align: 'right' });
-
-    // Linha de contato dentro da faixa
-    doc.setFontSize(6.8);
-    doc.setTextColor(138, 186, 158);
-    doc.text(EMPRESA.contato, M, 41.5);
+    // Faixa da marca (degradê real renderizado + logo transparente), igual à tela
+    desenharFaixaMarca(doc, {
+      rotulo: 'TABELA DE PREÇOS',
+      titulo: dados.nome,
+      subtitulo: `Código ${dados.codigo}  ·  Emitida em ${emitida}`
+    }, logo);
 
     // Faixa de condições
     const yInfo = 53;

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import html2canvas from 'html2canvas-pro';
 import { gerarPdfDeElemento } from '../../lib/pdfDeElemento';
+import { FaixaMarcaEno } from '../FaixaMarcaEno';
+import { EMPRESA } from '../../lib/empresa';
 import {
   FileText,
   Plus,
@@ -1663,153 +1665,92 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                 }}
                 className="w-full flex justify-center"
               >
-                {/* FOLHA DO DOCUMENTO CAPTURÁVEL */}
+                {/* FOLHA DO DOCUMENTO CAPTURÁVEL (mesmo estilo da Tabela de Preços) */}
                 <div
                   ref={printRef}
-                  className="bg-white shadow-2xl rounded-sm border border-slate-300 w-full max-w-[820px] p-8 sm:p-10 text-slate-800 font-sans space-y-4 text-xs"
+                  className="w-full max-w-[820px] bg-[#fbfaf5] text-[#171e1a] font-sans rounded-sm shadow-[0_30px_60px_-25px_rgba(0,0,0,0.6)] overflow-hidden text-xs"
                 >
-                  {/* Cabeçalho Oficial do Grupo ENO */}
-                  <div className="flex items-start justify-between border-b-2 border-emerald-900 pb-4">
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-12 h-12 rounded-xl bg-emerald-900 text-emerald-200 font-black text-lg flex items-center justify-center shadow-xs">
-                        ENO
+                  <FaixaMarcaEno
+                    rotulo={
+                      tipoDocumentoVisualizacao === 'Orçamento'
+                        ? 'Orçamento Comercial'
+                        : tipoDocumentoVisualizacao === 'Pedido Sugestivo'
+                        ? 'Pedido Sugestivo'
+                        : 'Pedido de Venda'
+                    }
+                    titulo={`Nº ${modalDetalhes.numero_pedido}`}
+                    subtitulo={
+                      <>
+                        Emissão {formatarDataBR(modalDetalhes.data_emissao)}
+                        {modalDetalhes.data_validade_orcamento && ` · Validade ${formatarDataBR(modalDetalhes.data_validade_orcamento)}`}
+                        {modalDetalhes.data_previsao_entrega && tipoDocumentoVisualizacao !== 'Orçamento' && ` · Entrega prevista ${formatarDataBR(modalDetalhes.data_previsao_entrega)}`}
+                      </>
+                    }
+                  />
+
+                  {/* Cliente e condições */}
+                  <div className="grid grid-cols-1 sm:grid-cols-[1.5fr_1fr_1fr] px-6 sm:px-8 py-4 gap-y-3 border-b border-[#e6e1d2]">
+                    <div className="pr-4">
+                      <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6e7470]">Cliente</div>
+                      <div className="text-[15px] font-black text-[#171e1a] mt-0.5 leading-snug">{modalDetalhes.cliente_nome}</div>
+                      <div className="text-[11px] text-[#6e7470] mt-0.5 tabular-nums">
+                        {[modalDetalhes.cliente_cnpj_cpf && `CNPJ/CPF ${modalDetalhes.cliente_cnpj_cpf}`, modalDetalhes.cliente_cidade_uf].filter(Boolean).join(' · ')}
+                      </div>
+                    </div>
+                    <div className="sm:pl-4 sm:border-l sm:border-[#ddd6c4] space-y-2">
+                      <div>
+                        <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6e7470]">Pagamento</div>
+                        <div className="text-[12px] font-bold mt-0.5">
+                          {[modalDetalhes.forma_pagamento, modalDetalhes.prazo_pagamento].filter(Boolean).join(' · ') || '-'}
+                        </div>
                       </div>
                       <div>
-                        <h2 className="text-lg font-black text-emerald-950 tracking-tight leading-tight">
-                          GRUPO ENO AGROINDUSTRIAL
-                        </h2>
-                        <p className="text-[11px] font-semibold text-slate-600">
-                          Indústria e Comércio de Féculas, Polvilhos e Amidos Especiais
-                        </p>
-                        <p className="text-[10px] text-slate-400 font-mono">
-                          CNPJ: 45.981.234/0001-90 • Inscr. Est.: 908.12345-67 • Paranavaí / PR
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          Rodovia PR-218, Km 14 • Fone: (44) 3421-9000 • comercial@grupoeno.com.br
-                        </p>
+                        <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6e7470]">Frete</div>
+                        <div className="text-[12px] font-bold mt-0.5">{modalDetalhes.tipo_frete || '-'}</div>
                       </div>
                     </div>
-
-                    <div className="text-right">
-                      <span className={`inline-block px-3.5 py-1 rounded text-white font-black text-xs tracking-wider uppercase shadow-2xs ${
-                        tipoDocumentoVisualizacao === 'Orçamento'
-                          ? 'bg-emerald-900'
-                          : tipoDocumentoVisualizacao === 'Pedido Sugestivo'
-                          ? 'bg-amber-600'
-                          : 'bg-blue-700'
-                      }`}>
-                        {tipoDocumentoVisualizacao === 'Orçamento'
-                          ? 'ORÇAMENTO COMERCIAL'
-                          : tipoDocumentoVisualizacao === 'Pedido Sugestivo'
-                          ? 'PEDIDO SUGESTIVO'
-                          : 'PEDIDO DE VENDA'}
-                      </span>
-                      <div className="text-sm font-mono font-black text-slate-800 mt-1">
-                        Nº {modalDetalhes.numero_pedido}
+                    <div className="sm:pl-4 sm:border-l sm:border-[#ddd6c4] space-y-2">
+                      <div>
+                        <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6e7470]">Representante</div>
+                        <div className="text-[12px] font-bold mt-0.5">{modalDetalhes.rca_nome || 'Venda direta'}</div>
                       </div>
-                      <div className="text-[10px] text-slate-500 mt-0.5">
-                        Emissão: {modalDetalhes.data_emissao.split('-').reverse().join('/')}
-                        {modalDetalhes.data_validade_orcamento && (
-                          <span className="ml-2 font-bold text-slate-700">
-                            • Validade: {modalDetalhes.data_validade_orcamento.split('-').reverse().join('/')}
-                          </span>
-                        )}
+                      <div>
+                        <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6e7470]">Valores em</div>
+                        <div className="text-[12px] font-bold mt-0.5">{modoExibicao === 'FARDO' ? 'Caixa / Fardo' : 'Unidade'}</div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Dados do Cliente e Condições Comerciais */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                        Destinatário / Cliente
-                      </span>
-                      <div className="font-black text-slate-900 text-sm">{modalDetalhes.cliente_nome}</div>
-                      <div className="text-slate-600 font-mono text-[11px] mt-0.5">
-                        CNPJ/CPF: {modalDetalhes.cliente_cnpj_cpf}
-                      </div>
-                      <div className="text-slate-500 text-[11px]">
-                        Cidade/UF: {modalDetalhes.cliente_cidade_uf}
-                      </div>
-                    </div>
-
-                    <div className="sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                        Condições Comerciais
-                      </span>
-                      <div className="font-bold text-slate-800 text-xs">
-                        RCA Responsável: {modalDetalhes.rca_nome}
-                      </div>
-                      <div className="text-slate-600 text-[11px] mt-0.5">
-                        Condição de Frete: <strong>{modalDetalhes.tipo_frete}</strong>
-                      </div>
-                      <div className="text-slate-600 text-[11px]">
-                        Prazo de Pagamento: <strong>{modalDetalhes.prazo_pagamento}</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Faixa Informativa da Apresentação */}
-                  <div className="flex items-center justify-between px-3.5 py-1.5 bg-slate-100 rounded-lg text-[11px] text-slate-600">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      {modoExibicao === 'FARDO' ? (
-                        <>
-                          <Package className="w-3.5 h-3.5 text-emerald-700" />
-                          <span>Valores apresentados em <strong>Fardo / Embalagem Agrupada</strong></span>
-                        </>
-                      ) : (
-                        <>
-                          <Layers className="w-3.5 h-3.5 text-blue-700" />
-                          <span>Valores apresentados em <strong>Preço e Quantidade Unitária (Kg / Pacote)</strong></span>
-                        </>
-                      )}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      {modalDetalhes.itens.length} {modalDetalhes.itens.length === 1 ? 'item' : 'itens'} cotados
-                    </span>
-                  </div>
-
-                  {/* Tabela de Produtos */}
-                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                    <table className="w-full text-left">
-                      <thead className="bg-slate-100 text-[10px] font-bold uppercase text-slate-600 border-b border-slate-200">
-                        <tr>
-                          <th className="py-2.5 px-3.5">Item / Descrição do Produto</th>
-                          <th className="py-2.5 px-2.5 text-center">
-                            {modoExibicao === 'FARDO' ? 'Embalagem' : 'Apresentação'}
-                          </th>
-                          <th className="py-2.5 px-2.5 text-center">
-                            {modoExibicao === 'FARDO' ? 'Qtd (Fardos/Sacos)' : 'Qtd (Unid/Kg)'}
-                          </th>
-                          <th className="py-2.5 px-3 text-right">
-                            {modoExibicao === 'FARDO' ? 'Preço Fardo' : 'Preço Unitário'}
-                          </th>
-                          <th className="py-2.5 px-3.5 text-right">Subtotal</th>
+                  {/* Itens */}
+                  <div className="px-4 sm:px-8 pt-5">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-[#0b3d24] text-white text-[10px] font-bold uppercase tracking-[0.12em]">
+                          <th className="py-2.5 pl-4 pr-3 rounded-l-md">Produto</th>
+                          <th className="py-2.5 px-3">Embalagem</th>
+                          <th className="py-2.5 px-3 text-right">Qtd</th>
+                          <th className="py-2.5 px-3 text-right">{modoExibicao === 'FARDO' ? 'Preço cx/fardo' : 'Preço unit.'}</th>
+                          <th className="py-2.5 pl-3 pr-4 text-right rounded-r-md">Subtotal</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 text-xs">
+                      <tbody>
                         {modalDetalhes.itens.map((it, idx) => {
                           const valores = calcularValoresItem(it, modoExibicao);
                           return (
-                            <tr key={idx} className="hover:bg-slate-50/50">
-                              <td className="py-2.5 px-3.5 font-semibold text-slate-900">
-                                {it.produto_nome}
+                            <tr key={idx} className={`border-b border-[#e6e1d2] ${idx % 2 === 1 ? 'bg-[#f6f3ea]' : ''}`}>
+                              <td className="py-2.5 pl-4 pr-3">
+                                <div className="text-[13px] font-bold">{it.produto_nome}</div>
                               </td>
-                              <td className="py-2.5 px-2.5 text-center">
-                                <span className={`px-2 py-0.5 rounded font-medium text-[11px] ${
-                                  modoExibicao === 'FARDO' ? 'bg-emerald-50 text-emerald-800' : 'bg-blue-50 text-blue-800'
-                                }`}>
-                                  {valores.apresentacao}
-                                </span>
+                              <td className="py-2.5 px-3 text-[11px] text-[#6e7470]">{valores.apresentacao}</td>
+                              <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                                <span className="text-[13px] font-black tabular-nums">{valores.quantidade.toLocaleString('pt-BR')}</span>
+                                <span className="text-[10px] text-[#6e7470] ml-1">{valores.unidadeRotulo}</span>
                               </td>
-                              <td className="py-2.5 px-2.5 text-center font-mono font-bold text-slate-900">
-                                {valores.quantidade.toLocaleString('pt-BR')} <span className="text-[10px] text-slate-400 font-sans">{valores.unidadeRotulo}</span>
+                              <td className="py-2.5 px-3 text-right text-[12px] tabular-nums whitespace-nowrap">
+                                {formatarMoeda(valores.preco)}
                               </td>
-                              <td className="py-2.5 px-3 text-right font-mono text-slate-700">
-                                {valores.preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                              </td>
-                              <td className="py-2.5 px-3.5 text-right font-mono font-bold text-slate-900">
-                                {valores.subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              <td className="py-2.5 pl-3 pr-4 text-right text-[14px] font-black tabular-nums text-[#064e3b] whitespace-nowrap">
+                                {formatarMoeda(valores.subtotal)}
                               </td>
                             </tr>
                           );
@@ -1818,54 +1759,53 @@ export function PedidosOrcamentosSugestivo({ onNavigate }: Props) {
                     </table>
                   </div>
 
-                  {/* Totais do Documento */}
-                  <div className="flex items-center justify-between p-4 bg-emerald-950/[0.04] border border-emerald-900/20 rounded-xl">
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Peso Total Aferido
-                      </span>
-                      <span className="font-mono text-xs font-bold text-slate-700">
-                        {(modalDetalhes.peso_total_kg / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} Ton ({modalDetalhes.peso_total_kg.toLocaleString('pt-BR')} kg)
-                      </span>
+                  {/* Totais */}
+                  <div className="px-4 sm:px-8 pt-4 pb-5 flex flex-col sm:flex-row sm:items-stretch justify-between gap-3">
+                    <div className="flex items-center gap-6 px-4 py-3 bg-[#f3ead3] border-l-[3px] border-[#c9a24a]">
+                      <div>
+                        <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6e7470]">Itens</div>
+                        <div className="text-[15px] font-black tabular-nums">{modalDetalhes.itens.length}</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6e7470]">Peso total</div>
+                        <div className="text-[15px] font-black tabular-nums">
+                          {modalDetalhes.peso_total_kg.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg
+                        </div>
+                      </div>
                     </div>
-
-                    <div className="text-right">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Valor Total da Operação
-                      </span>
-                      <span className="font-mono text-xl font-black text-emerald-950">
-                        {modalDetalhes.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </span>
+                    <div className="relative px-5 py-3 rounded-md bg-[linear-gradient(100deg,#042013,#0b3d24)] text-right overflow-hidden min-w-[230px]">
+                      <div className="absolute inset-x-0 top-0 h-[2px] bg-[linear-gradient(90deg,#9c7a2e,#e2c27a,#9c7a2e)]" />
+                      <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#c9a24a]">Valor total</div>
+                      <div className="text-[26px] font-black tracking-tight tabular-nums text-white leading-tight">
+                        {formatarMoeda(modalDetalhes.valor_total)}
+                      </div>
                     </div>
                   </div>
 
                   {/* Observações */}
                   {modalDetalhes.observacoes && (
-                    <div className="text-[11px] text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                      <strong className="text-slate-800">Observações Comerciais:</strong> {modalDetalhes.observacoes}
+                    <div className="px-6 sm:px-8 pb-4">
+                      <div className="w-10 h-[2px] bg-[#c9a24a] mb-2" />
+                      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#064e3b] mb-1">Observações</div>
+                      <p className="text-[11px] leading-relaxed whitespace-pre-line">{modalDetalhes.observacoes}</p>
                     </div>
                   )}
 
-                  {/* Assinaturas & Validação Comercial */}
-                  <div className="pt-6 border-t border-slate-200 grid grid-cols-2 gap-8 text-center text-[10px] text-slate-500">
+                  {/* Assinaturas */}
+                  <div className="px-6 sm:px-8 pt-8 pb-5 grid grid-cols-2 gap-10 text-center text-[10px] text-[#6e7470]">
                     <div>
-                      <div className="border-b border-slate-300 pb-1 mb-1 font-mono text-slate-700">
-                        {modalDetalhes.cliente_nome}
-                      </div>
-                      <span>De Acordo do Cliente / Comprador</span>
+                      <div className="border-t border-[#171e1a]/40 pt-1.5 font-bold text-[#171e1a] text-[11px]">{modalDetalhes.cliente_nome}</div>
+                      <span>De acordo do cliente</span>
                     </div>
-
                     <div>
-                      <div className="border-b border-slate-300 pb-1 mb-1 font-mono text-slate-700">
-                        {modalDetalhes.rca_nome} (Grupo ENO)
-                      </div>
-                      <span>Aprovação Comercial / RCA Responsável</span>
+                      <div className="border-t border-[#171e1a]/40 pt-1.5 font-bold text-[#171e1a] text-[11px]">{modalDetalhes.rca_nome || EMPRESA.razao}</div>
+                      <span>Aprovação comercial · {EMPRESA.razao}</span>
                     </div>
                   </div>
 
-                  {/* Rodapé Oficial do Documento */}
-                  <div className="text-[9px] text-slate-400 text-center pt-2">
-                    Documento comercial emitido para fins de negociação e programação industrial • Grupo ENO Agroindustrial • Paranavaí / PR
+                  <div className="px-6 sm:px-8 py-3 border-t border-[#ddd6c4] flex flex-wrap items-center justify-between gap-2 text-[10px] text-[#6e7470]">
+                    <span>{EMPRESA.razao} · Documento comercial nº {modalDetalhes.numero_pedido}</span>
+                    <span className="tabular-nums">Gerado em {new Date().toLocaleDateString('pt-BR')}</span>
                   </div>
                 </div>
               </div>

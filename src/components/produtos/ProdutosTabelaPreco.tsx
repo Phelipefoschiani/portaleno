@@ -39,6 +39,7 @@ import { formatarDataBR, hojeISO } from '../../lib/datas';
 import { ProdutosNavTabs } from './ProdutosNavTabs';
 import { CampoPrecoTabela } from './CampoPrecoTabela';
 import { gerarPdfTabelaPreco, LinhaTabelaPrecoPdf } from '../../lib/pdfTabelaPreco';
+import { FaixaMarcaEno } from '../FaixaMarcaEno';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -831,35 +832,11 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
               </label>
 
               <div id="tabela-preco-imprimivel" className="mx-auto max-w-[820px] bg-[#fbfaf5] rounded-sm shadow-[0_30px_60px_-25px_rgba(0,0,0,0.6)] overflow-hidden text-[#171e1a]">
-                {/* Faixa da marca */}
-                <div className="relative bg-[linear-gradient(100deg,#042013_0%,#0b3d24_70%,#13502f_100%)] px-6 sm:px-8 pt-6 pb-5 overflow-hidden">
-                  <div className="pointer-events-none absolute -right-16 -top-20 w-72 h-72 rounded-full bg-[radial-gradient(circle,rgba(201,162,74,0.28),transparent_65%)]" />
-                  <div className="pointer-events-none absolute inset-0 opacity-[0.07] bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:10px_10px]" />
-                  <div className="relative flex flex-col sm:flex-row sm:items-start justify-between gap-5">
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-lg bg-white p-1.5 shadow-[0_8px_24px_-8px_rgba(201,162,74,0.6)] shrink-0">
-                        <img src="/logo.jpg?v=3" alt="Grupo ENO" className="w-full h-full object-contain" />
-                      </div>
-                      <div>
-                        <div className="text-2xl font-black tracking-tight text-white leading-none">GRUPO ENO</div>
-                        <div className="text-[11px] text-[#a7d6ba] mt-1.5">Agroindústria · Fecularia & Mandioca Gourmet</div>
-                      </div>
-                    </div>
-                    <div className="sm:text-right">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.32em] text-[#c9a24a]">Tabela de Preços</div>
-                      <div className="text-3xl sm:text-[34px] font-black tracking-tight text-white leading-tight mt-1 uppercase break-words">
-                        {tabelaVisualizar.nome}
-                      </div>
-                      <div className="text-[11px] text-[#a7d6ba] mt-1 tabular-nums">
-                        Código {tabelaVisualizar.codigo} · Emitida em {new Date().toLocaleDateString('pt-BR')}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="relative mt-4 text-[10px] text-[#8abaa0]">
-                    Rodovia PR-482, km 14 · CNPJ 14.882.910/0001-44 · (44) 3639-8200 · comercial@grupoeno.com.br
-                  </div>
-                </div>
-                <div className="h-[3px] bg-[linear-gradient(90deg,#9c7a2e,#e2c27a,#9c7a2e)]" />
+                <FaixaMarcaEno
+                  rotulo="Tabela de Preços"
+                  titulo={tabelaVisualizar.nome}
+                  subtitulo={`Código ${tabelaVisualizar.codigo} · Emitida em ${new Date().toLocaleDateString('pt-BR')}`}
+                />
 
                 {/* Condições da tabela */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 px-6 sm:px-8 py-4 gap-y-3 border-b border-[#e6e1d2]">

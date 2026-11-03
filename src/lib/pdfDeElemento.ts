@@ -9,6 +9,9 @@ const A4_A = 297;
 const MARGEM = 8; // mm (topo e base de cada página)
 
 export async function gerarPdfDeElemento(elemento: HTMLElement): Promise<jsPDF> {
+  // Cor do papel da folha: as margens do PDF ficam da mesma cor (sem faixa branca em volta)
+  const corPapel = getComputedStyle(elemento).backgroundColor || '#ffffff';
+  const rgbPapel = (corPapel.match(/\d+/g) || ['255', '255', '255']).slice(0, 3).map(Number) as [number, number, number];
   const largura = elemento.scrollWidth;
   const altura = elemento.scrollHeight;
   const escala = 2;
@@ -16,7 +19,7 @@ export async function gerarPdfDeElemento(elemento: HTMLElement): Promise<jsPDF> 
   const canvas = await html2canvas(elemento, {
     scale: escala,
     useCORS: true,
-    backgroundColor: '#ffffff',
+    backgroundColor: corPapel,
     width: largura,
     height: altura,
     windowWidth: Math.max(document.documentElement.clientWidth, largura + 40),
@@ -52,7 +55,9 @@ export async function gerarPdfDeElemento(elemento: HTMLElement): Promise<jsPDF> 
   let inicio = 0;
   let pagina = 0;
   while (inicio < altura - 1) {
-    const limite = inicio + alturaUtilPx;
+    // 1ª página encosta no topo (a faixa da marca começa na borda); as demais têm margem
+    const topoMm = pagina === 0 ? 0 : MARGEM;
+    const limite = inicio + (A4_A - topoMm - MARGEM) * pxPorMm;
     let fim = altura;
     if (limite < altura) {
       const candidatos = quebrasOrdenadas.filter(p => p > inicio + alturaUtilPx * 0.4 && p <= limite);
@@ -64,13 +69,15 @@ export async function gerarPdfDeElemento(elemento: HTMLElement): Promise<jsPDF> 
     fatia.height = Math.ceil((fim - inicio) * escala);
     const ctx = fatia.getContext('2d');
     if (!ctx) break;
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = corPapel;
     ctx.fillRect(0, 0, fatia.width, fatia.height);
     ctx.drawImage(canvas, 0, Math.floor(inicio * escala), canvas.width, fatia.height, 0, 0, fatia.width, fatia.height);
 
     if (pagina > 0) pdf.addPage();
+    pdf.setFillColor(...rgbPapel);
+    pdf.rect(0, 0, A4_L, A4_A, 'F');
     const alturaMm = (fim - inicio) / pxPorMm;
-    pdf.addImage(fatia.toDataURL('image/jpeg', 0.9), 'JPEG', 0, MARGEM, A4_L, alturaMm, undefined, 'FAST');
+    pdf.addImage(fatia.toDataURL('image/jpeg', 0.9), 'JPEG', 0, topoMm, A4_L, alturaMm, undefined, 'FAST');
     inicio = fim;
     pagina++;
   }
