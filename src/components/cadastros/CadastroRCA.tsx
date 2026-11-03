@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { CampoNumero } from '../ui/CampoNumero';
 import { 
   Search, 
   Plus, 
@@ -1147,11 +1148,11 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                         {(formData.modelo_comissao || 'geral') === 'geral' ? 'Comissão sobre o total da venda (%)' : 'Comissão padrão — itens sem regra própria (%)'}
                       </label>
                       <div className="relative max-w-[12rem]">
-                        <input
-                          type="number"
+                        <CampoNumero
                           step="0.1"
+                          min={0}
                           value={formData.comissao_padrao_percentual ?? 3.5}
-                          onChange={(e) => setFormData({ ...formData, comissao_padrao_percentual: Number(e.target.value) })}
+                          onChange={(n) => setFormData({ ...formData, comissao_padrao_percentual: n })}
                           className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
@@ -1161,12 +1162,13 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                     <div className="sm:col-span-2">
                       <label className="text-xs font-bold text-slate-700 block mb-1">Vencimento da comissão (dia do mês seguinte ao faturamento)</label>
                       <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="1"
-                          max="31"
+                        <CampoNumero
+                          inteiro
+                          min={1}
+                          max={31}
+                          vazioComo={DIA_VENCIMENTO_COMISSAO_PADRAO}
                           value={formData.dia_vencimento_comissao ?? DIA_VENCIMENTO_COMISSAO_PADRAO}
-                          onChange={(e) => setFormData({ ...formData, dia_vencimento_comissao: Math.min(31, Math.max(1, Number(e.target.value) || DIA_VENCIMENTO_COMISSAO_PADRAO)) })}
+                          onChange={(n) => setFormData({ ...formData, dia_vencimento_comissao: n })}
                           className="w-24 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
                         />
                         <span className="text-[11px] text-slate-500">Ao faturar o pedido, a comissão vira conta a pagar ao RCA com este vencimento e a chave PIX cadastrada.</span>
@@ -1213,12 +1215,11 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                               </span>
                               <div className="flex items-center gap-2 shrink-0">
                                 <div className="w-20 relative">
-                                  <input
-                                    type="number"
+                                  <CampoNumero
                                     step="0.1"
-                                    min="0"
+                                    min={0}
                                     value={cp.percentual}
-                                    onChange={(e) => handleAlterarPercentualProduto(cp.produto_id, Number(e.target.value))}
+                                    onChange={(n) => handleAlterarPercentualProduto(cp.produto_id, n)}
                                     aria-label={`Comissão de ${cp.produto_nome} (%)`}
                                     className="w-full bg-emerald-50 border border-emerald-200 rounded px-2 py-1 text-xs font-mono font-bold text-emerald-800 tabular-nums"
                                   />
@@ -1255,12 +1256,11 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                         </select>
                         <div className="flex items-center gap-2">
                           <div className="w-24 relative">
-                            <input
-                              type="number"
+                            <CampoNumero
                               step="0.1"
-                              min="0"
+                              min={0}
                               value={novoProdutoPercentual}
-                              onChange={(e) => setNovoProdutoPercentual(Number(e.target.value))}
+                              onChange={(n) => setNovoProdutoPercentual(n)}
                               className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-slate-900"
                               placeholder="%"
                             />
@@ -1334,11 +1334,11 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           ))}
                         </select>
                         <div className="w-24 relative">
-                          <input
-                            type="number"
+                          <CampoNumero
                             step="0.1"
+                            min={0}
                             value={novoGrupoPercentual}
-                            onChange={(e) => setNovoGrupoPercentual(Number(e.target.value))}
+                            onChange={(n) => setNovoGrupoPercentual(n)}
                             className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-slate-900"
                             placeholder="%"
                           />
@@ -1409,11 +1409,11 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           ))}
                         </select>
                         <div className="w-24 relative">
-                          <input
-                            type="number"
+                          <CampoNumero
                             step="0.1"
+                            min={0}
                             value={novoClientePercentual}
-                            onChange={(e) => setNovoClientePercentual(Number(e.target.value))}
+                            onChange={(n) => setNovoClientePercentual(n)}
                             className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-slate-900"
                             placeholder="%"
                           />

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { CampoNumero } from '../ui/CampoNumero';
 import {
   Boxes,
   Plus,
@@ -529,13 +530,12 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">{modoEdicao ? 'Saldo Atual' : 'Saldo Inicial'}</label>
-                  <input
-                    type="number"
+                  <CampoNumero
                     step="any"
-                    min="0"
+                    min={0}
                     value={formData.estoque_atual}
                     readOnly={!!modoEdicao}
-                    onChange={(e) => setFormData({ ...formData, estoque_atual: parseFloat(e.target.value) || 0 })}
+                    onChange={(n) => setFormData({ ...formData, estoque_atual: n })}
                     className={`w-full border border-slate-200 rounded-lg px-3 py-2 font-bold font-mono text-center text-slate-800 focus:outline-none focus:border-emerald-700 ${modoEdicao ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50'}`}
                   />
                   {modoEdicao && (
@@ -559,11 +559,11 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Custo Médio (R$)</label>
-                  <input
-                    type="number"
+                  <CampoNumero
                     step="0.01"
+                    min={0}
                     value={formData.custo_medio_unitario}
-                    onChange={(e) => setFormData({ ...formData, custo_medio_unitario: parseFloat(e.target.value) || 0 })}
+                    onChange={(n) => setFormData({ ...formData, custo_medio_unitario: n })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-bold font-mono text-center text-slate-800 focus:outline-none focus:border-emerald-700"
                   />
                 </div>

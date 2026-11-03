@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { CampoNumero } from '../ui/CampoNumero';
 import {
   Package,
   Plus,
@@ -274,6 +275,14 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
 
   const handleSalvar = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!(formData.unidades_por_acondicionamento >= 1)) {
+      alert('Informe quantas unidades vão em cada ' + formData.tipo_acondicionamento.toLowerCase() + ' (mínimo 1).');
+      return;
+    }
+    if (!(formData.peso_unitario_kg > 0)) {
+      alert('Informe o peso de cada unidade (kg).');
+      return;
+    }
     const pesoTotal = formData.estoque_atual_sacos * formData.peso_unitario_kg;
     const status: ProdutoEstoque['status'] = calcularStatusProduto(pesoTotal, formData.estoque_minimo_kg);
 
@@ -828,12 +837,12 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
 
                   <div>
                     <label className="block font-bold text-emerald-950 mb-1">Quantos que vai (Qtd) *</label>
-                    <input
-                      type="number"
+                    <CampoNumero
+                      inteiro
                       required
-                      min="1"
+                      min={1}
                       value={formData.unidades_por_acondicionamento}
-                      onChange={(e) => setFormData({ ...formData, unidades_por_acondicionamento: parseInt(e.target.value) || 1 })}
+                      onChange={(n) => setFormData({ ...formData, unidades_por_acondicionamento: n })}
                       placeholder="Ex: 10 ou 12"
                       className="w-full bg-white border-2 border-emerald-500 rounded-xl px-3 py-2 font-mono font-black text-center text-emerald-950 text-sm focus:outline-none focus:border-emerald-700 shadow-xs"
                     />
@@ -844,12 +853,11 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
 
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Peso de cada unidade (kg)</label>
-                    <input
-                      type="number"
+                    <CampoNumero
                       step="any"
-                      min="0.01"
+                      min={0}
                       value={formData.peso_unitario_kg}
-                      onChange={(e) => setFormData({ ...formData, peso_unitario_kg: parseFloat(e.target.value) || 1 })}
+                      onChange={(n) => setFormData({ ...formData, peso_unitario_kg: n })}
                       className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 text-center focus:outline-none focus:border-emerald-700 shadow-2xs"
                     />
                     <span className="text-[10px] text-slate-500 block text-center mt-0.5">
@@ -868,11 +876,11 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Custo Insumos (R$)</label>
-                    <input
-                      type="number"
+                    <CampoNumero
                       step="0.01"
+                      min={0}
                       value={formData.custo_materia_prima}
-                      onChange={(e) => setFormData({ ...formData, custo_materia_prima: parseFloat(e.target.value) || 0 })}
+                      onChange={(n) => setFormData({ ...formData, custo_materia_prima: n })}
                       className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 text-right focus:outline-none focus:border-emerald-700 shadow-2xs"
                     />
                     <span className="text-[10px] text-slate-400 block text-right mt-0.5">da receita</span>
@@ -880,12 +888,11 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
 
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Custos Operacionais (R$)</label>
-                    <input
-                      type="number"
+                    <CampoNumero
                       step="0.01"
-                      min="0"
+                      min={0}
                       value={formData.custo_operacional}
-                      onChange={(e) => setFormData({ ...formData, custo_operacional: parseFloat(e.target.value) || 0 })}
+                      onChange={(n) => setFormData({ ...formData, custo_operacional: n })}
                       className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 text-right focus:outline-none focus:border-emerald-700 shadow-2xs"
                     />
                     <span className="text-[10px] text-slate-400 block text-right mt-0.5">energia/mão de obra</span>
@@ -961,11 +968,11 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                           </div>
                           <div className="sm:col-span-2">
                             <label className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5">Valor / Alíquota</label>
-                            <input
-                              type="number"
+                            <CampoNumero
                               step="any"
+                              min={0}
                               value={imp.valor}
-                              onChange={(e) => handleAtualizarImposto(imp.id, 'valor', parseFloat(e.target.value) || 0)}
+                              onChange={(n) => handleAtualizarImposto(imp.id, 'valor', n)}
                               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-mono font-bold text-right text-emerald-950 focus:outline-none focus:border-emerald-600"
                             />
                           </div>
@@ -1052,22 +1059,21 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                   <label className="block font-bold text-slate-700 mb-1">
                     Saldo Atual ({formData.tipo_acondicionamento}s)
                   </label>
-                  <input
-                    type="number"
-                    min="0"
+                  <CampoNumero
+                    inteiro
+                    min={0}
                     value={formData.estoque_atual_sacos}
-                    onChange={(e) => setFormData({ ...formData, estoque_atual_sacos: parseInt(e.target.value) || 0 })}
+                    onChange={(n) => setFormData({ ...formData, estoque_atual_sacos: n })}
                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-bold font-mono text-center text-slate-800 focus:outline-none focus:border-emerald-700 shadow-2xs"
                   />
                 </div>
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Estoque Mínimo Alerta (kg)</label>
-                  <input
-                    type="number"
-                    step="100"
+                  <CampoNumero
+                    min={0}
                     value={formData.estoque_minimo_kg}
-                    onChange={(e) => setFormData({ ...formData, estoque_minimo_kg: parseInt(e.target.value) || 0 })}
+                    onChange={(n) => setFormData({ ...formData, estoque_minimo_kg: n })}
                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-800 text-center focus:outline-none focus:border-emerald-700 shadow-2xs"
                   />
                 </div>

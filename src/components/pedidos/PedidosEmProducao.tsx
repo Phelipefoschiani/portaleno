@@ -43,10 +43,11 @@ import {
   garantirOrdensDosPedidosEmProducao,
   validadePadraoProduto
 } from '../../data/ordensProducaoData';
-import { formatarDataBR } from '../../lib/datas';
+import { formatarDataBR, hojeISO, paraISO } from '../../lib/datas';
 
-// Validade padrão do pedido: prazo da ficha técnica do 1º produto (24 meses quando não informado)
-const validadePadraoPedidoBR = (p: PedidoVenda) => formatarDataBR(validadePadraoProduto(p.itens[0]?.produto_id || ''));
+// Validade padrão do pedido: prazo da ficha técnica do 1º produto (24 meses quando não informado), em 'AAAA-MM-DD'
+const validadePadraoPedidoISO = (p: PedidoVenda, fabricacao?: string) =>
+  validadePadraoProduto(p.itens[0]?.produto_id || '', paraISO(fabricacao) || hojeISO());
 import { calcularConsumoProducao, ConsumoMateriaPrimaProducao } from '../../data/pipelineIntegrado';
 import { TabelaMateriaPrimaOP } from '../producao/OrdensProducaoPainel';
 
@@ -82,7 +83,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
   // Form de Apontamento por Produto
   const [produtoSelecionadoId, setProdutoSelecionadoId] = useState<string>('');
   const [qtdEmbalagensInput, setQtdEmbalagensInput] = useState<string>('');
-  const [dataApontamento, setDataApontamento] = useState(new Date().toLocaleDateString('pt-BR'));
+  const [dataApontamento, setDataApontamento] = useState(hojeISO());
   const [operadorTurno, setOperadorTurno] = useState('Turno A (Manhã) - Carlos Ferreira');
   const [observacaoApontamento, setObservacaoApontamento] = useState('');
 
@@ -133,10 +134,10 @@ export function PedidosEmProducao({ onNavigate }: Props) {
   const handleAbrirProducao = (p: PedidoVenda, produtoIdInicial?: string) => {
     setModalProducao(p);
     setLoteInput(p.lote_producao || `LOT-${new Date().getFullYear()}-${p.numero_pedido.replace(/\D/g, '')}`);
-    const hoje = new Date();
-    setDataFabricacaoInput(p.data_fabricacao || hoje.toLocaleDateString('pt-BR'));
-    setDataVencimentoInput(p.data_vencimento || validadePadraoPedidoBR(p));
-    setDataApontamento(new Date().toLocaleDateString('pt-BR'));
+    const fab = paraISO(p.data_fabricacao) || hojeISO();
+    setDataFabricacaoInput(fab);
+    setDataVencimentoInput(paraISO(p.data_vencimento) || validadePadraoPedidoISO(p, fab));
+    setDataApontamento(hojeISO());
     setQtdEmbalagensInput('');
     setObservacaoApontamento('');
 
@@ -198,7 +199,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
     // Cria apontamento com detalhes do produto
     const novoApontamento: ApontamentoProducao = {
       id: `apt_${Date.now()}`,
-      data: dataApontamento,
+      data: paraISO(dataApontamento) || hojeISO(),
       produto_id: itemAlvo.produto_id,
       produto_nome: itemAlvo.produto_nome,
       tipo_embalagem: itemAlvo.tipo_embalagem,
@@ -216,8 +217,8 @@ export function PedidosEmProducao({ onNavigate }: Props) {
       ...pedidoAtual,
       itens: itensAtualizados,
       lote_producao: loteInput || pedidoAtual.lote_producao,
-      data_fabricacao: dataFabricacaoInput || pedidoAtual.data_fabricacao || new Date().toLocaleDateString('pt-BR'),
-      data_vencimento: dataVencimentoInput || pedidoAtual.data_vencimento,
+      data_fabricacao: paraISO(dataFabricacaoInput) || paraISO(pedidoAtual.data_fabricacao) || hojeISO(),
+      data_vencimento: paraISO(dataVencimentoInput) || paraISO(pedidoAtual.data_vencimento) || undefined,
       apontamentos_producao: apontamentosAtuais,
       quantidade_produzida_acumulada_kg: totalKgAcumulado
     };
@@ -272,21 +273,24 @@ export function PedidosEmProducao({ onNavigate }: Props) {
   const handleTentarConcluirProducao = (pedido: PedidoVenda) => {
     // Sincroniza com os inputs se o modal de produção estiver aberto para este pedido
     const loteEfetivo = (modalProducao && modalProducao.id === pedido.id ? (loteInput.trim() || modalProducao.lote_producao?.trim() || '') : (pedido.lote_producao?.trim() || '')).trim();
-    const vencimentoEfetivo = (modalProducao && modalProducao.id === pedido.id ? (dataVencimentoInput.trim() || modalProducao.data_vencimento?.trim() || '') : (pedido.data_vencimento?.trim() || '')).trim();
-    const fabricacaoEfetiva = (modalProducao && modalProducao.id === pedido.id ? (dataFabricacaoInput.trim() || modalProducao.data_fabricacao?.trim() || new Date().toLocaleDateString('pt-BR')) : (pedido.data_fabricacao?.trim() || new Date().toLocaleDateString('pt-BR'))).trim();
+    const vencimentoEfetivo = modalProducao && modalProducao.id === pedido.id
+      ? (paraISO(dataVencimentoInput) || paraISO(modalProducao.data_vencimento))
+      : paraISO(pedido.data_vencimento);
+    const fabricacaoEfetiva = (modalProducao && modalProducao.id === pedido.id
+      ? (paraISO(dataFabricacaoInput) || paraISO(modalProducao.data_fabricacao))
+      : paraISO(pedido.data_fabricacao)) || hojeISO();
 
     if (!loteEfetivo || !vencimentoEfetivo) {
       // Bloqueia e abre modal para preenchimento obrigatório
       setModalBloqueioLote(pedido);
       setLoteInput(loteEfetivo || pedido.lote_producao || `LOT-${new Date().getFullYear()}-${pedido.numero_pedido.replace(/\D/g, '')}`);
-      const hoje = new Date();
-      setDataFabricacaoInput(fabricacaoEfetiva || hoje.toLocaleDateString('pt-BR'));
-      setDataVencimentoInput(vencimentoEfetivo || validadePadraoPedidoBR(pedido));
+      setDataFabricacaoInput(fabricacaoEfetiva);
+      setDataVencimentoInput(vencimentoEfetivo || validadePadraoPedidoISO(pedido, fabricacaoEfetiva));
       return;
     }
 
     // Se já tem lote e vencimento válidos, confirma e move para A_FATURAR
-    if (confirm(`Concluir produção do pedido ${pedido.numero_pedido}?\n\n• Lote: ${loteEfetivo}\n• Vencimento: ${vencimentoEfetivo}\n\nO pedido será liberado para o setor de Faturamento.`)) {
+    if (confirm(`Concluir produção do pedido ${pedido.numero_pedido}?\n\n• Lote: ${loteEfetivo}\n• Vencimento: ${formatarDataBR(vencimentoEfetivo)}\n\nO pedido será liberado para o setor de Faturamento.`)) {
       // Salva lote e vencimento no pedido
       const todos = carregarPedidosVenda();
       const idx = todos.findIndex(p => p.id === pedido.id);
@@ -320,10 +324,12 @@ export function PedidosEmProducao({ onNavigate }: Props) {
       alert('O Número do Lote de Fabricação é estritamente obrigatório.');
       return;
     }
-    if (!dataVencimentoInput.trim()) {
+    const vencISO = paraISO(dataVencimentoInput);
+    if (!vencISO) {
       alert('A Data de Vencimento é estritamente obrigatória.');
       return;
     }
+    const fabISO = paraISO(dataFabricacaoInput) || hojeISO();
 
     const todos = carregarPedidosVenda();
     const index = todos.findIndex(p => p.id === modalBloqueioLote.id);
@@ -333,15 +339,15 @@ export function PedidosEmProducao({ onNavigate }: Props) {
     todos[index] = {
       ...todos[index],
       lote_producao: loteInput.trim(),
-      data_fabricacao: dataFabricacaoInput.trim() || new Date().toLocaleDateString('pt-BR'),
-      data_vencimento: dataVencimentoInput.trim()
+      data_fabricacao: fabISO,
+      data_vencimento: vencISO
     };
     salvarPedidosVenda(todos);
 
     moverPedidoEtapa(modalBloqueioLote.id, 'A_FATURAR', {
       lote_producao: loteInput.trim(),
-      data_fabricacao: dataFabricacaoInput.trim() || new Date().toLocaleDateString('pt-BR'),
-      data_vencimento: dataVencimentoInput.trim()
+      data_fabricacao: fabISO,
+      data_vencimento: vencISO
     });
 
     setModalBloqueioLote(null);
@@ -586,7 +592,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                               <span>Lote: {item.lote_producao}</span>
                             </div>
                             <div className="text-[10px] text-emerald-800 mt-0.5">
-                              Venc: {item.data_vencimento}
+                              Venc: {formatarDataBR(item.data_vencimento)}
                             </div>
                           </div>
                         ) : (
@@ -886,8 +892,8 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                           Data do Apontamento
                         </label>
                         <input
-                          type="text"
-                          value={dataApontamento}
+                          type="date"
+                          value={paraISO(dataApontamento)}
                           onChange={(e) => setDataApontamento(e.target.value)}
                           className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-800 focus:outline-none focus:border-emerald-700"
                         />
@@ -915,11 +921,10 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                           Data de Vencimento *
                         </label>
                         <input
-                          type="text"
+                          type="date"
                           required
-                          value={dataVencimentoInput}
+                          value={paraISO(dataVencimentoInput)}
                           onChange={(e) => setDataVencimentoInput(e.target.value)}
-                          placeholder="DD/MM/AAAA"
                           className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
                         />
                       </div>
@@ -995,7 +1000,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                         <tbody className="divide-y divide-slate-100 font-mono text-xs">
                           {modalProducao.apontamentos_producao.map((apt) => (
                             <tr key={apt.id} className="hover:bg-slate-50">
-                              <td className="py-2.5 px-3 font-semibold text-slate-800">{apt.data}</td>
+                              <td className="py-2.5 px-3 font-semibold text-slate-800">{formatarDataBR(apt.data)}</td>
                               <td className="py-2.5 px-3 font-sans">
                                 <div className="font-bold text-slate-900 truncate max-w-[140px]" title={apt.produto_nome}>
                                   {apt.produto_nome || 'Produto'}
@@ -1047,7 +1052,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                 {loteInput.trim() && dataVencimentoInput.trim() ? (
                   <div className="hidden sm:flex items-center gap-1.5 text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 text-[11px] font-bold">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>Rastreabilidade OK: Lote {loteInput} • Venc: {dataVencimentoInput}</span>
+                    <span>Rastreabilidade OK: Lote {loteInput} • Venc: {formatarDataBR(dataVencimentoInput)}</span>
                   </div>
                 ) : (
                   <div className="hidden sm:flex items-center gap-1.5 text-amber-800 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-300 text-[11px] font-bold">
@@ -1123,11 +1128,10 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                     Data de Fabricação *
                   </label>
                   <input
-                    type="text"
+                    type="date"
                     required
-                    value={dataFabricacaoInput}
+                    value={paraISO(dataFabricacaoInput)}
                     onChange={(e) => setDataFabricacaoInput(e.target.value)}
-                    placeholder="DD/MM/AAAA"
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
                   />
                 </div>
@@ -1137,11 +1141,10 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                     Data de Vencimento *
                   </label>
                   <input
-                    type="text"
+                    type="date"
                     required
-                    value={dataVencimentoInput}
+                    value={paraISO(dataVencimentoInput)}
                     onChange={(e) => setDataVencimentoInput(e.target.value)}
-                    placeholder="DD/MM/AAAA"
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
                   />
                 </div>

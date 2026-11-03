@@ -5,7 +5,8 @@ import {
   carregarPedidosCompra,
   salvarPedidosCompra,
   efetivarPedidoCompra,
-  excluirPedidoCompra
+  excluirPedidoCompra,
+  estornarPagamentoPedidoCompra
 } from './mockStore';
 import { parseData } from '../lib/datas';
 
@@ -521,6 +522,22 @@ export function definirPagamentoCalculoRoca(
         ? `Pagamento registrado como A PAGAR e incluído no Contas a Pagar do Financeiro. ${res.mensagem}`
         : `Adiantamento registrado e saldo incluído no Contas a Pagar. ${res.mensagem}`
   };
+}
+
+/**
+ * Estorna o pagamento da pesagem (exclusão da despesa no Financeiro): segue a mesma trava da roça —
+ * bloqueia se o pedido tiver título já pago no Contas a Pagar. Caso contrário, remove despesa/títulos
+ * em aberto do pedido, devolve ao caixa e a pesagem volta a "pendente de definição de pagamento".
+ */
+export function estornarPagamentoCalculoRoca(calculoId: string): { sucesso: boolean; mensagem: string } {
+  const calculo = carregarCalculosNaRoca().find(c => c.id === calculoId);
+  if (!calculo) return { sucesso: false, mensagem: 'Pesagem não encontrada.' };
+  const res = estornarPagamentoPedidoCompra(calculo.pedido_compra_id, [calculo.id]);
+  if (!res.sucesso) return res;
+  salvarCalculosNaRoca(carregarCalculosNaRoca().map(c =>
+    c.id === calculoId ? { ...c, situacao_pagamento: 'PENDENTE_DEFINICAO' as const, detalhes_pagamento: undefined } : c
+  ));
+  return { sucesso: true, mensagem: `${res.mensagem} A pesagem ${calculo.numero_ticket} voltou a "Definir Pagamento".` };
 }
 
 /**

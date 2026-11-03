@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { CampoNumero } from '../ui/CampoNumero';
 import {
   DollarSign,
   Plus,
@@ -369,13 +370,14 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Valor do Título (R$)</label>
-                  <input
-                    type="number"
+                  <CampoNumero
                     step="0.01"
-                    min="0.01"
+                    min={0}
+                    casas={2}
+                    ocultarZero
                     required
-                    value={formData.valor || ''}
-                    onChange={(e) => setFormData({ ...formData, valor: parseFloat(e.target.value) || 0 })}
+                    value={formData.valor}
+                    onChange={(n) => setFormData({ ...formData, valor: n })}
                     placeholder="0.00"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
                   />

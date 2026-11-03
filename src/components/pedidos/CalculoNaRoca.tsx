@@ -42,7 +42,7 @@ import {
 import { CampoAnexoComprovante, ArquivoComprovante, ModalComprovantes, useExtratoRoca } from './ComprovantesRoca';
 import { Agricultor } from '../../data/mockStore';
 import { carregarAgricultores, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
-import { hojeISO, paraISO, formatarDataBR } from '../../lib/datas';
+import { hojeISO, paraISO, formatarDataBR, somarDias } from '../../lib/datas';
 
 interface Props {
   onNavigate?: (pageId: string) => void;
@@ -137,6 +137,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
   const [formaPagamentoEscolhida, setFormaPagamentoEscolhida] = useState('PIX');
   const [dataPagamentoOuVenc, setDataPagamentoOuVenc] = useState(new Date().toLocaleDateString('pt-BR'));
   const [valorAdiantado, setValorAdiantado] = useState('');
+  const [vencimentoSaldo, setVencimentoSaldo] = useState(somarDias(hojeISO(), 30));
   const [contaBancaria, setContaBancaria] = useState('Banco do Brasil - Conta Movimento');
   const [obsPagamento, setObsPagamento] = useState('');
   const [anexoPagamento, setAnexoPagamento] = useState<ArquivoComprovante | null>(null);
@@ -358,6 +359,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       setTimeout(() => setMensagemAviso(null), 8000);
       setModalPagamento(novoCalculo);
       setDataPagamentoOuVenc(new Date().toLocaleDateString('pt-BR'));
+      setVencimentoSaldo(somarDias(hojeISO(), 30));
       setObsPagamento('');
       setAnexoPagamento(null);
     }
@@ -368,10 +370,18 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
     e.preventDefault();
     if (!modalPagamento) return;
 
+    const temSaldo = tipoPagamentoForm === 'ADIANTAMENTO_PARCIAL' &&
+      modalPagamento.valor_total_estimado - (parseFloat(valorAdiantado.replace(',', '.')) || 0) > 0.009;
+    if (temSaldo && !paraISO(vencimentoSaldo)) {
+      alert('Informe o vencimento do saldo restante.');
+      return;
+    }
+
     const res = definirPagamentoCalculoRoca(modalPagamento.id, {
       tipo: tipoPagamentoForm,
       forma_pagamento: formaPagamentoEscolhida,
       data_pagamento_ou_vencimento: dataPagamentoOuVenc,
+      data_vencimento_saldo: temSaldo ? vencimentoSaldo : undefined,
       valor_pago:
         tipoPagamentoForm === 'ADIANTAMENTO_PARCIAL'
           ? parseFloat(valorAdiantado.replace(',', '.')) || 0
@@ -1028,6 +1038,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                           onClick={() => {
                             setModalPagamento(item);
                             setDataPagamentoOuVenc(new Date().toLocaleDateString('pt-BR'));
+                            setVencimentoSaldo(somarDias(hojeISO(), 30));
                             setObsPagamento('');
                             setAnexoPagamento(null);
                           }}
@@ -1982,6 +1993,18 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                         {Math.max(0, modalPagamento.valor_total_estimado - (parseFloat(valorAdiantado.replace(',', '.')) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </div>
                     </div>
+                    {modalPagamento.valor_total_estimado - (parseFloat(valorAdiantado.replace(',', '.')) || 0) > 0.009 && (
+                      <div className="col-span-2">
+                        <label className="block font-bold text-purple-900 mb-1">Vencimento do saldo</label>
+                        <input
+                          type="date"
+                          required
+                          value={vencimentoSaldo}
+                          onChange={(e) => setVencimentoSaldo(e.target.value)}
+                          className="w-full bg-white border border-purple-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none"
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 

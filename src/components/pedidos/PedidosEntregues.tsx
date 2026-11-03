@@ -290,7 +290,7 @@ export function PedidosEntregues({ onNavigate }: Props) {
                   {modalDetalhes.data_vencimento && (
                     <div className="flex justify-between items-center py-1 border-b border-slate-200/80">
                       <span className="text-slate-500 font-medium">Data de Vencimento:</span>
-                      <span className="font-mono text-slate-800 font-bold">{modalDetalhes.data_vencimento}</span>
+                      <span className="font-mono text-slate-800 font-bold">{formatarDataBR(modalDetalhes.data_vencimento)}</span>
                     </div>
                   )}
                   {modalDetalhes.nota_fiscal?.arquivo_anexado && (

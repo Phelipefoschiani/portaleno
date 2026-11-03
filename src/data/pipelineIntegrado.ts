@@ -639,15 +639,20 @@ const chaveOrigemSitio = (id: string) =>
 
 /**
  * Indica se um título a pagar já está representado por uma despesa realizada (para não contar duas vezes).
- * Vínculo: titulo.despesa_id, despesa.titulo_pagar_id ou (legado) mesmo pedido de compra e mesmo valor.
+ * Vínculo explícito: titulo.despesa_id ou despesa.titulo_pagar_id (despesa nascida da baixa do título).
+ * Heurística legada (mesmo pedido de compra e mesmo valor) só para títulos antigos: nunca para os títulos
+ * gerados pela efetivação de compra (pag_pc_*, inclusive o saldo de adiantamento pag_pc_*_saldo), que
+ * coexistem com a despesa do adiantamento e podem ter o mesmo valor (ex.: adiantamento de 50%).
  */
 export function tituloPagarTemDespesaVinculada(titulo: TituloPagar, despesasRealizadas: DespesaOperacional[]): boolean {
   const t: any = titulo;
   if (t.despesa_id && despesasRealizadas.some(d => d.id === t.despesa_id)) return true;
   if (despesasRealizadas.some((d: any) => d.titulo_pagar_id === titulo.id)) return true;
-  if (titulo.pedido_compra_id) {
+  if (titulo.pedido_compra_id && !String(titulo.id || '').startsWith('pag_pc_')) {
     const mesmoValor = despesasRealizadas.some((d: any) =>
       d.pedido_compra_id === titulo.pedido_compra_id &&
+      !d.titulo_pagar_id &&
+      !String(d.id || '').startsWith('desp_pc_') &&
       Math.abs((Number(d.valor) || 0) - (Number(titulo.valor) || 0)) < 0.01
     );
     if (mesmoValor) return true;

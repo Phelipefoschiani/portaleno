@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { CampoNumero } from '../ui/CampoNumero';
 import { jsPDF } from 'jspdf';
 import {
   Receipt,
@@ -53,13 +54,18 @@ import {
   carregarPedidosCompra,
   salvarPedidosCompra,
   efetivarPedidoCompra,
+  UNIDADES_PEDIDO_COMPRA,
+  lerNumeroBR,
+  formatarDecimalBR,
+  pedidoCompraDaDespesa,
+  estornarPagamentoPedidoCompra,
   Agricultor,
   Fornecedor,
   CategoriaCompra,
   StatusPedidoCompra
 } from '../../data/mockStore';
 import { FinanceiroNavTabs } from './FinanceiroNavTabs';
-import { carregarCalculosNaRoca, definirPagamentoCalculoRoca, excluirCalculoNaRoca } from '../../data/calculoRocaData';
+import { carregarCalculosNaRoca, definirPagamentoCalculoRoca, excluirCalculoNaRoca, estornarPagamentoCalculoRoca } from '../../data/calculoRocaData';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -243,6 +249,32 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
 
   // Ação: Excluir Despesa Direta
   const handleExcluirDespesa = (id: string) => {
+    // Despesa de pedido de compra: excluir = estornar o pagamento do pedido (não deixa o pedido "Pago")
+    const despesa = carregarDespesas().find(d => d.id === id);
+    const pedidoId = pedidoCompraDaDespesa(despesa as (DespesaOperacional & { pedido_compra_id?: string }) | undefined);
+    const pedido = pedidoId ? carregarPedidosCompra().find(p => p.id === pedidoId) : undefined;
+    if (pedido) {
+      const calculo = carregarCalculosNaRoca().find(c => c.pedido_compra_id === pedido.id);
+      const aviso =
+        `Esta despesa é o pagamento do pedido de compra "${pedido.item_descricao}".\n\n` +
+        'Ao excluir:\n' +
+        '• o valor pago volta para o caixa;\n' +
+        '• o saldo em aberto no Contas a Pagar deste pedido (se houver) também é removido;\n' +
+        `• o pedido volta para "A Confirmar" (sem pagamento)${calculo ? ` e a pesagem ${calculo.numero_ticket} volta a "Definir Pagamento"` : ''};\n` +
+        '• a entrada no estoque de matéria-prima já lançada é mantida (não duplica ao finalizar de novo).\n\n' +
+        'Deseja continuar?';
+      if (!confirm(aviso)) return;
+      const res = calculo ? estornarPagamentoCalculoRoca(calculo.id) : estornarPagamentoPedidoCompra(pedido.id);
+      if (!res.sucesso) {
+        alert(res.mensagem);
+        return;
+      }
+      recarregar();
+      window.dispatchEvent(new Event('pedidos_compra_updated'));
+      setMensagemFeedback(res.mensagem);
+      setTimeout(() => setMensagemFeedback(null), 6000);
+      return;
+    }
     if (confirm('Deseja excluir este lançamento de despesa?')) {
       salvarDespesas(carregarDespesas().filter(d => d.id !== id));
       // Estorna no caixa o que esta despesa havia debitado (se debitou)
@@ -255,11 +287,17 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
   // Ação: Salvar Novo Pedido de Compra Programado (Simples: Fornecedor, Data, Valor e Descrição)
   const handleSalvarNovoPedidoProgramado = (e: React.FormEvent) => {
     e.preventDefault();
-    const total = parseFloat(novoValorTotal.includes(',') ? novoValorTotal.replace(/\./g, '').replace(',', '.') : novoValorTotal) || (Number(novoQtd) * Number(novoUnitario)) || 0;
+    const qtd = lerNumeroBR(novoQtd);
+    if (!(qtd > 0)) {
+      alert('Informe a quantidade do pedido.');
+      return;
+    }
+    const total = lerNumeroBR(novoValorTotal) || (qtd * lerNumeroBR(novoUnitario)) || 0;
     if (total <= 0) {
       alert('Informe um valor estimado maior que zero.');
       return;
     }
+    const unitario = parseFloat((total / qtd).toFixed(4));
     const listaParceiros = novoTipoParceiro === 'AGRICULTOR' ? agricultores : fornecedores;
     if (listaParceiros.length === 0) {
       alert(novoTipoParceiro === 'AGRICULTOR'
@@ -288,10 +326,10 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
         local_compra: agr?.nome_propriedade || '',
         item_descricao: novoItem.trim() || 'Pedido de Compra Programado',
         categoria: 'Mandioca / Matéria-Prima',
-        quantidade: 1,
-        unidade_medida: 'Unidades',
-        valor_unitario: total,
-        valor_total: total,
+        quantidade: qtd,
+        unidade_medida: novoUnidade,
+        valor_unitario: unitario,
+        valor_total: parseFloat(total.toFixed(2)),
         status_pedido: 'Programado',
         forma_pagamento: 'PIX',
         observacoes: 'Programado — Categoria e pagamento definidos ao efetivar'
@@ -314,10 +352,10 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
         local_compra: forn?.fantasia || forn?.razao_nome || '',
         item_descricao: novoItem.trim() || 'Pedido de Compra Programado',
         categoria: 'Embalagens',
-        quantidade: 1,
-        unidade_medida: 'Unidades',
-        valor_unitario: total,
-        valor_total: total,
+        quantidade: qtd,
+        unidade_medida: novoUnidade,
+        valor_unitario: unitario,
+        valor_total: parseFloat(total.toFixed(2)),
         status_pedido: 'Programado',
         forma_pagamento: 'PIX',
         observacoes: 'Programado — Categoria e pagamento definidos ao efetivar'
@@ -333,6 +371,9 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
     setModalNovoPedido(false);
     setNovoItem('');
     setNovoValorTotal('');
+    setNovoQtd('1');
+    setNovoUnidade('Unidades');
+    setNovoUnitario('');
     setMensagemFeedback('Pedido de compra programado com sucesso! Já disponível em Despesas Programadas.');
     setTimeout(() => setMensagemFeedback(null), 5000);
   };
@@ -354,8 +395,8 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
     e.preventDefault();
     if (!pedidoEditando) return;
 
-    const qtd = numeroSeguro(editQtd);
-    const unit = numeroSeguro(editUnitario);
+    const qtd = lerNumeroBR(editQtd);
+    const unit = lerNumeroBR(editUnitario);
     const total = qtd * unit;
     const dataEditada = paraISO(editData) || editData;
 
@@ -1039,14 +1080,15 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Valor do Gasto (R$)</label>
-                  <input
-                    type="number"
+                  <CampoNumero
                     step="0.01"
-                    min="1"
+                    min={0}
+                    casas={2}
+                    ocultarZero
                     required
-                    value={formDespesa.valor || ''}
-                    onChange={(e) => setFormDespesa({ ...formDespesa, valor: parseFloat(e.target.value) || 0 })}
-                    placeholder="0.00"
+                    value={formDespesa.valor}
+                    onChange={(n) => setFormDespesa({ ...formDespesa, valor: n })}
+                    placeholder="0,00"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-red-700 focus:outline-none focus:border-emerald-700"
                   />
                 </div>
@@ -1189,16 +1231,69 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                   />
                 </div>
 
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Valor Estimado / Total (R$) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={novoValorTotal}
-                    onChange={(e) => setNovoValorTotal(e.target.value)}
-                    placeholder="Ex: 1500,00"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-700"
-                  />
+                <div className="sm:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Quantidade *</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      required
+                      value={novoQtd}
+                      onChange={(e) => {
+                        setNovoQtd(e.target.value);
+                        const q = lerNumeroBR(e.target.value);
+                        const u = lerNumeroBR(novoUnitario);
+                        if (q > 0 && u > 0) setNovoValorTotal(formatarDecimalBR(q * u, 2));
+                      }}
+                      placeholder="Ex: 1.000"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-700"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Unidade *</label>
+                    <select
+                      value={novoUnidade}
+                      onChange={(e) => setNovoUnidade(e.target.value as PedidoCompraGeral['unidade_medida'])}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-medium text-slate-800 focus:outline-none focus:border-blue-700"
+                    >
+                      {UNIDADES_PEDIDO_COMPRA.map(u => (
+                        <option key={u.valor} value={u.valor}>{u.rotulo}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Valor Unitário (R$)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={novoUnitario}
+                      onChange={(e) => {
+                        setNovoUnitario(e.target.value);
+                        const q = lerNumeroBR(novoQtd);
+                        const u = lerNumeroBR(e.target.value);
+                        if (q > 0 && u > 0) setNovoValorTotal(formatarDecimalBR(q * u, 2));
+                      }}
+                      placeholder="Ex: 1,50"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-700"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Valor Estimado / Total (R$) *</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      required
+                      value={novoValorTotal}
+                      onChange={(e) => {
+                        setNovoValorTotal(e.target.value);
+                        const q = lerNumeroBR(novoQtd);
+                        const t = lerNumeroBR(e.target.value);
+                        if (q > 0 && t > 0) setNovoUnitario(formatarDecimalBR(t / q, 4));
+                      }}
+                      placeholder="Ex: 1.500,00"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-700"
+                    />
+                  </div>
                 </div>
 
                 <div className="sm:col-span-2">
@@ -1327,12 +1422,9 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                     onChange={(e) => setEditUnidade(e.target.value as any)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-medium text-slate-800 focus:outline-none focus:border-blue-700"
                   >
-                    <option value="Unidades">Unidades (UN)</option>
-                    <option value="KG">KG (Quilogramas)</option>
-                    <option value="Sacos">Sacos (SC)</option>
-                    <option value="Litros">Litros (L)</option>
-                    <option value="Caixas">Caixas (CX)</option>
-                    <option value="Fardos">Fardos (FD)</option>
+                    {UNIDADES_PEDIDO_COMPRA.map(u => (
+                      <option key={u.valor} value={u.valor}>{u.rotulo}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -1353,7 +1445,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                     Total Recalculado
                   </span>
                   <span className="text-base font-black font-mono text-white">
-                    {formatarMoeda(numeroSeguro(editQtd) * numeroSeguro(editUnitario))}
+                    {formatarMoeda(lerNumeroBR(editQtd) * lerNumeroBR(editUnitario))}
                   </span>
                 </div>
 

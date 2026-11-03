@@ -47,7 +47,10 @@ import {
   carregarPedidosCompra,
   salvarPedidosCompra,
   efetivarPedidoCompra,
-  excluirPedidoCompra
+  excluirPedidoCompra,
+  UNIDADES_PEDIDO_COMPRA,
+  lerNumeroBR,
+  formatarDecimalBR
 } from '../../data/mockStore';
 import {
   carregarCalculosNaRoca,
@@ -61,7 +64,7 @@ import {
   carregarFornecedores,
   EVENTO_CADASTROS_ATUALIZADOS
 } from '../../data/cadastrosData';
-import { hojeISO, paraISO, formatarDataBR } from '../../lib/datas';
+import { hojeISO, paraISO, formatarDataBR, somarDias } from '../../lib/datas';
 
 export function PedidoCompra() {
   const [pedidos, setPedidos] = useState<PedidoCompraGeral[]>(carregarPedidosCompra());
@@ -95,6 +98,7 @@ export function PedidoCompra() {
   const [categoriaDef, setCategoriaDef] = useState<CategoriaCompra>('Embalagens');
   const [contaBancariaDef, setContaBancariaDef] = useState('Banco do Brasil - Conta Movimento');
   const [valorAdiantadoDef, setValorAdiantadoDef] = useState('');
+  const [vencimentoSaldoDef, setVencimentoSaldoDef] = useState(somarDias(hojeISO(), 30));
   const [obsPagamentoDef, setObsPagamentoDef] = useState('');
   // Comprovante de pagamento (somente compras do Cálculo na Roça; guardado em chave própria)
   const [anexoPagamentoDef, setAnexoPagamentoDef] = useState<ArquivoComprovante | null>(null);
@@ -119,6 +123,7 @@ export function PedidoCompra() {
         setCategoriaDef(ped.categoria || 'Embalagens');
         setFormaPagamentoDef(ped.forma_pagamento || 'PIX');
         setDataPagamentoOuVencDef(new Date().toLocaleDateString('pt-BR'));
+        setVencimentoSaldoDef(somarDias(hojeISO(), 30));
         setObsPagamentoDef('');
         setAnexoPagamentoDef(null);
         setMensagemSucesso(`Pedido gerado a partir do Cálculo na Roça! Defina abaixo a situação para virar despesa.`);
@@ -251,7 +256,13 @@ export function PedidoCompra() {
   const salvarNovoPedido = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const total = parseFloat(valorTotalForm.includes(',') ? valorTotalForm.replace(/\./g, '').replace(',', '.') : valorTotalForm) || (Number(quantidadeForm) * Number(valorUnitarioForm)) || 0;
+    const qtd = lerNumeroBR(quantidadeForm);
+    if (!(qtd > 0)) {
+      alert('Informe a quantidade do pedido.');
+      return;
+    }
+    const total = parseFloat((lerNumeroBR(valorTotalForm) || (qtd * lerNumeroBR(valorUnitarioForm)) || 0).toFixed(2));
+    const unitario = qtd > 0 ? parseFloat((total / qtd).toFixed(4)) : total;
 
     let novoPedido: PedidoCompraGeral;
 
@@ -277,9 +288,9 @@ export function PedidoCompra() {
         local_compra: `${agr.nome_propriedade} (${agr.endereco.municipio}/${agr.endereco.uf})`,
         item_descricao: itemDescricaoForm.trim() || 'Mandioca Industrial (Raiz In Natura)',
         categoria: 'Mandioca / Matéria-Prima',
-        quantidade: 1,
-        unidade_medida: 'Unidades',
-        valor_unitario: total,
+        quantidade: qtd,
+        unidade_medida: unidadeMedidaForm,
+        valor_unitario: unitario,
         valor_total: total,
         status_pedido: 'Programado',
         forma_pagamento: 'PIX',
@@ -308,9 +319,9 @@ export function PedidoCompra() {
         local_compra: forn.fantasia || forn.razao_nome,
         item_descricao: itemDescricaoForm.trim() || 'Pedido de Compra Programado',
         categoria: 'Embalagens',
-        quantidade: 1,
-        unidade_medida: 'Unidades',
-        valor_unitario: total,
+        quantidade: qtd,
+        unidade_medida: unidadeMedidaForm,
+        valor_unitario: unitario,
         valor_total: total,
         status_pedido: 'Programado',
         forma_pagamento: 'PIX',
@@ -332,6 +343,9 @@ export function PedidoCompra() {
     setDataForm(new Date().toLocaleDateString('pt-BR'));
     setItemDescricaoForm('');
     setValorTotalForm('');
+    setQuantidadeForm('1');
+    setUnidadeMedidaForm('Unidades');
+    setValorUnitarioForm('');
     setMensagemSucesso('Pedido de compra programado com sucesso!');
     setTimeout(() => setMensagemSucesso(null), 5000);
   };
@@ -365,8 +379,8 @@ export function PedidoCompra() {
     e.preventDefault();
     if (!pedidoEditando) return;
 
-    const qtd = Number(editQuantidade) || 0;
-    const unit = Number(editValorUnitario) || 0;
+    const qtd = lerNumeroBR(editQuantidade);
+    const unit = lerNumeroBR(editValorUnitario);
     const total = qtd * unit;
 
     const pedidosAtuais = carregarPedidosCompra();
@@ -473,6 +487,7 @@ export function PedidoCompra() {
     setCategoriaDef(pedido.categoria || 'Embalagens');
     setFormaPagamentoDef(pedido.forma_pagamento || 'PIX');
     setDataPagamentoOuVencDef(new Date().toLocaleDateString('pt-BR'));
+    setVencimentoSaldoDef(somarDias(hojeISO(), 30));
     setObsPagamentoDef('');
     setAnexoPagamentoDef(null);
   };
@@ -498,6 +513,12 @@ export function PedidoCompra() {
       alert('Informe um valor de adiantamento maior que zero e menor ou igual ao valor da compra.');
       return;
     }
+    const temSaldo = tipoPagamentoDef === 'ADIANTAMENTO_PARCIAL' && valTotal - valorAdiantado > 0.009;
+    if (temSaldo && !paraISO(vencimentoSaldoDef)) {
+      alert('Informe o vencimento do saldo restante.');
+      return;
+    }
+    const dataVencimentoSaldo = temSaldo ? vencimentoSaldoDef : undefined;
 
     // Verifica se este pedido é de um cálculo na roça
     const calculos = carregarCalculosNaRoca();
@@ -510,6 +531,7 @@ export function PedidoCompra() {
           tipo: tipoPagamentoDef,
           forma_pagamento: formaPagamentoDef,
           data_pagamento_ou_vencimento: dataPagamentoOuVencDef,
+          data_vencimento_saldo: dataVencimentoSaldo,
           valor_pago: tipoPagamentoDef === 'ADIANTAMENTO_PARCIAL' ? valorAdiantado : valTotal,
           saldo_restante: tipoPagamentoDef === 'ADIANTAMENTO_PARCIAL' ? Math.max(0, valTotal - valorAdiantado) : 0,
           conta_bancaria: contaBancariaDef,
@@ -534,6 +556,7 @@ export function PedidoCompra() {
       const res = efetivarPedidoCompra(ped.id, {
         tipo: tipoPagamentoDef,
         data: dataPagamentoOuVencDef,
+        data_vencimento_saldo: dataVencimentoSaldo,
         forma_pagamento: formaPagamentoDef,
         item_descricao: itemEfetivado,
         valor_total: valTotal,
@@ -898,7 +921,9 @@ export function PedidoCompra() {
             setCategoriaForm('Embalagens');
             setItemDescricaoForm('');
             setUnidadeMedidaForm('Unidades');
-            setValorUnitarioForm('1.00');
+            setQuantidadeForm('1');
+            setValorUnitarioForm('');
+            setValorTotalForm('');
             setStatusPedidoForm('Programado');
             setModalNovoPedido(true);
           }}
@@ -1457,13 +1482,72 @@ export function PedidoCompra() {
                     <span className="absolute left-3.5 top-2.5 text-xs sm:text-sm font-bold text-slate-400">R$</span>
                     <input
                       type="text"
+                      inputMode="decimal"
                       required
                       value={valorTotalForm}
-                      onChange={(e) => setValorTotalForm(e.target.value)}
-                      placeholder="Ex: 1500,00"
+                      onChange={(e) => {
+                        setValorTotalForm(e.target.value);
+                        const q = lerNumeroBR(quantidadeForm);
+                        const t = lerNumeroBR(e.target.value);
+                        if (q > 0 && t > 0) setValorUnitarioForm(formatarDecimalBR(t / q, 4));
+                      }}
+                      placeholder="Ex: 1.500,00"
                       className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-black font-mono text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* 2b. QUANTIDADE + UNIDADE + VALOR UNITÁRIO (total calculado) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Quantidade <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    required
+                    value={quantidadeForm}
+                    onChange={(e) => {
+                      setQuantidadeForm(e.target.value);
+                      const q = lerNumeroBR(e.target.value);
+                      const u = lerNumeroBR(valorUnitarioForm);
+                      if (q > 0 && u > 0) setValorTotalForm(formatarDecimalBR(q * u, 2));
+                    }}
+                    placeholder="Ex: 1.000"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold font-mono text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Unidade <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={unidadeMedidaForm}
+                    onChange={(e) => setUnidadeMedidaForm(e.target.value as PedidoCompraGeral['unidade_medida'])}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                  >
+                    {UNIDADES_PEDIDO_COMPRA.map(u => (
+                      <option key={u.valor} value={u.valor}>{u.rotulo}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Valor Unitário (R$)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={valorUnitarioForm}
+                    onChange={(e) => {
+                      setValorUnitarioForm(e.target.value);
+                      const q = lerNumeroBR(quantidadeForm);
+                      const u = lerNumeroBR(e.target.value);
+                      if (q > 0 && u > 0) setValorTotalForm(formatarDecimalBR(q * u, 2));
+                    }}
+                    placeholder="Ex: 1,50"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-bold font-mono text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                  />
                 </div>
               </div>
 
@@ -1760,7 +1844,7 @@ export function PedidoCompra() {
                     Total Calculado
                   </span>
                   <span className="text-base sm:text-lg font-black font-mono text-white truncate">
-                    R$ {((Number(editQuantidade) || 0) * (Number(editValorUnitario) || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {(lerNumeroBR(editQuantidade) * lerNumeroBR(editValorUnitario)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
@@ -2380,6 +2464,7 @@ export function PedidoCompra() {
                     </select>
                   </div>
                 ) : tipoPagamentoDef === 'ADIANTAMENTO_PARCIAL' ? (
+                  <>
                   <div>
                     <label className="block font-bold text-slate-700 mb-1 text-xs">Valor do Adiantamento Pago (R$) *</label>
                     <input
@@ -2392,6 +2477,19 @@ export function PedidoCompra() {
                       className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700 text-xs"
                     />
                   </div>
+                  {(lerNumeroBR(valorTotalDef) || pedidoDefinirPagamento.valor_total) - (parseFloat(valorAdiantadoDef.replace(',', '.')) || 0) > 0.009 && (
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1 text-xs">Vencimento do saldo *</label>
+                      <input
+                        type="date"
+                        required
+                        value={vencimentoSaldoDef}
+                        onChange={(e) => setVencimentoSaldoDef(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-emerald-700 text-xs"
+                      />
+                    </div>
+                  )}
+                  </>
                 ) : (
                   <div className="flex items-center text-slate-500 font-medium py-2 text-xs">
                     <span>O valor total entrará integralmente no Contas a Pagar do Financeiro.</span>

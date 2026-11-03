@@ -119,7 +119,15 @@ export interface PedidoVenda {
     arquivo_conteudo?: string;
   };
   observacoes?: string;
-  origem: 'Venda Direta' | 'RCA' | 'Portal Portfólio VIP' | 'Sugestão Reposição' | 'Portal do Cliente';
+  /**
+   * Quem gerou o pedido:
+   * - 'Venda Direta': admin sem RCA
+   * - 'Admin': admin lançou com RCA vinculado
+   * - 'RCA': feito pelo próprio RCA no portal dele
+   * - 'Portal do Cliente' / 'Portal Portfólio VIP': portais
+   * - 'Sugestão Reposição': Pedido Sugestivo
+   */
+  origem: 'Venda Direta' | 'Admin' | 'RCA' | 'Portal Portfólio VIP' | 'Sugestão Reposição' | 'Portal do Cliente';
   subtipo_venda?: 'Orçamento' | 'Pedido Sugestivo' | 'Pedido';
   modo_exibicao_padrao?: 'FARDO' | 'UNITARIO';
   tabela_id?: string;

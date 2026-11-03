@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CampoNumero } from '../ui/CampoNumero';
 import {
   FileText,
   Search,
@@ -523,10 +524,11 @@ export function FinanceiroNotasEntrada({ onNavigate }: Props) {
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
                     Peso Líquido Balança (kg)
                   </label>
-                  <input
-                    type="number"
-                    value={formData.peso_liquido_kg || ''}
-                    onChange={(e) => setFormData({ ...formData, peso_liquido_kg: Number(e.target.value) })}
+                  <CampoNumero
+                    min={0}
+                    ocultarZero
+                    value={formData.peso_liquido_kg}
+                    onChange={(n) => setFormData({ ...formData, peso_liquido_kg: n })}
                     placeholder="28000"
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono text-slate-900 focus:outline-none focus:border-emerald-700 bg-slate-50"
                   />
@@ -536,13 +538,15 @@ export function FinanceiroNotasEntrada({ onNavigate }: Props) {
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
                     Valor Total da NF-e (R$) *
                   </label>
-                  <input
-                    type="number"
+                  <CampoNumero
                     step="0.01"
+                    min={0}
+                    casas={2}
+                    ocultarZero
                     required
-                    value={formData.valor_total || ''}
-                    onChange={(e) => setFormData({ ...formData, valor_total: Number(e.target.value) })}
-                    placeholder="16800.00"
+                    value={formData.valor_total}
+                    onChange={(n) => setFormData({ ...formData, valor_total: n })}
+                    placeholder="16800,00"
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono font-bold text-emerald-950 focus:outline-none focus:border-emerald-700 bg-slate-50"
                   />
                 </div>

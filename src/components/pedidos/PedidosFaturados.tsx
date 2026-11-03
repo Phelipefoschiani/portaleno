@@ -25,6 +25,7 @@ import {
   moverPedidoEtapa
 } from '../../data/pedidosVendaData';
 import { PedidosNavTabs } from './PedidosNavTabs';
+import { formatarDataBR } from '../../lib/datas';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -392,7 +393,7 @@ export function PedidosFaturados({ onNavigate }: Props) {
                     </div>
                     <div>
                       <span className="text-slate-400 block font-medium">Vencimento:</span>
-                      <strong className="text-slate-800 font-mono text-xs">{modalNf.data_vencimento || '2 anos'}</strong>
+                      <strong className="text-slate-800 font-mono text-xs">{modalNf.data_vencimento ? formatarDataBR(modalNf.data_vencimento) : '2 anos'}</strong>
                     </div>
                   </div>
 

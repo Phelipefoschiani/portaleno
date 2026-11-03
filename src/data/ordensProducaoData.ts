@@ -331,8 +331,8 @@ function refletirOPNoPedido(op: OrdemProducao, pacotesApontados: number, operado
     apontamentos_producao: apontamentos,
     quantidade_produzida_acumulada_kg: apontamentos.reduce((acc, a) => acc + (Number(a.quantidade_produzida_kg) || 0), 0),
     lote_producao: ped.lote_producao || op.lote,
-    data_fabricacao: ped.data_fabricacao || op.data_fabricacao,
-    data_vencimento: ped.data_vencimento || op.data_validade
+    data_fabricacao: paraISO(ped.data_fabricacao) || op.data_fabricacao,
+    data_vencimento: paraISO(ped.data_vencimento) || op.data_validade
   };
   salvarPedidosVenda(pedidos);
 }

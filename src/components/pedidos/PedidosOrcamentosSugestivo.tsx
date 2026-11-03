@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { CampoNumero } from '../ui/CampoNumero';
 import html2canvas from 'html2canvas-pro';
 import { gerarPdfDeElemento } from '../../lib/pdfDeElemento';
 import { FaixaMarcaEno } from '../FaixaMarcaEno';
@@ -129,6 +130,15 @@ const COR_ETAPA: Record<PedidoVenda['etapa'], string> = {
   A_FATURAR: 'bg-violet-100 text-violet-900 border-violet-300',
   FATURADO: 'bg-emerald-100 text-emerald-900 border-emerald-300',
   ENTREGUE: 'bg-slate-200 text-slate-800 border-slate-300',
+};
+
+/** Origem efetiva: pedidos antigos do admin sem RCA foram gravados como 'RCA' por engano. */
+const origemEfetiva = (p: PedidoVenda): string =>
+  p.origem === 'RCA' && !p.rca_id ? 'Venda Direta' : (p.origem || 'Venda Direta');
+
+const ROTULO_ORIGEM: Record<string, string> = {
+  Admin: 'Admin (c/ RCA)',
+  RCA: 'Portal do RCA',
 };
 
 export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoId, abrirNovoSinal }: Props) {
@@ -566,7 +576,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
     csv += `CNPJ/CPF${separador}${pedido.cliente_cnpj_cpf}\n`;
     csv += `Cidade/UF${separador}${pedido.cliente_cidade_uf}\n`;
     csv += `RCA Responsável${separador}${pedido.rca_nome}\n`;
-    csv += `Data Emissão${separador}${pedido.data_emissao}\n`;
+    csv += `Data Emissão${separador}${formatarDataBR(pedido.data_emissao)}\n`;
     csv += `Condição de Frete${separador}${pedido.tipo_frete}\n`;
     csv += `Prazo de Pagamento${separador}${pedido.prazo_pagamento}\n\n`;
 
@@ -701,7 +711,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
         p.cliente_cidade_uf.toLowerCase().includes(busca.toLowerCase());
 
       if (!matchBusca) return false;
-      if (filtroOrigem !== 'TODAS' && p.origem !== filtroOrigem) return false;
+      if (filtroOrigem !== 'TODAS' && origemEfetiva(p) !== filtroOrigem) return false;
 
       if (filtroSubtipo !== 'TODOS') {
         if (filtroSubtipo === 'Pedido Sugestivo') {
@@ -938,10 +948,17 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
       forma_pagamento: formaPagamentoForm,
       prazo_pagamento: prazoPagamentoForm,
       tipo_frete: tipoFreteForm,
-      // Pedido feito pelo cliente segue identificado como 'Portal do Cliente' (também quando o admin edita)
+      // Pedido feito pelo cliente segue identificado como 'Portal do Cliente' (também quando o admin edita).
+      // Admin sem RCA = 'Venda Direta'; admin com RCA = 'Admin'; 'RCA' só quando feito no portal do RCA.
       origem: modoCliente || pedidoEmEdicao?.origem === 'Portal do Cliente'
         ? 'Portal do Cliente'
-        : subtipoForm === 'Pedido Sugestivo' ? 'Sugestão Reposição' : 'RCA',
+        : pedidoEmEdicao?.origem === 'Portal Portfólio VIP'
+        ? 'Portal Portfólio VIP'
+        : subtipoForm === 'Pedido Sugestivo'
+        ? 'Sugestão Reposição'
+        : modoRca || (pedidoEmEdicao?.origem === 'RCA' && rcaSel)
+        ? 'RCA'
+        : rcaSel ? 'Admin' : 'Venda Direta',
       observacoes: observacoesForm
     };
 
@@ -1152,7 +1169,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
             className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-emerald-700 cursor-pointer"
           >
             <option value="TODAS">Todas as Origens</option>
-            <option value="RCA">RCA</option>
+            <option value="RCA">RCA (portal do RCA)</option>
+            <option value="Admin">Admin (com RCA)</option>
             <option value="Venda Direta">Venda Direta</option>
             <option value="Sugestão Reposição">Sugestão de Reposição</option>
             <option value="Portal Portfólio VIP">Portal VIP</option>
@@ -1311,7 +1329,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                         ) : (
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className={`w-1.5 h-1.5 rounded-full ${item.origem === 'Sugestão Reposição' ? 'bg-amber-500' : 'bg-emerald-600'}`} />
-                          <span className="text-[10px] text-slate-400 font-medium">{item.origem}</span>
+                          <span className="text-[10px] text-slate-400 font-medium">{ROTULO_ORIGEM[origemEfetiva(item)] || origemEfetiva(item)}</span>
                         </div>
                         )}
                       </td>
@@ -1818,13 +1836,14 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                               <label className="text-[10px] text-slate-400 block -mb-0.5">
                                 {modoItem(item) === 'FARDO' ? 'Qtd (Caixas)' : 'Qtd (Unid.)'}
                               </label>
-                              <input
-                                type="number"
-                                min="1"
+                              <CampoNumero
+                                inteiro
+                                min={0}
                                 value={item.quantidade}
-                                onChange={(e) => {
+                                aria-label="Quantidade do item"
+                                onChange={(n) => {
                                   const updated = [...itensForm];
-                                  updated[idx].quantidade = Math.max(0, parseInt(e.target.value) || 0);
+                                  updated[idx] = { ...updated[idx], quantidade: Math.max(0, n) };
                                   setItensForm(updated);
                                 }}
                                 className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-center font-bold"
@@ -1835,15 +1854,17 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                               <label className="text-[10px] text-slate-400 block -mb-0.5">
                                 {modoItem(item) === 'FARDO' ? 'Preço Caixa' : 'Preço Unitário'}
                               </label>
-                              <input
-                                type="number"
+                              <CampoNumero
                                 step="0.01"
+                                min={0}
+                                casas={2}
                                 value={item.precoUnitario}
                                 readOnly={modoCliente}
-                                onChange={(e) => {
+                                aria-label="Preço do item"
+                                onChange={(n) => {
                                   if (modoCliente) return;
                                   const updated = [...itensForm];
-                                  updated[idx].precoUnitario = parseFloat(e.target.value) || 0;
+                                  updated[idx] = { ...updated[idx], precoUnitario: n };
                                   setItensForm(updated);
                                 }}
                                 className={`w-full border border-slate-200 rounded px-2 py-1 text-center font-mono font-bold ${modoCliente ? 'bg-slate-100 text-slate-700' : 'bg-white'}`}

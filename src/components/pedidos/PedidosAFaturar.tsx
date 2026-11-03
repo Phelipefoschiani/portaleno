@@ -57,7 +57,7 @@ function faltasEstoquePedido(p: PedidoVenda): FaltaEstoqueFaturar[] {
   });
   return faltas;
 }
-import { hojeISO, paraISO } from '../../lib/datas';
+import { hojeISO, paraISO, formatarDataBR } from '../../lib/datas';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -441,7 +441,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                           <span>{item.lote_producao || 'Lote Padrão'}</span>
                         </div>
                         <div className="text-[10px] text-slate-500 mt-0.5">
-                          Venc: {item.data_vencimento || '2 anos'}
+                          Venc: {item.data_vencimento ? formatarDataBR(item.data_vencimento) : '2 anos'}
                         </div>
                       </td>
 
@@ -700,7 +700,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                     Lote Vinculado
                   </span>
                   <span className="font-mono text-xs font-bold text-slate-800">
-                    {modalImportarNf.lote_producao || 'LOT-2026-PADRAO'} • Venc: {modalImportarNf.data_vencimento || '2 anos'}
+                    {modalImportarNf.lote_producao || 'LOT-2026-PADRAO'} • Venc: {modalImportarNf.data_vencimento ? formatarDataBR(modalImportarNf.data_vencimento) : '2 anos'}
                   </span>
                 </div>
               </div>
@@ -758,7 +758,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                     Lote: {modalDetalhes.lote_producao || 'Lote Padrão'}
                   </div>
                   <div className="text-slate-600 mt-0.5">
-                    Vencimento: {modalDetalhes.data_vencimento || '2 anos'}
+                    Vencimento: {modalDetalhes.data_vencimento ? formatarDataBR(modalDetalhes.data_vencimento) : '2 anos'}
                   </div>
                   <div className="text-slate-500">
                     Frete: {modalDetalhes.tipo_frete}

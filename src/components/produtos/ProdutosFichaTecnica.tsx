@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { CampoNumero } from '../ui/CampoNumero';
 import {
   FileText,
   Plus,
@@ -591,11 +592,11 @@ export function ProdutosFichaTecnica({ onNavigate }: Props) {
                     </div>
                     <div className="sm:col-span-4">
                       <label className="block font-bold text-slate-800 mb-1">Prazo de Validade (meses)</label>
-                      <input
-                        type="number"
-                        min="1"
+                      <CampoNumero
+                        inteiro
+                        min={1}
                         value={formValidadeMeses}
-                        onChange={(e) => setFormValidadeMeses(parseInt(e.target.value) || 0)}
+                        onChange={(n) => setFormValidadeMeses(n)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-700"
                       />
                       <span className="text-[10px] text-slate-500">Usado na validade padrão das Ordens de Produção</span>

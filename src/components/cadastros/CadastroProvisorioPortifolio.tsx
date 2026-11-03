@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { CampoNumero } from '../ui/CampoNumero';
 import {
   Search,
   Plus,
@@ -868,12 +869,13 @@ export function CadastroProvisorioPortifolio({
                           <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                             Limite para Pedidos (R$)
                           </label>
-                          <input
-                            type="number"
-                            value={formData.permissoes.limite_valor_pedido || ''}
-                            onChange={(e) => setFormData({
+                          <CampoNumero
+                            min={0}
+                            ocultarZero
+                            value={formData.permissoes.limite_valor_pedido}
+                            onChange={(n) => setFormData({
                               ...formData,
-                              permissoes: { ...formData.permissoes, limite_valor_pedido: parseFloat(e.target.value) || 0 }
+                              permissoes: { ...formData.permissoes, limite_valor_pedido: n }
                             })}
                             placeholder="Ex: 50000"
                             className="w-full bg-white border border-lime-400 rounded-xl px-3 py-1.5 text-xs font-mono font-bold text-slate-900"

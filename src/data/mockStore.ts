@@ -61,6 +61,37 @@ export interface PedidoCompraGeral {
   efetivado_em?: string; // quando virou despesa/título no financeiro
 }
 
+// Unidades aceitas no pedido de compra (mesmas do tipo PedidoCompraGeral['unidade_medida'])
+export const UNIDADES_PEDIDO_COMPRA: { valor: PedidoCompraGeral['unidade_medida']; rotulo: string }[] = [
+  { valor: 'Unidades', rotulo: 'Unidades (UN)' },
+  { valor: 'KG', rotulo: 'KG (Quilogramas)' },
+  { valor: 'Toneladas', rotulo: 'Toneladas (TON)' },
+  { valor: 'Sacos', rotulo: 'Sacos (SC)' },
+  { valor: 'Litros', rotulo: 'Litros (L)' },
+  { valor: 'Caixas', rotulo: 'Caixas (CX)' },
+  { valor: 'Pacotes', rotulo: 'Pacotes (PCT)' },
+  { valor: 'Fardos', rotulo: 'Fardos (FD)' }
+];
+
+// Lê número digitado em pt-BR: "1.500,00", "1500,00", "1500.00" e "1.000" (milhar) — inválido vira 0
+export function lerNumeroBR(texto: string | number | undefined | null): number {
+  if (typeof texto === 'number') return Number.isFinite(texto) ? texto : 0;
+  const s = String(texto ?? '').trim().replace(/\s/g, '');
+  if (!s) return 0;
+  const normal = s.includes(',')
+    ? s.replace(/\./g, '').replace(',', '.')
+    : /^\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g, '') : s;
+  const n = parseFloat(normal);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Formata número para edição em campo de texto pt-BR (sem milhar): 1500.5 -> "1500,50"
+export function formatarDecimalBR(valor: number, casas: number): string {
+  if (!Number.isFinite(valor)) return '';
+  const fixo = casas > 2 ? String(parseFloat(valor.toFixed(casas))) : valor.toFixed(casas);
+  return fixo.replace('.', ',');
+}
+
 export interface Agricultor {
   id: string;
   empresa_id: string;
@@ -404,6 +435,52 @@ export function confirmarPedidoCompraELancarDespesa(
     status_final: 'Confirmado'
   });
   return { sucesso: res.sucesso, mensagem: res.mensagem, categoriaFinanceiro };
+}
+
+/** Pedido de compra de uma despesa: pelo campo pedido_compra_id ou pelo id desp_pc_<pedido>_<ts>. */
+export function pedidoCompraDaDespesa(despesa: { id?: string; pedido_compra_id?: string } | null | undefined): string | undefined {
+  if (!despesa) return undefined;
+  if (despesa.pedido_compra_id) return despesa.pedido_compra_id;
+  const m = String(despesa.id || '').match(/^desp_pc_(.+)_\d{10,}$/);
+  return m ? m[1] : undefined;
+}
+
+/**
+ * Estorna o pagamento de um pedido de compra (exclusão da despesa no Financeiro):
+ * remove as despesas pagas e os títulos em aberto do pedido, devolve o valor ao caixa e
+ * volta o pedido para 'A Confirmar' (sem pagamento), para ser efetivado de novo.
+ * Bloqueia se algum título do pedido já foi pago no Contas a Pagar.
+ * A entrada no estoque de matéria-prima é mantida (entrada_estoque impede duplicar ao re-efetivar).
+ */
+export function estornarPagamentoPedidoCompra(pedidoId: string, idsLegados: string[] = []): { sucesso: boolean; mensagem: string } {
+  if (typeof window === 'undefined') return { sucesso: false, mensagem: 'Janela indisponível' };
+  const pedidos = carregarPedidosCompra();
+  const index = pedidos.findIndex(p => p.id === pedidoId);
+  if (index === -1) return { sucesso: false, mensagem: 'Pedido de compra não encontrado.' };
+  const chaves = [pedidoId, ...idsLegados];
+
+  const titulosTodos = lerJson(CHAVE_TITULOS_PAGAR);
+  const vincT = (t: any) => t.pedido_compra_id === pedidoId || idVinculado(String(t.id || ''), chaves);
+  if (titulosTodos.some((t: any) => vincT(t) && t.status === 'PAGO')) {
+    return {
+      sucesso: false,
+      mensagem: 'Este pedido já tem título pago no Contas a Pagar. Estorne aquele pagamento antes de excluir esta despesa.'
+    };
+  }
+
+  const despesasTodas = lerJson(CHAVE_DESPESAS);
+  const vincD = (d: any) => d.pedido_compra_id === pedidoId || idVinculado(String(d.id || ''), chaves);
+  despesasTodas.filter(vincD).forEach((d: any) => estornarBaixaNoCaixa(`despesa:${d.id}`));
+  localStorage.setItem(CHAVE_DESPESAS, JSON.stringify(despesasTodas.filter((d: any) => !vincD(d))));
+  localStorage.setItem(CHAVE_TITULOS_PAGAR, JSON.stringify(titulosTodos.filter((t: any) => !vincT(t))));
+
+  pedidos[index] = { ...pedidos[index], status_pedido: 'A Confirmar', data_pagamento: undefined, efetivado_em: undefined };
+  salvarPedidosCompra(pedidos);
+  window.dispatchEvent(new Event('financeiro_updated'));
+  return {
+    sucesso: true,
+    mensagem: `Pagamento estornado: o pedido "${pedidos[index].item_descricao}" voltou para "A Confirmar" (sem pagamento) e o valor voltou ao caixa.`
+  };
 }
 
 /**

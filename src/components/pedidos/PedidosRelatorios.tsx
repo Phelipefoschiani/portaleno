@@ -505,8 +505,8 @@ export function PedidosRelatorios({ onNavigate }: Props) {
                       <td className="py-2.5 px-4 font-bold text-slate-900 font-sans">{p.numero_pedido}</td>
                       <td className="py-2.5 px-4 font-sans text-slate-700">{p.cliente_nome}</td>
                       <td className="py-2.5 px-4 font-bold text-emerald-900">{p.lote_producao || 'LOT-2026-F01'}</td>
-                      <td className="py-2.5 px-4 text-slate-600">{p.data_fabricacao || p.data_emissao}</td>
-                      <td className="py-2.5 px-4 text-slate-600">{p.data_vencimento || '15/09/2028'}</td>
+                      <td className="py-2.5 px-4 text-slate-600">{formatarDataBR(p.data_fabricacao || p.data_emissao)}</td>
+                      <td className="py-2.5 px-4 text-slate-600">{p.data_vencimento ? formatarDataBR(p.data_vencimento) : '-'}</td>
                       <td className="py-2.5 px-4 text-center font-bold">{(p.peso_total_kg / 1000).toFixed(1)} Ton</td>
                       <td className="py-2.5 px-4 text-center font-sans">
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
