@@ -10,6 +10,7 @@
 // consegue alterar os dados. Quando houver servidor, a autenticação deve ser feita no backend.
 
 import { MODO_NUVEM, supabase } from './supabase';
+import { envioJaFeitoNeste, existemDadosParaEnviar, enviarDadosDesteNavegador } from './bancoEnvio';
 
 export type PerfilUsuario = 'ADMIN' | 'AGRICULTOR' | 'RCA' | 'PROVISORIO' | 'PRODUCAO' | 'SITIO' | 'CLIENTE';
 
@@ -529,6 +530,30 @@ async function carregarUsuariosAdmin(): Promise<void> {
   }));
 }
 
+/**
+ * Na primeira entrada do administrador com o banco ligado, pergunta se pode enviar
+ * os dados que estão neste navegador. Não apaga nada daqui.
+ */
+async function perguntarEnvioInicial(): Promise<void> {
+  if (envioJaFeitoNeste() || !existemDadosParaEnviar()) return;
+  if (sessionStorage.getItem('eno_envio_recusado')) return;
+  const enviar = window.confirm(
+    'Este computador tem dados guardados que ainda não estão no banco de dados.\n\n' +
+    'Enviar agora?\n\n' +
+    '(Nada é apagado daqui. Se cancelar, pergunto de novo na próxima vez que entrar.)'
+  );
+  if (!enviar) {
+    sessionStorage.setItem('eno_envio_recusado', '1');
+    return;
+  }
+  const r = await enviarDadosDesteNavegador();
+  window.alert(
+    r.erros.length
+      ? 'Envio com problemas:\n\n' + r.erros.join('\n') + '\n\nTente de novo ou me avise.'
+      : `Envio concluído: ${r.linhas} registros em ${r.tabelas} tabelas.`
+  );
+}
+
 /** Liga o login do banco (chamar uma vez ao abrir o app). */
 export function iniciarAuthNuvem(): void {
   if (!MODO_NUVEM || !supabase) return;
@@ -551,7 +576,10 @@ export function iniciarAuthNuvem(): void {
         return;
       }
       sessaoNuvem = s;
-      if (s.perfil === 'ADMIN') await carregarUsuariosAdmin();
+      if (s.perfil === 'ADMIN') {
+        await carregarUsuariosAdmin();
+        await perguntarEnvioInicial();
+      }
     } finally {
       carregandoNuvem = false;
       avisarMudanca();
