@@ -8,7 +8,11 @@ import { join } from 'node:path';
 import { initializeApp, cert, getApps, type ServiceAccount } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import config from '../firebase-applet-config.json';
+// Identificação do projeto e do banco (não é segredo; a chave de acesso fica na variável FIREBASE_SERVICE_ACCOUNT)
+const config = {
+  projectId: 'gen-lang-client-0964317826',
+  firestoreDatabaseId: 'ai-studio-grupoeno-f6438af8-17df-4089-9c1f-fe6ed3a0c8e1',
+};
 
 type Perfil = 'ADMIN' | 'AGRICULTOR' | 'RCA' | 'PROVISORIO' | 'PRODUCAO' | 'SITIO' | 'CLIENTE';
 const PERFIS: Perfil[] = ['ADMIN', 'AGRICULTOR', 'RCA', 'PROVISORIO', 'PRODUCAO', 'SITIO', 'CLIENTE'];
