@@ -53,6 +53,15 @@
     background-color: #f8fafc;
     color: #0f172a;
   }
+
+  /* Campos não impõem largura mínima própria: dentro de flex/grid eles encolhem
+     junto com a coluna em vez de empurrar a janela para fora da tela no celular. */
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    min-width: 0;
+    max-width: 100%;
+  }
 }
 
 /* Custom Aloe Vera CSS Themes & Animations */

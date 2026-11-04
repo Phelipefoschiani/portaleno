@@ -40,6 +40,8 @@ export interface TituloPagar {
   observacoes?: string;
 }
 
+import type { NotaFornecedor } from './notasFornecedorData';
+
 export interface DespesaOperacional {
   id: string;
   data: string;
@@ -50,6 +52,7 @@ export interface DespesaOperacional {
   responsavel: string;
   forma_pagamento: string;
   comprovante_anexo?: boolean;
+  nota_fiscal?: NotaFornecedor; // nota do fornecedor (para a declaração)
 }
 
 export interface NotaFiscalSaida {
@@ -80,6 +83,8 @@ export interface NotaFiscalEntrada {
   valor_total: number;
   data_emissao: string;
   status_sefaz: 'AUTORIZADA' | 'PROCESSADA';
+  despesa_id?: string; // despesa paga que esta nota comprova
+  pedido_compra_id?: string; // compra que esta nota comprova
 }
 
 export interface LancamentoReceita {

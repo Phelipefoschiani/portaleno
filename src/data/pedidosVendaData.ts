@@ -117,6 +117,9 @@ export interface PedidoVenda {
     valor_nota?: number;
     observacao_fiscal?: string;
     arquivo_conteudo?: string;
+    protocolo?: string; // protocolo de autorização da SEFAZ (lido do XML)
+    peso_liquido_kg?: number; // pesos dos volumes da nota
+    peso_bruto_kg?: number;
   };
   observacoes?: string;
   /**

@@ -1030,7 +1030,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       {/* ========================================================================= */}
       {modalNovo && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-5xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-5xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Topo do Modal */}
             <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
@@ -1172,8 +1172,8 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                 </div>
 
                 {/* Input de Pesagem (até 3 casas após a vírgula) */}
-                <div className="flex items-center gap-3 p-3 bg-papel-2 rounded-md border border-linha">
-                  <div className="flex-1 max-w-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 bg-papel-2 rounded-md border border-linha">
+                  <div className="w-full sm:flex-1 sm:max-w-sm min-w-0">
                     <label className="block text-[11px] font-bold text-tinta-2 mb-1">
                       Peso do Saco #{sacosForm.length + 1} (em KG - até 3 casas decimais):
                     </label>
@@ -1204,7 +1204,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                   <button
                     type="button"
                     onClick={() => handleAdicionarSaco()}
-                    className="mt-5 px-5 py-2.5 rounded-md bg-eno-900 hover:bg-eno-950 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm transition-all"
+                    className="sm:mt-5 px-5 py-2.5 rounded-md bg-eno-900 hover:bg-eno-950 text-white font-bold text-xs flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer shadow-sm transition-all"
                   >
                     <Plus className="w-4 h-4" />
                     <span>+ Adicionar Saco #{sacosForm.length + 1}</span>
@@ -1215,12 +1215,12 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
 
                 {/* RELAÇÃO DE SACOS EM MODO LISTA COM EDITAR E EXCLUIR */}
                 <div className="rounded-md border border-linha overflow-hidden bg-papel">
-                  <div className="bg-papel-3/60 px-4 py-2 border-b border-linha flex items-center justify-between text-[11px] font-bold text-tinta-2 uppercase tracking-wider">
-                    <div className="w-20">Saco</div>
-                    <div className="w-32 text-right">Peso (kg)</div>
-                    <div className="w-32 text-right">Preço Pago (kg)</div>
-                    <div className="w-32 text-right">Valor do Saco</div>
-                    <div className="w-24 text-center">Ações</div>
+                  <div className="bg-papel-3/60 px-3 sm:px-4 py-2 border-b border-linha flex items-center justify-between gap-2 text-[11px] font-bold text-tinta-2 uppercase tracking-wider">
+                    <div className="shrink-0 w-16 sm:w-20">Saco</div>
+                    <div className="flex-1 sm:flex-none sm:w-32 text-right">Peso (kg)</div>
+                    <div className="hidden sm:block w-32 text-right">Preço Pago (kg)</div>
+                    <div className="flex-1 sm:flex-none sm:w-32 text-right">Valor</div>
+                    <div className="shrink-0 w-[68px] sm:w-24 text-center">Ações</div>
                   </div>
 
                   <div className="max-h-[240px] overflow-y-auto divide-y divide-linha">
@@ -1239,19 +1239,19 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                         return (
                           <div
                             key={saco.numero}
-                            className={`px-4 py-2 flex items-center justify-between transition-colors ${
+                            className={`px-3 sm:px-4 py-2 flex items-center justify-between gap-2 transition-colors ${
                               emEdicao ? 'bg-st-aguardando-bg/80' : 'hover:bg-papel-2/80'
                             }`}
                           >
                             {/* Número do Saco */}
-                            <div className="w-20 font-bold text-tinta tabular-nums flex items-center gap-1.5">
-                              <span className="px-2 py-0.5 rounded bg-papel-3/60 border border-linha text-xs">
+                            <div className="shrink-0 w-16 sm:w-20 font-bold text-tinta tabular-nums flex items-center gap-1.5">
+                              <span className="px-2 py-0.5 rounded bg-papel-3/60 border border-linha text-xs whitespace-nowrap">
                                 Saco {saco.numero}
                               </span>
                             </div>
 
                             {/* Peso (kg) com edição inline */}
-                            <div className="w-32 text-right tabular-nums font-bold">
+                            <div className="flex-1 sm:flex-none sm:w-32 min-w-0 text-right tabular-nums font-bold whitespace-nowrap">
                               {emEdicao ? (
                                 <div className="flex items-center justify-end gap-1">
                                   <input
@@ -1266,7 +1266,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                                         handleCancelarEdicaoSaco();
                                       }
                                     }}
-                                    className="w-20 px-2 py-1 bg-papel border-2 border-ouro rounded text-right font-bold text-xs"
+                                    className="w-full max-w-20 min-w-0 px-2 py-1 bg-papel border-2 border-ouro rounded text-right font-bold text-xs"
                                     autoFocus
                                   />
                                   <span className="text-[10px] text-cinza">kg</span>
@@ -1279,17 +1279,17 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                             </div>
 
                             {/* Preço Pago kg */}
-                            <div className="w-32 text-right tabular-nums text-tinta-2 text-xs">
+                            <div className="hidden sm:block w-32 text-right tabular-nums text-tinta-2 text-xs">
                               R$ {precoKg.toFixed(2)}/kg
                             </div>
 
                             {/* Valor do Saco */}
-                            <div className="w-32 text-right tabular-nums font-bold text-eno-800 text-xs">
+                            <div className="flex-1 sm:flex-none sm:w-32 text-right tabular-nums font-bold text-eno-800 text-xs whitespace-nowrap">
                               R$ {valorSaco.toFixed(2).replace('.', ',')}
                             </div>
 
                             {/* Ações (Editar e Deletar Linha) */}
-                            <div className="w-24 flex items-center justify-center gap-1">
+                            <div className="shrink-0 w-[68px] sm:w-24 flex items-center justify-center gap-1">
                               {emEdicao ? (
                                 <>
                                   <button
@@ -1391,14 +1391,14 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                 </div>
 
                 {/* PAINEL DE TOTAIS EM TEMPO REAL */}
-                <div className="p-4 rounded-md bg-eno-950 text-white flex flex-wrap items-center justify-between gap-4 shadow-sm">
-                  <div className="flex items-center gap-6">
+                <div className="p-4 rounded-md bg-eno-950 text-white grid grid-cols-2 gap-4 sm:flex sm:flex-wrap sm:items-center sm:justify-between shadow-sm">
+                  <div className="col-span-2 grid grid-cols-2 gap-x-4 gap-y-3 sm:flex sm:flex-wrap sm:items-center sm:gap-6 [&_strong]:whitespace-nowrap">
                     <div>
                       <span className="text-[10px] text-ouro-claro font-bold uppercase tracking-wider block">Total de Sacos:</span>
                       <strong className="text-lg font-extrabold tabular-nums text-white">{totaisForm.totalSacos} sacos</strong>
                     </div>
 
-                    <div className="h-8 w-px bg-eno-800" />
+                    <div className="h-8 w-px bg-eno-800 hidden sm:block" />
 
                     <div>
                       <span className="text-[10px] text-ouro-claro font-bold uppercase tracking-wider block">Peso Bruto:</span>
@@ -1407,7 +1407,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                       </strong>
                     </div>
 
-                    <div className="h-8 w-px bg-eno-800" />
+                    <div className="h-8 w-px bg-eno-800 hidden sm:block" />
 
                     <div>
                       <span className="text-[10px] text-ouro-claro font-bold uppercase tracking-wider block">Desconto:</span>
@@ -1416,13 +1416,13 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                       </strong>
                     </div>
 
-                    <div className="h-8 w-px bg-eno-800" />
+                    <div className="h-8 w-px bg-eno-800 hidden sm:block" />
 
                     <div>
                       <span className="text-[10px] text-ouro-claro font-bold uppercase tracking-wider block">Peso Líquido:</span>
                       <strong className="text-lg font-extrabold tabular-nums text-white">
                         {totaisForm.pesoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kg
-                        <span className="text-xs font-normal text-ouro-claro ml-1.5">
+                        <span className="block sm:inline text-xs font-normal text-ouro-claro sm:ml-1.5">
                           ({(totaisForm.pesoTotal / 1000).toFixed(3)} Ton)
                         </span>
                       </strong>
@@ -1438,7 +1438,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                     </div>
                   </div>
 
-                  <div className="text-right">
+                  <div className="col-span-2 border-t border-eno-800 pt-3 sm:border-0 sm:pt-0 sm:text-right">
                     <span className="text-[10px] text-ouro-claro font-bold uppercase tracking-wider block">Valor Total Estimado da Carga:</span>
                     <strong className="text-xl font-extrabold tabular-nums text-ouro-claro">
                       {totaisForm.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
@@ -1488,41 +1488,41 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       {/* ========================================================================= */}
       {ticketModal && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/75 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-4xl sm:max-w-5xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-4xl sm:max-w-5xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Topo de Controles */}
-            <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <FileText className="w-5 h-5 text-ouro-claro" />
-                <div>
+            <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 border-b border-eno-800 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <FileText className="w-5 h-5 text-ouro-claro shrink-0" />
+                <div className="min-w-0">
                   <h3 className="font-bold text-sm sm:text-base text-white">
                     Romaneio & Ticket da Roça - {ticketModal.numero_ticket}
                   </h3>
-                  <p className="text-[11px] text-cinza">
+                  <p className="hidden sm:block text-[11px] text-cinza">
                     Formato Padrão A4 • Relação em Modo Lista com Pesos e Valores
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <button
                   onClick={exportarPNG}
                   disabled={exportando}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-eno-700 hover:bg-eno-600 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-eno-700 hover:bg-eno-600 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
                   title="Baixar imagem PNG para envio por WhatsApp"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Exportar PNG</span>
+                  <span><span className="hidden sm:inline">Exportar </span>PNG</span>
                 </button>
 
                 <button
                   onClick={exportarPDF}
                   disabled={exportando}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-papel text-tinta hover:bg-papel-3/60 text-xs font-bold transition-colors cursor-pointer shadow-xs border border-linha-forte"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-papel text-tinta hover:bg-papel-3/60 text-xs font-bold transition-colors cursor-pointer shadow-xs border border-linha-forte"
                   title="Baixar documento PDF oficial tamanho A4"
                 >
                   <Printer className="w-3.5 h-3.5 text-eno-800" />
-                  <span>Exportar PDF (A4)</span>
+                  <span><span className="hidden sm:inline">Exportar </span>PDF<span className="hidden sm:inline"> (A4)</span></span>
                 </button>
 
                 <button
@@ -1535,18 +1535,20 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
             </div>
 
             {/* ÁREA DO DOCUMENTO FORMATADO EM TAMANHO A4 (794px x 1123px proporção) */}
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-linha flex justify-center">
+            <div className="p-4 sm:p-6 overflow-auto overflow-x-auto flex-1 bg-linha" data-rolagem-x>
+              <p className="md:hidden mb-2 text-[11px] font-semibold text-tinta-2">Folha A4 — deslize para os lados para ver a folha inteira.</p>
               <div
                 ref={folhaTicketRef}
                 style={{
                   backgroundColor: '#ffffff',
                   color: '#0f172a',
-                  width: '100%',
+                  width: '794px',
+                  minWidth: '794px',
                   maxWidth: '794px',
                   minHeight: '1000px',
                   boxSizing: 'border-box'
                 }}
-                className="p-8 sm:p-10 rounded-md shadow-xl border border-linha-forte space-y-5"
+                className="mx-auto p-8 sm:p-10 rounded-md shadow-xl border border-linha-forte space-y-5"
               >
                 {/* CABEÇALHO DO TICKET */}
                 <div style={{ borderBottom: '2px solid #064e3b', paddingBottom: '16px' }} className="flex items-start justify-between">
@@ -1809,7 +1811,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       {/* ========================================================================= */}
       {modalPagamento && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-3xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-3xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Header */}
             <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">

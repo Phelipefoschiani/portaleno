@@ -238,7 +238,7 @@ export function PortalConvidadoExclusivo({
               title="Voltar ao Painel"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Voltar ao Painel</span>
+              <span className="hidden lg:inline">Voltar ao Painel</span>
             </button>
 
             <div className="hidden sm:block h-6 w-px bg-emerald-800/60" />
@@ -248,11 +248,11 @@ export function PortalConvidadoExclusivo({
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-[15px] sm:text-2xl font-extrabold tracking-tight text-white whitespace-nowrap">Grupo ENO</span>
-                  <span className="hidden sm:inline px-2 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider uppercase bg-amber-400/20 text-amber-300 border border-amber-400/40">
+                  <span className="hidden lg:inline whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider uppercase bg-amber-400/20 text-amber-300 border border-amber-400/40">
                     Portfólio Reservado VIP
                   </span>
                 </div>
-                <p className="text-xs text-emerald-300/80 font-medium hidden sm:block">
+                <p className="text-xs text-emerald-300/80 font-medium hidden lg:block">
                   Área Exclusiva para Convidados & Parceiros Homologados
                 </p>
               </div>
@@ -261,7 +261,7 @@ export function PortalConvidadoExclusivo({
 
           {/* Dados do Convidado e Vencimento */}
           <div className="flex items-center gap-3">
-            <div className="hidden md:flex flex-col items-end text-right">
+            <div className="hidden xl:flex flex-col items-end text-right">
               <div className="flex items-center gap-1.5 text-xs text-white font-bold">
                 <Users className="w-3.5 h-3.5 text-emerald-400" />
                 <span>{cadastro.nome_convidado}</span>
@@ -280,8 +280,8 @@ export function PortalConvidadoExclusivo({
             ) : (
               <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-md bg-emerald-950/90 border border-emerald-500/60 text-emerald-200 text-xs font-bold shadow-lg shrink-0">
                 <Clock className="w-4 h-4 text-emerald-400 hidden sm:block" />
-                <span className="hidden sm:inline">Válido até {dataVencFormatada()}</span>
-                <span className="px-1.5 py-0.5 rounded bg-emerald-800 text-[10px] text-emerald-100 tabular-nums">
+                <span className="hidden sm:inline whitespace-nowrap">Válido até {dataVencFormatada()}</span>
+                <span className="px-1.5 py-0.5 rounded bg-emerald-800 text-[10px] text-emerald-100 tabular-nums whitespace-nowrap">
                   {diasRestantes}d restantes
                 </span>
               </div>
@@ -684,7 +684,7 @@ export function PortalConvidadoExclusivo({
             <div className="hidden sm:block overflow-x-auto rounded-2xl border border-emerald-700/40 bg-[#031d12] shadow-2xl">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-[#02140c] border-b border-emerald-800/60 text-[11px] font-extrabold uppercase tracking-wider text-emerald-300">
+                  <tr className="bg-[#02140c] border-b border-emerald-800/60 text-[11px] font-extrabold uppercase tracking-wider text-emerald-300 whitespace-nowrap">
                     <th className="py-4 px-6">Produto / Especificação</th>
                     <th className="py-4 px-4">Categoria</th>
                     <th className="py-4 px-4 text-right">Preço por KG</th>
@@ -1360,7 +1360,7 @@ export function PortalConvidadoExclusivo({
       {/* ========================================================= */}
       {fotoModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="relative w-full max-w-5xl lg:max-w-6xl bg-[#031d12] border border-emerald-600/70 sm:rounded-2xl overflow-hidden shadow-2xl flex flex-col sm:my-auto h-dvh sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+          <div className="min-w-0 relative w-full max-w-5xl lg:max-w-6xl bg-[#031d12] border border-emerald-600/70 sm:rounded-2xl overflow-hidden shadow-2xl flex flex-col sm:my-auto h-dvh sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             <div className="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-emerald-800/60 bg-[#02140c]">
               <div className="flex items-center gap-2 text-white font-extrabold text-base min-w-0">
                 <ImageIcon className="w-5 h-5 text-emerald-400" />
@@ -1409,7 +1409,7 @@ export function PortalConvidadoExclusivo({
       {/* ========================================================= */}
       {eventoModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="relative w-full max-w-3xl sm:max-w-4xl bg-[#031d12] border border-emerald-600/70 sm:rounded-2xl overflow-hidden shadow-2xl p-4 sm:p-8 space-y-5 sm:my-auto h-dvh sm:h-auto sm:max-h-[calc(100vh-3.5rem)] overflow-y-auto flex flex-col">
+          <div className="min-w-0 relative w-full max-w-3xl sm:max-w-4xl bg-[#031d12] border border-emerald-600/70 sm:rounded-2xl overflow-hidden shadow-2xl p-4 sm:p-8 space-y-5 sm:my-auto h-dvh sm:h-auto sm:max-h-[calc(100vh-3.5rem)] overflow-y-auto flex flex-col">
             <div className="flex items-center justify-between border-b border-emerald-800/60 pb-3">
               <div className="flex items-center gap-2 text-white font-black text-base">
                 <Calendar className="w-5 h-5 text-amber-400" />

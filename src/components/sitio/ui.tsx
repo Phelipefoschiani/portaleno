@@ -162,7 +162,7 @@ export function Folha({
       <form
         onSubmit={onSubmit}
         onClick={e => e.stopPropagation()}
-        className="w-full sm:max-w-lg max-h-[94dvh] sm:max-h-[90vh] flex flex-col bg-papel-2 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
+        className="min-w-0 w-full sm:max-w-lg max-h-[94dvh] sm:max-h-[90vh] flex flex-col bg-papel-2 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
       >
         <div className="relative bg-eno-900 text-white px-5 pt-4 pb-4 shrink-0 overflow-hidden">
           <div className="pointer-events-none absolute -right-10 -top-16 w-48 h-48 rounded-full bg-emerald-500/20 blur-3xl" />

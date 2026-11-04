@@ -103,7 +103,7 @@ export function ModalFolha({
       aria-modal="true"
     >
       <div
-        className={`relative flex w-full flex-col overflow-hidden bg-papel-2 h-[100dvh] sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:my-auto sm:rounded-md sm:border sm:border-eno-900/40 sm:shadow-[0_40px_80px_-24px_rgba(4,32,19,0.6)] ${largura}`}
+        className={`min-w-0 relative flex w-full flex-col overflow-hidden bg-papel-2 h-[100dvh] sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:my-auto sm:rounded-md sm:border sm:border-eno-900/40 sm:shadow-[0_40px_80px_-24px_rgba(4,32,19,0.6)] ${largura}`}
       >
         <header className="shrink-0 bg-eno-900 text-white">
           <div className="flex items-start gap-3 px-4 pt-3 pb-3 sm:px-6 sm:pt-4">

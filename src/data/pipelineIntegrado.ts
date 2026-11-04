@@ -52,6 +52,9 @@ import {
 } from './sitioControleData';
 
 import { hojeISO, paraISO, somarDias } from '../lib/datas';
+import { registrarLoteMP, removerLoteMP, consumirLotesMP } from './lotesMateriaPrimaData';
+import type { UsoLoteMateriaPrima } from './lotesMateriaPrimaData';
+import type { NotaFornecedor } from './notasFornecedorData';
 
 // Reexporta utilitários de unidade para quem já importa do pipeline
 export { normalizarUnidade, converterQuantidade };
@@ -121,6 +124,7 @@ export interface RegistroEntradaMateriaPrima {
   valor_total: number;
   nf_entrada_id?: string;
   data: string;
+  lote_mp_id?: string; // lote criado no controle de lotes de MP
 }
 
 /**
@@ -141,6 +145,10 @@ export function integrarEntradaMateriaPrima(params: {
   chavePix?: string;
   data?: string;
   materiaPrimaId?: string;
+  lote?: string; // lote do fornecedor
+  validadeLote?: string;
+  pedidoCompraId?: string;
+  notaFornecedor?: NotaFornecedor; // nota do fornecedor: número, série e chave reais
 }): RegistroEntradaMateriaPrima | null {
   const data = paraISO(params.data) || hojeISO();
   const materias = carregarMateriaPrima();
@@ -166,33 +174,49 @@ export function integrarEntradaMateriaPrima(params: {
   );
   salvarMateriaPrima(atualizadas);
 
-  // Registra Nota Fiscal de Entrada
+  // Registra Nota Fiscal de Entrada (a mesma nota com vários itens entra uma vez só)
   let nfId: string | undefined;
+  const chaveNota = (params.notaFornecedor?.chave || '').replace(/\D/g, '');
   try {
     const notasEntrada = carregarNotasEntrada();
+    if (chaveNota && notasEntrada.some(n => (n.chave_acesso || '').replace(/\D/g, '') === chaveNota)) throw new Error('nota já registrada');
     nfId = `nfe_ent_${Date.now()}`;
     const kg = converterQuantidade(Number(params.quantidade) || 0, params.unidade, 'KG');
     const pesoEhMassa = ['KG', 'TON'].includes(normalizarUnidade(params.unidade));
     const novaNfe: NotaFiscalEntrada = {
       id: nfId,
-      numero: params.numeroNF || `ENT-${Date.now().toString().slice(-6)}`,
-      serie: '1',
-      chave_acesso: '',
+      numero: params.notaFornecedor?.numero || params.numeroNF || `ENT-${Date.now().toString().slice(-6)}`,
+      serie: params.notaFornecedor?.serie || '1',
+      chave_acesso: params.notaFornecedor?.chave || '',
       parceiro_nome: params.fornecedorNome,
       tipo_parceiro: params.tipoParceiro || (ehMandioca(params.descricaoItem) ? 'Agricultor' : 'Fornecedor'),
-      cnpj_cpf: params.fornecedorCpfCnpj || '',
+      cnpj_cpf: params.notaFornecedor?.emitente_documento || params.fornecedorCpfCnpj || '',
       produto_descricao: params.descricaoItem,
       peso_liquido_kg: pesoEhMassa && kg !== null ? kg : 0,
       valor_total: valor,
-      data_emissao: data,
-      status_sefaz: 'PROCESSADA'
+      data_emissao: params.notaFornecedor?.data_emissao || data,
+      status_sefaz: params.notaFornecedor?.protocolo ? 'AUTORIZADA' : 'PROCESSADA',
+      pedido_compra_id: params.pedidoCompraId
     };
     notasEntrada.unshift(novaNfe);
     salvarNotasEntrada(notasEntrada);
   } catch (err) {
-    console.error('Erro ao integrar NF de entrada:', err);
+    if (!(err instanceof Error && err.message === 'nota já registrada')) console.error('Erro ao integrar NF de entrada:', err);
     nfId = undefined;
   }
+
+  const loteMp = registrarLoteMP({
+    materia_prima_id: mp.id,
+    materia_prima_nome: mp.nome,
+    lote: params.lote || '',
+    data_entrada: data,
+    data_validade: paraISO(params.validadeLote) || undefined,
+    quantidade_entrada: qtdConvertida,
+    unidade: mp.unidade_medida,
+    fornecedor_nome: params.fornecedorNome,
+    pedido_compra_id: params.pedidoCompraId,
+    nota: params.numeroNF
+  });
 
   return {
     materia_prima_id: mp.id,
@@ -201,7 +225,8 @@ export function integrarEntradaMateriaPrima(params: {
     unidade: mp.unidade_medida,
     valor_total: valor,
     nf_entrada_id: nfId,
-    data
+    data,
+    lote_mp_id: loteMp?.id
   };
 }
 
@@ -220,6 +245,7 @@ export function estornarEntradaMateriaPrima(registro?: RegistroEntradaMateriaPri
       : m
   );
   salvarMateriaPrima(atualizadas);
+  removerLoteMP(registro.lote_mp_id);
   if (registro.nf_entrada_id) {
     try {
       salvarNotasEntrada(carregarNotasEntrada().filter(n => n.id !== registro.nf_entrada_id));
@@ -255,6 +281,7 @@ export interface ConsumoMateriaPrimaProducao {
   falta: number; // quanto falta para cobrir (0 = coberto)
   quantidade_consumida?: number; // gravado na conclusão (baixa real)
   unidade_incompativel?: boolean; // unidade da receita não converte para a da MP (não baixa)
+  lotes_usados?: UsoLoteMateriaPrima[]; // de quais lotes a baixa saiu (gravado na conclusão)
 }
 
 /**
@@ -327,6 +354,7 @@ export interface ItemProducaoEstoque {
   embalagens?: number; // só para o fallback de sacaria sem receita
   peso_unitario_kg?: number;
   lote?: string;
+  lotes_mp?: Record<string, string[]>; // lotes de MP escolhidos pela produção (id da MP -> ids dos lotes)
 }
 
 /**
@@ -342,7 +370,11 @@ export function aplicarProducaoNoEstoque(itens: ItemProducaoEstoque[]): ConsumoM
 
   // Consumo consolidado (calculado antes de mexer no estoque)
   const consumo = new Map<string, ConsumoMateriaPrimaProducao>();
+  const lotesEscolhidos: Record<string, string[]> = {};
   validos.forEach(item => {
+    Object.entries(item.lotes_mp || {}).forEach(([mpId, ids]) => {
+      lotesEscolhidos[mpId] = [...(lotesEscolhidos[mpId] || []), ...ids.filter(id => !(lotesEscolhidos[mpId] || []).includes(id))];
+    });
     calcularConsumoProducao(item.produto_id, item.pacotes, {
       produtoNome: item.produto_nome,
       pesoUnitarioKg: item.peso_unitario_kg,
@@ -385,7 +417,8 @@ export function aplicarProducaoNoEstoque(itens: ItemProducaoEstoque[]): ConsumoM
       ...c,
       estoque_atual: estoqueAntes,
       falta: Math.max(0, parseFloat((c.quantidade_necessaria - estoqueAntes).toFixed(4))),
-      quantidade_consumida: parseFloat(baixa.toFixed(4))
+      quantidade_consumida: parseFloat(baixa.toFixed(4)),
+      lotes_usados: baixa > 0 ? consumirLotesMP(mat.id, baixa, mat.unidade_medida, lotesEscolhidos[mat.id]) : undefined
     });
     if (baixa <= 0) return mat;
     return comStatusAtualizado({ ...mat, estoque_atual: parseFloat((estoqueAntes - baixa).toFixed(3)) });
@@ -529,7 +562,7 @@ export function integrarFaturamentoPedidoVenda(pedido: PedidoVenda): void {
         cliente_nome: pedido.cliente_nome,
         cnpj_cpf: pedido.cliente_cnpj_cpf,
         valor_total: valorNota,
-        peso_liquido_kg: pesoTotalKg || pedido.peso_total_kg,
+        peso_liquido_kg: Number(pedido.nota_fiscal?.peso_liquido_kg) || pesoTotalKg || pedido.peso_total_kg,
         data_emissao: paraISO(pedido.nota_fiscal?.data_emissao) || dataFaturamento,
         status_sefaz: 'AUTORIZADA',
         transportadora: pedido.transportadora || pedido.programacao_entrega?.transportadora || '',

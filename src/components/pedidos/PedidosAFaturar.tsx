@@ -63,6 +63,8 @@ function faltasEstoquePedido(p: PedidoVenda): FaltaEstoqueFaturar[] {
   return faltas;
 }
 import { hojeISO, paraISO, formatarDataBR } from '../../lib/datas';
+import { lerNFeXml, chaveNFeValida, situacaoNFe, mesmoDocumento, formatarDocumento, DadosNFe } from '../../lib/nfeXml';
+import { carregarNotasSaida } from '../../data/financeiroData';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -88,6 +90,9 @@ export function PedidosAFaturar({ onNavigate }: Props) {
   const [tipoArquivoAnexado, setTipoArquivoAnexado] = useState<'XML' | 'PDF'>('XML');
   const [arquivoConteudo, setArquivoConteudo] = useState<string | null>(null);
   const [observacaoFiscal, setObservacaoFiscal] = useState('');
+  // Dados lidos do XML (conferência com o pedido) e aviso de leitura/validação
+  const [dadosNfe, setDadosNfe] = useState<DadosNFe | null>(null);
+  const [erroNf, setErroNf] = useState('');
 
   // Dados de Transporte e Expedição
   const [placaInput, setPlacaInput] = useState('');
@@ -146,80 +151,58 @@ export function PedidosAFaturar({ onNavigate }: Props) {
   // Abrir modal de importação e guarda da Nota Fiscal
   const handleAbrirImportarNf = (p: PedidoVenda) => {
     setModalImportarNf(p);
-    const randNum = Math.floor(20000 + Math.random() * 80000);
-    setNumeroNfImport(p.nota_fiscal?.numero || String(randNum));
+    // Só traz o que já foi guardado; os números da NF vêm do XML (ou são digitados)
+    setNumeroNfImport(p.nota_fiscal?.numero || '');
     setSerieNfImport(p.nota_fiscal?.serie || '1');
-    setChaveAcessoImport(p.nota_fiscal?.chave_acesso || `35260908849120000109550010000${randNum}1829384756`);
-    setDataEmissaoImport(p.nota_fiscal?.data_emissao || new Date().toLocaleDateString('pt-BR'));
-    setValorNfImport(p.valor_total.toFixed(2));
-    setNomeArquivoAnexado(p.nota_fiscal?.arquivo_anexado || p.nota_fiscal?.nome_arquivo_xml || `NFe_${randNum}.xml`);
+    setChaveAcessoImport(p.nota_fiscal?.chave_acesso || '');
+    setDataEmissaoImport(paraISO(p.nota_fiscal?.data_emissao) || hojeISO());
+    setValorNfImport(String(p.nota_fiscal?.valor_nota ?? p.valor_total.toFixed(2)));
+    setNomeArquivoAnexado(p.nota_fiscal?.arquivo_anexado || p.nota_fiscal?.nome_arquivo_xml || null);
     setTipoArquivoAnexado(p.nota_fiscal?.tipo_arquivo || 'XML');
     setArquivoConteudo(p.nota_fiscal?.arquivo_conteudo || null);
     setObservacaoFiscal('');
-    setTransportadoraInput(p.transportadora || 'TransVale Logística');
-    setPlacaInput(p.placa_veiculo || 'BRA-2E19');
-    setMotoristaInput(p.motorista_nome || 'Sebastião Antunes');
+    setDadosNfe(null);
+    setErroNf('');
+    setTransportadoraInput(p.transportadora || p.programacao_entrega?.transportadora || '');
+    setPlacaInput(p.placa_veiculo || p.programacao_entrega?.placa || '');
+    setMotoristaInput(p.motorista_nome || '');
   };
 
-  // Upload e leitura real/simulada de arquivo XML ou PDF da Nota Fiscal
+  // Leitura do arquivo da NF: o XML preenche os números sozinho; o PDF (DANFE) só é guardado
   const handleSelecionarArquivo = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = ''; // permite escolher o mesmo arquivo de novo
     if (!file) return;
 
+    setErroNf('');
+    setDadosNfe(null);
     setNomeArquivoAnexado(file.name);
     const isPdf = file.name.toLowerCase().endsWith('.pdf');
-    const isXml = file.name.toLowerCase().endsWith('.xml');
     setTipoArquivoAnexado(isPdf ? 'PDF' : 'XML');
 
     const reader = new FileReader();
-
-    if (isXml) {
+    if (!isPdf) {
       reader.onload = (ev) => {
+        const text = String(ev.target?.result || '');
+        setArquivoConteudo(text);
         try {
-          const text = ev.target?.result as string;
-          setArquivoConteudo(text);
-          const parser = new DOMParser();
-          const xmlDoc = parser.parseFromString(text, 'text/xml');
-
-          const nNF = xmlDoc.getElementsByTagName('nNF')[0]?.textContent;
-          if (nNF) setNumeroNfImport(nNF);
-
-          const serie = xmlDoc.getElementsByTagName('serie')[0]?.textContent;
-          if (serie) setSerieNfImport(serie);
-
-          const chNFe = xmlDoc.getElementsByTagName('chNFe')[0]?.textContent ||
-                        xmlDoc.querySelector('infNFe')?.getAttribute('Id')?.replace(/^NFe/, '');
-          if (chNFe) setChaveAcessoImport(chNFe);
-
-          const dhEmi = xmlDoc.getElementsByTagName('dhEmi')[0]?.textContent ||
-                        xmlDoc.getElementsByTagName('dEmi')[0]?.textContent;
-          if (dhEmi) {
-            const dt = new Date(dhEmi);
-            if (!isNaN(dt.getTime())) {
-              setDataEmissaoImport(dt.toLocaleDateString('pt-BR'));
-            }
-          }
-
-          const vNF = xmlDoc.getElementsByTagName('vNF')[0]?.textContent;
-          if (vNF) setValorNfImport(parseFloat(vNF).toFixed(2));
+          const d = lerNFeXml(text);
+          setDadosNfe(d);
+          if (d.numero) setNumeroNfImport(d.numero);
+          setSerieNfImport(d.serie || '1');
+          if (d.chave) setChaveAcessoImport(d.chave);
+          if (d.data_emissao) setDataEmissaoImport(d.data_emissao);
+          if (d.valor_total > 0) setValorNfImport(d.valor_total.toFixed(2));
+          if (d.transportadora) setTransportadoraInput(d.transportadora);
+          if (d.placa) setPlacaInput(d.placa);
         } catch (err) {
-          console.warn('Leitura do XML da NF:', err);
+          setErroNf(err instanceof Error ? err.message : 'Não foi possível ler o XML da nota.');
         }
       };
       reader.readAsText(file);
     } else {
-      // PDF ou outro formato
-      reader.onload = (ev) => {
-        setArquivoConteudo(ev.target?.result as string);
-      };
+      reader.onload = (ev) => setArquivoConteudo(ev.target?.result as string);
       reader.readAsDataURL(file);
-
-      // Tenta inferir número da nota do nome do arquivo se contiver dígitos
-      const matches = file.name.match(/\d{4,8}/);
-      if (matches) {
-        setNumeroNfImport(matches[0]);
-        setChaveAcessoImport(`35260908849120000109550010000${matches[0].padStart(8, '0')}1982348571`);
-      }
     }
   };
 
@@ -228,13 +211,51 @@ export function PedidosAFaturar({ onNavigate }: Props) {
     e.preventDefault();
     if (!modalImportarNf) return;
 
-    if (!numeroNfImport.trim()) {
-      alert('Informe o Número da Nota Fiscal.');
+    setErroNf('');
+    const numeroNf = numeroNfImport.trim().replace(/^0+(?=\d)/, '');
+    const serieNf = serieNfImport.trim() || '1';
+    const chave = chaveAcessoImport.replace(/\D/g, '');
+    if (!numeroNf) {
+      setErroNf('Informe o número da nota fiscal (ou importe o XML).');
       return;
     }
-    if (!chaveAcessoImport.trim()) {
-      alert('Informe a Chave de Acesso da NF-e (44 dígitos).');
+    if (!chaveNFeValida(chave)) {
+      setErroNf(chave.length !== 44
+        ? `A chave de acesso tem ${chave.length} dígitos; precisa ter 44.`
+        : 'A chave de acesso não confere (dígito verificador inválido). Confira a digitação.');
       return;
+    }
+    if (String(parseInt(chave.slice(25, 34), 10)) !== String(parseInt(numeroNf, 10))) {
+      setErroNf(`O número ${numeroNf} não bate com o número dentro da chave de acesso (${parseInt(chave.slice(25, 34), 10)}).`);
+      return;
+    }
+    // A mesma NF não pode ser guardada em dois pedidos
+    const repetida = carregarPedidosVenda().find(p =>
+      p.id !== modalImportarNf.id && !!p.nota_fiscal &&
+      ((p.nota_fiscal.chave_acesso || '').replace(/\D/g, '') === chave ||
+        ((p.nota_fiscal.numero || '').replace(/^0+(?=\d)/, '') === numeroNf && (p.nota_fiscal.serie || '1') === serieNf))
+    );
+    if (repetida) {
+      setErroNf(`Esta NF (nº ${numeroNf}, série ${serieNf}) já está guardada no pedido ${repetida.numero_pedido}.`);
+      return;
+    }
+    if (carregarNotasSaida().some(n => !!n.chave_acesso && n.chave_acesso.replace(/\D/g, '') === chave)) {
+      setErroNf('Esta chave de acesso já está nas Notas de Saída.');
+      return;
+    }
+    if (dadosNfe) {
+      const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      const avisos: string[] = [];
+      const sit = situacaoNFe(dadosNfe);
+      if (sit === 'OUTRA') avisos.push(`A SEFAZ não autorizou esta nota: ${dadosNfe.status_codigo} - ${dadosNfe.status_texto}.`);
+      if (sit === 'SEM_PROTOCOLO') avisos.push('O XML não tem o protocolo de autorização (parece o XML antes do envio à SEFAZ).');
+      if (dadosNfe.destinatario.documento && !mesmoDocumento(dadosNfe.destinatario.documento, modalImportarNf.cliente_cnpj_cpf)) {
+        avisos.push(`O destinatário da nota (${dadosNfe.destinatario.nome}, ${formatarDocumento(dadosNfe.destinatario.documento)}) não é o cliente do pedido (${modalImportarNf.cliente_nome}).`);
+      }
+      if (Math.abs(dadosNfe.valor_total - modalImportarNf.valor_total) > 0.01) {
+        avisos.push(`Valor da nota ${brl(dadosNfe.valor_total)} diferente do pedido ${brl(modalImportarNf.valor_total)}. O Contas a Receber usa o valor da nota.`);
+      }
+      if (avisos.length > 0 && !confirm(`Confira antes de guardar:\n\n• ${avisos.join('\n• ')}\n\nGuardar a nota mesmo assim?`)) return;
     }
 
     // Aviso de estoque insuficiente: avisa e deixa seguir
@@ -244,19 +265,22 @@ export function PedidosAFaturar({ onNavigate }: Props) {
       if (!confirm(`Atenção: o estoque de produto acabado não cobre este pedido.\n\n${lista}\n\nO estoque desses produtos ficará zerado. Faturar mesmo assim?`)) return;
     }
 
-    const valorFinal = parseFloat(valorNfImport) || modalImportarNf.valor_total;
+    const valorFinal = parseFloat(String(valorNfImport).replace(',', '.')) || modalImportarNf.valor_total;
     // Data de faturamento sempre AAAA-MM-DD (aceita a data digitada em DD/MM/AAAA)
     const dataFaturamento = paraISO(dataEmissaoImport) || hojeISO();
 
     moverPedidoEtapa(modalImportarNf.id, 'FATURADO', {
       nota_fiscal: {
-        numero: numeroNfImport.trim(),
-        serie: serieNfImport.trim() || '1',
-        chave_acesso: chaveAcessoImport.trim(),
+        numero: numeroNf,
+        serie: serieNf,
+        chave_acesso: chave,
         data_emissao: dataFaturamento,
-        xml_importado: true,
+        xml_importado: !!dadosNfe,
+        protocolo: dadosNfe?.protocolo || undefined,
+        peso_liquido_kg: dadosNfe?.peso_liquido_kg || undefined,
+        peso_bruto_kg: dadosNfe?.peso_bruto_kg || undefined,
         nome_arquivo_xml: nomeArquivoAnexado || undefined,
-        arquivo_anexado: nomeArquivoAnexado || `NF_${numeroNfImport}.xml`,
+        arquivo_anexado: nomeArquivoAnexado || undefined,
         tipo_arquivo: tipoArquivoAnexado,
         arquivo_conteudo: arquivoConteudo || undefined,
         valor_nota: valorFinal,
@@ -270,7 +294,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
       transportadora: transportadoraInput || modalImportarNf.transportadora
     });
 
-    const msg = `Nota Fiscal nº ${numeroNfImport} importada e guardada com sucesso! Pedido transferido para Faturados / Expedição.`;
+    const msg = `Nota Fiscal nº ${numeroNf} importada e guardada com sucesso! Pedido transferido para Faturados / Expedição.`;
     setToastSucesso(msg);
     setTimeout(() => setToastSucesso(null), 4000);
     setModalImportarNf(null);
@@ -461,7 +485,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
       {/* 6. MODAL IMPORTAR E GUARDAR NOTA FISCAL (SEM CONEXÃO SEFAZ) */}
       {modalImportarNf && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-4xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-4xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Topo do Modal */}
             <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
@@ -530,10 +554,10 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                     onClick={() => fileInputRef.current?.click()}
                     className="px-4 py-2 bg-papel border border-eno-600 text-eno-800 rounded-md font-bold text-xs hover:bg-eno-50 transition-colors shadow-2xs cursor-pointer"
                   >
-                    Selecionar Arquivo da Nota Fiscal (XML ou PDF)
+                    Importar arquivo da nota (XML ou PDF)
                   </button>
                   <p className="text-[10px] text-cinza mt-1">
-                    Formatos aceitos: .xml (NF-e oficial) ou .pdf (DANFE gerado)
+                    O <strong>XML</strong> preenche número, série, chave, data, valor, peso e transporte sozinho. O PDF (DANFE) só fica guardado.
                   </p>
                 </div>
 
@@ -545,10 +569,82 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                       <FileCode className="w-4 h-4 text-eno-700" />
                     )}
                     <span>{nomeArquivoAnexado}</span>
-                    <span className="text-[10px] text-eno-700 font-sans font-normal">(Pronto p/ guardar)</span>
+                    <span className="text-[10px] text-eno-700 font-sans font-normal">{dadosNfe ? '(lido)' : '(pronto p/ guardar)'}</span>
                   </div>
                 )}
               </div>
+
+              {/* CONFERÊNCIA DO XML COM O PEDIDO */}
+              {dadosNfe && (() => {
+                const sit = situacaoNFe(dadosNfe);
+                const clienteOk = !dadosNfe.destinatario.documento || mesmoDocumento(dadosNfe.destinatario.documento, modalImportarNf.cliente_cnpj_cpf);
+                const valorOk = Math.abs(dadosNfe.valor_total - modalImportarNf.valor_total) <= 0.01;
+                const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                const linha = 'flex items-baseline justify-between gap-3 py-1.5';
+                const marca = (ok: boolean) => <span className={`shrink-0 font-bold ${ok ? 'text-eno-700' : 'text-st-vencido'}`}>{ok ? 'confere' : 'diferente'}</span>;
+                return (
+                  <div className="rounded-md border border-linha">
+                    <div className="bg-papel-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-cinza border-b border-linha">
+                      Conferência da nota com o pedido
+                    </div>
+                    <div className="px-3 divide-y divide-linha text-[11.5px]">
+                      <div className={linha}>
+                        <span className="text-cinza shrink-0">SEFAZ</span>
+                        <span className={`text-right font-semibold ${sit === 'AUTORIZADA' ? 'text-eno-800' : 'text-st-vencido'}`}>
+                          {sit === 'AUTORIZADA' ? `Autorizada · protocolo ${dadosNfe.protocolo}` : sit === 'SEM_PROTOCOLO' ? 'XML sem protocolo de autorização' : `${dadosNfe.status_codigo} - ${dadosNfe.status_texto}`}
+                        </span>
+                      </div>
+                      <div className={linha}>
+                        <span className="text-cinza shrink-0">Destinatário</span>
+                        <span className="text-right min-w-0">
+                          <span className="font-semibold text-tinta">{dadosNfe.destinatario.nome || '-'}</span>{' '}
+                          <span className="tabular-nums text-cinza">{formatarDocumento(dadosNfe.destinatario.documento)}</span>{' '}
+                          {marca(clienteOk)}
+                        </span>
+                      </div>
+                      <div className={linha}>
+                        <span className="text-cinza shrink-0">Valor</span>
+                        <span className="text-right tabular-nums">
+                          <span className="font-bold text-tinta">{brl(dadosNfe.valor_total)}</span>
+                          {!valorOk && <span className="text-cinza"> · pedido {brl(modalImportarNf.valor_total)}</span>}{' '}
+                          {marca(valorOk)}
+                        </span>
+                      </div>
+                      {(dadosNfe.peso_liquido_kg > 0 || dadosNfe.peso_bruto_kg > 0) && (
+                        <div className={linha}>
+                          <span className="text-cinza shrink-0">Peso</span>
+                          <span className="text-right tabular-nums">
+                            líquido {dadosNfe.peso_liquido_kg.toLocaleString('pt-BR')} kg · bruto {dadosNfe.peso_bruto_kg.toLocaleString('pt-BR')} kg
+                            <span className="text-cinza"> · pedido {modalImportarNf.peso_total_kg.toLocaleString('pt-BR')} kg</span>
+                          </span>
+                        </div>
+                      )}
+                      {dadosNfe.itens.length > 0 && (
+                        <div className="py-1.5 space-y-1">
+                          <span className="text-cinza">Itens da nota ({dadosNfe.itens.length})</span>
+                          {dadosNfe.itens.map((it, i) => (
+                            <div key={i} className="flex items-baseline justify-between gap-3">
+                              <span className="min-w-0 text-tinta">
+                                {it.descricao}
+                                {it.lotes.length > 0 && <span className="text-cinza tabular-nums"> · lote {it.lotes.map(l => l.lote).join(', ')}</span>}
+                              </span>
+                              <span className="shrink-0 tabular-nums text-tinta-2">{it.quantidade.toLocaleString('pt-BR')} {it.unidade} · {brl(it.valor_total)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {dadosNfe.duplicatas.length > 0 && (
+                        <div className={linha}>
+                          <span className="text-cinza shrink-0">Parcelas na nota</span>
+                          <span className="text-right tabular-nums">
+                            {dadosNfe.duplicatas.map(d => `${formatarDataBR(d.vencimento)} ${brl(d.valor)}`).join(' · ')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* CAMPOS FISCAIS CONFERIDOS */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -585,8 +681,9 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                     Data de Emissão da NF
                   </label>
                   <input
-                    type="text"
-                    value={dataEmissaoImport}
+                    type="date"
+                    value={paraISO(dataEmissaoImport)}
+                    max={hojeISO()}
                     onChange={(e) => setDataEmissaoImport(e.target.value)}
                     className="w-full bg-papel-2 border border-linha-forte rounded-lg px-3 py-2 tabular-nums text-tinta focus:outline-none focus:border-eno-700"
                   />
@@ -603,12 +700,16 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                   required
                   maxLength={44}
                   value={chaveAcessoImport}
-                  onChange={(e) => setChaveAcessoImport(e.target.value.replace(/\s+/g, ''))}
-                  placeholder="Ex: 35260908849120000109550010000245891829384756"
+                  inputMode="numeric"
+                  onChange={(e) => setChaveAcessoImport(e.target.value.replace(/\D/g, ''))}
+                  placeholder="44 números (vem no XML ou no DANFE)"
                   className="w-full bg-papel-2 border border-linha-forte rounded-lg px-3 py-2 tabular-nums font-bold text-xs text-tinta focus:outline-none focus:border-eno-700 tracking-wider"
                 />
                 <span className="text-[10px] text-cinza tabular-nums mt-0.5 block">
-                  Tamanho: {chaveAcessoImport.length} de 44 caracteres
+                  {chaveAcessoImport.length} de 44 números
+                  {chaveAcessoImport.length === 44 && (chaveNFeValida(chaveAcessoImport)
+                    ? <span className="text-eno-700 font-bold"> · chave válida</span>
+                    : <span className="text-st-vencido font-bold"> · chave não confere</span>)}
                 </span>
               </div>
 
@@ -625,7 +726,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                       type="text"
                       value={transportadoraInput}
                       onChange={(e) => setTransportadoraInput(e.target.value)}
-                      placeholder="Ex: TransVale Logística"
+                      placeholder="Nome da transportadora"
                       className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 text-tinta font-medium focus:outline-none focus:border-eno-700"
                     />
                   </div>
@@ -636,7 +737,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                       type="text"
                       value={placaInput}
                       onChange={(e) => setPlacaInput(e.target.value.toUpperCase())}
-                      placeholder="Ex: BRA-2E19"
+                      placeholder="AAA-0A00"
                       className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 tabular-nums font-bold uppercase text-tinta focus:outline-none focus:border-eno-700"
                     />
                   </div>
@@ -647,7 +748,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                       type="text"
                       value={motoristaInput}
                       onChange={(e) => setMotoristaInput(e.target.value)}
-                      placeholder="Ex: Sebastião Antunes"
+                      placeholder="Nome do motorista"
                       className="w-full bg-papel border border-linha-forte rounded-lg px-3 py-2 text-tinta font-medium focus:outline-none focus:border-eno-700"
                     />
                   </div>
@@ -661,7 +762,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                     Valor Total da Nota Fiscal
                   </span>
                   <span className="tabular-nums text-base font-extrabold text-eno-800">
-                    {modalImportarNf.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {(parseFloat(String(valorNfImport).replace(',', '.')) || modalImportarNf.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
                 </div>
 
@@ -670,11 +771,16 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                     Lote Vinculado
                   </span>
                   <span className="tabular-nums text-xs font-bold text-tinta">
-                    {modalImportarNf.lote_producao || 'LOT-2026-PADRAO'} • Venc: {modalImportarNf.data_vencimento ? formatarDataBR(modalImportarNf.data_vencimento) : '2 anos'}
+                    {modalImportarNf.lote_producao || '-'} • Venc: {modalImportarNf.data_vencimento ? formatarDataBR(modalImportarNf.data_vencimento) : '-'}
                   </span>
                 </div>
               </div>
 
+              {erroNf && (
+                <div role="alert" className="p-2.5 rounded-md bg-st-vencido-bg border border-st-vencido/30 text-st-vencido font-semibold flex items-start gap-1.5">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-px" /> <span>{erroNf}</span>
+                </div>
+              )}
               <div className="pt-3 border-t border-linha flex items-center justify-end gap-3 max-sm:sticky max-sm:-bottom-4 max-sm:z-10 max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:pb-4 max-sm:bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
                 <button
                   type="button"
@@ -700,7 +806,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
       {/* 7. MODAL DETALHES DO PEDIDO A FATURAR */}
       {modalDetalhes && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-3xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-3xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
               <h3 className="font-bold text-sm sm:text-base text-white flex items-center gap-2">
                 <Receipt className="w-5 h-5 text-ouro-claro" />

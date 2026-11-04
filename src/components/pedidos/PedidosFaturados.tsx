@@ -31,6 +31,7 @@ import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
 import { StatusChip } from '../ui/StatusChip';
 import { EstadoVazio } from '../ui/EstadoVazio';
 import { formatarDataBR } from '../../lib/datas';
+import { ChaveAcesso } from '../ui/ChaveAcesso';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -120,10 +121,10 @@ export function PedidosFaturados({ onNavigate }: Props) {
     const amanha = new Date();
     amanha.setDate(amanha.getDate() + 1);
     setDataProgramadaInput(p.programacao_entrega?.data_programada || amanha.toLocaleDateString('pt-BR'));
-    setTransportadoraEntregaInput(p.programacao_entrega?.transportadora || p.transportadora || 'TransVale Rodoviário');
-    setMotoristaEntregaInput(p.programacao_entrega?.motorista || p.motorista_nome || 'Sebastião Antunes');
+    setTransportadoraEntregaInput(p.programacao_entrega?.transportadora || p.transportadora || '');
+    setMotoristaEntregaInput(p.programacao_entrega?.motorista || p.motorista_nome || '');
     setTelefoneMotoristaInput(p.programacao_entrega?.telefone_motorista || '(14) 99872-3321');
-    setPlacaEntregaInput(p.programacao_entrega?.placa || p.placa_veiculo || 'BRA-2E19');
+    setPlacaEntregaInput(p.programacao_entrega?.placa || p.placa_veiculo || '');
   };
 
   // Salvar Programação de Entrega
@@ -373,7 +374,7 @@ export function PedidosFaturados({ onNavigate }: Props) {
       {/* 5. MODAL ESPELHO DA NF-E (AMPLO E HORIZONTAL) */}
       {modalNf && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-5xl lg:max-w-6xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-5xl lg:max-w-6xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
               <h3 className="font-bold text-sm sm:text-base text-white">Espelho Fiscal - NF-e {modalNf.nota_fiscal?.numero}</h3>
               <button onClick={() => setModalNf(null)} className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-eno-800 text-eno-100 hover:text-white transition-colors cursor-pointer">
@@ -387,7 +388,7 @@ export function PedidosFaturados({ onNavigate }: Props) {
                   <div>
                     <span className="text-cinza font-medium block mb-1">Chave de Acesso (44 Dígitos):</span>
                     <div className="p-2.5 bg-papel rounded-md border border-linha tabular-nums text-[11px] select-all break-all text-tinta">
-                      {modalNf.nota_fiscal?.chave_acesso}
+                      <ChaveAcesso chave={modalNf.nota_fiscal?.chave_acesso} />
                     </div>
                   </div>
 
@@ -484,7 +485,7 @@ export function PedidosFaturados({ onNavigate }: Props) {
       {/* 6. MODAL PROGRAMAR LOGÍSTICA DE ENTREGA (AMPLO E HORIZONTAL) */}
       {modalProgramar && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-5xl lg:max-w-6xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-5xl lg:max-w-6xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
               <div className="flex items-center gap-2.5">
                 <CalendarDays className="w-5 h-5 text-ouro-claro" />

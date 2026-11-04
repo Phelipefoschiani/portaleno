@@ -33,7 +33,7 @@ export function HomeModal({ isOpen, onClose, type, title, subtitle, onOpenPortal
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden text-slate-800">
+      <div className="min-w-0 relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden text-slate-800">
         
         {/* Header */}
         <div className="bg-[#091712] text-white p-6 relative">

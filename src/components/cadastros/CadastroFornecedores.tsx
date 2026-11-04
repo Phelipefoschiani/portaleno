@@ -1492,7 +1492,7 @@ export function CadastroFornecedores() {
       {/* ========================================================= */}
       {compraModalDanfe && (
         <div className="fixed inset-0 z-[60] overflow-y-auto bg-eno-950/60 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="relative w-full max-w-6xl bg-papel sm:rounded-md border border-linha overflow-hidden flex flex-col sm:my-auto h-dvh sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+          <div className="min-w-0 relative w-full max-w-6xl bg-papel sm:rounded-md border border-linha overflow-hidden flex flex-col sm:my-auto h-dvh sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Header do Modal */}
             <div className="shrink-0 px-4 py-3 sm:p-5 bg-[linear-gradient(100deg,#042013_0%,#0b3d24_100%)] text-white flex items-center justify-between gap-3">

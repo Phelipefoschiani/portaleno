@@ -179,7 +179,7 @@ export function ProdutosEtiqueta({ onNavigate }: Props) {
                 <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 border-b-2 border-tinta pb-3 tabular-nums">
                   <div>
                     <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-cinza block">Lote industrial</span>
-                    <strong className="text-[13px] font-extrabold break-all">{lote}</strong>
+                    <strong className="text-[13px] font-extrabold [overflow-wrap:anywhere]">{lote}</strong>
                   </div>
                   <div>
                     <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-cinza block">Registro SIF/MAPA</span>

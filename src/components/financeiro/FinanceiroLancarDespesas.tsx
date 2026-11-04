@@ -45,6 +45,9 @@ import {
   StatusPedidoCompra
 } from '../../data/mockStore';
 import { FinanceiroNavTabs } from './FinanceiroNavTabs';
+import { CampoNotaFornecedor } from '../ui/CampoNotaFornecedor';
+import { NotaFornecedor, guardarNotaEntrada, removerNotasEntradaDoVinculo, notaEntradaJaGuardada, textoNota } from '../../data/notasFornecedorData';
+import type { DadosNFe } from '../../lib/nfeXml';
 import { carregarCalculosNaRoca, definirPagamentoCalculoRoca, excluirCalculoNaRoca, estornarPagamentoCalculoRoca } from '../../data/calculoRocaData';
 
 interface Props {
@@ -76,6 +79,10 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
     responsavel: '',
     forma_pagamento: 'PIX'
   });
+
+  // Nota do fornecedor da despesa direta e da compra que vira despesa
+  const [notaDespesa, setNotaDespesa] = useState<NotaFornecedor | null>(null);
+  const [notaFinalizacao, setNotaFinalizacao] = useState<NotaFornecedor | null>(null);
 
   // Modal Novo Pedido de Compra / Programação (Simples: Fornecedor, Data, Valor e Descrição)
   const [modalNovoPedido, setModalNovoPedido] = useState(false);
@@ -207,11 +214,19 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       alert('Informe um valor maior que zero.');
       return;
     }
+    if (notaDespesa?.chave) {
+      const repetida = notaEntradaJaGuardada(notaDespesa.chave);
+      if (repetida) {
+        alert(`Esta nota já foi lançada: ${repetida}.`);
+        return;
+      }
+    }
     const nova: DespesaOperacional = {
       id: `desp_${Date.now()}`,
       ...formDespesa,
       valor: numeroSeguro(formDespesa.valor),
-      data: paraISO(formDespesa.data) || hojeISO()
+      data: paraISO(formDespesa.data) || hojeISO(),
+      nota_fiscal: notaDespesa || undefined
     };
     // Despesa paga só sai se o caixa tiver saldo
     const semSaldo = conferirSaldoParaPagar(nova.valor);
@@ -222,6 +237,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
     salvarDespesas([nova, ...carregarDespesas()]);
     // Despesa realizada já foi paga: sai do caixa uma única vez
     registrarBaixaNoCaixa(`despesa:${nova.id}`, -nova.valor, { descricao: `${nova.descricao}${nova.categoria ? ` (${nova.categoria})` : ''}`, data: nova.data });
+    if (nova.nota_fiscal) guardarNotaEntrada({ ...nova.nota_fiscal, valor: nova.nota_fiscal.valor || nova.valor }, { despesa_id: nova.id, descricao: nova.descricao });
     setModalNovaDespesa(false);
     setMensagemFeedback('Despesa operacional lançada com sucesso!');
     setTimeout(() => setMensagemFeedback(null), 5000);
@@ -259,6 +275,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       salvarDespesas(carregarDespesas().filter(d => d.id !== id));
       // Estorna no caixa o que esta despesa havia debitado (se debitou)
       estornarBaixaNoCaixa(`despesa:${id}`);
+      removerNotasEntradaDoVinculo({ despesa_id: id });
       setMensagemFeedback('Despesa excluída com sucesso!');
       setTimeout(() => setMensagemFeedback(null), 5000);
     }
@@ -459,6 +476,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
     setDataFinalizacao(hojeISO());
     setFormaPagamentoFinalizacao(pedido.forma_pagamento || 'PIX');
     setObsFinalizacao('');
+    setNotaFinalizacao(pedido.nota_fiscal_entrada || null);
   };
 
   // Ação: Confirmar Finalização da Compra e Virar Despesa
@@ -475,6 +493,13 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       return;
     }
     const dataEfetiva = paraISO(dataFinalizacao) || hojeISO();
+    if (notaFinalizacao?.chave && notaFinalizacao.chave !== pedidoFinalizando.nota_fiscal_entrada?.chave) {
+      const repetida = notaEntradaJaGuardada(notaFinalizacao.chave);
+      if (repetida) {
+        alert(`Esta nota já foi lançada: ${repetida}.`);
+        return;
+      }
+    }
 
     // Pagamento à vista só sai se o caixa tiver saldo (antes de mexer em qualquer lançamento)
     if (tipoFinalizacao === 'JA_PAGO') {
@@ -512,7 +537,8 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       item_descricao: itemEfetivado,
       valor_total: valTotal,
       categoria: categoriaFinalizacao as CategoriaCompra,
-      observacao: obsFinalizacao || undefined
+      observacao: obsFinalizacao || undefined,
+      nota_fiscal: notaFinalizacao || undefined
     });
     if (!res.sucesso) {
       alert(res.mensagem);
@@ -663,8 +689,12 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
       responsavel: '',
       forma_pagamento: 'PIX'
     });
+    setNotaDespesa(null);
     setModalNovaDespesa(true);
   };
+
+  // Compras de produtor rural (mandioca): não cobram nota de fornecedor
+  const pedidosAgricultor = useMemo(() => new Set(pedidosCompra.filter(p => p.tipo_parceiro === 'AGRICULTOR').map(p => p.id)), [pedidosCompra]);
 
   const nomeParceiro = (p: PedidoCompraGeral) =>
     p.tipo_parceiro === 'AGRICULTOR' ? p.agricultor_nome : (p.fornecedor_fantasia || p.fornecedor_nome);
@@ -805,7 +835,16 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                     {despesasRealizadasFiltradas.map(item => (
                       <tr key={item.id} className={tabela.tr}>
                         <Td className="whitespace-nowrap tabular-nums">{formatarDataBR(item.data)}</Td>
-                        <Td className="font-semibold text-tinta max-w-[360px]">{item.descricao}</Td>
+                        <Td className="font-semibold text-tinta max-w-[360px]">
+                          {item.descricao}
+                          {item.nota_fiscal ? (
+                            <div className="text-[11px] font-semibold text-eno-700">{textoNota(item.nota_fiscal)}{item.nota_fiscal.importada_xml ? ' · XML' : ''}</div>
+                          ) : pedidosAgricultor.has(pedidoCompraDaDespesa(item as DespesaOperacional & { pedido_compra_id?: string }) || '') ? (
+                            <div className="text-[11px] text-cinza">Produtor rural</div>
+                          ) : (
+                            <div className="text-[11px] font-semibold text-st-aguardando">Sem nota fiscal</div>
+                          )}
+                        </Td>
                         <Td>
                           <div>{item.categoria}</div>
                           <div className="text-[11.5px] text-cinza">{item.setor}</div>
@@ -920,6 +959,17 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
           }
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <CampoNotaFornecedor
+              className="sm:col-span-2"
+              nota={notaDespesa}
+              onNota={setNotaDespesa}
+              onXmlLido={(d: DadosNFe) => setFormDespesa(f => ({
+                ...f,
+                descricao: f.descricao || `${d.emitente.nome}: ${d.itens.map(i => i.descricao).slice(0, 3).join(', ')}${d.itens.length > 3 ? '...' : ''}`,
+                valor: d.valor_total || f.valor,
+                data: d.data_emissao || f.data
+              }))}
+            />
             <Campo rotulo="Descrição do gasto" className="sm:col-span-2">
               <input type="text" required value={formDespesa.descricao}
                 onChange={e => setFormDespesa({ ...formDespesa, descricao: e.target.value })}
@@ -1115,6 +1165,21 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
           <div className="space-y-5">
             <GrupoForm titulo="1. O que foi comprado">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {pedidoFinalizando.tipo_parceiro !== 'AGRICULTOR' && (
+                  <CampoNotaFornecedor
+                    className="sm:col-span-2"
+                    nota={notaFinalizacao}
+                    onNota={setNotaFinalizacao}
+                    onXmlLido={(d: DadosNFe) => {
+                      if (d.valor_total > 0) setValorTotalFinalizacao(d.valor_total.toFixed(2).replace('.', ','));
+                      // A prazo: o vencimento vem da primeira parcela da nota
+                      if (d.duplicatas[0]?.vencimento) {
+                        setTipoFinalizacao('A_PAGAR');
+                        setDataFinalizacao(d.duplicatas[0].vencimento);
+                      }
+                    }}
+                  />
+                )}
                 <Campo rotulo="Produto comprado *" dica="A descrição do pedido vira o produto da despesa." className="sm:col-span-2">
                   <input type="text" required value={produtoFinalizacao} onChange={e => setProdutoFinalizacao(e.target.value)}
                     placeholder="5.000 sacos de ráfia" className={campo} />

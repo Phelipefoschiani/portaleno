@@ -493,7 +493,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                               {negativos > 0 ? `${negativos} com margem negativa` : `mostra ${nomeMostrarPreco(item).toLowerCase()}`}
                             </div>
                           </Td>
-                          <Td>{item.prazo_padrao}</Td>
+                          <Td className="whitespace-nowrap">{item.prazo_padrao}</Td>
                           <Td className="whitespace-nowrap">{item.frete_tipo}</Td>
                           <Td className="whitespace-nowrap tabular-nums text-cinza">{textoVigencia(item)}</Td>
                           <Td>
@@ -859,7 +859,9 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                           <div className="flex items-baseline justify-between gap-3">
                             <div className="min-w-0">
                               <div className="text-[14px] font-bold text-tinta leading-snug">{l.nome}</div>
-                              <div className="text-[11.5px] text-cinza">{l.categoria} · {[l.peso, l.acondicionamento].filter(Boolean).join(' · ')}</div>
+                              <div className="text-[11.5px] text-cinza">{[l.categoria, l.peso, l.acondicionamento].filter(Boolean).map((parte, j) => (
+                                <React.Fragment key={j}>{j > 0 && ' · '}<span className="whitespace-nowrap">{parte}</span></React.Fragment>
+                              ))}</div>
                             </div>
                             <div className="text-right shrink-0 tabular-nums">
                               {(verUn || l.rotuloAcondicionamento === 'Unidade') && (

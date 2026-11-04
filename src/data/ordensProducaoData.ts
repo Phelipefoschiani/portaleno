@@ -33,6 +33,8 @@ export interface ApontamentoOP {
   pacotes: number;
   operador?: string;
   observacao?: string;
+  lote?: string;
+  lotes_mp_texto?: string; // "Fécula: L123 · Sacaria: L9" (lotes de MP usados neste apontamento)
 }
 
 export interface OrdemProducao {
@@ -62,6 +64,7 @@ export interface OrdemProducao {
   lote?: string;
   data_fabricacao?: string; // AAAA-MM-DD
   data_validade?: string; // AAAA-MM-DD
+  lotes_mp?: Record<string, string[]>; // lotes de matéria-prima escolhidos pela produção (id da MP -> ids dos lotes)
   // Datas de status
   data_criacao: string;
   data_prevista?: string;
@@ -128,6 +131,15 @@ export function prazoValidadeMesesProduto(produtoId: string): number {
 
 export function validadePadraoProduto(produtoId: string, dataFabricacao: string = hojeISO()): string {
   return somarMeses(dataFabricacao, prazoValidadeMesesProduto(produtoId));
+}
+
+function juntarLotesMP(a?: Record<string, string[]>, b?: Record<string, string[]>): Record<string, string[]> | undefined {
+  if (!a && !b) return undefined;
+  const r: Record<string, string[]> = { ...(a || {}) };
+  Object.entries(b || {}).forEach(([mp, ids]) => {
+    r[mp] = [...(r[mp] || []), ...ids.filter(id => !(r[mp] || []).includes(id))];
+  });
+  return r;
 }
 
 export function loteSugeridoOP(numeroOP: string): string {
@@ -351,15 +363,8 @@ function atualizarOP(opId: string, fn: (op: OrdemProducao) => OrdemProducao | nu
 export function iniciarOrdemProducao(opId: string): OrdemProducao | null {
   return atualizarOP(opId, op => {
     if (op.status !== 'PLANEJADA') return null;
-    const fab = op.data_fabricacao || hojeISO();
-    return {
-      ...op,
-      status: 'EM_PRODUCAO',
-      data_inicio: hojeISO(),
-      lote: op.lote || loteSugeridoOP(op.numero),
-      data_fabricacao: fab,
-      data_validade: op.data_validade || validadePadraoProduto(op.produto_id, fab)
-    };
+    // Lote, fabricação e validade ficam para a produção informar no apontamento
+    return { ...op, status: 'EM_PRODUCAO', data_inicio: hojeISO() };
   });
 }
 
@@ -377,7 +382,11 @@ export function atualizarRastreabilidadeOP(opId: string, dados: { lote?: string;
 }
 
 // Apontamento de pacotes produzidos (pode ser negativo para correção, sem passar de 0)
-export function apontarProducaoOP(opId: string, pacotes: number, extras?: { operador?: string; observacao?: string; lote?: string; data_fabricacao?: string; data_validade?: string }): OrdemProducao | null {
+export function apontarProducaoOP(
+  opId: string,
+  pacotes: number,
+  extras?: { operador?: string; observacao?: string; lote?: string; data_fabricacao?: string; data_validade?: string; lotes_mp?: Record<string, string[]>; lotes_mp_texto?: string }
+): OrdemProducao | null {
   const qtd = Number(pacotes) || 0;
   if (qtd === 0) return null;
   let delta = 0;
@@ -394,8 +403,17 @@ export function apontarProducaoOP(opId: string, pacotes: number, extras?: { oper
       lote: extras?.lote?.trim() || o.lote || loteSugeridoOP(o.numero),
       data_fabricacao: fab,
       data_validade: paraISO(extras?.data_validade) || o.data_validade || validadePadraoProduto(o.produto_id, fab),
+      lotes_mp: juntarLotesMP(o.lotes_mp, extras?.lotes_mp),
       apontamentos: [
-        { id: `apt_${Date.now()}`, data: hojeISO(), pacotes: delta, operador: extras?.operador, observacao: extras?.observacao },
+        {
+          id: `apt_${Date.now()}`,
+          data: hojeISO(),
+          pacotes: delta,
+          operador: extras?.operador,
+          observacao: extras?.observacao,
+          lote: extras?.lote?.trim() || o.lote,
+          lotes_mp_texto: extras?.lotes_mp_texto
+        },
         ...(o.apontamentos || [])
       ]
     };
@@ -411,7 +429,7 @@ export function apontarProducaoOP(opId: string, pacotes: number, extras?: { oper
  */
 export function concluirOrdemProducao(
   opId: string,
-  dados?: { pacotes_produzidos?: number; lote?: string; data_fabricacao?: string; data_validade?: string },
+  dados?: { pacotes_produzidos?: number; lote?: string; data_fabricacao?: string; data_validade?: string; lotes_mp?: Record<string, string[]> },
   opcoes?: { refletirNoPedido?: boolean }
 ): OrdemProducao | null {
   const lista = carregarOrdensProducao();
@@ -424,6 +442,7 @@ export function concluirOrdemProducao(
   const fab = paraISO(dados?.data_fabricacao) || atual.data_fabricacao || hojeISO();
   const lote = dados?.lote?.trim() || atual.lote || loteSugeridoOP(atual.numero);
   const validade = paraISO(dados?.data_validade) || atual.data_validade || validadePadraoProduto(atual.produto_id, fab);
+  const lotesMp = juntarLotesMP(atual.lotes_mp, dados?.lotes_mp);
 
   // Marca como integrada ANTES de mexer no estoque (evita dupla baixa em chamadas concorrentes)
   const travada: OrdemProducao = { ...atual, estoque_integrado: true };
@@ -433,7 +452,7 @@ export function concluirOrdemProducao(
   let consumo: ConsumoMateriaPrimaProducao[] = [];
   try {
     consumo = aplicarProducaoNoEstoque([
-      { produto_id: atual.produto_id, produto_nome: atual.produto_nome, pacotes: produzido, peso_unitario_kg: atual.peso_unitario_kg, lote }
+      { produto_id: atual.produto_id, produto_nome: atual.produto_nome, pacotes: produzido, peso_unitario_kg: atual.peso_unitario_kg, lote, lotes_mp: lotesMp }
     ]);
   } catch (e) {
     console.error('Erro ao integrar conclusão da OP:', e);
@@ -447,6 +466,7 @@ export function concluirOrdemProducao(
     lote,
     data_fabricacao: fab,
     data_validade: validade,
+    lotes_mp: lotesMp,
     data_inicio: atual.data_inicio || hojeISO(),
     data_conclusao: hojeISO(),
     consumo_real: consumo

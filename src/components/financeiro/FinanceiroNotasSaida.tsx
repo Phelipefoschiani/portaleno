@@ -14,6 +14,7 @@ import {
 } from '../../data/financeiroData';
 import { formatarDataBR, compararDatas } from '../../lib/datas';
 import { FinanceiroNavTabs } from './FinanceiroNavTabs';
+import { ChaveAcesso } from '../ui/ChaveAcesso';
 
 interface Props {
   onNavigate?: (tabId: string) => void;
@@ -229,7 +230,7 @@ export function FinanceiroNotasSaida({ onNavigate }: Props) {
                 </button>
               </div>
               <div className="bg-papel border border-linha rounded-md px-3 py-2.5 text-[13px] tabular-nums tracking-[0.04em] text-tinta break-all select-all">
-                {modalVisualizar.chave_acesso}
+                <ChaveAcesso chave={modalVisualizar.chave_acesso} />
               </div>
             </div>
           </div>

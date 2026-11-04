@@ -233,25 +233,7 @@ export default function App() {
 
       {/* 4. Cadastro Produção (Página dedicada para a equipe da fábrica) */}
       {telaAtiva === 'PRODUCAO' && autorizado('PRODUCAO') && (
-        <div className="min-h-screen bg-[#f4f8f5] flex flex-col">
-          <header className="bg-[#022013] text-white px-6 py-4 flex items-center justify-between border-b border-emerald-800">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleSair}
-                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition-colors cursor-pointer"
-              >
-                ← Sair
-              </button>
-              <div>
-                <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">Grupo ENO · Chão de Fábrica</div>
-                <h1 className="text-base sm:text-lg font-black text-white">Produção: Ordens e Colaboradores</h1>
-              </div>
-            </div>
-          </header>
-          <div className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full">
-            <PortalProducao />
-          </div>
-        </div>
+        <PortalProducao onVoltar={sairDoPortal} conta={sessao?.nome} ehAdmin={ehAdmin} />
       )}
 
       {/* 5. Cadastro Controle do Sítio (Mandiocultura & Talhões) */}

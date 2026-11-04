@@ -32,6 +32,8 @@ import {
 } from '../../data/ordensProducaoData';
 import { calcularConsumoProducao, ConsumoMateriaPrimaProducao } from '../../data/pipelineIntegrado';
 import { carregarEstoqueProdutos, ProdutoEstoque } from '../../data/produtosData';
+import { carregarColaboradoresProducao } from '../../data/cadastrosData';
+import { carregarLotesMP, lotesDisponiveisMP, rotuloLoteMP, EVENTO_LOTES_MP, LoteMateriaPrima } from '../../data/lotesMateriaPrimaData';
 import { formatarDataBR, hojeISO } from '../../lib/datas';
 import { PedidosNavTabs } from '../pedidos/PedidosNavTabs';
 import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
@@ -47,6 +49,9 @@ interface Props {
 }
 
 type FiltroStatus = 'ABERTAS' | StatusOrdemProducao | 'TODAS';
+
+// Pares [id da MP, ids dos lotes] de um mapa de lotes escolhidos
+const paresLotes = (r?: Record<string, string[]>): [string, string[]][] => Object.keys(r || {}).map(k => [k, (r || {})[k] || []]);
 
 const fmt = (n: number, casas = 3) => (Number(n) || 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
 
@@ -76,13 +81,14 @@ export function TabelaMateriaPrimaOP({ itens, titulo, real }: { itens: ConsumoMa
   return (
     <div className="rounded-md border border-linha overflow-x-auto">
       <div className="bg-papel-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-cinza border-b border-linha">{titulo}</div>
-      <table className="w-full text-[11px]">
+      <table className="w-full text-[11px] [&_th]:whitespace-nowrap [&_td.text-right]:whitespace-nowrap">
         <thead>
           <tr className="text-cinza text-[10px] uppercase">
             <th className="text-left py-1 px-3 font-bold">Matéria-prima</th>
             <th className="text-right py-1 px-3 font-bold">{real ? 'Necessário' : 'Necessária'}</th>
             <th className="text-right py-1 px-3 font-bold">{real ? 'Estoque na baixa' : 'Estoque atual'}</th>
             {real && <th className="text-right py-1 px-3 font-bold">Baixado</th>}
+            {real && <th className="text-left py-1 px-3 font-bold">Lotes usados</th>}
             <th className="text-right py-1 px-3 font-bold">Falta</th>
           </tr>
         </thead>
@@ -96,6 +102,13 @@ export function TabelaMateriaPrimaOP({ itens, titulo, real }: { itens: ConsumoMa
               <td className="py-1 px-3 text-right">{fmt(c.quantidade_necessaria)} {c.unidade}</td>
               <td className="py-1 px-3 text-right text-tinta-2">{fmt(c.estoque_atual)} {c.unidade}</td>
               {real && <td className="py-1 px-3 text-right">{fmt(c.quantidade_consumida || 0)} {c.unidade}</td>}
+              {real && (
+                <td className="py-1 px-3 text-left font-sans text-tinta-2">
+                  {(c.lotes_usados || []).length === 0
+                    ? '-'
+                    : (c.lotes_usados || []).map(u => `${u.lote} (${fmt(u.quantidade)} ${u.unidade})`).join(' · ')}
+                </td>
+              )}
               <td className={`py-1 px-3 text-right font-bold ${c.falta > 0 ? 'text-st-vencido' : 'text-eno-700'}`}>
                 {c.falta > 0 ? `-${fmt(c.falta)} ${c.unidade}` : 'OK'}
               </td>
@@ -129,10 +142,14 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
   const [formValidade, setFormValidade] = useState('');
   const [formOperador, setFormOperador] = useState('');
   const [formObs, setFormObs] = useState('');
+  const [erroAcao, setErroAcao] = useState('');
+  const [formLotesMp, setFormLotesMp] = useState<Record<string, string[]>>({});
+  const [lotesMp, setLotesMp] = useState<LoteMateriaPrima[]>([]);
 
   const recarregar = () => {
     setOps(carregarOrdensProducao());
     setProdutos(carregarEstoqueProdutos());
+    setLotesMp(carregarLotesMP());
     setVersao(v => v + 1);
   };
 
@@ -147,7 +164,9 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
     window.addEventListener(EVENTO_OPS, h);
     window.addEventListener('produtos_updated', h);
     window.addEventListener('pedidos_venda_updated', h);
+    window.addEventListener(EVENTO_LOTES_MP, h);
     return () => {
+      window.removeEventListener(EVENTO_LOTES_MP, h);
       window.removeEventListener(EVENTO_OPS, h);
       window.removeEventListener('produtos_updated', h);
       window.removeEventListener('pedidos_venda_updated', h);
@@ -227,14 +246,24 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
   };
 
   const abrirAcao = (op: OrdemProducao, tipo: 'APONTAR' | 'CONCLUIR') => {
-    const fab = op.data_fabricacao || hojeISO();
     setOpAcao({ op, tipo });
+    setErroAcao('');
     setFormPacotes(tipo === 'CONCLUIR' ? String(op.quantidade_produzida_pacotes || 0) : '');
-    setFormLote(op.lote || loteSugeridoOP(op.numero));
-    setFormFabricacao(fab);
-    setFormValidade(op.data_validade || validadePadraoProduto(op.produto_id, fab));
+    // Lote, fabricação e validade são informados pela produção (só vêm preenchidos se já foram lançados antes)
+    setFormLote(op.lote || '');
+    setFormFabricacao(op.data_fabricacao || '');
+    setFormValidade(op.data_validade || '');
     setFormOperador('');
     setFormObs('');
+    // Lotes de MP: no apontamento a produção escolhe; na conclusão já vêm os declarados nos apontamentos
+    setFormLotesMp(tipo === 'CONCLUIR' ? { ...(op.lotes_mp || {}) } : {});
+  };
+
+  const alternarLoteMp = (mpId: string, loteId: string) => {
+    setFormLotesMp(atual => {
+      const ids = atual[mpId] || [];
+      return { ...atual, [mpId]: ids.includes(loteId) ? ids.filter(i => i !== loteId) : [...ids, loteId] };
+    });
   };
 
   const handleIniciar = (op: OrdemProducao) => {
@@ -254,19 +283,46 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
   const handleConfirmarAcao = (e: React.FormEvent) => {
     e.preventDefault();
     if (!opAcao) return;
+    setErroAcao('');
     const { op, tipo } = opAcao;
     const pacotes = parseFloat(formPacotes) || 0;
     if (!formLote.trim()) {
-      alert('Informe o lote de fabricação.');
+      setErroAcao('Informe o lote de fabricação.');
+      return;
+    }
+    if (!formFabricacao) {
+      setErroAcao('Informe a data de fabricação.');
+      return;
+    }
+    if (formFabricacao > hojeISO()) {
+      setErroAcao('A data de fabricação não pode ser futura.');
       return;
     }
     if (!formValidade) {
-      alert('Informe a data de validade.');
+      setErroAcao('Informe a data de validade.');
       return;
     }
+    if (formValidade <= formFabricacao) {
+      setErroAcao('A validade precisa ser depois da data de fabricação.');
+      return;
+    }
+    // De qual lote saiu cada matéria-prima (obrigatório quando há lote cadastrado com saldo)
+    const semLote = consumoAcao.filter(c => c.quantidade_necessaria > 0 && lotesDisponiveisMP(c.materia_prima_id).length > 0 && (formLotesMp[c.materia_prima_id] || []).length === 0);
+    if (semLote.length > 0) {
+      setErroAcao(`Marque de qual lote saiu a matéria-prima:\n${semLote.map(c => `• ${c.materia_prima_nome}`).join('\n')}`);
+      return;
+    }
+    const lotesEscolhidos = Object.fromEntries(paresLotes(formLotesMp).filter(([, ids]) => ids.length > 0)) as Record<string, string[]>;
+    const textoLotes = paresLotes(lotesEscolhidos)
+      .map(([mpId, ids]) => {
+        const doMp = lotesMp.filter(l => ids.includes(l.id));
+        return doMp.length ? `${doMp[0].materia_prima_nome}: ${doMp.map(rotuloLoteMP).join(', ')}` : '';
+      })
+      .filter(Boolean)
+      .join(' · ');
     if (tipo === 'APONTAR') {
       if (pacotes === 0) {
-        alert('Informe a quantidade de pacotes produzidos (use negativo para corrigir).');
+        setErroAcao('Informe a quantidade de pacotes produzidos (use negativo para corrigir).');
         return;
       }
       apontarProducaoOP(op.id, pacotes, {
@@ -274,7 +330,9 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
         observacao: formObs || undefined,
         lote: formLote,
         data_fabricacao: formFabricacao,
-        data_validade: formValidade
+        data_validade: formValidade,
+        lotes_mp: lotesEscolhidos,
+        lotes_mp_texto: textoLotes || undefined
       });
       setOpAcao(null);
       return;
@@ -291,7 +349,8 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
       pacotes_produzidos: pacotes,
       lote: formLote,
       data_fabricacao: formFabricacao,
-      data_validade: formValidade
+      data_validade: formValidade,
+      lotes_mp: lotesEscolhidos
     });
     setOpAcao(null);
   };
@@ -405,6 +464,18 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
                       <span>• Val. {formatarDataBR(op.data_validade)}</span>
                     </div>
                   )}
+                  {op.status !== 'CONCLUIDA' && paresLotes(op.lotes_mp).some(([, ids]) => ids.length > 0) && (
+                    <div className="text-[11px] text-tinta-2">
+                      <span className="text-cinza">Lotes de MP: </span>
+                      {paresLotes(op.lotes_mp)
+                        .map(([, ids]) => {
+                          const doMp = lotesMp.filter(l => ids.includes(l.id));
+                          return doMp.length ? `${doMp[0].materia_prima_nome}: ${doMp.map(rotuloLoteMP).join(', ')}` : '';
+                        })
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </div>
+                  )}
                 </div>
 
                 <div className="lg:min-w-[240px] space-y-2">
@@ -424,25 +495,25 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
                       <div className="h-full bg-eno-600" style={{ width: `${progresso}%` }} />
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5 lg:justify-end max-lg:[&>button]:flex-1 max-lg:[&>button]:justify-center max-sm:[&>button]:h-10">
+                  <div className="flex flex-wrap gap-1.5 lg:justify-end max-lg:[&>button]:flex-1 max-lg:[&>button]:justify-center max-sm:[&>button]:h-11">
                     {op.status === 'PLANEJADA' && (
-                      <button onClick={() => handleIniciar(op)} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[5px] bg-st-producao hover:bg-st-producao text-white text-[11px] font-bold cursor-pointer">
-                        <Play className="w-3 h-3" /> Iniciar
+                      <button onClick={() => handleIniciar(op)} className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md bg-st-producao hover:opacity-90 text-white text-[12.5px] font-bold cursor-pointer">
+                        <Play className="w-4 h-4" /> Iniciar
                       </button>
                     )}
                     {aberta && (
-                      <button onClick={() => abrirAcao(op, 'APONTAR')} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[5px] bg-papel border border-linha-forte hover:bg-papel-2 text-tinta text-[11px] font-bold cursor-pointer">
-                        <PenLine className="w-3 h-3" /> Apontar
+                      <button onClick={() => abrirAcao(op, 'APONTAR')} className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md bg-eno-800 hover:bg-eno-900 text-white text-[12.5px] font-bold cursor-pointer">
+                        <PenLine className="w-4 h-4" /> Apontar produção
                       </button>
                     )}
                     {aberta && (
-                      <button onClick={() => abrirAcao(op, 'CONCLUIR')} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[5px] bg-eno-800 hover:bg-eno-900 text-white text-[11px] font-bold cursor-pointer">
-                        <CheckCircle2 className="w-3 h-3" /> Concluir
+                      <button onClick={() => abrirAcao(op, 'CONCLUIR')} className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md bg-papel border border-eno-700 text-eno-800 hover:bg-eno-50 text-[12.5px] font-bold cursor-pointer">
+                        <CheckCircle2 className="w-4 h-4" /> Concluir
                       </button>
                     )}
                     {aberta && modo === 'ADMIN' && (
-                      <button onClick={() => handleCancelar(op)} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-[5px] text-st-vencido hover:bg-st-vencido-bg text-[11px] font-bold cursor-pointer">
-                        <XCircle className="w-3 h-3" /> Cancelar
+                      <button onClick={() => handleCancelar(op)} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-st-vencido hover:bg-st-vencido-bg text-[12.5px] font-bold cursor-pointer">
+                        <XCircle className="w-4 h-4" /> Cancelar
                       </button>
                     )}
                   </div>
@@ -467,7 +538,7 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
       {/* MODAL: NOVA OP PARA ESTOQUE */}
       {novaAberta && (
         <div className="fixed inset-0 z-50 bg-eno-900/60 flex items-stretch sm:items-center justify-center p-0 sm:p-4">
-          <form onSubmit={handleCriarNova} className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md w-full max-w-2xl h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-y-auto shadow-xl text-xs flex flex-col">
+          <form onSubmit={handleCriarNova} className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md w-full max-w-2xl h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-y-auto shadow-xl text-xs flex flex-col">
             <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-2 border-b border-linha sticky top-0 bg-papel z-10">
               <h3 className="font-extrabold text-tinta text-sm">Nova Ordem de Produção para Estoque</h3>
               <button type="button" onClick={() => setNovaAberta(false)} className="inline-flex items-center justify-center w-10 h-10 -mr-2 shrink-0 rounded-md hover:bg-papel-3/60 cursor-pointer" aria-label="Fechar"><X className="w-4 h-4" /></button>
@@ -522,7 +593,7 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
       {/* MODAL: APONTAR / CONCLUIR */}
       {opAcao && (
         <div className="fixed inset-0 z-50 bg-eno-900/60 flex items-stretch sm:items-center justify-center p-0 sm:p-4">
-          <form onSubmit={handleConfirmarAcao} className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md w-full max-w-2xl h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-y-auto shadow-xl text-xs flex flex-col">
+          <form onSubmit={handleConfirmarAcao} className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md w-full max-w-2xl h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-y-auto shadow-xl text-xs flex flex-col">
             <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-2 border-b border-linha sticky top-0 bg-papel z-10">
               <h3 className="font-extrabold text-tinta text-sm">
                 {opAcao.tipo === 'APONTAR' ? 'Apontar produção' : 'Concluir'} — {opAcao.op.numero} · {opAcao.op.produto_nome}
@@ -542,34 +613,98 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
                 </div>
                 <div>
                   <label className="block font-bold text-tinta-2 mb-1">Lote *</label>
-                  <input type="text" value={formLote} onChange={e => setFormLote(e.target.value)} className="w-full border border-linha-forte rounded-md px-3 py-2 tabular-nums font-bold focus:outline-none focus:border-eno-700" />
+                  <input type="text" value={formLote} onChange={e => setFormLote(e.target.value)} placeholder="Nº do lote" className="w-full border border-linha-forte rounded-md px-3 py-2 tabular-nums font-bold focus:outline-none focus:border-eno-700" />
+                  {!formLote && (
+                    <button type="button" onClick={() => setFormLote(loteSugeridoOP(opAcao.op.numero))} className="mt-1 text-[11px] font-bold text-eno-700 underline cursor-pointer">
+                      Usar sugestão: {loteSugeridoOP(opAcao.op.numero)}
+                    </button>
+                  )}
                 </div>
                 <div>
-                  <label className="block font-bold text-tinta-2 mb-1">Fabricação</label>
+                  <label className="block font-bold text-tinta-2 mb-1">Fabricação *</label>
                   <input
                     type="date"
                     value={formFabricacao}
-                    onChange={e => {
-                      setFormFabricacao(e.target.value);
-                      if (e.target.value) setFormValidade(validadePadraoProduto(opAcao.op.produto_id, e.target.value));
-                    }}
+                    max={hojeISO()}
+                    onChange={e => setFormFabricacao(e.target.value)}
                     className="w-full border border-linha-forte rounded-md px-3 py-2 tabular-nums focus:outline-none focus:border-eno-700"
                   />
+                  {!formFabricacao && (
+                    <button type="button" onClick={() => setFormFabricacao(hojeISO())} className="mt-1 text-[11px] font-bold text-eno-700 underline cursor-pointer">
+                      Usar hoje
+                    </button>
+                  )}
                 </div>
                 <div>
                   <label className="block font-bold text-tinta-2 mb-1">Validade *</label>
-                  <input type="date" value={formValidade} onChange={e => setFormValidade(e.target.value)} className="w-full border border-linha-forte rounded-md px-3 py-2 tabular-nums focus:outline-none focus:border-eno-700" />
+                  <input type="date" value={formValidade} min={formFabricacao || undefined} onChange={e => setFormValidade(e.target.value)} className="w-full border border-linha-forte rounded-md px-3 py-2 tabular-nums focus:outline-none focus:border-eno-700" />
+                  {!formValidade && formFabricacao && (
+                    <button type="button" onClick={() => setFormValidade(validadePadraoProduto(opAcao.op.produto_id, formFabricacao))} className="mt-1 text-[11px] font-bold text-eno-700 underline cursor-pointer">
+                      Usar prazo da ficha técnica: {formatarDataBR(validadePadraoProduto(opAcao.op.produto_id, formFabricacao))}
+                    </button>
+                  )}
                 </div>
               </div>
               {opAcao.tipo === 'APONTAR' && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-bold text-tinta-2 mb-1">Operador / Turno</label>
-                    <input type="text" value={formOperador} onChange={e => setFormOperador(e.target.value)} className="w-full border border-linha-forte rounded-md px-3 py-2 focus:outline-none focus:border-eno-700" />
+                    <input type="text" list="colaboradores-op" value={formOperador} onChange={e => setFormOperador(e.target.value)} className="w-full border border-linha-forte rounded-md px-3 py-2 focus:outline-none focus:border-eno-700" />
+                    <datalist id="colaboradores-op">
+                      {carregarColaboradoresProducao().filter(c => c.status === 'ATIVO').map(c => <option key={c.id} value={c.nome_completo} />)}
+                    </datalist>
                   </div>
                   <div>
                     <label className="block font-bold text-tinta-2 mb-1">Observação</label>
                     <input type="text" value={formObs} onChange={e => setFormObs(e.target.value)} className="w-full border border-linha-forte rounded-md px-3 py-2 focus:outline-none focus:border-eno-700" />
+                  </div>
+                </div>
+              )}
+              {consumoAcao.some(c => c.quantidade_necessaria > 0) && (
+                <div className="rounded-md border border-linha">
+                  <div className="bg-papel-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-cinza border-b border-linha">
+                    Lotes de matéria-prima usados *
+                  </div>
+                  <div className="divide-y divide-linha">
+                    {consumoAcao.filter(c => c.quantidade_necessaria > 0).map(c => {
+                      const disponiveis = lotesMp
+                        .filter(l => l.materia_prima_id === c.materia_prima_id && (l.saldo > 0.0001 || (formLotesMp[c.materia_prima_id] || []).includes(l.id)))
+                        .sort((a, b) => (a.data_validade || '9999').localeCompare(b.data_validade || '9999') || a.data_entrada.localeCompare(b.data_entrada));
+                      const marcados = formLotesMp[c.materia_prima_id] || [];
+                      return (
+                        <div key={c.materia_prima_id} className="px-3 py-2 space-y-1.5">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="font-bold text-tinta">{c.materia_prima_nome}</span>
+                            <span className="text-[10.5px] text-cinza tabular-nums shrink-0">{fmt(c.quantidade_necessaria)} {c.unidade}</span>
+                          </div>
+                          {disponiveis.length === 0 ? (
+                            <div className="text-[11px] text-cinza italic">
+                              Nenhum lote com saldo. Lance a entrada desta matéria-prima com o lote do fornecedor.
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {disponiveis.map(l => {
+                                const ativo = marcados.includes(l.id);
+                                return (
+                                  <button
+                                    key={l.id}
+                                    type="button"
+                                    onClick={() => alternarLoteMp(c.materia_prima_id, l.id)}
+                                    aria-pressed={ativo}
+                                    className={`text-left px-2.5 py-1.5 rounded-md border text-[11px] leading-tight cursor-pointer max-w-full ${ativo ? 'border-eno-700 bg-eno-50 text-eno-900' : 'border-linha-forte bg-papel text-tinta-2 hover:bg-papel-2'}`}
+                                  >
+                                    <span className="font-bold tabular-nums break-all">{rotuloLoteMP(l)}</span>
+                                    <span className="block text-[10px] text-cinza tabular-nums">
+                                      saldo {fmt(l.saldo)} {l.unidade}{l.data_validade ? ` · val. ${formatarDataBR(l.data_validade)}` : ''}{l.fornecedor_nome ? ` · ${l.fornecedor_nome}` : ''}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -583,7 +718,12 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
                 </div>
               )}
             </div>
-            <div className="px-5 py-3 border-t border-linha flex justify-end gap-2 sticky bottom-0 bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:min-h-11">
+            <div className="px-5 py-3 border-t border-linha flex flex-wrap justify-end gap-2 sticky bottom-0 bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:min-h-11">
+              {erroAcao && (
+                <div role="alert" className="basis-full p-2.5 rounded-md bg-st-vencido-bg border border-st-vencido/30 text-st-vencido font-semibold whitespace-pre-line flex items-start gap-1.5">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-px" /> <span>{erroAcao}</span>
+                </div>
+              )}
               <button type="button" onClick={() => setOpAcao(null)} className="px-4 py-2 rounded-md bg-papel-3/60 hover:bg-linha font-bold cursor-pointer">Voltar</button>
               <button type="submit" className="px-4 py-2 rounded-md bg-eno-900 hover:bg-eno-950 text-white font-bold cursor-pointer">
                 {opAcao.tipo === 'APONTAR' ? 'Registrar apontamento' : 'Concluir OP'}
@@ -596,7 +736,7 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
   );
 
   if (modo === 'PRODUCAO') {
-    return <div className="w-full flex flex-col bg-papel-2 text-tinta rounded-md border border-linha overflow-hidden min-h-[60vh]">{conteudo}</div>;
+    return <div className="w-full flex flex-col text-tinta">{conteudo}</div>;
   }
 
   return (

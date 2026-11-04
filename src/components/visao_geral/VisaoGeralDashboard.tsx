@@ -389,7 +389,7 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
                     <li key={ped.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 px-4 py-2.5 border-b border-linha last:border-b-0">
                       <span className="min-w-0">
                         <span className="block text-[13.5px] font-semibold text-tinta truncate">{ped.cliente_nome}</span>
-                        <span className="block text-[11.5px] text-cinza tabular-nums">{ped.numero_pedido} · {formatarDataBR(ped.data_emissao)}</span>
+                        <span className="block text-[11.5px] text-cinza tabular-nums"><span className="whitespace-nowrap">{ped.numero_pedido}</span> · <span className="whitespace-nowrap">{formatarDataBR(ped.data_emissao)}</span></span>
                       </span>
                       <span className="text-right">
                         <span className="block text-[13.5px] font-bold tabular-nums text-tinta">{formatarMoeda(ped.valor_total)}</span>
@@ -470,10 +470,10 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
                   )}
                   {calculosRoca.slice(0, 5).map(calc => (
                     <tr key={calc.id} className={tabela.tr}>
-                      <td className={`${tabela.td} font-semibold text-tinta tabular-nums`}>{calc.numero_ticket}</td>
+                      <td className={`${tabela.td} font-semibold text-tinta tabular-nums whitespace-nowrap`}>{calc.numero_ticket}</td>
                       <td className={`${tabela.td} max-w-[220px] truncate`}>{calc.fornecedor_nome}</td>
-                      <td className={`${tabela.td} text-right tabular-nums`}>{numeroSeguro(calc.peso_total_kg).toLocaleString('pt-BR')} kg</td>
-                      <td className={`${tabela.td} text-right tabular-nums font-semibold text-tinta`}>{formatarMoeda(calc.valor_total_estimado)}</td>
+                      <td className={`${tabela.td} text-right tabular-nums whitespace-nowrap`}>{numeroSeguro(calc.peso_total_kg).toLocaleString('pt-BR')} kg</td>
+                      <td className={`${tabela.td} text-right tabular-nums font-semibold text-tinta whitespace-nowrap`}>{formatarMoeda(calc.valor_total_estimado)}</td>
                     </tr>
                   ))}
                 </tbody>

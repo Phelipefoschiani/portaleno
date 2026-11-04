@@ -123,7 +123,7 @@ export function ModalCadastro({
     <div className="fixed inset-0 z-[60] bg-eno-950/60 flex justify-center items-stretch sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label={titulo}>
       <form
         onSubmit={onSubmit}
-        className={`form-cadastro relative w-full ${largura} bg-papel-2 sm:rounded-md border border-linha flex flex-col h-dvh sm:h-auto sm:max-h-[calc(100dvh-3rem)] overflow-hidden shadow-[0_24px_60px_-20px_rgba(4,32,19,0.6)]`}
+        className={`min-w-0 form-cadastro relative w-full ${largura} bg-papel-2 sm:rounded-md border border-linha flex flex-col h-dvh sm:h-auto sm:max-h-[calc(100dvh-3rem)] overflow-hidden shadow-[0_24px_60px_-20px_rgba(4,32,19,0.6)]`}
       >
         <div className="h-[3px] filete-ouro shrink-0" aria-hidden />
         <div className="shrink-0 bg-papel border-b border-linha flex items-center gap-3 px-4 sm:px-6 py-3">

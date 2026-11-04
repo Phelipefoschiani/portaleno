@@ -49,6 +49,7 @@ import {
   validadePadraoProduto
 } from '../../data/ordensProducaoData';
 import { formatarDataBR, hojeISO, paraISO } from '../../lib/datas';
+import { carregarColaboradoresProducao } from '../../data/cadastrosData';
 
 // Validade padrão do pedido: prazo da ficha técnica do 1º produto (24 meses quando não informado), em 'AAAA-MM-DD'
 const validadePadraoPedidoISO = (p: PedidoVenda, fabricacao?: string) =>
@@ -89,7 +90,9 @@ export function PedidosEmProducao({ onNavigate }: Props) {
   const [produtoSelecionadoId, setProdutoSelecionadoId] = useState<string>('');
   const [qtdEmbalagensInput, setQtdEmbalagensInput] = useState<string>('');
   const [dataApontamento, setDataApontamento] = useState(hojeISO());
-  const [operadorTurno, setOperadorTurno] = useState('Turno A (Manhã) - Carlos Ferreira');
+  const [operadorTurno, setOperadorTurno] = useState('Turno A (Manhã)');
+  const [operadorNome, setOperadorNome] = useState('');
+  const [erroApontamento, setErroApontamento] = useState('');
   const [observacaoApontamento, setObservacaoApontamento] = useState('');
 
   // Rastreabilidade Obrigatória
@@ -138,10 +141,11 @@ export function PedidosEmProducao({ onNavigate }: Props) {
   // Abrir Modal de Apontamento por Produto (com opção de escolher produto inicial)
   const handleAbrirProducao = (p: PedidoVenda, produtoIdInicial?: string) => {
     setModalProducao(p);
-    setLoteInput(p.lote_producao || `LOT-${new Date().getFullYear()}-${p.numero_pedido.replace(/\D/g, '')}`);
-    const fab = paraISO(p.data_fabricacao) || hojeISO();
-    setDataFabricacaoInput(fab);
-    setDataVencimentoInput(paraISO(p.data_vencimento) || validadePadraoPedidoISO(p, fab));
+    setErroApontamento('');
+    // Lote, fabricação e vencimento são informados pela produção (só vêm preenchidos se já foram lançados)
+    setLoteInput(p.lote_producao || '');
+    setDataFabricacaoInput(paraISO(p.data_fabricacao) || '');
+    setDataVencimentoInput(paraISO(p.data_vencimento) || '');
     setDataApontamento(hojeISO());
     setQtdEmbalagensInput('');
     setObservacaoApontamento('');
@@ -167,10 +171,34 @@ export function PedidosEmProducao({ onNavigate }: Props) {
   const handleRegistrarProducaoProduto = (e: React.FormEvent) => {
     e.preventDefault();
     if (!modalProducao) return;
+    setErroApontamento('');
 
     const qtdEmbalagens = parseInt(qtdEmbalagensInput) || 0;
     if (qtdEmbalagens <= 0) {
-      alert('Informe uma quantidade válida de embalagens finalizadas.');
+      setErroApontamento('Informe uma quantidade válida de embalagens finalizadas.');
+      return;
+    }
+    // Sem lote, fabricação e vencimento não grava o produzido do dia (rastreabilidade)
+    const fabApont = paraISO(dataFabricacaoInput);
+    const vencApont = paraISO(dataVencimentoInput);
+    if (!loteInput.trim()) {
+      setErroApontamento('Informe o lote de fabricação para gravar o que foi produzido.');
+      return;
+    }
+    if (!fabApont) {
+      setErroApontamento('Informe a data de fabricação para gravar o que foi produzido.');
+      return;
+    }
+    if (fabApont > hojeISO()) {
+      setErroApontamento('A data de fabricação não pode ser futura.');
+      return;
+    }
+    if (!vencApont) {
+      setErroApontamento('Informe a data de vencimento para gravar o que foi produzido.');
+      return;
+    }
+    if (vencApont <= fabApont) {
+      setErroApontamento('O vencimento precisa ser depois da data de fabricação.');
       return;
     }
 
@@ -185,7 +213,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
     const itemAlvo = pedidoAtual.itens[itemAlvoIndex];
     const opItem = opDoItem(pedidoAtual.id, itemAlvoIndex);
     if (opItem?.status === 'CONCLUIDA') {
-      alert(`A ${opItem.numero} deste produto já foi concluída (estoque lançado). Para produzir mais, crie uma nova OP em "Ordens de Produção".`);
+      setErroApontamento(`A ${opItem.numero} deste produto já foi concluída (estoque lançado). Para produzir mais, crie uma nova OP em "Ordens de Produção".`);
       return;
     }
     const qtdAnterior = itemAlvo.quantidade_produzida || 0;
@@ -210,7 +238,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
       tipo_embalagem: itemAlvo.tipo_embalagem,
       quantidade_produzida_embalagens: qtdEmbalagens,
       quantidade_produzida_kg: pesoKgApontado,
-      operador: operadorTurno,
+      operador: [operadorTurno, operadorNome.trim()].filter(Boolean).join(' - '),
       lote: loteInput,
       observacao: observacaoApontamento || undefined
     };
@@ -283,14 +311,14 @@ export function PedidosEmProducao({ onNavigate }: Props) {
       : paraISO(pedido.data_vencimento);
     const fabricacaoEfetiva = (modalProducao && modalProducao.id === pedido.id
       ? (paraISO(dataFabricacaoInput) || paraISO(modalProducao.data_fabricacao))
-      : paraISO(pedido.data_fabricacao)) || hojeISO();
+      : paraISO(pedido.data_fabricacao)) || '';
 
-    if (!loteEfetivo || !vencimentoEfetivo) {
-      // Bloqueia e abre modal para preenchimento obrigatório
+    if (!loteEfetivo || !vencimentoEfetivo || !fabricacaoEfetiva || vencimentoEfetivo <= fabricacaoEfetiva) {
+      // Bloqueia e abre o modal para a produção preencher (nada vem inventado)
       setModalBloqueioLote(pedido);
-      setLoteInput(loteEfetivo || pedido.lote_producao || `LOT-${new Date().getFullYear()}-${pedido.numero_pedido.replace(/\D/g, '')}`);
+      setLoteInput(loteEfetivo || '');
       setDataFabricacaoInput(fabricacaoEfetiva);
-      setDataVencimentoInput(vencimentoEfetivo || validadePadraoPedidoISO(pedido, fabricacaoEfetiva));
+      setDataVencimentoInput(vencimentoEfetivo || '');
       return;
     }
 
@@ -329,12 +357,24 @@ export function PedidosEmProducao({ onNavigate }: Props) {
       alert('O Número do Lote de Fabricação é estritamente obrigatório.');
       return;
     }
+    const fabISO = paraISO(dataFabricacaoInput);
+    if (!fabISO) {
+      alert('Informe a data de fabricação.');
+      return;
+    }
+    if (fabISO > hojeISO()) {
+      alert('A data de fabricação não pode ser futura.');
+      return;
+    }
     const vencISO = paraISO(dataVencimentoInput);
     if (!vencISO) {
       alert('A Data de Vencimento é estritamente obrigatória.');
       return;
     }
-    const fabISO = paraISO(dataFabricacaoInput) || hojeISO();
+    if (vencISO <= fabISO) {
+      alert('O vencimento precisa ser depois da data de fabricação.');
+      return;
+    }
 
     const todos = carregarPedidosVenda();
     const index = todos.findIndex(p => p.id === modalBloqueioLote.id);
@@ -623,7 +663,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
       {/* 5. MODAL ACOMPANHAMENTO DE PRODUÇÃO COM ESCOLHA DO PRODUTO */}
       {modalProducao && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-5xl lg:max-w-6xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-5xl lg:max-w-6xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Cabeçalho do Modal */}
             <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">
@@ -856,8 +896,8 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                       </div>
                     </div>
 
-                    {/* Lote e Vencimento */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-eno-100">
+                    {/* Lote, Fabricação e Vencimento (obrigatórios para gravar o produzido) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 border-t border-eno-100">
                       <div>
                         <label className="block font-bold text-tinta-2 mb-1">
                           Número do Lote *
@@ -868,6 +908,20 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                           value={loteInput}
                           onChange={(e) => setLoteInput(e.target.value)}
                           placeholder="Ex: LOT-2026-F104"
+                          className="w-full bg-papel border border-linha-forte rounded-lg px-2.5 py-1.5 tabular-nums font-bold text-tinta focus:outline-none focus:border-eno-700"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-tinta-2 mb-1">
+                          Fabricação *
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          max={hojeISO()}
+                          value={paraISO(dataFabricacaoInput)}
+                          onChange={(e) => setDataFabricacaoInput(e.target.value)}
                           className="w-full bg-papel border border-linha-forte rounded-lg px-2.5 py-1.5 tabular-nums font-bold text-tinta focus:outline-none focus:border-eno-700"
                         />
                       </div>
@@ -889,15 +943,32 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block font-bold text-tinta-2 mb-1">Turno / Operador</label>
-                        <select
-                          value={operadorTurno}
-                          onChange={(e) => setOperadorTurno(e.target.value)}
-                          className="w-full bg-papel border border-linha-forte rounded-lg px-2.5 py-1.5 text-xs text-tinta cursor-pointer"
-                        >
-                          <option value="Turno A (Manhã) - Carlos Ferreira">Turno A (Manhã)</option>
-                          <option value="Turno B (Tarde) - Marcelo Silveira">Turno B (Tarde)</option>
-                          <option value="Turno C (Noite) - Robson Alves">Turno C (Noite)</option>
-                        </select>
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={operadorTurno}
+                            onChange={(e) => setOperadorTurno(e.target.value)}
+                            aria-label="Turno"
+                            className="w-full bg-papel border border-linha-forte rounded-lg px-2.5 py-1.5 text-xs text-tinta cursor-pointer"
+                          >
+                            <option value="Turno A (Manhã)">Turno A (Manhã)</option>
+                            <option value="Turno B (Tarde)">Turno B (Tarde)</option>
+                            <option value="Turno C (Noite)">Turno C (Noite)</option>
+                          </select>
+                          <input
+                            type="text"
+                            list="colaboradores-producao"
+                            value={operadorNome}
+                            onChange={(e) => setOperadorNome(e.target.value)}
+                            aria-label="Operador"
+                            placeholder="Operador"
+                            className="w-full min-w-0 bg-papel border border-linha-forte rounded-lg px-2.5 py-1.5 text-xs text-tinta"
+                          />
+                          <datalist id="colaboradores-producao">
+                            {carregarColaboradoresProducao().filter(c => c.status === 'ATIVO').map(c => (
+                              <option key={c.id} value={c.nome_completo} />
+                            ))}
+                          </datalist>
+                        </div>
                       </div>
 
                       <div>
@@ -912,10 +983,15 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                       </div>
                     </div>
 
+                    {erroApontamento && (
+                      <div role="alert" className="p-2.5 rounded-md bg-st-vencido-bg border border-st-vencido/30 text-st-vencido font-semibold">
+                        {erroApontamento}
+                      </div>
+                    )}
                     <div className="flex justify-end pt-2">
                       <button
                         type="submit"
-                        className="flex items-center gap-2 px-5 py-2 rounded-md bg-eno-800 hover:bg-eno-900 text-white font-bold text-xs cursor-pointer shadow-xs hover:shadow"
+                        className="flex items-center justify-center gap-2 px-5 py-2 max-sm:w-full max-sm:min-h-11 rounded-md bg-eno-800 hover:bg-eno-900 text-white font-bold text-xs cursor-pointer shadow-xs hover:shadow"
                       >
                         <Plus className="w-4 h-4" />
                         <span>Salvar Apontamento do Produto</span>
@@ -926,11 +1002,11 @@ export function PedidosEmProducao({ onNavigate }: Props) {
 
                 {/* HISTÓRICO DE APONTAMENTOS */}
                 <div className="lg:col-span-6 space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3">
                     <span className="font-bold text-tinta uppercase tracking-wider text-xs block">
                       Histórico de Apontamentos Realizados
                     </span>
-                    <span className="text-cinza tabular-nums text-[11px]">
+                    <span className="shrink-0 whitespace-nowrap text-cinza tabular-nums text-[11px]">
                       Total: <strong className="text-eno-800 font-bold">{modalProducao.quantidade_produzida_acumulada_kg?.toLocaleString('pt-BR') || 0} kg</strong>
                     </span>
                   </div>
@@ -1033,7 +1109,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
       {/* 6. MODAL BLOQUEIO: LOTE E VENCIMENTO OBRIGATÓRIOS PARA AVANÇAR */}
       {modalBloqueioLote && (
         <div className="fixed inset-0 z-[110] overflow-y-auto bg-black/80 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-center animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-lg bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-ouro flex flex-col">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-lg bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-ouro flex flex-col">
             <div className="bg-ouro-escuro text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <Lock className="w-5 h-5 text-white" />
@@ -1073,9 +1149,14 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                   required
                   value={loteInput}
                   onChange={(e) => setLoteInput(e.target.value)}
-                  placeholder="Ex: LOT-2026-F104"
+                  placeholder="Nº do lote"
                   className="w-full bg-papel-2 border border-linha-forte rounded-lg px-3 py-2 tabular-nums font-extrabold text-tinta focus:outline-none focus:border-eno-700"
                 />
+                {!loteInput && modalBloqueioLote && (
+                  <button type="button" onClick={() => setLoteInput(`LOT-${new Date().getFullYear()}-${modalBloqueioLote.numero_pedido.replace(/\D/g, '')}`)} className="mt-1 text-[11px] font-bold text-eno-700 underline cursor-pointer">
+                    Usar sugestão: LOT-{new Date().getFullYear()}-{modalBloqueioLote.numero_pedido.replace(/\D/g, '')}
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1100,9 +1181,15 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                     type="date"
                     required
                     value={paraISO(dataVencimentoInput)}
+                    min={paraISO(dataFabricacaoInput) || undefined}
                     onChange={(e) => setDataVencimentoInput(e.target.value)}
                     className="w-full bg-papel-2 border border-linha-forte rounded-lg px-3 py-2 tabular-nums font-bold text-tinta focus:outline-none focus:border-eno-700"
                   />
+                  {!dataVencimentoInput && paraISO(dataFabricacaoInput) && modalBloqueioLote && (
+                    <button type="button" onClick={() => setDataVencimentoInput(validadePadraoPedidoISO(modalBloqueioLote, paraISO(dataFabricacaoInput)))} className="mt-1 text-[11px] font-bold text-eno-700 underline cursor-pointer">
+                      Usar prazo da ficha: {formatarDataBR(validadePadraoPedidoISO(modalBloqueioLote, paraISO(dataFabricacaoInput)))}
+                    </button>
+                  )}
                 </div>
               </div>
 

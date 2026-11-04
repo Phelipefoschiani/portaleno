@@ -1547,7 +1547,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
           ) : selectedRca ? (
             
             /* VISUALIZAÇÃO DOS DETALHES DO RCA */
-            <div className="w-full max-w-5xl mx-auto space-y-5">
+            <div className="@container w-full max-w-5xl mx-auto space-y-5">
               <div className="flex items-center gap-2 pt-1 md:pt-0">
                 <button
                   type="button"
@@ -1568,7 +1568,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
               
               {/* CARTÃO SUPERIOR: PERFIL DO RCA */}
               <div className="bg-papel rounded-md border border-linha p-6  text-left">
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                <div className="flex flex-col @2xl:flex-row @2xl:items-start justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1.5">
                       <span className="px-2.5 py-1 rounded-md bg-eno-900 text-eno-600 tabular-nums text-xs font-extrabold tracking-wider">
@@ -1627,7 +1627,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                   </div>
 
                   {/* BOX PIX COM CÓPIA RÁPIDA */}
-                  <div className="bg-eno-50/80 border border-linha-forte rounded-md p-4 sm:w-80 shrink-0 text-left">
+                  <div className="bg-eno-50/80 border border-linha-forte rounded-md p-4 @2xl:w-80 shrink-0 text-left">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-eno-800 flex items-center gap-1">
                         <CreditCard className="w-3.5 h-3.5 text-eno-600" />
@@ -1654,7 +1654,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
               </div>
 
               {/* 4 CARDS DE INDICADORES (SEM METAS) */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-left">
+              <div className="grid grid-cols-2 @3xl:grid-cols-4 gap-4 text-left">
                 <div className="bg-papel p-4 rounded-md border border-linha ">
                   <span className="text-[11px] font-bold uppercase text-cinza block mb-1">Modelo de Comissão</span>
                   <p className="text-base font-extrabold text-tinta flex items-center gap-1.5">
@@ -1704,7 +1704,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 @3xl:grid-cols-3 gap-4">
                   {/* Regra Geral */}
                   <div className="bg-papel-2 p-3.5 rounded-md border border-linha">
                     <span className="text-[10px] font-bold uppercase text-cinza block mb-1">1. Taxa Geral Padrão</span>
@@ -1785,7 +1785,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                     <p className="text-xs mt-1">Edite o cadastro para vincular clientes à carteira.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 @xl:grid-cols-2 gap-3">
                     {clientesDoRca.map((cli) => {
                       return (
                         <div
@@ -1794,7 +1794,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           className="p-4 rounded-md border border-linha/90 bg-papel hover:bg-eno-50/40 hover:border-eno-600/50 transition-all cursor-pointer  group"
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <div>
+                            <div className="min-w-0">
                               <h4 className="text-sm font-extrabold text-tinta group-hover:text-eno-800 transition-colors line-clamp-1">
                                 {cli.razao_social}
                               </h4>
@@ -1807,7 +1807,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                             </span>
                           </div>
 
-                          <div className="mt-2.5 grid grid-cols-3 gap-2 text-left bg-papel-2 p-2.5 rounded-lg border border-linha">
+                          <div className="mt-2.5 grid grid-cols-3 gap-2 text-left [&>div]:min-w-0 [&>div>span:last-child]:whitespace-nowrap bg-papel-2 p-2.5 rounded-lg border border-linha">
                             <div>
                               <span className="text-[10px] text-cinza font-bold block uppercase">Compras</span>
                               <span className="text-xs font-extrabold text-tinta">{cli.qtd_compras} pedidos</span>
@@ -1882,7 +1882,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-left text-xs [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap">
                     <thead>
                       <tr className="border-b border-linha bg-papel-2 text-tinta-2 font-bold uppercase text-[10px]">
                         <th className="py-2.5 px-3">Pedido</th>
@@ -1903,7 +1903,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                           <tr key={v.id} className="hover:bg-papel-2/80 transition-colors">
                             <td className="py-3 px-3 tabular-nums font-bold text-tinta">{v.numero_pedido}</td>
                             <td className="py-3 px-3 text-tinta-2">{formatarDataBR(v.data)}</td>
-                            <td className="py-3 px-3">
+                            <td className="py-3 px-3 !whitespace-normal min-w-40">
                               <p className="font-bold text-tinta line-clamp-1">{v.cliente_nome}</p>
                               <p className="text-[10px] text-cinza">{v.cliente_cidade}</p>
                             </td>
@@ -1976,7 +1976,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
       {/* MODAL DE DETALHES DO CLIENTE VINCULADO (AMPLO E HORIZONTAL) */}
       {clienteModal && (
         <div className="fixed inset-0 bg-eno-900/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start animate-fadeIn">
-          <div className="bg-papel rounded-md border border-linha  max-w-4xl sm:max-w-5xl w-full p-6 text-left my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] overflow-y-auto flex flex-col animate-in fade-in zoom-in-95 duration-150">
+          <div className="min-w-0 bg-papel rounded-md border border-linha  max-w-4xl sm:max-w-5xl w-full p-6 text-left my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] overflow-y-auto flex flex-col animate-in fade-in zoom-in-95 duration-150">
             
             <div className="flex items-start justify-between pb-4 border-b border-linha">
               <div className="flex items-center gap-3">

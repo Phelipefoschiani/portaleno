@@ -1,24 +1,40 @@
 import React, { useState } from 'react';
+import { ClipboardList, PackagePlus, Users } from 'lucide-react';
 import { OrdensProducaoPainel } from './OrdensProducaoPainel';
 import { CadastroProducao } from '../cadastros/CadastroProducao';
-import { Segmentado } from '../ui/BarraFiltros';
+import { EntradaMateriaPrimaProducao } from './EntradaMateriaPrimaProducao';
+import { MolduraPortal } from '../portais/MolduraPortal';
 
-// Portal do perfil PRODUCAO: fila de Ordens de Produção (sem valores financeiros) + cadastro de colaboradores
-export function PortalProducao() {
-  const [aba, setAba] = useState<'OPS' | 'COLABORADORES'>('OPS');
+type AbaProducao = 'OPS' | 'ENTRADA_MP' | 'COLABORADORES';
+
+// Portal do perfil PRODUCAO: fila de Ordens de Produção, entrada de matéria-prima (lote do fornecedor) e colaboradores
+export function PortalProducao({ onVoltar, conta, ehAdmin }: { onVoltar: () => void; conta?: string; ehAdmin?: boolean }) {
+  const [aba, setAba] = useState<AbaProducao>('OPS');
   return (
-    <div className="space-y-4">
-      <Segmentado<'OPS' | 'COLABORADORES'>
-        rotuloAria="Seções do portal da produção"
-        valor={aba}
-        onChange={setAba}
-        className="w-full sm:w-fit [&>button]:h-10 sm:[&>button]:h-8 [&>button]:flex-1 sm:[&>button]:flex-none"
-        opcoes={[
-          { valor: 'OPS', rotulo: 'Fila de produção (OPs)' },
-          { valor: 'COLABORADORES', rotulo: 'Colaboradores' },
-        ]}
-      />
-      {aba === 'OPS' ? <OrdensProducaoPainel modo="PRODUCAO" /> : <CadastroProducao />}
-    </div>
+    <MolduraPortal<AbaProducao>
+      portal="Chão de fábrica"
+      conta={conta}
+      onVoltar={onVoltar}
+      ehAdmin={ehAdmin}
+      abas={[
+        { id: 'OPS', rotulo: 'Ordens de produção', curto: 'Ordens', Icone: ClipboardList },
+        { id: 'ENTRADA_MP', rotulo: 'Entrada de matéria-prima', curto: 'Matéria-prima', Icone: PackagePlus },
+        { id: 'COLABORADORES', rotulo: 'Colaboradores', curto: 'Equipe', Icone: Users },
+      ]}
+      abaAtiva={aba}
+      onAba={setAba}
+    >
+      {aba === 'OPS' && <OrdensProducaoPainel modo="PRODUCAO" />}
+      {aba === 'ENTRADA_MP' && (
+        <div className="px-3 sm:px-5 pt-4">
+          <EntradaMateriaPrimaProducao />
+        </div>
+      )}
+      {aba === 'COLABORADORES' && (
+        <div className="px-3 sm:px-5 pt-4">
+          <CadastroProducao />
+        </div>
+      )}
+    </MolduraPortal>
   );
 }

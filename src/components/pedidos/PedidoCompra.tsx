@@ -1194,7 +1194,7 @@ export function PedidoCompra() {
       {/* ========================================================= */}
       {modalNovoPedido && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md border-0 sm:border border-linha shadow-2xl max-w-2xl sm:max-w-3xl w-full h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)] flex flex-col sm:my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md border-0 sm:border border-linha shadow-2xl max-w-2xl sm:max-w-3xl w-full h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)] flex flex-col sm:my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             
             {/* Topo do Modal */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-linha bg-papel-2 shrink-0">
@@ -1468,7 +1468,7 @@ export function PedidoCompra() {
       {/* ========================================================= */}
       {modalEditarPedido && pedidoEditando && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md border-0 sm:border border-linha shadow-2xl max-w-5xl lg:max-w-6xl w-full h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)] flex flex-col sm:my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md border-0 sm:border border-linha shadow-2xl max-w-5xl lg:max-w-6xl w-full h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)] flex flex-col sm:my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             
             {/* Topo do Modal de Edição */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-linha bg-papel-2 shrink-0">
@@ -1792,7 +1792,7 @@ export function PedidoCompra() {
       {/* ========================================================= */}
       {pedidoVisualizarA4 && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/80 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-eno-900 rounded-none sm:rounded-md border-0 sm:border border-eno-800 shadow-2xl max-w-5xl lg:max-w-6xl w-full h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)] flex flex-col sm:my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-eno-900 rounded-none sm:rounded-md border-0 sm:border border-eno-800 shadow-2xl max-w-5xl lg:max-w-6xl w-full h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)] flex flex-col sm:my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             
             {/* Barra Superior de Ações */}
             <div className="flex items-center justify-between px-5 py-2.5 border-b border-eno-800 bg-eno-800 text-white shrink-0">
@@ -2015,7 +2015,7 @@ export function PedidoCompra() {
       {/* ========================================================= */}
       {pedidoEdicaoDestopo && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md border-0 sm:border border-linha shadow-2xl max-w-2xl sm:max-w-3xl w-full p-6 sm:p-7 space-y-4 sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md border-0 sm:border border-linha shadow-2xl max-w-2xl sm:max-w-3xl w-full p-6 sm:p-7 space-y-4 sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-linha pb-3">
               <div className="flex items-center gap-2 text-st-aguardando font-extrabold text-sm">
                 <Edit2 className="w-4 h-4 text-st-aguardando" />
@@ -2081,7 +2081,7 @@ export function PedidoCompra() {
       {/* ========================================================================= */}
       {pedidoDefinirPagamento && (
         <div className="fixed inset-0 z-[120] overflow-y-auto bg-black/70 backdrop-blur-xs p-0 sm:p-6 flex justify-center items-stretch sm:items-start animate-fadeIn">
-          <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-4xl sm:max-w-5xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
+          <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base relative w-full max-w-4xl sm:max-w-5xl bg-papel rounded-none sm:rounded-md shadow-2xl overflow-hidden border-0 sm:border border-linha flex flex-col sm:my-auto h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-3.5rem)]">
             
             {/* Topo do Modal */}
             <div className="bg-eno-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-eno-800 shrink-0">

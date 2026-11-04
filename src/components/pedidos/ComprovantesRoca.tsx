@@ -198,7 +198,7 @@ export function ModalComprovantes({ calculo, onFechar, permitirRemover = false, 
 
   return (
     <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-xs flex items-stretch sm:items-center justify-center p-0 sm:p-4" onClick={onFechar}>
-      <div className="max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md max-w-2xl w-full shadow-2xl border-0 sm:border border-linha h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="min-w-0 max-sm:[&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:min-h-11 max-sm:[&_input]:text-base max-sm:[&_select]:min-h-11 max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base bg-papel rounded-none sm:rounded-md max-w-2xl w-full shadow-2xl border-0 sm:border border-linha h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="px-4 sm:px-5 py-3 border-b border-linha flex items-center justify-between gap-2 shrink-0">
           <div className="min-w-0">
             <span className="text-[10.5px] uppercase tracking-[0.14em] font-bold text-cinza">Comprovantes de pagamento</span>
@@ -454,12 +454,12 @@ export function ExtratoAgricultor({ calculos, onVerTicket, permitirRemoverCompro
                       <div className="font-extrabold text-tinta tabular-nums">{l.calculo.numero_ticket}</div>
                       <div className="text-[11px] text-cinza">{formatarDataBR(l.calculo.data)} • {l.calculo.total_sacos} sc</div>
                     </td>
-                    <td data-rotulo="Bruto" className="py-3 px-3 text-right tabular-nums text-tinta-2">{kg(l.peso_bruto_kg)}</td>
-                    <td data-rotulo="Desconto" className="py-3 px-3 text-right tabular-nums text-st-aguardando">{l.desconto_kg > 0 ? `- ${kg(l.desconto_kg)}` : '—'}</td>
-                    <td data-rotulo="Líquido" className="py-3 px-3 text-right tabular-nums font-bold text-eno-800">{kg(l.peso_liquido_kg)}</td>
-                    <td data-rotulo="Preço/kg" className="py-3 px-3 text-right tabular-nums text-tinta-2">{formatarMoeda(l.calculo.preco_por_kg)}</td>
-                    <td data-rotulo="Valor total" className="py-3 px-3 text-right tabular-nums font-extrabold text-tinta">{formatarMoeda(l.valor_total)}</td>
-                    <td data-rotulo="Recebido" className="py-3 px-3 text-right tabular-nums font-bold text-eno-700">{formatarMoeda(l.valor_recebido)}</td>
+                    <td data-rotulo="Bruto" className="py-3 px-3 text-right tabular-nums whitespace-nowrap text-tinta-2">{kg(l.peso_bruto_kg)}</td>
+                    <td data-rotulo="Desconto" className="py-3 px-3 text-right tabular-nums whitespace-nowrap text-st-aguardando">{l.desconto_kg > 0 ? `- ${kg(l.desconto_kg)}` : '—'}</td>
+                    <td data-rotulo="Líquido" className="py-3 px-3 text-right tabular-nums whitespace-nowrap font-bold text-eno-800">{kg(l.peso_liquido_kg)}</td>
+                    <td data-rotulo="Preço/kg" className="py-3 px-3 text-right tabular-nums whitespace-nowrap text-tinta-2">{formatarMoeda(l.calculo.preco_por_kg)}</td>
+                    <td data-rotulo="Valor total" className="py-3 px-3 text-right tabular-nums whitespace-nowrap font-extrabold text-tinta">{formatarMoeda(l.valor_total)}</td>
+                    <td data-rotulo="Recebido" className="py-3 px-3 text-right tabular-nums whitespace-nowrap font-bold text-eno-700">{formatarMoeda(l.valor_recebido)}</td>
                     <td data-rotulo="Pago em / Forma" className="py-3 px-3 text-tinta-2">
                       {l.pagamentos.length > 0 ? (
                         <>
@@ -468,7 +468,7 @@ export function ExtratoAgricultor({ calculos, onVerTicket, permitirRemoverCompro
                         </>
                       ) : <span className="text-cinza">—</span>}
                     </td>
-                    <td data-rotulo="Saldo" className="py-3 px-3 text-right tabular-nums font-bold text-st-aguardando">{l.saldo > 0.009 ? formatarMoeda(l.saldo) : '—'}</td>
+                    <td data-rotulo="Saldo" className="py-3 px-3 text-right tabular-nums whitespace-nowrap font-bold text-st-aguardando">{l.saldo > 0.009 ? formatarMoeda(l.saldo) : '—'}</td>
                     <td data-rotulo="Vencimento" className={`py-3 px-3 font-bold ${l.status === 'VENCIDO' ? 'text-st-vencido' : 'text-tinta-2'}`}>
                       {l.vencimento ? formatarDataBR(l.vencimento) : (l.saldo > 0.009 ? <span className="text-cinza font-normal">A definir</span> : '—')}
                     </td>

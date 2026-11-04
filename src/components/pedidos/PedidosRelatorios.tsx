@@ -664,7 +664,7 @@ export function PedidosRelatorios({ onNavigate }: Props) {
                       <td data-rotulo="Data Programada" className="py-2.5 px-4 text-tinta-2">{p.programacao_entrega?.data_programada || p.data_previsao_entrega}</td>
                       <td data-rotulo="Data Entrega" className="py-2.5 px-4 text-tinta font-bold">{p.data_entrega_realizada || 'Em trânsito'}</td>
                       <td data-rotulo="Motorista / Transportadora" className="py-2.5 px-4 font-sans text-tinta-2">
-                        {p.programacao_entrega?.motorista || p.motorista_nome || 'Sebastião Antunes'} ({p.transportadora || 'Própria'})
+                        {p.programacao_entrega?.motorista || p.motorista_nome || '-'} ({p.transportadora || 'Própria'})
                       </td>
                       <td data-rotulo="Status" className="py-2.5 px-4 text-center font-sans">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${

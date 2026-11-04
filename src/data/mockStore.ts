@@ -2,7 +2,9 @@
 import { integrarEntradaMateriaPrima, estornarEntradaMateriaPrima } from './pipelineIntegrado';
 import type { RegistroEntradaMateriaPrima } from './pipelineIntegrado';
 import { hojeISO, paraISO, somarDias } from '../lib/datas';
-import { registrarBaixaNoCaixa, estornarBaixaNoCaixa, conferirSaldoParaPagar, valorJaDebitadoNoCaixa } from './financeiroData';
+import { registrarBaixaNoCaixa, estornarBaixaNoCaixa, conferirSaldoParaPagar, valorJaDebitadoNoCaixa, carregarNotasEntrada } from './financeiroData';
+import { guardarNotaEntrada, removerNotasEntradaDoVinculo } from './notasFornecedorData';
+import type { NotaFornecedor } from './notasFornecedorData';
 
 export type StatusPedidoCompra = 'A Confirmar' | 'Confirmado' | 'Programado' | 'Orçamento' | 'Entregue (A Pagar)' | 'Pago';
 
@@ -57,6 +59,10 @@ export interface PedidoCompraGeral {
   observacoes?: string;
   // Integração com estoque/financeiro
   materia_prima_id?: string; // matéria-prima cadastrada correspondente (opcional; senão, procura pelo nome)
+  lote_mp?: string; // lote do fornecedor (rastreabilidade da matéria-prima)
+  validade_mp?: string; // AAAA-MM-DD
+  origem_lancamento?: 'PRODUCAO'; // entrada lançada pelo portal da produção
+  nota_fiscal_entrada?: NotaFornecedor; // nota do fornecedor (XML importado ou digitada)
   entrada_estoque?: RegistroEntradaMateriaPrima; // preenchido quando a entrada no estoque já foi feita (uma única vez)
   efetivado_em?: string; // quando virou despesa/título no financeiro
 }
@@ -251,6 +257,7 @@ export interface DadosEfetivacaoCompra {
   numero_documento?: string;
   status_final?: StatusPedidoCompra; // padrão: 'Pago' ou 'Entregue (A Pagar)'
   ids_legados?: string[]; // ids extras (ex.: id do cálculo na roça) para limpar lançamentos antigos
+  nota_fiscal?: NotaFornecedor; // nota do fornecedor desta compra
 }
 
 export interface ResultadoEfetivacaoCompra {
@@ -276,6 +283,7 @@ export function efetivarPedidoCompra(pedidoId: string, dados: DadosEfetivacaoCom
   }
   if (dados.categoria) pedido.categoria = dados.categoria;
   if (dados.forma_pagamento) pedido.forma_pagamento = dados.forma_pagamento as PedidoCompraGeral['forma_pagamento'];
+  if (dados.nota_fiscal) pedido.nota_fiscal_entrada = dados.nota_fiscal;
 
   const categoria = categoriaFinanceiraCompra(pedido.categoria);
   const setor = setorDaCategoria(categoria);
@@ -283,7 +291,7 @@ export function efetivarPedidoCompra(pedidoId: string, dados: DadosEfetivacaoCom
   const dataMov = paraISO(dados.data) || hojeISO();
   const valorTotal = Number(pedido.valor_total) || 0;
   const chaves = [pedido.id, ...(dados.ids_legados || [])];
-  const numeroDoc = dados.numero_documento || `PC-${pedido.id.toUpperCase()}`;
+  const numeroDoc = dados.numero_documento || (pedido.nota_fiscal_entrada ? `NF-${pedido.nota_fiscal_entrada.numero}` : `PC-${pedido.id.toUpperCase()}`);
 
   // 2. Remove lançamentos anteriores do mesmo pedido (programados, despesas e títulos ainda não pagos)
   const despesasTodas = lerJson(CHAVE_DESPESAS);
@@ -310,7 +318,8 @@ export function efetivarPedidoCompra(pedidoId: string, dados: DadosEfetivacaoCom
     responsavel: pedido.comprador_nome || 'Gestão de Suprimentos',
     forma_pagamento: pedido.forma_pagamento || 'PIX',
     conta_bancaria: dados.conta_bancaria,
-    comprovante_anexo: true
+    comprovante_anexo: true,
+    nota_fiscal: pedido.nota_fiscal_entrada
   });
   const novoTitulo = (valor: number, vencimento: string, sufixo: string, obs: string) => ({
     id: `pag_pc_${pedido.id}_${ts}${sufixo}`,
@@ -382,12 +391,24 @@ export function efetivarPedidoCompra(pedidoId: string, dados: DadosEfetivacaoCom
         tipoParceiro: pedido.tipo_parceiro === 'AGRICULTOR' ? 'Agricultor' : 'Fornecedor',
         numeroNF: numeroDoc,
         data: pedido.data,
-        materiaPrimaId: pedido.materia_prima_id
+        materiaPrimaId: pedido.materia_prima_id,
+        lote: pedido.lote_mp,
+        validadeLote: pedido.validade_mp,
+        pedidoCompraId: pedido.id,
+        notaFornecedor: pedido.nota_fiscal_entrada
       });
       if (entrada) pedido.entrada_estoque = entrada;
     } catch (e) {
       console.error('Erro na entrada de matéria-prima:', e);
     }
+  }
+
+  // Nota do fornecedor nas Notas de Entrada (uma vez; a entrada de matéria-prima já pode ter registrado)
+  if (pedido.nota_fiscal_entrada && !carregarNotasEntrada().some(n => n.pedido_compra_id === pedido.id)) {
+    guardarNotaEntrada(pedido.nota_fiscal_entrada, {
+      pedido_compra_id: pedido.id,
+      descricao: `${pedido.item_descricao} - Qtd: ${pedido.quantidade} ${pedido.unidade_medida}`
+    });
   }
 
   pedido.efetivado_em = new Date().toISOString();
@@ -503,6 +524,7 @@ export function excluirPedidoCompra(pedidoId: string, idsLegados: string[] = [])
     const titulos = titulosTodos.filter((t: any) => !vincT(t));
     localStorage.setItem(CHAVE_TITULOS_PAGAR, JSON.stringify(titulos));
     if (pedido?.entrada_estoque) estornarEntradaMateriaPrima(pedido.entrada_estoque);
+    removerNotasEntradaDoVinculo({ pedido_compra_id: pedidoId });
     window.dispatchEvent(new Event('financeiro_updated'));
     window.dispatchEvent(new Event('produtos_updated'));
   } catch (err) {

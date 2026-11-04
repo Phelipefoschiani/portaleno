@@ -118,7 +118,7 @@ export function PortalAgricultor({ onVoltar, agricultorId, permitirSelecaoAdmin 
       {/* Comprovante de pesagem: tela cheia no celular, janela no computador */}
       {ticketModal && (
         <div className="fixed inset-0 z-50 bg-eno-950/60 flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label={`Comprovante ${ticketModal.numero_ticket}`}>
-          <div className="bg-papel w-full sm:max-w-lg h-dvh sm:h-auto sm:max-h-[90vh] sm:rounded-md border border-linha flex flex-col overflow-hidden shadow-[0_24px_60px_-20px_rgba(4,32,19,0.6)]">
+          <div className="min-w-0 bg-papel w-full sm:max-w-lg h-dvh sm:h-auto sm:max-h-[90vh] sm:rounded-md border border-linha flex flex-col overflow-hidden shadow-[0_24px_60px_-20px_rgba(4,32,19,0.6)]">
             <div className="h-[3px] filete-ouro shrink-0" aria-hidden />
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-linha shrink-0">
               <div className="min-w-0">

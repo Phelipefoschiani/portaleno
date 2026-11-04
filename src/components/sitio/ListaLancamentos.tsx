@@ -111,7 +111,7 @@ export function DetalheLancamento({ d, onFechar }: { d: DespesaSitio; onFechar: 
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[#021a10]/75" onClick={onFechar}>
       <div
         onClick={e => e.stopPropagation()}
-        className="w-full sm:max-w-md max-h-[90dvh] overflow-y-auto bg-papel rounded-t-3xl sm:rounded-3xl shadow-2xl"
+        className="min-w-0 w-full sm:max-w-md max-h-[90dvh] overflow-y-auto bg-papel rounded-t-3xl sm:rounded-3xl shadow-2xl"
       >
         <div className="sticky top-0 bg-eno-900 text-white px-5 py-4 flex items-start justify-between gap-3">
           <div className="min-w-0">

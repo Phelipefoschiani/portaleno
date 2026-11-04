@@ -109,7 +109,7 @@ export function ModalFolha({
     </>
   );
 
-  const casca = `relative flex flex-col w-full h-[100dvh] sm:h-auto sm:max-h-[calc(100dvh-3rem)] ${largura} bg-papel-2 sm:rounded-lg sm:border sm:border-linha shadow-[0_30px_80px_-30px_rgba(4,32,19,0.6)] overflow-hidden`;
+  const casca = `relative flex flex-col w-full min-w-0 h-[100dvh] sm:h-auto sm:max-h-[calc(100dvh-3rem)] ${largura} bg-papel-2 sm:rounded-lg sm:border sm:border-linha shadow-[0_30px_80px_-30px_rgba(4,32,19,0.6)] overflow-hidden`;
 
   return (
     <div
