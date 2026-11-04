@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { mascaraCpfCnpj, mascaraInscricaoEstadual, ESTADOS_UF } from '../../lib/mascarasCadastro';
 import { CampoNumero } from '../ui/CampoNumero';
 import { 
   Search, 
@@ -867,7 +868,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                       <input
                         type="text"
                         value={formData.cpf_cnpj || ''}
-                        onChange={(e) => setFormData({ ...formData, cpf_cnpj: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, cpf_cnpj: mascaraCpfCnpj(e.target.value) })}
                         className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs tabular-nums font-bold text-tinta focus:outline-none focus:ring-2 focus:ring-eno-600"
                         placeholder={formData.tipo_pessoa === 'PJ' ? '00.000.000/0001-00' : '000.000.000-00'}
                         required
@@ -1519,10 +1520,9 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                         })}
                         className="w-full bg-papel border border-linha-forte rounded-md px-3 py-2 text-xs font-bold text-tinta"
                       >
-                        <option value="PR">Paraná (PR)</option>
-                        <option value="SP">São Paulo (SP)</option>
-                        <option value="MS">Mato Grosso do Sul (MS)</option>
-                        <option value="SC">Santa Catarina (SC)</option>
+                        {ESTADOS_UF.map(({ uf, nome }) => (
+                          <option key={uf} value={uf}>{nome} ({uf})</option>
+                        ))}
                       </select>
                     </div>
                     <div>

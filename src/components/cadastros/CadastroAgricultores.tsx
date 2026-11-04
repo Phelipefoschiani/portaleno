@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { mascaraCpfCnpj, mascaraInscricaoEstadual, ESTADOS_UF } from '../../lib/mascarasCadastro';
 import { 
   Search, 
   Plus, 
@@ -601,7 +602,7 @@ export function CadastroAgricultores() {
                       type="text"
                       required
                       value={formData.cpf_cnpj}
-                      onChange={(e) => setFormData({ ...formData, cpf_cnpj: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, cpf_cnpj: mascaraCpfCnpj(e.target.value) })}
                       placeholder={formData.tipo_pessoa === 'PF' ? '000.000.000-00' : '00.000.000/0001-00'}
                       className="w-full px-3.5 py-2 rounded-md border border-linha-forte text-xs sm:text-sm tabular-nums focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20"
                     />
@@ -614,7 +615,7 @@ export function CadastroAgricultores() {
                     <input
                       type="text"
                       value={formData.ie_rural}
-                      onChange={(e) => setFormData({ ...formData, ie_rural: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, ie_rural: mascaraInscricaoEstadual(e.target.value) })}
                       placeholder="Ex: PR-904.312.11-0"
                       className="w-full px-3.5 py-2 rounded-md border border-linha-forte text-xs sm:text-sm tabular-nums focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20"
                     />
@@ -698,7 +699,7 @@ export function CadastroAgricultores() {
                       onChange={(e) => setFormData({ ...formData, uf: e.target.value })}
                       className="w-full px-3.5 py-2 rounded-md border border-linha-forte text-xs sm:text-sm font-bold bg-papel focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20"
                     >
-                      {['PR', 'SP', 'MG', 'RJ', 'SC', 'RS', 'GO', 'MS', 'MT', 'BA', 'ES', 'DF'].map(uf => (
+                      {ESTADOS_UF.map(({ uf }) => (
                         <option key={uf} value={uf}>{uf}</option>
                       ))}
                     </select>

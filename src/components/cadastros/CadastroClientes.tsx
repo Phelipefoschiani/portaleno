@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { mascaraCpfCnpj, mascaraInscricaoEstadual, ESTADOS_UF } from '../../lib/mascarasCadastro';
 import { 
   Search, 
   Plus, 
@@ -889,7 +890,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     type="text"
                     required
                     value={formData.cpf_cnpj}
-                    onChange={(e) => setFormData({ ...formData, cpf_cnpj: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, cpf_cnpj: mascaraCpfCnpj(e.target.value) })}
                     placeholder={formData.tipo_pessoa === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00'}
                     className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm tabular-nums font-semibold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
@@ -903,7 +904,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                   <input
                     type="text"
                     value={formData.ie_rg}
-                    onChange={(e) => setFormData({ ...formData, ie_rg: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, ie_rg: formData.tipo_pessoa === 'PJ' ? mascaraInscricaoEstadual(e.target.value) : e.target.value })}
                     placeholder="Ex: 254.991.002-1"
                     className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm tabular-nums focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel-2/30 focus:bg-papel transition-all"
                   />
@@ -1024,7 +1025,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                     onChange={(e) => setFormData({ ...formData, uf: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-md border border-linha-forte text-xs sm:text-sm font-bold focus:outline-none focus:border-eno-600 focus:ring-2 focus:ring-eno-600/20 bg-papel"
                   >
-                    {['SP', 'MG', 'RJ', 'PR', 'SC', 'RS', 'GO', 'MS', 'MT', 'BA', 'ES', 'DF'].map(uf => (
+                    {ESTADOS_UF.map(({ uf }) => (
                       <option key={uf} value={uf}>{uf}</option>
                     ))}
                   </select>

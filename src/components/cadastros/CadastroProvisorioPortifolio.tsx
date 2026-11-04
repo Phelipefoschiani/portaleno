@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { mascaraCpfCnpj } from '../../lib/mascarasCadastro';
 import { CampoNumero } from '../ui/CampoNumero';
 import {
   Search,
@@ -563,7 +564,7 @@ export function CadastroProvisorioPortifolio({
                       <input
                         type="text"
                         value={formData.cpf_cnpj}
-                        onChange={(e) => setFormData({ ...formData, cpf_cnpj: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, cpf_cnpj: mascaraCpfCnpj(e.target.value) })}
                         placeholder="00.000.000/0001-00"
                         className="w-full bg-papel border border-linha-forte rounded-md px-3.5 py-2 text-xs text-tinta focus:outline-none focus:border-eno-600 font-medium"
                       />
