@@ -1,26 +1,18 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { initializeFirestore, memoryLocalCache } from 'firebase/firestore';
+import { getAuth, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
+
+/** Sistema ligado ao banco de dados na nuvem (VITE_MODO_NUVEM=1). Desligado = tudo só no navegador, como antes. */
+export const MODO_NUVEM = import.meta.env.VITE_MODO_NUVEM === '1';
 
 // Inicializa o app do Firebase
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Inicializa o Cloud Firestore com o ID de banco configurado
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
+// Cache em memória: o que fica no aparelho é o localStorage (limpo ao sair); nada de um usuário
+// fica guardado no navegador para o próximo que entrar.
+export const db = initializeFirestore(app, { localCache: memoryLocalCache() }, firebaseConfig.firestoreDatabaseId || '(default)');
 
-// Inicializa a autenticação
 export const auth = getAuth(app);
-
-// Teste de conexão recomendado para validar inicialização
-export async function testarConexaoFirestore(): Promise<boolean> {
-  try {
-    await getDocFromServer(doc(db, 'produtos', 'ping_check'));
-    return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore offline ou em cache:', error.message);
-    }
-    return true;
-  }
-}
+// Fechou o navegador, saiu do sistema (como a sessão local de antes)
+setPersistence(auth, browserSessionPersistence).catch(() => {});

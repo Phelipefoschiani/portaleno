@@ -195,8 +195,8 @@ export function UsuariosAcessos() {
       }, 'Usuário criado com sucesso.');
     } else if (modal.modo === 'editar' && modal.usuario) {
       const id = modal.usuario.id;
-      executar(() => {
-        atualizarUsuario(id, { usuario: form.usuario, nome: form.nome, perfil: form.perfil, vinculo_id: vinculo, ativo: form.ativo });
+      executar(async () => {
+        await atualizarUsuario(id, { usuario: form.usuario, nome: form.nome, perfil: form.perfil, vinculo_id: vinculo, ativo: form.ativo });
       }, 'Usuário atualizado.');
     } else if (modal.modo === 'senha' && modal.usuario) {
       if (!validarSenhaForm()) return;
@@ -206,7 +206,7 @@ export function UsuariosAcessos() {
   };
 
   const alternarAtivo = (u: UsuarioSistema) => {
-    executar(() => { atualizarUsuario(u.id, { ativo: !u.ativo }); }, u.ativo ? 'Usuário desativado.' : 'Usuário ativado.');
+    executar(async () => { await atualizarUsuario(u.id, { ativo: !u.ativo }); }, u.ativo ? 'Usuário desativado.' : 'Usuário ativado.');
   };
 
   const handleExcluir = (u: UsuarioSistema) => {

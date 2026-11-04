@@ -2,6 +2,8 @@
 // Permite zerar completamente os dados do sistema (tudo fica no localStorage).
 // Regra de ouro: NUNCA apagar chaves 'grupo_eno_auth_*' (usuários e sessão).
 
+import { liberarAlteracaoEmMassa } from '../lib/nuvem';
+
 const PREFIXO_DADOS = 'grupo_eno_';
 const PREFIXO_AUTH = 'grupo_eno_auth_';
 
@@ -90,6 +92,8 @@ export function listarChavesDeDados(): string[] {
  */
 export function limparTodoOSistema(manterCadastrosBase: boolean = false): void {
   if (typeof window === 'undefined') return;
+  // Zerar é intencional: a nuvem aceita apagar tudo
+  liberarAlteracaoEmMassa();
 
   for (const chave of listarChavesDeDados()) {
     if (FLAGS_CONTROLE.has(chave)) continue;

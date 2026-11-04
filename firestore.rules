@@ -1,18 +1,87 @@
 rules_version = '2';
 
-// O sistema do Grupo ENO hoje funciona 100% OFFLINE: todos os dados ficam no
-// armazenamento local do navegador (localStorage) e o app NÃO lê nem grava no Firestore.
-// Por isso, todo acesso ao banco fica NEGADO.
-//
-// Quando o app for conectado ao Firestore, cada coleção deve exigir usuário autenticado
-// (request.auth != null) e checar o perfil/vínculo do usuário (ex.: via custom claims),
-// por exemplo:
-//   match /pedidos_venda/{id} {
-//     allow read, write: if request.auth != null && request.auth.token.perfil == 'ADMIN';
-//   }
+// Regras do banco do Grupo ENO. Espelham src/lib/nuvemAcesso.ts: mudou lá, muda aqui.
+// - Perfil e vínculo vêm do login (custom claims gravados só pelo servidor em api/usuarios.ts).
+// - ADMIN: tudo. PRODUCAO e SITIO: chaves inteiras. RCA, CLIENTE, AGRICULTOR e PROVISORIO:
+//   só os registros que têm o campo de dono (_rca, _cliente, _agr, _prov) igual ao próprio vínculo.
 // Nunca liberar leitura/escrita pública.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function logado() { return request.auth != null; }
+    function perfil() { return request.auth.token.get('perfil', ''); }
+    function vinculo() { return request.auth.token.get('vinculo_id', ''); }
+    function admin() { return logado() && perfil() == 'ADMIN'; }
+
+    function p(nome) { return 'grupo_eno_' + nome; }
+    function catalogo() { return [p('produtos_estoque_v1'), p('categorias_produto_v1'), p('tabelas_preco_v1')]; }
+
+    // Chaves lidas inteiras
+    function leitura() {
+      return {
+        'PRODUCAO': catalogo().concat([p('receitas_v1'), p('fichas_tecnicas_v1'), p('fornecedores_v1'), p('agricultores_v1'),
+                    p('financeiro_caixa_baixas_v1'), p('financeiro_caixa_invest_v1'), p('clientes_v1')]),
+        'SITIO': [],
+        'RCA': catalogo().concat([p('receitas_v1'), p('materia_prima_v1')]),
+        'CLIENTE': catalogo(),
+        'AGRICULTOR': [],
+        'PROVISORIO': catalogo()
+      };
+    }
+    // Chaves gravadas inteiras
+    function escrita() {
+      return {
+        'PRODUCAO': [p('ordens_producao_v1'), p('lotes_materia_prima_v1'), p('materia_prima_v1'), p('produtos_estoque_v1'),
+                     p('movimentos_mp_v1'), p('pedidos_venda_v1'), p('pedidos_compra_v2'), p('financeiro_pagar_v1'),
+                     p('financeiro_despesas_v1'), p('financeiro_notas_entrada_v1'), p('colaboradores_producao_v1')],
+        'SITIO': [p('sitio_controle_despesas_v3'), p('financeiro_despesas_v1'), p('financeiro_pagar_v1'),
+                  p('financeiro_caixa_baixas_v1'), p('financeiro_caixa_invest_v1'), p('financeiro_caixa_movimentos_v1')]
+      };
+    }
+    // Chaves com só os próprios registros: campo de dono e o que pode ler/gravar
+    function proprios() {
+      return {
+        'RCA': { 'campo': '_rca', 'ler': [p('clientes_v1'), p('pedidos_venda_v1'), p('vendas_rca_v1'), p('rcas_v1')],
+                 'gravar': [p('clientes_v1'), p('pedidos_venda_v1'), p('vendas_rca_v1')] },
+        'CLIENTE': { 'campo': '_cliente', 'ler': [p('clientes_v1'), p('pedidos_venda_v1')], 'gravar': [p('pedidos_venda_v1')] },
+        'AGRICULTOR': { 'campo': '_agr', 'ler': [p('agricultores_v1'), p('calculos_roca_v1')], 'gravar': [] },
+        'PROVISORIO': { 'campo': '_prov', 'ler': [p('cadastros_provisorios_v1'), p('pedidos_portfolio_v1')], 'gravar': [p('pedidos_portfolio_v1')] }
+      };
+    }
+
+    function grava(chave) { return admin() || (logado() && chave in escrita().get(perfil(), [])); }
+    function le(chave) { return grava(chave) || (logado() && chave in leitura().get(perfil(), [])); }
+    function regra() { return proprios().get(perfil(), { 'campo': '', 'ler': [], 'gravar': [] }); }
+    function dono(dados) { return regra().campo != '' && vinculo() != '' && dados.get(regra().campo, '') == vinculo(); }
+    function leProprio(chave, dados) { return logado() && chave in regra().ler && dono(dados); }
+    function gravaProprio(chave, dados) { return logado() && chave in regra().gravar && dono(dados); }
+
+    // Dados do sistema: dados/{chave} (ordem ou valor) e dados/{chave}/registros/{id}
+    match /dados/{chave} {
+      allow read: if le(chave) || (logado() && chave in regra().ler);
+      allow write: if grava(chave);
+
+      match /registros/{id} {
+        allow read: if le(chave) || leProprio(chave, resource.data);
+        allow create: if grava(chave) || gravaProprio(chave, request.resource.data);
+        allow update: if grava(chave) || (gravaProprio(chave, resource.data) && gravaProprio(chave, request.resource.data));
+        allow delete: if grava(chave) || gravaProprio(chave, resource.data);
+      }
+    }
+
+    // Usuários: só o servidor grava; cada um lê o seu, o admin lê todos
+    match /usuarios/{uid} {
+      allow read: if admin() || (logado() && request.auth.uid == uid);
+      allow write: if false;
+    }
+
+    // Estado do sistema (primeira migração para a nuvem)
+    match /sistema/{doc} {
+      allow read: if logado();
+      allow write: if admin();
+    }
+
+    // Qualquer outro caminho: fechado
     match /{document=**} {
       allow read, write: if false;
     }

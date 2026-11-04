@@ -1,9 +1,18 @@
-// Autenticação local do Grupo ENO (sistema offline, dados no navegador).
+// Autenticação do Grupo ENO.
+// Com VITE_MODO_NUVEM=1: login pelo Firebase Auth; perfil e vínculo vêm do token (custom claims) e do
+// documento usuarios/{uid}; criar/alterar/excluir usuários passa pela função do servidor (api/usuarios).
+// Sem a nuvem (modo antigo, abaixo): autenticação local no navegador.
+//
 // - Usuários em localStorage ('grupo_eno_auth_usuarios_v1') com senha em hash PBKDF2-SHA256 + salt aleatório.
 // - Sessão em sessionStorage ('grupo_eno_auth_sessao_v1'), válida por 8 horas.
 // - Bloqueio de 5 tentativas erradas por 5 minutos.
 // Observação: por ser 100% local, quem tem acesso ao navegador com ferramentas de desenvolvedor
 // consegue alterar os dados. Quando houver servidor, a autenticação deve ser feita no backend.
+
+import { MODO_NUVEM, auth as authFirebase, db } from './firebase';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { collection, doc, getDoc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
+import { iniciarSincronizacao, pararSincronizacao } from './nuvem';
 
 export type PerfilUsuario = 'ADMIN' | 'AGRICULTOR' | 'RCA' | 'PROVISORIO' | 'PRODUCAO' | 'SITIO' | 'CLIENTE';
 
@@ -146,12 +155,14 @@ function validarNomeUsuario(usuario: string, lista: UsuarioArmazenado[], ignorar
 
 /** Valida um login (nome ou e-mail) contra a base atual, sem gravar. Lança erro se inválido/duplicado. */
 export function validarLogin(usuario: string, ignorarId?: string): string {
+  if (MODO_NUVEM) return validarNomeUsuario(usuario, usuariosNuvem as UsuarioArmazenado[], ignorarId);
   return validarNomeUsuario(usuario, lerUsuarios(), ignorarId);
 }
 
 /** Usuário vinculado a um cadastro (ex.: RCA ou cliente) com o perfil indicado. */
 export function obterUsuarioPorVinculo(perfil: PerfilUsuario, vinculoId?: string | null): UsuarioSistema | undefined {
   if (!vinculoId) return undefined;
+  if (MODO_NUVEM) return usuariosNuvem.find(x => x.perfil === perfil && x.vinculo_id === vinculoId);
   const u = lerUsuarios().find(x => x.perfil === perfil && x.vinculo_id === vinculoId);
   return u ? publico(u) : undefined;
 }
@@ -221,6 +232,7 @@ function gravarSessao(u: UsuarioArmazenado): SessaoUsuario {
 /** Retorna a sessão válida atual (ou null). Perfil e vínculo vêm sempre do cadastro atual do usuário. */
 export function obterSessao(): SessaoUsuario | null {
   if (typeof window === 'undefined') return null;
+  if (MODO_NUVEM) return sessaoNuvem;
   try {
     const raw = sessionStorage.getItem(KEY_SESSAO);
     if (!raw) return null;
@@ -243,6 +255,12 @@ export function obterSessao(): SessaoUsuario | null {
 
 export function encerrarSessao(): void {
   if (typeof window === 'undefined') return;
+  if (MODO_NUVEM) {
+    sessaoNuvem = null;
+    signOut(authFirebase).catch(() => {});
+    window.dispatchEvent(new Event(EVENTO_AUTH_ATUALIZADO));
+    return;
+  }
   sessionStorage.removeItem(KEY_SESSAO);
   window.dispatchEvent(new Event(EVENTO_AUTH_ATUALIZADO));
 }
@@ -262,11 +280,31 @@ function exigirAdmin(): SessaoUsuario {
 // ---------- API pública ----------
 
 export function existemUsuarios(): boolean {
+  if (MODO_NUVEM) return true; // na nuvem, use verificarPrimeiroAcesso()
   return lerUsuarios().length > 0;
+}
+
+/** true quando ainda não existe nenhum administrador (tela de primeiro acesso). */
+export async function verificarPrimeiroAcesso(): Promise<boolean> {
+  if (!MODO_NUVEM) return !existemUsuarios();
+  try {
+    const r = await chamarApi({ acao: 'estado' }, false);
+    return !r.temAdmin;
+  } catch {
+    return false;
+  }
 }
 
 /** Primeiro acesso: só funciona quando não há nenhum usuário cadastrado. Já inicia a sessão. */
 export async function criarPrimeiroAdministrador(usuario: string, senha: string, nome?: string): Promise<SessaoUsuario> {
+  if (MODO_NUVEM) {
+    validarSenha(senha);
+    const login = validarNomeUsuario(usuario, []);
+    await chamarApi({ acao: 'primeiro_admin', usuario: login, senha, nome: (nome || '').trim() || login }, false);
+    const r = await autenticar(login, senha);
+    if (r.ok === false) throw new Error(r.erro);
+    return r.sessao;
+  }
   if (existemUsuarios()) throw new Error('O administrador inicial já foi criado.');
   validarSenha(senha);
   const u = validarNomeUsuario(usuario, []);
@@ -288,6 +326,7 @@ export async function criarPrimeiroAdministrador(usuario: string, senha: string,
 export type ResultadoLogin = { ok: true; sessao: SessaoUsuario } | { ok: false; erro: string };
 
 export async function autenticar(usuario: string, senha: string): Promise<ResultadoLogin> {
+  if (MODO_NUVEM) return autenticarNuvem(usuario, senha);
   const u = normalizarUsuario(usuario);
   const restante = bloqueioRestanteMs(u);
   if (restante > 0) {
@@ -311,6 +350,7 @@ export async function autenticar(usuario: string, senha: string): Promise<Result
 }
 
 export function listarUsuarios(): UsuarioSistema[] {
+  if (MODO_NUVEM) return [...usuariosNuvem];
   return lerUsuarios().map(publico);
 }
 
@@ -328,6 +368,11 @@ export async function criarUsuario(dados: {
 }): Promise<UsuarioSistema> {
   exigirAdmin();
   validarSenha(dados.senha);
+  if (MODO_NUVEM) {
+    const usuario = validarNomeUsuario(dados.usuario, usuariosNuvem as UsuarioArmazenado[]);
+    const r = await chamarApi({ acao: 'criar', ...dados, usuario });
+    return r.usuario as UsuarioSistema;
+  }
   const lista = lerUsuarios();
   const u = validarNomeUsuario(dados.usuario, lista);
   const cred = await gerarCredencial(dados.senha);
@@ -345,11 +390,19 @@ export async function criarUsuario(dados: {
   return publico(novo);
 }
 
-export function atualizarUsuario(
+export async function atualizarUsuario(
   id: string,
   dados: Partial<Pick<UsuarioSistema, 'usuario' | 'nome' | 'perfil' | 'vinculo_id' | 'ativo'>>
-): UsuarioSistema {
+): Promise<UsuarioSistema> {
   exigirAdmin();
+  if (MODO_NUVEM) {
+    const atual = usuariosNuvem.find(u => u.id === id);
+    const usuario = dados.usuario !== undefined && atual && normalizarUsuario(dados.usuario) !== atual.usuario
+      ? validarNomeUsuario(dados.usuario, usuariosNuvem as UsuarioArmazenado[], id)
+      : undefined;
+    const r = await chamarApi({ acao: 'atualizar', id, ...dados, usuario });
+    return r.usuario as UsuarioSistema;
+  }
   const lista = lerUsuarios();
   const idx = lista.findIndex(u => u.id === id);
   if (idx < 0) throw new Error('Usuário não encontrado.');
@@ -377,6 +430,10 @@ export function atualizarUsuario(
 export async function redefinirSenha(id: string, novaSenha: string): Promise<void> {
   exigirAdmin();
   validarSenha(novaSenha);
+  if (MODO_NUVEM) {
+    await chamarApi({ acao: 'senha', id, senha: novaSenha });
+    return;
+  }
   const cred = await gerarCredencial(novaSenha);
   const lista = lerUsuarios();
   const idx = lista.findIndex(u => u.id === id);
@@ -386,8 +443,13 @@ export async function redefinirSenha(id: string, novaSenha: string): Promise<voi
   limparFalhas(lista[idx].usuario);
 }
 
-export function excluirUsuario(id: string): void {
+export async function excluirUsuario(id: string): Promise<void> {
   const sessao = exigirAdmin();
+  if (MODO_NUVEM) {
+    await chamarApi({ acao: 'excluir', id });
+    if (sessao.usuario_id === id) encerrarSessao();
+    return;
+  }
   const lista = lerUsuarios();
   const nova = lista.filter(u => u.id !== id);
   if (nova.length === lista.length) throw new Error('Usuário não encontrado.');
@@ -396,4 +458,128 @@ export function excluirUsuario(id: string): void {
   }
   gravarUsuarios(nova);
   if (sessao.usuario_id === id) encerrarSessao();
+}
+
+// ---------- nuvem (Firebase Auth) ----------
+
+let sessaoNuvem: SessaoUsuario | null = null;
+let usuariosNuvem: UsuarioSistema[] = [];
+let unsubUsuarios: Unsubscribe | null = null;
+let carregandoNuvem = false;
+let esperandoSessao: ((s: SessaoUsuario | null) => void)[] = [];
+export const EVENTO_NUVEM_CARREGANDO = 'grupo_eno_nuvem_carregando';
+
+/** Login interno no Firebase: o próprio e-mail ou "usuario@usuarios.grupoeno.app". */
+export function emailDoLogin(usuario: string): string {
+  const u = normalizarUsuario(usuario);
+  return u.includes('@') ? u : `${u}@usuarios.grupoeno.app`;
+}
+
+/** Entrou e os dados ainda estão chegando da nuvem. */
+export function nuvemCarregando(): boolean {
+  return carregandoNuvem;
+}
+
+async function chamarApi(corpo: Record<string, unknown>, comLogin = true): Promise<any> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (comLogin) {
+    const token = await authFirebase.currentUser?.getIdToken();
+    if (!token) throw new Error('Sessão expirada. Entre de novo.');
+    headers.Authorization = `Bearer ${token}`;
+  }
+  let r: Response;
+  try {
+    r = await fetch('/api/usuarios', { method: 'POST', headers, body: JSON.stringify(corpo) });
+  } catch {
+    throw new Error('Sem conexão com o servidor. Confira a internet.');
+  }
+  const json = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(json.erro || 'Não foi possível concluir a operação no servidor.');
+  return json;
+}
+
+function avisarSessao(s: SessaoUsuario | null): void {
+  const fila = esperandoSessao;
+  esperandoSessao = [];
+  fila.forEach(f => f(s));
+  window.dispatchEvent(new Event(EVENTO_AUTH_ATUALIZADO));
+}
+
+/** Liga o login da nuvem (chamar uma vez ao abrir o app). */
+export function iniciarAuthNuvem(): void {
+  if (!MODO_NUVEM) return;
+  onAuthStateChanged(authFirebase, async user => {
+    if (unsubUsuarios) { unsubUsuarios(); unsubUsuarios = null; }
+    usuariosNuvem = [];
+    if (!user) {
+      sessaoNuvem = null;
+      pararSincronizacao(true);
+      carregandoNuvem = false;
+      window.dispatchEvent(new Event(EVENTO_NUVEM_CARREGANDO));
+      avisarSessao(null);
+      return;
+    }
+    carregandoNuvem = true;
+    window.dispatchEvent(new Event(EVENTO_NUVEM_CARREGANDO));
+    try {
+      const token = await user.getIdTokenResult(true);
+      const perfil = token.claims.perfil as PerfilUsuario | undefined;
+      const perfilDoc = (await getDoc(doc(db, 'usuarios', user.uid))).data();
+      if (!perfil || !perfilDoc || perfilDoc.ativo === false) throw new Error('Usuário sem acesso liberado.');
+      const sessao: SessaoUsuario = {
+        usuario_id: user.uid,
+        usuario: String(perfilDoc.usuario || ''),
+        nome: String(perfilDoc.nome || perfilDoc.usuario || ''),
+        perfil,
+        vinculo_id: (token.claims.vinculo_id as string) || perfilDoc.vinculo_id || undefined,
+        expira_em: Date.now() + DURACAO_SESSAO_MS,
+      };
+      await iniciarSincronizacao({ uid: user.uid, perfil, vinculo: sessao.vinculo_id });
+      if (perfil === 'ADMIN') {
+        unsubUsuarios = onSnapshot(collection(db, 'usuarios'), snap => {
+          usuariosNuvem = snap.docs.map(d => {
+            const x = d.data();
+            return {
+              id: d.id,
+              usuario: String(x.usuario || ''),
+              nome: String(x.nome || ''),
+              perfil: x.perfil as PerfilUsuario,
+              vinculo_id: x.vinculo_id || undefined,
+              ativo: x.ativo !== false,
+              criado_em: String(x.criado_em || ''),
+            };
+          });
+          window.dispatchEvent(new Event(EVENTO_AUTH_ATUALIZADO));
+        });
+      }
+      sessaoNuvem = sessao;
+      avisarSessao(sessao);
+    } catch (e) {
+      console.error('[login]', e);
+      sessaoNuvem = null;
+      await signOut(authFirebase).catch(() => {});
+      avisarSessao(null);
+    } finally {
+      carregandoNuvem = false;
+      window.dispatchEvent(new Event(EVENTO_NUVEM_CARREGANDO));
+    }
+  });
+}
+
+async function autenticarNuvem(usuario: string, senha: string): Promise<ResultadoLogin> {
+  let resolver: ((s: SessaoUsuario | null) => void) | null = null;
+  const esperar = new Promise<SessaoUsuario | null>(r => { resolver = r; esperandoSessao.push(r); });
+  try {
+    await signInWithEmailAndPassword(authFirebase, emailDoLogin(usuario), senha);
+  } catch (e: any) {
+    esperandoSessao = esperandoSessao.filter(f => f !== resolver);
+    const codigo = String(e?.code || '');
+    if (codigo.includes('too-many-requests')) return { ok: false, erro: 'Muitas tentativas inválidas. Tente novamente em alguns minutos.' };
+    if (codigo.includes('network')) return { ok: false, erro: 'Sem conexão com a internet.' };
+    if (codigo.includes('user-disabled')) return { ok: false, erro: 'Usuário desativado. Fale com o administrador.' };
+    return { ok: false, erro: ERRO_GENERICO };
+  }
+  const sessao = await esperar;
+  if (!sessao) return { ok: false, erro: 'Usuário sem acesso liberado. Fale com o administrador.' };
+  return { ok: true, sessao };
 }

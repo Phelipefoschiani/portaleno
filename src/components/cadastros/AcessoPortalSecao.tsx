@@ -87,11 +87,11 @@ export async function aplicarAcessoPortal(
       await criarUsuario({ usuario: plano.login, nome: ctx.nome, perfil: ctx.perfil, vinculo_id: ctx.vinculoId, senha: plano.senha, ativo: plano.ativo });
       return `Acesso ao portal criado. Login: ${plano.login}`;
     case 'atualizar':
-      atualizarUsuario(plano.id, { usuario: plano.login, nome: ctx.nome, ativo: plano.ativo, perfil: ctx.perfil, vinculo_id: ctx.vinculoId });
+      await atualizarUsuario(plano.id, { usuario: plano.login, nome: ctx.nome, ativo: plano.ativo, perfil: ctx.perfil, vinculo_id: ctx.vinculoId });
       if (plano.senha) await redefinirSenha(plano.id, plano.senha);
       return plano.senha ? 'Acesso ao portal atualizado e senha redefinida.' : null;
     case 'remover':
-      excluirUsuario(plano.id);
+      await excluirUsuario(plano.id);
       return 'Acesso ao portal removido.';
   }
 }

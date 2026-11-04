@@ -603,12 +603,12 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
     }
   };
 
-  const handleExcluirRca = (rca: RCA) => {
+  const handleExcluirRca = async (rca: RCA) => {
     const usuarioRca = obterUsuarioPorVinculo('RCA', rca.id);
     if (!window.confirm('Excluir o RCA "' + rca.nome_completo + '"? Os clientes da carteira ficarão sem representante.' + (usuarioRca ? ` O login "${usuarioRca.usuario}" do portal também será excluído.` : ''))) return;
     if (usuarioRca) {
       try {
-        excluirUsuario(usuarioRca.id);
+        await excluirUsuario(usuarioRca.id);
       } catch (err) {
         alert(`Não foi possível excluir o login do portal: ${err instanceof Error ? err.message : 'erro'}. Remova em Usuários e Acessos.`);
       }

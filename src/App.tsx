@@ -26,7 +26,11 @@ import {
   podeAcessar,
   SessaoUsuario,
   EVENTO_AUTH_ATUALIZADO,
+  EVENTO_NUVEM_CARREGANDO,
+  iniciarAuthNuvem,
+  nuvemCarregando,
 } from './lib/auth';
+import { MODO_NUVEM } from './lib/firebase';
 
 export type PaginaInstitucional = 'PROPOSITO' | 'NEGOCIOS' | 'FORNECEDORES' | 'TRABALHE' | 'SUSTENTABILIDADE' | 'CONTATO';
 
@@ -53,7 +57,24 @@ export default function App() {
       window.location.reload();
       return;
     }
+    // Login e dados na nuvem (só depois da limpeza local, para nada local ir para o banco por engano)
+    iniciarAuthNuvem();
   }, []);
+
+  // Entrou: os dados estão chegando da nuvem
+  const [carregandoNuvem, setCarregandoNuvem] = useState(() => MODO_NUVEM && nuvemCarregando());
+  useEffect(() => {
+    if (!MODO_NUVEM) return;
+    const h = () => setCarregandoNuvem(nuvemCarregando());
+    window.addEventListener(EVENTO_NUVEM_CARREGANDO, h);
+    return () => window.removeEventListener(EVENTO_NUVEM_CARREGANDO, h);
+  }, []);
+
+  // Sessão restaurada pela nuvem (recarregou a página já logado): volta ao portal do usuário
+  useEffect(() => {
+    if (MODO_NUVEM && sessao && telaAtiva === 'HOME' && !isLoginOpen) setTelaAtiva(sessao.perfil);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessao?.usuario_id]);
 
   // Mantém a sessão em dia (expiração de 8h, usuário desativado/alterado pelo admin)
   useEffect(() => {
@@ -138,6 +159,19 @@ export default function App() {
   const cadastroVip = cadastrosProvisorios.find(c => c.id === cadastroVipId);
 
   // Renderizador principal com LoginModal sempre disponível em qualquer tela
+  // Logado na nuvem e os dados ainda chegando: espera antes de abrir qualquer tela
+  if (carregandoNuvem) {
+    return (
+      <div className="min-h-dvh flex flex-col items-center justify-center gap-4 bg-[linear-gradient(160deg,#042013_0%,#0b3d24_100%)] text-white px-6 text-center" role="status">
+        <img src="/favicon-192.png" alt="" className="w-16 h-16 animate-pulse" />
+        <div>
+          <div className="text-lg font-extrabold">Grupo ENO</div>
+          <div className="mt-1 text-sm text-white/75">Carregando seus dados…</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       {telaAtiva === 'PROPOSITO' && (

@@ -6,3 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Chave do servidor do Firebase: nunca no Git
+firebase-admin.json
+*-firebase-adminsdk-*.json

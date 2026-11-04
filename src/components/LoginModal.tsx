@@ -14,6 +14,7 @@ import {
   existemUsuarios,
   PerfilUsuario,
   SENHA_MINIMA,
+  verificarPrimeiroAcesso,
 } from '../lib/auth';
 
 export type DestinoAcesso = PerfilUsuario;
@@ -45,6 +46,8 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
       setPassword('');
       setConfirmacao('');
       setPrimeiroAcesso(!existemUsuarios());
+      // Na nuvem, quem sabe se já existe administrador é o servidor
+      verificarPrimeiroAcesso().then(setPrimeiroAcesso).catch(() => {});
     }
 
     return () => {

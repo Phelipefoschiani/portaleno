@@ -10,6 +10,7 @@ import {
   KEY_ULTIMO_BACKUP
 } from '../data/sistemaReset';
 import { hojeISO, parseData } from './datas';
+import { liberarAlteracaoEmMassa } from './nuvem';
 
 const ASSINATURA_BACKUP = 'grupo-eno-backup';
 const VERSAO_BACKUP = 1;
@@ -121,6 +122,8 @@ export async function lerArquivoBackup(arquivo: File): Promise<ArquivoBackup> {
  * Não recarrega a página: quem chama faz o window.location.reload().
  */
 export function restaurarBackup(backup: ArquivoBackup): void {
+  // Restaurar troca tudo de uma vez: a nuvem aceita as exclusões em massa
+  liberarAlteracaoEmMassa();
   const anteriores: Record<string, string> = {};
   for (const chave of listarChavesDeDados()) {
     const v = localStorage.getItem(chave);
