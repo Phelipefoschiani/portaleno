@@ -17,7 +17,7 @@ import {
   verificarPrimeiroAcesso,
   enviarRedefinicaoSenha,
 } from '../lib/auth';
-import { MODO_NUVEM } from '../lib/firebase';
+import { MODO_NUVEM } from '../lib/supabase';
 
 export type DestinoAcesso = PerfilUsuario;
 

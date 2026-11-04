@@ -30,7 +30,7 @@ import {
   iniciarAuthNuvem,
   nuvemCarregando,
 } from './lib/auth';
-import { MODO_NUVEM } from './lib/firebase';
+import { MODO_NUVEM } from './lib/supabase';
 
 export type PaginaInstitucional = 'PROPOSITO' | 'NEGOCIOS' | 'FORNECEDORES' | 'TRABALHE' | 'SUSTENTABILIDADE' | 'CONTATO';
 

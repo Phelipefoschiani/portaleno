@@ -14,3 +14,6 @@ export const supabase = SUPABASE_CONFIGURADO
       auth: { persistSession: true, autoRefreshToken: true, storageKey: 'eno_auth' },
     })
   : null;
+
+/** Login e usuários pelo Supabase (ligado quando as variáveis estão configuradas). */
+export const MODO_NUVEM = SUPABASE_CONFIGURADO;

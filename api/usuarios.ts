@@ -1,18 +1,8 @@
-// Função do servidor (Vercel) que gerencia os usuários do sistema no Firebase.
+// Função do servidor (Vercel) que gerencia os usuários no Supabase.
 // Só ela cria contas, troca senha, muda perfil e exclui: o navegador não tem esse poder.
-// Credencial: variável FIREBASE_SERVICE_ACCOUNT (JSON da conta de serviço) ou o arquivo
-// firebase-admin.json na raiz do projeto (só no computador; fora do Git).
+// Variáveis na Vercel: SUPABASE_URL e SUPABASE_SECRET_KEY (a chave secreta fica só aqui).
 
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { initializeApp, cert, getApps, type ServiceAccount } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-// Identificação do projeto e do banco (não é segredo; a chave de acesso fica na variável FIREBASE_SERVICE_ACCOUNT)
-const config = {
-  projectId: 'gen-lang-client-0964317826',
-  firestoreDatabaseId: 'ai-studio-grupoeno-f6438af8-17df-4089-9c1f-fe6ed3a0c8e1',
-};
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 type Perfil = 'ADMIN' | 'AGRICULTOR' | 'RCA' | 'PROVISORIO' | 'PRODUCAO' | 'SITIO' | 'CLIENTE';
 const PERFIS: Perfil[] = ['ADMIN', 'AGRICULTOR', 'RCA', 'PROVISORIO', 'PRODUCAO', 'SITIO', 'CLIENTE'];
@@ -22,17 +12,11 @@ class ErroUso extends Error {
   constructor(msg: string, public status = 400) { super(msg); }
 }
 
-function credencial(): ServiceAccount {
-  const env = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (env) return JSON.parse(env);
-  const arquivo = join(process.cwd(), 'firebase-admin.json');
-  if (existsSync(arquivo)) return JSON.parse(readFileSync(arquivo, 'utf8'));
-  throw new ErroUso('Credencial do Firebase não configurada no servidor (FIREBASE_SERVICE_ACCOUNT ou firebase-admin.json).', 503);
-}
-
-function servicos() {
-  const app = getApps()[0] || initializeApp({ credential: cert(credencial()), projectId: config.projectId });
-  return { auth: getAuth(app), db: getFirestore(app, config.firestoreDatabaseId || '(default)') };
+function servidor(): SupabaseClient {
+  const url = process.env.SUPABASE_URL;
+  const chave = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !chave) throw new ErroUso('Banco de dados não configurado no servidor (SUPABASE_URL e SUPABASE_SECRET_KEY).', 503);
+  return createClient(url, chave, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
 const RE_EMAIL = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
@@ -55,88 +39,92 @@ function validarPerfil(p: unknown): Perfil {
   return p as Perfil;
 }
 
-async function loginEmUso(db: FirebaseFirestore.Firestore, usuario: string, ignorarUid?: string) {
-  const q = await db.collection('usuarios').where('usuario', '==', usuario).get();
-  if (q.docs.some(d => d.id !== ignorarUid)) throw new ErroUso('Já existe um usuário com esse login.');
+async function loginEmUso(db: SupabaseClient, usuario: string, ignorarId?: string) {
+  const { data } = await db.from('perfis').select('id').eq('usuario', usuario);
+  if ((data || []).some(r => r.id !== ignorarId)) throw new ErroUso('Já existe um usuário com esse login.');
 }
 
-async function adminsAtivos(db: FirebaseFirestore.Firestore) {
-  const q = await db.collection('usuarios').where('perfil', '==', 'ADMIN').get();
-  return q.docs.filter(d => d.data().ativo !== false).map(d => d.id);
+async function contarAdminsAtivos(db: SupabaseClient, exceto?: string): Promise<number> {
+  const { data } = await db.from('perfis').select('id').eq('perfil', 'ADMIN').eq('ativo', true);
+  return (data || []).filter(r => r.id !== exceto).length;
 }
 
-function publico(uid: string, d: Record<string, any>) {
-  return { id: uid, usuario: d.usuario, nome: d.nome, perfil: d.perfil, vinculo_id: d.vinculo_id || undefined, ativo: d.ativo !== false, criado_em: d.criado_em };
+function publico(p: Record<string, any>) {
+  return { id: p.id, usuario: p.usuario, nome: p.nome, perfil: p.perfil, vinculo_id: p.vinculo_id || undefined, ativo: p.ativo !== false, criado_em: p.criado_em };
 }
 
-async function executar(corpo: any, tokenCabecalho?: string) {
-  const { auth, db } = servicos();
+async function exigirAdmin(db: SupabaseClient, token: string): Promise<void> {
+  if (!token) throw new ErroUso('Entre no sistema para continuar.', 401);
+  const { data: u, error } = await db.auth.getUser(token);
+  if (error || !u.user) throw new ErroUso('Sessão expirada. Entre de novo.', 401);
+  const { data: p } = await db.from('perfis').select('perfil, ativo').eq('id', u.user.id).maybeSingle();
+  if (!p || p.perfil !== 'ADMIN' || p.ativo === false) throw new ErroUso('Apenas administradores podem gerenciar usuários.', 403);
+}
+
+async function executar(corpo: any, authorization?: string) {
+  const db = servidor();
   const acao = String(corpo?.acao || '');
-  const estadoRef = db.collection('sistema').doc('estado');
 
   if (acao === 'estado') {
-    return { temAdmin: !!(await estadoRef.get()).data()?.temAdmin };
+    const { data } = await db.from('perfis').select('id').eq('perfil', 'ADMIN').limit(1);
+    return { temAdmin: (data || []).length > 0 };
   }
 
   if (acao === 'primeiro_admin') {
     const usuario = validarLogin(corpo.usuario);
     const senha = validarSenha(corpo.senha);
     const nome = String(corpo.nome || usuario).trim() || usuario;
-    // Reserva a vaga de primeiro administrador antes de criar a conta (evita dois "primeiros")
-    await db.runTransaction(async t => {
-      const est = await t.get(estadoRef);
-      if (est.data()?.temAdmin) throw new ErroUso('O administrador inicial já foi criado.', 409);
-      t.set(estadoRef, { temAdmin: true, em: FieldValue.serverTimestamp() }, { merge: true });
-    });
-    try {
-      const u = await auth.createUser({ email: emailDoLogin(usuario), password: senha, displayName: nome });
-      await auth.setCustomUserClaims(u.uid, { perfil: 'ADMIN' });
-      await db.collection('usuarios').doc(u.uid).set({ usuario, nome, perfil: 'ADMIN', ativo: true, criado_em: new Date().toISOString() });
-    } catch (e) {
-      await estadoRef.set({ temAdmin: false }, { merge: true });
-      throw e;
+    const { data: existe } = await db.from('perfis').select('id').eq('perfil', 'ADMIN').limit(1);
+    if ((existe || []).length > 0) throw new ErroUso('O administrador inicial já foi criado.', 409);
+    const { data: criado, error } = await db.auth.admin.createUser({ email: emailDoLogin(usuario), password: senha, email_confirm: true, user_metadata: { nome } });
+    if (error || !criado.user) throw new ErroUso(error?.message || 'Não foi possível criar o administrador.');
+    const { error: erroPerfil } = await db.from('perfis').insert({ id: criado.user.id, usuario, nome, perfil: 'ADMIN', ativo: true });
+    if (erroPerfil) {
+      await db.auth.admin.deleteUser(criado.user.id);
+      throw new ErroUso(erroPerfil.message);
     }
     return { ok: true };
   }
 
   // Daqui para baixo: só administrador logado
-  const token = (tokenCabecalho || '').replace(/^Bearer\s+/i, '');
-  if (!token) throw new ErroUso('Entre no sistema para continuar.', 401);
-  const quem = await auth.verifyIdToken(token, true).catch(() => null);
-  if (!quem) throw new ErroUso('Sessão expirada. Entre de novo.', 401);
-  const quemDoc = (await db.collection('usuarios').doc(quem.uid).get()).data();
-  if (quem.perfil !== 'ADMIN' || !quemDoc || quemDoc.ativo === false) throw new ErroUso('Apenas administradores podem gerenciar usuários.', 403);
+  await exigirAdmin(db, String(authorization || '').replace(/^Bearer\s+/i, ''));
 
   if (acao === 'criar') {
     const usuario = validarLogin(corpo.usuario);
     const senha = validarSenha(corpo.senha);
     const perfil = validarPerfil(corpo.perfil);
     const nome = String(corpo.nome || usuario).trim() || usuario;
-    const vinculo_id = corpo.vinculo_id ? String(corpo.vinculo_id) : '';
+    const vinculo_id = corpo.vinculo_id ? String(corpo.vinculo_id) : null;
     const ativo = corpo.ativo !== false;
     await loginEmUso(db, usuario);
-    const u = await auth.createUser({ email: emailDoLogin(usuario), password: senha, displayName: nome, disabled: !ativo }).catch((e: any) => {
-      if (String(e?.code).includes('email-already-exists')) throw new ErroUso('Já existe uma conta com esse login.');
-      throw e;
-    });
-    await auth.setCustomUserClaims(u.uid, { perfil, ...(vinculo_id ? { vinculo_id } : {}) });
-    const dados = { usuario, nome, perfil, vinculo_id: vinculo_id || null, ativo, criado_em: new Date().toISOString() };
-    await db.collection('usuarios').doc(u.uid).set(dados);
-    return { usuario: publico(u.uid, dados) };
+    const { data: criado, error } = await db.auth.admin.createUser({ email: emailDoLogin(usuario), password: senha, email_confirm: true, user_metadata: { nome } });
+    if (error || !criado.user) {
+      if (/already|registered|exists/i.test(error?.message || '')) throw new ErroUso('Já existe uma conta com esse login.');
+      throw new ErroUso(error?.message || 'Não foi possível criar o usuário.');
+    }
+    if (!ativo) await db.auth.admin.updateUserById(criado.user.id, { ban_duration: '876000h' });
+    const { data: gravado, error: erroPerfil } = await db.from('perfis')
+      .insert({ id: criado.user.id, usuario, nome, perfil, vinculo_id, ativo })
+      .select('*').single();
+    if (erroPerfil) {
+      await db.auth.admin.deleteUser(criado.user.id);
+      throw new ErroUso(erroPerfil.message);
+    }
+    return { usuario: publico(gravado) };
   }
 
-  const uid = String(corpo.id || '');
-  const ref = db.collection('usuarios').doc(uid);
-  const atual = (await ref.get()).data();
-  if (!uid || !atual) throw new ErroUso('Usuário não encontrado.', 404);
+  const id = String(corpo.id || '');
+  const { data: atual } = await db.from('perfis').select('*').eq('id', id).maybeSingle();
+  if (!id || !atual) throw new ErroUso('Usuário não encontrado.', 404);
 
   if (acao === 'atualizar') {
-    const novo = { ...atual };
+    const novo: Record<string, any> = { ...atual };
     if (corpo.usuario !== undefined && corpo.usuario !== null) {
       const usuario = validarLogin(corpo.usuario);
       if (usuario !== atual.usuario) {
-        await loginEmUso(db, usuario, uid);
-        await auth.updateUser(uid, { email: emailDoLogin(usuario) });
+        await loginEmUso(db, usuario, id);
+        const { error } = await db.auth.admin.updateUserById(id, { email: emailDoLogin(usuario) });
+        if (error) throw new ErroUso(error.message);
         novo.usuario = usuario;
       }
     }
@@ -145,30 +133,31 @@ async function executar(corpo: any, tokenCabecalho?: string) {
     if (corpo.vinculo_id !== undefined) novo.vinculo_id = corpo.vinculo_id ? String(corpo.vinculo_id) : null;
     if (corpo.ativo !== undefined) novo.ativo = corpo.ativo !== false;
     if (atual.perfil === 'ADMIN' && (novo.perfil !== 'ADMIN' || !novo.ativo)) {
-      const ativos = await adminsAtivos(db);
-      if (ativos.filter(id => id !== uid).length === 0) throw new ErroUso('Não é possível remover ou desativar o último administrador ativo.');
+      if ((await contarAdminsAtivos(db, id)) === 0) throw new ErroUso('Não é possível remover ou desativar o último administrador ativo.');
     }
-    await auth.updateUser(uid, { displayName: novo.nome, disabled: !novo.ativo });
-    await auth.setCustomUserClaims(uid, { perfil: novo.perfil, ...(novo.vinculo_id ? { vinculo_id: novo.vinculo_id } : {}) });
-    // Mudou perfil, vínculo ou foi desativado: derruba as sessões abertas desse usuário
-    if (novo.perfil !== atual.perfil || novo.vinculo_id !== atual.vinculo_id || !novo.ativo) await auth.revokeRefreshTokens(uid);
-    await ref.set(novo);
-    return { usuario: publico(uid, novo) };
+    // Desativar bloqueia o login da conta; ativar libera de novo
+    const { error: erroAuth } = await db.auth.admin.updateUserById(id, { ban_duration: novo.ativo ? 'none' : '876000h' });
+    if (erroAuth) throw new ErroUso(erroAuth.message);
+    const { data: gravado, error } = await db.from('perfis')
+      .update({ usuario: novo.usuario, nome: novo.nome, perfil: novo.perfil, vinculo_id: novo.vinculo_id, ativo: novo.ativo })
+      .eq('id', id).select('*').single();
+    if (error) throw new ErroUso(error.message);
+    return { usuario: publico(gravado) };
   }
 
   if (acao === 'senha') {
-    await auth.updateUser(uid, { password: validarSenha(corpo.senha) });
-    await auth.revokeRefreshTokens(uid);
+    const { error } = await db.auth.admin.updateUserById(id, { password: validarSenha(corpo.senha) });
+    if (error) throw new ErroUso(error.message);
     return { ok: true };
   }
 
   if (acao === 'excluir') {
-    if (atual.perfil === 'ADMIN') {
-      const ativos = await adminsAtivos(db);
-      if (ativos.filter(id => id !== uid).length === 0) throw new ErroUso('Não é possível remover ou desativar o último administrador ativo.');
+    if (atual.perfil === 'ADMIN' && (await contarAdminsAtivos(db, id)) === 0) {
+      throw new ErroUso('Não é possível remover ou desativar o último administrador ativo.');
     }
-    await auth.deleteUser(uid).catch((e: any) => { if (!String(e?.code).includes('user-not-found')) throw e; });
-    await ref.delete();
+    const { error } = await db.auth.admin.deleteUser(id);
+    if (error) throw new ErroUso(error.message);
+    await db.from('perfis').delete().eq('id', id);
     return { ok: true };
   }
 

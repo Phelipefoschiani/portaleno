@@ -1,7 +1,7 @@
 // Autenticação do Grupo ENO.
-// Com VITE_MODO_NUVEM=1: login pelo Firebase Auth; perfil e vínculo vêm do token (custom claims) e do
-// documento usuarios/{uid}; criar/alterar/excluir usuários passa pela função do servidor (api/usuarios).
-// Sem a nuvem (modo antigo, abaixo): autenticação local no navegador.
+// Com o Supabase configurado: login pelo Supabase Auth; perfil e vínculo vêm da tabela perfis;
+// criar/alterar/excluir usuários passa pela função do servidor (api/usuarios).
+// Sem o Supabase (modo antigo, abaixo): autenticação local no navegador.
 //
 // - Usuários em localStorage ('grupo_eno_auth_usuarios_v1') com senha em hash PBKDF2-SHA256 + salt aleatório.
 // - Sessão em sessionStorage ('grupo_eno_auth_sessao_v1'), válida por 8 horas.
@@ -9,10 +9,7 @@
 // Observação: por ser 100% local, quem tem acesso ao navegador com ferramentas de desenvolvedor
 // consegue alterar os dados. Quando houver servidor, a autenticação deve ser feita no backend.
 
-import { MODO_NUVEM, auth as authFirebase, db } from './firebase';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
-import { collection, doc, getDoc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
-import { iniciarSincronizacao, pararSincronizacao } from './nuvem';
+import { MODO_NUVEM, supabase } from './supabase';
 
 export type PerfilUsuario = 'ADMIN' | 'AGRICULTOR' | 'RCA' | 'PROVISORIO' | 'PRODUCAO' | 'SITIO' | 'CLIENTE';
 
@@ -257,7 +254,7 @@ export function encerrarSessao(): void {
   if (typeof window === 'undefined') return;
   if (MODO_NUVEM) {
     sessaoNuvem = null;
-    signOut(authFirebase).catch(() => {});
+    supabase?.auth.signOut().catch(() => {});
     window.dispatchEvent(new Event(EVENTO_AUTH_ATUALIZADO));
     return;
   }
@@ -460,30 +457,37 @@ export async function excluirUsuario(id: string): Promise<void> {
   if (sessao.usuario_id === id) encerrarSessao();
 }
 
-// ---------- nuvem (Firebase Auth) ----------
+// ---------- banco (Supabase Auth) ----------
+// Cada usuário tem uma conta no Supabase Auth com um e-mail interno (usuario@usuarios.grupoeno.app),
+// e o perfil fica na tabela perfis. O usuário digita só o nome de usuário; o e-mail é montado.
 
 let sessaoNuvem: SessaoUsuario | null = null;
 let usuariosNuvem: UsuarioSistema[] = [];
-let unsubUsuarios: Unsubscribe | null = null;
 let carregandoNuvem = false;
-let esperandoSessao: ((s: SessaoUsuario | null) => void)[] = [];
 export const EVENTO_NUVEM_CARREGANDO = 'grupo_eno_nuvem_carregando';
 
-/** Login interno no Firebase: o próprio e-mail ou "usuario@usuarios.grupoeno.app". */
+/** E-mail usado no Supabase para o login: o próprio e-mail, ou usuario@usuarios.grupoeno.app. */
 export function emailDoLogin(usuario: string): string {
   const u = normalizarUsuario(usuario);
   return u.includes('@') ? u : `${u}@usuarios.grupoeno.app`;
 }
 
-/** Entrou e os dados ainda estão chegando da nuvem. */
+/** Entrou e os dados do perfil ainda estão chegando. */
 export function nuvemCarregando(): boolean {
   return carregandoNuvem;
 }
 
+function avisarMudanca(): void {
+  window.dispatchEvent(new Event(EVENTO_AUTH_ATUALIZADO));
+  window.dispatchEvent(new Event(EVENTO_NUVEM_CARREGANDO));
+}
+
+/** Chama a função do servidor (api/usuarios), com o token de quem está logado. */
 async function chamarApi(corpo: Record<string, unknown>, comLogin = true): Promise<any> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (comLogin) {
-    const token = await authFirebase.currentUser?.getIdToken();
+    const { data } = await supabase!.auth.getSession();
+    const token = data.session?.access_token;
     if (!token) throw new Error('Sessão expirada. Entre de novo.');
     headers.Authorization = `Bearer ${token}`;
   }
@@ -498,108 +502,103 @@ async function chamarApi(corpo: Record<string, unknown>, comLogin = true): Promi
   return json;
 }
 
-function avisarSessao(s: SessaoUsuario | null): void {
-  const fila = esperandoSessao;
-  esperandoSessao = [];
-  fila.forEach(f => f(s));
-  window.dispatchEvent(new Event(EVENTO_AUTH_ATUALIZADO));
+/** Lê o perfil de quem está logado. null = conta sem perfil ou desativada. */
+async function carregarPerfil(uid: string): Promise<SessaoUsuario | null> {
+  const { data, error } = await supabase!.from('perfis').select('*').eq('id', uid).maybeSingle();
+  if (error || !data || !data.ativo) return null;
+  return {
+    usuario_id: uid,
+    usuario: String(data.usuario),
+    nome: String(data.nome || data.usuario),
+    perfil: data.perfil as PerfilUsuario,
+    vinculo_id: data.vinculo_id || undefined,
+    expira_em: Date.now() + DURACAO_SESSAO_MS,
+  };
 }
 
-/** Liga o login da nuvem (chamar uma vez ao abrir o app). */
+async function carregarUsuariosAdmin(): Promise<void> {
+  const { data } = await supabase!.from('perfis').select('*').order('criado_em', { ascending: false });
+  usuariosNuvem = (data || []).map(x => ({
+    id: String(x.id),
+    usuario: String(x.usuario),
+    nome: String(x.nome || ''),
+    perfil: x.perfil as PerfilUsuario,
+    vinculo_id: x.vinculo_id || undefined,
+    ativo: x.ativo !== false,
+    criado_em: String(x.criado_em || ''),
+  }));
+}
+
+/** Liga o login do banco (chamar uma vez ao abrir o app). */
 export function iniciarAuthNuvem(): void {
-  if (!MODO_NUVEM) return;
-  onAuthStateChanged(authFirebase, async user => {
-    if (unsubUsuarios) { unsubUsuarios(); unsubUsuarios = null; }
-    usuariosNuvem = [];
-    if (!user) {
-      sessaoNuvem = null;
-      pararSincronizacao(true);
-      carregandoNuvem = false;
-      window.dispatchEvent(new Event(EVENTO_NUVEM_CARREGANDO));
-      avisarSessao(null);
-      return;
-    }
-    carregandoNuvem = true;
-    window.dispatchEvent(new Event(EVENTO_NUVEM_CARREGANDO));
+  if (!MODO_NUVEM || !supabase) return;
+  carregandoNuvem = true;
+  avisarMudanca();
+
+  const aplicar = async (uid: string | null) => {
     try {
-      const token = await user.getIdTokenResult(true);
-      const perfil = token.claims.perfil as PerfilUsuario | undefined;
-      const perfilDoc = (await getDoc(doc(db, 'usuarios', user.uid))).data();
-      if (!perfil || !perfilDoc || perfilDoc.ativo === false) throw new Error('Usuário sem acesso liberado.');
-      const sessao: SessaoUsuario = {
-        usuario_id: user.uid,
-        usuario: String(perfilDoc.usuario || ''),
-        nome: String(perfilDoc.nome || perfilDoc.usuario || ''),
-        perfil,
-        vinculo_id: (token.claims.vinculo_id as string) || perfilDoc.vinculo_id || undefined,
-        expira_em: Date.now() + DURACAO_SESSAO_MS,
-      };
-      await iniciarSincronizacao({ uid: user.uid, perfil, vinculo: sessao.vinculo_id });
-      if (perfil === 'ADMIN') {
-        unsubUsuarios = onSnapshot(collection(db, 'usuarios'), snap => {
-          usuariosNuvem = snap.docs.map(d => {
-            const x = d.data();
-            return {
-              id: d.id,
-              usuario: String(x.usuario || ''),
-              nome: String(x.nome || ''),
-              perfil: x.perfil as PerfilUsuario,
-              vinculo_id: x.vinculo_id || undefined,
-              ativo: x.ativo !== false,
-              criado_em: String(x.criado_em || ''),
-            };
-          });
-          window.dispatchEvent(new Event(EVENTO_AUTH_ATUALIZADO));
-        });
+      if (!uid) {
+        sessaoNuvem = null;
+        usuariosNuvem = [];
+        return;
       }
-      sessaoNuvem = sessao;
-      avisarSessao(sessao);
-    } catch (e) {
-      console.error('[login]', e);
-      // Mostra o motivo (ex.: envio cancelado) antes de voltar ao login
-      window.alert(e instanceof Error ? e.message : 'Não foi possível entrar.');
-      sessaoNuvem = null;
-      await signOut(authFirebase).catch(() => {});
-      avisarSessao(null);
+      const s = await carregarPerfil(uid);
+      if (!s) {
+        await supabase!.auth.signOut();
+        sessaoNuvem = null;
+        usuariosNuvem = [];
+        window.alert('Usuário sem acesso liberado. Fale com o administrador.');
+        return;
+      }
+      sessaoNuvem = s;
+      if (s.perfil === 'ADMIN') await carregarUsuariosAdmin();
     } finally {
       carregandoNuvem = false;
-      window.dispatchEvent(new Event(EVENTO_NUVEM_CARREGANDO));
+      avisarMudanca();
     }
+  };
+
+  // Chamado ao abrir a página (sessão guardada) e a cada entrada/saída
+  supabase.auth.onAuthStateChange((_evento, session) => {
+    // Fora do retorno do evento, para não travar o cliente do Supabase
+    window.setTimeout(() => { aplicar(session?.user?.id ?? null); }, 0);
   });
 }
 
+const MENSAGENS_LOGIN: Record<string, string> = {
+  'Invalid login credentials': ERRO_GENERICO,
+  'Email not confirmed': 'Conta sem confirmação. Fale com o administrador.',
+};
+
 async function autenticarNuvem(usuario: string, senha: string): Promise<ResultadoLogin> {
-  let resolver: ((s: SessaoUsuario | null) => void) | null = null;
-  const esperar = new Promise<SessaoUsuario | null>(r => { resolver = r; esperandoSessao.push(r); });
-  try {
-    await signInWithEmailAndPassword(authFirebase, emailDoLogin(usuario), senha);
-  } catch (e: any) {
-    esperandoSessao = esperandoSessao.filter(f => f !== resolver);
-    const codigo = String(e?.code || '');
-    if (codigo.includes('too-many-requests')) return { ok: false, erro: 'Muitas tentativas inválidas. Tente novamente em alguns minutos.' };
-    if (codigo.includes('network')) return { ok: false, erro: 'Sem conexão com a internet.' };
-    if (codigo.includes('user-disabled')) return { ok: false, erro: 'Usuário desativado. Fale com o administrador.' };
-    return { ok: false, erro: ERRO_GENERICO };
+  const { data, error } = await supabase!.auth.signInWithPassword({ email: emailDoLogin(usuario), password: senha });
+  if (error || !data.user) {
+    const msg = error?.message || '';
+    if (/rate|too many/i.test(msg)) return { ok: false, erro: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' };
+    if (/network|fetch/i.test(msg)) return { ok: false, erro: 'Sem conexão com a internet.' };
+    return { ok: false, erro: MENSAGENS_LOGIN[msg] || ERRO_GENERICO };
   }
-  const sessao = await esperar;
-  if (!sessao) return { ok: false, erro: 'Usuário sem acesso liberado. Fale com o administrador.' };
-  return { ok: true, sessao };
+  const s = await carregarPerfil(data.user.id);
+  if (!s) {
+    await supabase!.auth.signOut();
+    return { ok: false, erro: 'Usuário sem acesso liberado. Fale com o administrador.' };
+  }
+  sessaoNuvem = s;
+  if (s.perfil === 'ADMIN') await carregarUsuariosAdmin();
+  avisarMudanca();
+  return { ok: true, sessao: s };
 }
 
 /**
- * Manda o link para redefinir a senha. Só funciona para login feito com e-mail.
- * A resposta é sempre a mesma, para não dizer quais contas existem.
+ * Manda o link para criar uma senha nova. Só funciona para login feito com e-mail real.
+ * A resposta é sempre a mesma, para não revelar quais contas existem.
  */
 export async function enviarRedefinicaoSenha(usuario: string): Promise<{ ok: boolean; erro?: string }> {
-  if (!MODO_NUVEM) return { ok: false, erro: 'Recuperação de senha disponível só com o banco de dados ligado.' };
+  if (!MODO_NUVEM || !supabase) return { ok: false, erro: 'Recuperação de senha disponível só com o banco ligado.' };
   const u = normalizarUsuario(usuario);
-  if (!u.includes('@') || !RE_EMAIL.test(u)) {
+  if (!RE_EMAIL.test(u)) {
     return { ok: false, erro: 'Digite o e-mail de acesso (o mesmo usado para entrar) para receber o link.' };
   }
-  try {
-    await sendPasswordResetEmail(authFirebase, u);
-  } catch (e: any) {
-    if (String(e?.code || '').includes('network')) return { ok: false, erro: 'Sem conexão com a internet.' };
-  }
+  await supabase.auth.resetPasswordForEmail(u, { redirectTo: window.location.origin });
   return { ok: true };
 }
