@@ -388,13 +388,13 @@ export async function iniciarSincronizacao(params: { uid: string; perfil: Perfil
       throw new Error('O banco de dados ainda não foi iniciado. Peça ao administrador para entrar primeiro.');
     }
     if (temDadosLocais) {
-      const enviar = window.confirm('Primeira vez no banco de dados.
+      const enviar = window.confirm(
+        'Primeira vez no banco de dados.\n\n' +
+        'Enviar os dados que estão neste computador para o banco?\n\n' +
+        '(Os outros aparelhos passam a ver estes dados.)\n\n' +
+        'Se cancelar, nada é enviado e nada é apagado.'
+      );
 
-Enviar os dados que estão neste computador para o banco?
-
-(Os outros aparelhos passam a ver estes dados.)
-
-Se cancelar, nada é enviado e nada é apagado.');
       if (!enviar) throw new Error('Envio cancelado. Nada foi enviado nem apagado.');
       lerSujas().forEach(k => marcarSuja(k, false));
       todasAsChavesConhecidas().forEach(k => marcarSuja(k, true)); // tudo daqui vence na primeira carga
@@ -404,11 +404,11 @@ Se cancelar, nada é enviado e nada é apagado.');
     // Aparelho que já usava o sistema sem banco: o que está só aqui não vai para o banco
     const sujas = lerSujas();
     const soAqui = todasAsChavesConhecidas().some(k => !sujas.has(k) && !!localStorage.getItem(k) && localStorage.getItem(k) !== '[]');
-    if (soAqui && !window.confirm('Este aparelho tem dados que não estão no banco.
-
-Eles serão substituídos pelos dados do banco. Faça um backup antes.
-
-Continuar?')) {
+    if (soAqui && !window.confirm(
+      'Este aparelho tem dados que não estão no banco.\n\n' +
+      'Eles serão substituídos pelos dados do banco. Faça um backup antes.\n\n' +
+      'Continuar?'
+    )) {
       throw new Error('Entrada cancelada. Faça o backup deste aparelho e entre de novo.');
     }
     todasAsChavesConhecidas().forEach(k => { if (!sujas.has(k)) gravarLocal(k, null); });
