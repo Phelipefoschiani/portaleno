@@ -556,6 +556,8 @@ export function iniciarAuthNuvem(): void {
       avisarSessao(sessao);
     } catch (e) {
       console.error('[login]', e);
+      // Mostra o motivo (ex.: envio cancelado) antes de voltar ao login
+      window.alert(e instanceof Error ? e.message : 'Não foi possível entrar.');
       sessaoNuvem = null;
       await signOut(authFirebase).catch(() => {});
       avisarSessao(null);

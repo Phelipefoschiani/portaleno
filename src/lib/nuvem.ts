@@ -368,27 +368,49 @@ export async function iniciarSincronizacao(params: { uid: string; perfil: Perfil
   vinculoAtual = params.vinculo || '';
   uidAtual = params.uid;
 
-  // Primeira vez na nuvem: o administrador envia os dados que estão neste computador
+  // Primeira vez na nuvem: só o administrador envia os dados deste computador.
+  // Nenhum dado local é apagado antes de a pergunta ser respondida.
   const estadoRef = doc(db, 'sistema', 'estado');
   let migrado = false;
   try {
     migrado = !!(await getDoc(estadoRef)).data()?.migrado;
   } catch (e) {
     console.warn('[nuvem] não foi possível ler o estado do sistema:', e);
+    throw new Error('Sem conexão com o banco de dados. Tente de novo.');
   }
-  if (!migrado && params.perfil === 'ADMIN') {
-    const temDados = todasAsChavesConhecidas().some(k => {
-      const v = localStorage.getItem(k);
-      return !!v && v !== '[]' && v !== '{}';
-    });
-    if (!temDados || window.confirm('Primeira vez na nuvem.\n\nEnviar os dados que estão neste computador para o banco de dados do Grupo ENO?\n\n(Os outros aparelhos passam a ver estes dados.)')) {
+  const temDadosLocais = todasAsChavesConhecidas().some(k => {
+    const v = localStorage.getItem(k);
+    return !!v && v !== '[]' && v !== '{}';
+  });
+
+  if (!migrado) {
+    if (params.perfil !== 'ADMIN') {
+      throw new Error('O banco de dados ainda não foi iniciado. Peça ao administrador para entrar primeiro.');
+    }
+    if (temDadosLocais) {
+      const enviar = window.confirm('Primeira vez no banco de dados.
+
+Enviar os dados que estão neste computador para o banco?
+
+(Os outros aparelhos passam a ver estes dados.)
+
+Se cancelar, nada é enviado e nada é apagado.');
+      if (!enviar) throw new Error('Envio cancelado. Nada foi enviado nem apagado.');
       lerSujas().forEach(k => marcarSuja(k, false));
       todasAsChavesConhecidas().forEach(k => marcarSuja(k, true)); // tudo daqui vence na primeira carga
     }
     await setDoc(estadoRef, { migrado: true, em: serverTimestamp(), por: params.uid }, { merge: true });
-  } else if (migrado) {
-    // Aparelho entrando: o que vale é a nuvem (menos o que foi alterado aqui sem internet)
+  } else if (temDadosLocais && params.perfil !== 'ADMIN') {
+    // Aparelho que já usava o sistema sem banco: o que está só aqui não vai para o banco
     const sujas = lerSujas();
+    const soAqui = todasAsChavesConhecidas().some(k => !sujas.has(k) && !!localStorage.getItem(k) && localStorage.getItem(k) !== '[]');
+    if (soAqui && !window.confirm('Este aparelho tem dados que não estão no banco.
+
+Eles serão substituídos pelos dados do banco. Faça um backup antes.
+
+Continuar?')) {
+      throw new Error('Entrada cancelada. Faça o backup deste aparelho e entre de novo.');
+    }
     todasAsChavesConhecidas().forEach(k => { if (!sujas.has(k)) gravarLocal(k, null); });
   }
 
