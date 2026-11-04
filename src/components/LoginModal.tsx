@@ -15,7 +15,9 @@ import {
   PerfilUsuario,
   SENHA_MINIMA,
   verificarPrimeiroAcesso,
+  enviarRedefinicaoSenha,
 } from '../lib/auth';
+import { MODO_NUVEM } from '../lib/firebase';
 
 export type DestinoAcesso = PerfilUsuario;
 
@@ -222,6 +224,22 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
                   className={campo}
                 />
               </div>
+            </div>
+          )}
+
+          {!primeiroAcesso && MODO_NUVEM && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={async () => {
+                  setError('');
+                  const r = await enviarRedefinicaoSenha(username);
+                  setError(r.ok ? 'Se esse e-mail estiver cadastrado, o link para criar uma senha nova chegou na caixa de entrada (confira o spam).' : (r.erro || 'Não foi possível enviar o link.'));
+                }}
+                className="text-[12.5px] font-semibold text-eno-800 underline underline-offset-2 cursor-pointer hover:text-eno-900"
+              >
+                Esqueci minha senha
+              </button>
             </div>
           )}
 

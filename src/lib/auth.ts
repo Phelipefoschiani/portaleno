@@ -10,7 +10,7 @@
 // consegue alterar os dados. Quando houver servidor, a autenticação deve ser feita no backend.
 
 import { MODO_NUVEM, auth as authFirebase, db } from './firebase';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { collection, doc, getDoc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
 import { iniciarSincronizacao, pararSincronizacao } from './nuvem';
 
@@ -584,4 +584,22 @@ async function autenticarNuvem(usuario: string, senha: string): Promise<Resultad
   const sessao = await esperar;
   if (!sessao) return { ok: false, erro: 'Usuário sem acesso liberado. Fale com o administrador.' };
   return { ok: true, sessao };
+}
+
+/**
+ * Manda o link para redefinir a senha. Só funciona para login feito com e-mail.
+ * A resposta é sempre a mesma, para não dizer quais contas existem.
+ */
+export async function enviarRedefinicaoSenha(usuario: string): Promise<{ ok: boolean; erro?: string }> {
+  if (!MODO_NUVEM) return { ok: false, erro: 'Recuperação de senha disponível só com o banco de dados ligado.' };
+  const u = normalizarUsuario(usuario);
+  if (!u.includes('@') || !RE_EMAIL.test(u)) {
+    return { ok: false, erro: 'Digite o e-mail de acesso (o mesmo usado para entrar) para receber o link.' };
+  }
+  try {
+    await sendPasswordResetEmail(authFirebase, u);
+  } catch (e: any) {
+    if (String(e?.code || '').includes('network')) return { ok: false, erro: 'Sem conexão com a internet.' };
+  }
+  return { ok: true };
 }
