@@ -10,6 +10,7 @@ import './cadastros.css';
 export function FormularioCadastro({
   onSubmit,
   onCancelar,
+  onLimpar,
   titulo,
   subtitulo,
   extra,
@@ -21,6 +22,8 @@ export function FormularioCadastro({
 }: {
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   onCancelar: () => void;
+  /** Botão Limpar: zera o formulário e apaga o rascunho salvo. */
+  onLimpar?: () => void;
   titulo: string;
   subtitulo?: React.ReactNode;
   /** Controle curto ao lado do título (ex.: "Cadastro ativo"). */
@@ -67,6 +70,15 @@ export function FormularioCadastro({
         className="shrink-0 bg-papel border-t border-linha px-3 sm:px-6 py-2.5 flex items-center gap-2 sm:justify-end"
         style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}
       >
+        {onLimpar && (
+          <button
+            type="button"
+            onClick={() => { if (window.confirm('Limpar todo o formulário? Os dados digitados serão apagados.')) onLimpar(); }}
+            className="h-11 sm:h-9 px-4 rounded-md text-st-vencido text-[13px] font-semibold hover:bg-st-vencido-bg transition-colors cursor-pointer mr-auto focus-visible:outline-2 focus-visible:outline-ouro"
+          >
+            Limpar
+          </button>
+        )}
         <button
           type="button"
           onClick={onCancelar}

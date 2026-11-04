@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { lerRascunho, apagarRascunho, useRascunho } from '../../lib/rascunho';
 import { mascaraCpfCnpj, mascaraInscricaoEstadual, ESTADOS_UF } from '../../lib/mascarasCadastro';
 import { CampoNumero } from '../ui/CampoNumero';
 import { 
@@ -293,13 +294,17 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
     });
   }, [selectedRca, vendasDoRca]);
 
+  // Rascunho: o cadastro novo fica guardado enquanto é preenchido
+  useRascunho('rca', formData, isCreating);
+
   // Form Handlers
   const handleNovoRca = () => {
     const maiorCodigo = rcas.reduce((max, r) => Math.max(max, Number(String(r.codigo_rca || '').replace(/\D/g, '')) || 0), 0);
     const proximoNum = Math.max(rcas.length, maiorCodigo) + 1;
     const cod = `RCA-${proximoNum.toString().padStart(3, '0')}`;
     
-    setFormData({
+    const rascunhoRca = lerRascunho<typeof formData>('rca');
+    setFormData(rascunhoRca ? { ...rascunhoRca, codigo_rca: cod } : {
       codigo_rca: cod,
       tipo_pessoa: 'PF',
       status: 'Ativo',
@@ -541,6 +546,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
         criado_em: new Date().toISOString()
       };
 
+      apagarRascunho('rca');
       setRcas(prev => [novoRca, ...prev]);
       sincronizarClientesDoRca(novoRca);
       setSelectedRca(novoRca);
@@ -778,6 +784,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
             <FormularioCadastro
               onSubmit={handleSalvar}
               onCancelar={cancelarEdicao}
+              onLimpar={isCreating ? () => { apagarRascunho('rca'); handleNovoRca(); } : undefined}
               titulo={isCreating ? 'Novo representante' : (formData.nome_fantasia || formData.nome_completo || `Editar ${formData.codigo_rca}`)}
               subtitulo={isCreating ? 'Identificação, comissão, carteira, PIX e região' : `Editar ${formData.codigo_rca}`}
               rotuloSalvar={isCreating ? 'Cadastrar representante' : 'Salvar alterações'}

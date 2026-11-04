@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { lerRascunho, apagarRascunho, useRascunho } from '../../lib/rascunho';
 import { mascaraCpfCnpj, mascaraInscricaoEstadual, ESTADOS_UF } from '../../lib/mascarasCadastro';
 import { 
   Search, 
@@ -133,9 +134,12 @@ export function CadastroAgricultores() {
     }, 2000);
   };
 
+  // Rascunho: o cadastro novo fica guardado enquanto é preenchido
+  useRascunho('agricultores', formData, modo === 'formulario' && !agricultorSelecionado);
+
   const abrirFormularioNovo = () => {
     setAgricultorSelecionado(null);
-    setFormData({
+    setFormData(lerRascunho<typeof formData>('agricultores') ?? {
       tipo_pessoa: 'PF',
       nome_completo: '',
       nome_propriedade: '',
@@ -268,6 +272,7 @@ export function CadastroAgricultores() {
       setAgricultores(prev => [novo, ...prev]);
     }
 
+    apagarRascunho('agricultores');
     setModo('lista');
   };
 
@@ -513,6 +518,7 @@ export function CadastroAgricultores() {
         <FormularioCadastro
           onSubmit={salvarAgricultor}
           onCancelar={() => setModo('lista')}
+          onLimpar={agricultorSelecionado ? undefined : () => { apagarRascunho('agricultores'); abrirFormularioNovo(); }}
           titulo={agricultorSelecionado ? agricultorSelecionado.nome_completo : 'Novo agricultor'}
           subtitulo={agricultorSelecionado ? 'Editar cadastro do produtor' : 'Dados do produtor, da propriedade e chave PIX para pagar a safra'}
           extra={<ChaveAtivo ativo={formData.ativo} onChange={v => setFormData({ ...formData, ativo: v })} rotulo="Produtor ativo" />}

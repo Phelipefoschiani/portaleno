@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { lerRascunho, apagarRascunho, useRascunho } from '../../lib/rascunho';
 import { mascaraCpfCnpj, mascaraInscricaoEstadual, ESTADOS_UF } from '../../lib/mascarasCadastro';
 import { 
   Search, 
@@ -298,9 +299,12 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
     ativo: true,
   });
 
+  // Rascunho: enquanto cadastra um cliente novo, o formulário fica guardado
+  useRascunho(`clientes${modoRca ? '_rca' : ''}`, formData, modo === 'formulario' && !clienteSelecionado);
+
   const abrirFormularioNovo = () => {
     setClienteSelecionado(null);
-    setFormData({
+    setFormData(lerRascunho<typeof formData>(`clientes${modoRca ? '_rca' : ''}`) ?? {
       tipo_pessoa: 'PJ',
       razao_nome: '',
       fantasia: '',
@@ -517,6 +521,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
       }
     }
 
+    apagarRascunho(`clientes${modoRca ? '_rca' : ''}`);
     setModo('lista');
   };
 
@@ -597,7 +602,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                 clientes.length === 0
                   ? (modoRca ? 'Sua carteira ainda está vazia' : 'Nenhum cliente cadastrado')
                   : <>
-                      {clientes.length} {clientes.length === 1 ? 'cliente' : 'clientes'} · {ativosCount} {ativosCount === 1 ? 'ativo' : 'ativos'}
+                      {clientes.length} {clientes.length === 1 ? 'cliente' : `clientes${modoRca ? '_rca' : ''}`} · {ativosCount} {ativosCount === 1 ? 'ativo' : 'ativos'}
                       {semTabelaCount > 0 && <span className="text-st-aguardando font-semibold"> · {semTabelaCount} sem tabela de preço</span>}
                     </>
               }
@@ -806,6 +811,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
         <FormularioCadastro
           onSubmit={salvarCliente}
           onCancelar={() => setModo('lista')}
+          onLimpar={clienteSelecionado ? undefined : () => { apagarRascunho(`clientes${modoRca ? '_rca' : ''}`); abrirFormularioNovo(); }}
           titulo={clienteSelecionado ? clienteSelecionado.razao_nome : (modoRca ? 'Adicionar cliente' : 'Novo cliente')}
           subtitulo={clienteSelecionado ? 'Editar cadastro do cliente' : 'Dados fiscais, endereço de entrega e condição comercial'}
           extra={<ChaveAtivo ativo={formData.ativo} onChange={v => setFormData({ ...formData, ativo: v })} rotulo="Cliente ativo" />}

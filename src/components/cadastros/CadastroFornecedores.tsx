@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { lerRascunho, apagarRascunho, useRascunho } from '../../lib/rascunho';
 import { mascaraCpfCnpj, mascaraInscricaoEstadual, ESTADOS_UF } from '../../lib/mascarasCadastro';
 import { 
   Search, 
@@ -407,12 +408,15 @@ export function CadastroFornecedores() {
     });
   };
 
+  // Rascunho: o cadastro novo fica guardado enquanto é preenchido
+  useRascunho('fornecedores', formData, modo === 'formulario' && !fornecedorSelecionado);
+
   const abrirFormularioNovo = () => {
     setFornecedorSelecionado(null);
     setMateriaPrimaSelecionadaId('');
     setNovoItemNome('');
     setNovoItemCodigoFornecedor('');
-    setFormData({
+    setFormData(lerRascunho<typeof formData>('fornecedores') ?? {
       tipo_pessoa: 'PJ',
       razao_nome: '',
       fantasia: '',
@@ -542,6 +546,7 @@ export function CadastroFornecedores() {
       setFornecedores(prev => [novo, ...prev]);
     }
 
+    apagarRascunho('fornecedores');
     setModo('lista');
   };
 
@@ -970,6 +975,7 @@ export function CadastroFornecedores() {
         <FormularioCadastro
           onSubmit={salvarFornecedor}
           onCancelar={() => setModo('lista')}
+          onLimpar={fornecedorSelecionado ? undefined : () => { apagarRascunho('fornecedores'); abrirFormularioNovo(); }}
           titulo={fornecedorSelecionado ? (fornecedorSelecionado.fantasia || fornecedorSelecionado.razao_nome) : 'Novo fornecedor'}
           subtitulo={fornecedorSelecionado ? 'Editar cadastro do fornecedor' : 'Dados cadastrais, endereço e matérias-primas que ele fornece'}
           extra={<ChaveAtivo ativo={formData.ativo} onChange={v => setFormData({ ...formData, ativo: v })} rotulo="Fornecedor ativo" />}
