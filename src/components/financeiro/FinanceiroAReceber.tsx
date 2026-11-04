@@ -23,6 +23,7 @@ import {
   registrarBaixaNoCaixa
 } from '../../data/financeiroData';
 import { hojeISO, somarDias, paraISO, formatarDataBR, compararDatas } from '../../lib/datas';
+import { Painel } from '../ui/Painel';
 import { FinanceiroNavTabs } from './FinanceiroNavTabs';
 
 interface Props {
@@ -79,6 +80,22 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
     const qtdPagos = titulos.filter(t => t.status === 'PAGO').length;
 
     return { emAberto, recebidoMes, qtdAberto, qtdVencidos, valorVencido, qtdPagos };
+  }, [titulos]);
+
+  // Saldo devedor: o que cada cliente ainda deve (conta corrente e prazos em aberto), do mais atrasado ao menor
+  const saldoDevedor = useMemo(() => {
+    const mapa = new Map<string, { cliente: string; qtd: number; total: number; vencido: number; proximo: string; contaCorrente: number }>();
+    titulos.filter(t => t.status !== 'PAGO').forEach(t => {
+      const chave = t.cliente_cnpj || t.cliente_nome;
+      const atual = mapa.get(chave) || { cliente: t.cliente_nome, qtd: 0, total: 0, vencido: 0, proximo: '', contaCorrente: 0 };
+      atual.qtd += 1;
+      atual.total += t.valor;
+      if (statusEfetivoReceber(t) === 'VENCIDO') atual.vencido += t.valor;
+      if (/conta corrente/i.test(t.forma_pagamento || '')) atual.contaCorrente += t.valor;
+      if (!atual.proximo || t.data_vencimento < atual.proximo) atual.proximo = t.data_vencimento;
+      mapa.set(chave, atual);
+    });
+    return [...mapa.values()].sort((a, b) => b.vencido - a.vencido || b.total - a.total);
   }, [titulos]);
 
   const titulosFiltrados = useMemo(() => {
@@ -204,6 +221,52 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
                   onClick={metricas.qtdVencidos > 0 ? () => setFiltroStatus('VENCIDO') : undefined} />
                 <CardNumero rotulo="Recebido no mês" unidade="R$" unidadeAntes valor={moedaSemSimbolo(metricas.recebidoMes)} />
               </FaixaFin>
+            </div>
+          )}
+
+          {!semNenhum && saldoDevedor.length > 0 && (
+            <div className="px-4 sm:px-6 pb-4">
+              <Painel titulo="Saldo devedor por cliente" contexto={`${saldoDevedor.length} ${saldoDevedor.length === 1 ? 'cliente' : 'clientes'}`} semPadding>
+                <div className="sm:hidden divide-y divide-linha">
+                  {saldoDevedor.map(s => (
+                    <div key={s.cliente} className="px-4 py-3 space-y-0.5">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="font-bold text-tinta truncate min-w-0">{s.cliente}</span>
+                        <span className="font-extrabold tabular-nums text-tinta shrink-0">{formatarMoeda(s.total)}</span>
+                      </div>
+                      <div className="text-[11.5px] text-cinza">
+                        {s.qtd} {s.qtd === 1 ? 'título' : 'títulos'} · próximo venc. {formatarDataBR(s.proximo)}
+                        {s.vencido > 0 && <span className="text-st-vencido font-bold"> · vencido {formatarMoeda(s.vencido)}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <TabelaDados className="hidden sm:block">
+                  <thead>
+                    <tr>
+                      <Th>Cliente</Th>
+                      <Th numero>Títulos</Th>
+                      <Th>Próximo vencimento</Th>
+                      <Th numero>Vencido</Th>
+                      <Th numero>Saldo devedor</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {saldoDevedor.map(s => (
+                      <tr key={s.cliente} className={tabela.tr}>
+                        <Td className="font-semibold text-tinta">
+                          {s.cliente}
+                          {s.contaCorrente > 0 && <div className="text-[11px] font-semibold text-eno-700">conta corrente {formatarMoeda(s.contaCorrente)}</div>}
+                        </Td>
+                        <Td numero>{s.qtd}</Td>
+                        <Td className="tabular-nums">{formatarDataBR(s.proximo)}</Td>
+                        <Td numero>{s.vencido > 0 ? <span className="font-bold text-st-vencido">{formatarMoeda(s.vencido)}</span> : '-'}</Td>
+                        <Td numero><span className="font-bold text-tinta">{formatarMoeda(s.total)}</span></Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </TabelaDados>
+              </Painel>
             </div>
           )}
 

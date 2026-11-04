@@ -6,11 +6,12 @@ export const FORMAS_PAGAMENTO = [
   'Pix',
   'Transferência Bancária (TED)',
   'Cartão de Crédito',
+  'Conta corrente',
   'Dinheiro'
 ];
 
 // Formas que normalmente têm prazo em dias
-export const formaComPrazo = (forma: string) => /boleto|cart[aã]o|ted|transfer/i.test(forma || '');
+export const formaComPrazo = (forma: string) => /boleto|cart[aã]o|ted|transfer|conta corrente/i.test(forma || '');
 
 // Limpa o que foi digitado: só números separados por "/" (ex.: "28 / 35, 42" -> "28/35/42")
 export function normalizarDias(texto: string): string {

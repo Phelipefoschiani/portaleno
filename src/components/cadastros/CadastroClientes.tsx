@@ -137,6 +137,7 @@ const FORMAS_PAGAMENTO_OPTIONS = [
   { id: 'fp_3', nome: 'Transferência Bancária (TED)' },
   { id: 'fp_4', nome: 'Cartão de Crédito' },
   { id: 'fp_5', nome: 'Dinheiro' },
+  { id: 'fp_6', nome: 'Conta corrente' },
 ];
 
 
