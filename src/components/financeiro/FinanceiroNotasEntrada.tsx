@@ -88,10 +88,11 @@ export function FinanceiroNotasEntrada({ onNavigate }: Props) {
       id: `nfe_ent_${Date.now()}`,
       numero: formData.numero,
       serie: formData.serie,
-      chave_acesso: formData.chave_acesso || `412603${Math.floor(10000000000000 + Math.random() * 90000000000000)}5500100000${formData.numero.replace(/\D/g, '')}1000000001`,
+      // Sem chave informada, fica vazia: nunca inventar a chave de uma nota fiscal
+      chave_acesso: (formData.chave_acesso || '').replace(/\s/g, ''),
       parceiro_nome: formData.parceiro_nome,
       tipo_parceiro: formData.tipo_parceiro,
-      cnpj_cpf: formData.cnpj_cpf || '000.000.000-00',
+      cnpj_cpf: formData.cnpj_cpf || '',
       produto_descricao: formData.produto_descricao,
       peso_liquido_kg: Number(formData.peso_liquido_kg) || 0,
       valor_total: Number(formData.valor_total) || 0,

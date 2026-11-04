@@ -157,6 +157,16 @@ function verificarModoLimpo(): boolean {
   return localStorage.getItem('grupo_eno_modo_limpo_v1') === 'true';
 }
 
+/** Próximo número sequencial de título (ex.: PAG-0007), sem sorteio. */
+export function proximoNumeroTitulo(prefixo: 'PAG' | 'DUP', titulos: { numero_documento?: string }[]): string {
+  const usados = titulos
+    .map(t => (t.numero_documento || '').match(new RegExp(`^${prefixo}-(\d+)$`)))
+    .filter((m): m is RegExpMatchArray => !!m)
+    .map(m => parseInt(m[1], 10));
+  const proximo = (usados.length ? Math.max(...usados) : 0) + 1;
+  return `${prefixo}-${String(proximo).padStart(4, '0')}`;
+}
+
 export function carregarTitulosReceber(): TituloReceber[] {
   if (typeof window === 'undefined') return verificarModoLimpo() ? [] : TITULOS_RECEBER_INICIAIS;
   try {

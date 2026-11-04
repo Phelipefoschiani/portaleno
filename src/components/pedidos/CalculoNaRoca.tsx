@@ -252,8 +252,8 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
     const novos: SacoPesagem[] = [];
     const inicio = sacosForm.length + 1;
     for (let i = 0; i < qtd; i++) {
-      const variacao = Math.random() * 1.6 - 0.8;
-      const peso = parseFloat((pesoBase + variacao).toFixed(3));
+      // Peso igual ao padrão informado: o peso real de cada saco é digitado na pesagem
+      const peso = parseFloat(pesoBase.toFixed(3));
       novos.push({
         numero: inicio + i,
         peso_kg: peso

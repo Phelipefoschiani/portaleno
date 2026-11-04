@@ -14,6 +14,7 @@ import {
 import {
   TituloReceber,
   carregarTitulosReceber,
+  proximoNumeroTitulo,
   salvarTitulosReceber,
   statusEfetivoReceber,
   dataNoMesAtual,
@@ -134,7 +135,7 @@ export function FinanceiroAReceber({ onNavigate }: Props) {
 
   const abrirNovo = () => {
     setFormData({
-      numero_documento: `DUP-${Math.floor(1000 + Math.random() * 9000)}`,
+      numero_documento: proximoNumeroTitulo('DUP', carregarTitulosReceber()),
       cliente_nome: '',
       cliente_cnpj: '',
       valor: 0,

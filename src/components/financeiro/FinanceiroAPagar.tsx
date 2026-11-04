@@ -13,6 +13,7 @@ import {
 import {
   TituloPagar,
   carregarTitulosPagar,
+  proximoNumeroTitulo,
   salvarTitulosPagar,
   statusEfetivoPagar,
   dataNoMesAtual,
@@ -139,7 +140,7 @@ export function FinanceiroAPagar({ onNavigate }: Props) {
 
   const abrirNovo = () => {
     setFormData({
-      numero_documento: `PAG-${Math.floor(1000 + Math.random() * 9000)}`,
+      numero_documento: proximoNumeroTitulo('PAG', carregarTitulosPagar()),
       favorecido_nome: '',
       tipo_favorecido: 'Agricultor',
       categoria: 'Mandioca / Matéria-Prima',
