@@ -295,7 +295,7 @@ function acompanharGravacoes(): void {
 let acompanhando = false;
 
 /** Liga a sincronização (depois do login). Com somenteBuscar, só recebe do banco até a confirmação. */
-export function iniciarSincronizacaoBanco(opcoes?: { somenteBuscar?: boolean }): void {
+export async function iniciarSincronizacaoBanco(opcoes?: { somenteBuscar?: boolean }): Promise<void> {
   if (!supabase || ligada) return;
   if (!acompanhando) {
     acompanharGravacoes();
@@ -305,8 +305,12 @@ export function iniciarSincronizacaoBanco(opcoes?: { somenteBuscar?: boolean }):
   podeEnviar = !opcoes?.somenteBuscar;
   window.addEventListener('focus', buscarTudoDoBanco);
   timerBusca = window.setInterval(buscarTudoDoBanco, INTERVALO_BUSCA_MS);
-  if (podeEnviar) enviarPendentes().then(buscarTudoDoBanco);
-  else buscarTudoDoBanco();
+  // Espera a primeira busca (com limite de tempo), para a tela só abrir com os dados do banco
+  const primeira = (async () => {
+    if (podeEnviar) await enviarPendentes();
+    await buscarTudoDoBanco();
+  })();
+  await Promise.race([primeira, new Promise<void>(r => window.setTimeout(r, 15_000))]);
 }
 
 /** Depois da confirmação do administrador: libera o envio e começa a enviar o que estiver pendente. */

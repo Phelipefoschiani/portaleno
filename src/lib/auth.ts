@@ -586,7 +586,7 @@ export function iniciarAuthNuvem(): void {
       // Sincronização automática. Enquanto o administrador não respondeu o envio inicial, ela espera,
       // para nada subir sem a pergunta.
       const esperaDecisao = s.perfil === 'ADMIN' && existemDadosParaEnviar() && !envioJaFeitoNeste();
-      iniciarSincronizacaoBanco({ somenteBuscar: esperaDecisao });
+      await iniciarSincronizacaoBanco({ somenteBuscar: esperaDecisao });
     } finally {
       carregandoNuvem = false;
       avisarMudanca();
