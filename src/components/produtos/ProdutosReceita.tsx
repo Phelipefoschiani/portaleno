@@ -42,7 +42,9 @@ export function ProdutosReceita({ onNavigate }: Props) {
   // 7. Observações Técnicas
   const [formNome, setFormNome] = useState('');
   const [formCodigo, setFormCodigo] = useState('');
-  const [formTipoEmbalagem, setFormTipoEmbalagem] = useState<'Saco 25kg' | 'Fardo 10x1kg' | 'Pacote 1kg' | 'Big Bag 1000kg' | 'Caixa' | 'Granel'>('Saco 25kg');
+  const [formTipoEmbalagem, setFormTipoEmbalagem] = useState<string>('Saco 25kg');
+  // Nova embalagem: nome e peso por pacote informados pelo usuário
+  const [novaEmbalagem, setNovaEmbalagem] = useState<{ aberto: boolean; nome: string; peso: string }>({ aberto: false, nome: '', peso: '' });
   const [formRendimentoPacotes, setFormRendimentoPacotes] = useState('');
   const [formPesoPorPacoteKg, setFormPesoPorPacoteKg] = useState('25');
   const [formMateriasPrimas, setFormMateriasPrimas] = useState<ItemMateriaPrimaReceita[]>([]);
@@ -85,7 +87,26 @@ export function ProdutosReceita({ onNavigate }: Props) {
   };
 
   // Atualiza peso por pacote automaticamente ao mudar o tipo de embalagem
-  const handleMudarTipoEmbalagem = (tipo: 'Saco 25kg' | 'Fardo 10x1kg' | 'Pacote 1kg' | 'Big Bag 1000kg' | 'Caixa' | 'Granel') => {
+  const EMBALAGENS_PADRAO = ['Pacote 1kg', 'Saco 25kg', 'Fardo 10x1kg', 'Big Bag 1000kg', 'Caixa', 'Granel'];
+  // Padrão + embalagens criadas pelo usuário (vindas das receitas salvas)
+  const opcoesEmbalagem = useMemo(() => {
+    const extras = Array.from(new Set(receitas.map(r => r.tipo_embalagem).filter((t): t is string => !!t && !EMBALAGENS_PADRAO.includes(t))));
+    if (formTipoEmbalagem && !EMBALAGENS_PADRAO.includes(formTipoEmbalagem) && !extras.includes(formTipoEmbalagem)) extras.push(formTipoEmbalagem);
+    return [...EMBALAGENS_PADRAO, ...extras];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [receitas, formTipoEmbalagem]);
+
+  const confirmarNovaEmbalagem = () => {
+    const nome = novaEmbalagem.nome.trim();
+    const peso = parseFloat(String(novaEmbalagem.peso).replace(',', '.'));
+    if (!nome) { alert('Informe o nome da embalagem (ex.: Pacote 500g).'); return; }
+    if (!(peso > 0)) { alert('Informe o peso de cada pacote em kg (ex.: 0,5).'); return; }
+    setFormTipoEmbalagem(nome);
+    setFormPesoPorPacoteKg(String(peso));
+    setNovaEmbalagem({ aberto: false, nome: '', peso: '' });
+  };
+
+  const handleMudarTipoEmbalagem = (tipo: string) => {
     setFormTipoEmbalagem(tipo);
     if (tipo === 'Saco 25kg') setFormPesoPorPacoteKg('25');
     else if (tipo === 'Big Bag 1000kg') setFormPesoPorPacoteKg('1000');
@@ -706,14 +727,33 @@ export function ProdutosReceita({ onNavigate }: Props) {
                 <input type="text" required value={formCodigo} onChange={(e) => setFormCodigo(e.target.value)} placeholder="Ex: REC-001" className={`${form.campo} tabular-nums`} />
               </Campo>
               <Campo rotulo="Tipo de embalagem *" className="sm:col-span-4">
-                <select value={formTipoEmbalagem} onChange={(e) => handleMudarTipoEmbalagem(e.target.value as any)} className={form.select}>
-                  <option value="Pacote 1kg">Pacote 1kg</option>
-                  <option value="Saco 25kg">Saco 25kg</option>
-                  <option value="Fardo 10x1kg">Fardo 10x1kg</option>
-                  <option value="Big Bag 1000kg">Big Bag 1.000kg</option>
-                  <option value="Caixa">Caixa</option>
-                  <option value="Granel">Granel</option>
-                </select>
+                <div className="flex gap-2">
+                  <select value={formTipoEmbalagem} onChange={(e) => handleMudarTipoEmbalagem(e.target.value)} className={`${form.select} flex-1 min-w-0`}>
+                    {opcoesEmbalagem.map(op => (
+                      <option key={op} value={op}>{op === 'Big Bag 1000kg' ? 'Big Bag 1.000kg' : op}</option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={() => setNovaEmbalagem({ aberto: true, nome: '', peso: '' })}
+                    className="shrink-0 px-3 rounded-md border border-eno-700 text-eno-800 text-xs font-bold bg-papel hover:bg-eno-50 cursor-pointer">
+                    + Nova
+                  </button>
+                </div>
+                {novaEmbalagem.aberto && (
+                  <div className="mt-2 p-3 rounded-md border border-linha bg-papel-2 space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input type="text" value={novaEmbalagem.nome} onChange={(e) => setNovaEmbalagem({ ...novaEmbalagem, nome: e.target.value })}
+                        placeholder="Nome (ex.: Pacote 500g)" className={form.campo} />
+                      <input type="text" inputMode="decimal" value={novaEmbalagem.peso} onChange={(e) => setNovaEmbalagem({ ...novaEmbalagem, peso: e.target.value })}
+                        placeholder="Peso de cada pacote em kg (ex.: 0,5)" className={`${form.campo} tabular-nums`} />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button type="button" onClick={() => setNovaEmbalagem({ aberto: false, nome: '', peso: '' })}
+                        className="px-3 py-1.5 rounded-md text-xs font-bold text-tinta-2 hover:bg-papel-3/60 cursor-pointer">Cancelar</button>
+                      <button type="button" onClick={confirmarNovaEmbalagem}
+                        className="px-3 py-1.5 rounded-md text-xs font-bold bg-eno-800 text-white hover:bg-eno-900 cursor-pointer">Usar esta embalagem</button>
+                    </div>
+                  </div>
+                )}
               </Campo>
               <Campo rotulo="Quantos pacotes rende *" className="sm:col-span-4" ajuda={`Custo total ÷ ${formRendimentoPacotes || 0} unidades`}>
                 <input
