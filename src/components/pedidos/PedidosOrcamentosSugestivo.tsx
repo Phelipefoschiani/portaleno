@@ -88,6 +88,14 @@ const modoObrigatorioDaTabela = (tab?: TabelaPreco | null): 'FARDO' | 'UNITARIO'
 
 // Fator de conversão fardo/caixa -> pacotes (1 quando vendido avulso/saco)
 const fatorItem = (n?: number) => (Number(n) > 0 ? Number(n) : 1);
+
+// Peso (kg) de um item do formulário: embalagens × pacotes por embalagem × peso do pacote
+function pesoItemFormulario(it: { produtoId: string; quantidade: number; unidadesPorFardo?: number; modo?: string }, produtos: any[]): number {
+  const prod = produtos.find(p => p.id === it.produtoId);
+  if (!prod) return 0;
+  const fator = it.modo === 'UNITARIO' ? 1 : fatorItem(it.unidadesPorFardo || prod.unidades_por_fardo);
+  return (Number(it.quantidade) || 0) * fator * (Number(prod.peso_unitario_kg) || 0);
+}
 import { PedidosNavTabs } from './PedidosNavTabs';
 import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
 import { BarraFiltros, Segmentado, CampoBusca, SeletorFiltro } from '../ui/BarraFiltros';
@@ -1683,6 +1691,11 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
                       return (
                         <div key={idx} className="p-3 bg-papel-2 rounded-md border border-linha space-y-2">
+                          {item.produtoId && (
+                            <div className="text-[11.5px] font-semibold text-tinta-2 tabular-nums">
+                              Peso deste item: <span className="text-tinta">{pesoItemFormulario(item, produtosDisponiveis).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg</span>
+                            </div>
+                          )}
                           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                             <div className="col-span-2 sm:flex-1 sm:min-w-[200px]">
                               <select
@@ -1936,6 +1949,12 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
               </div>
 
               <div className="pt-3 border-t border-linha flex flex-wrap items-center justify-end gap-2 max-sm:sticky max-sm:-bottom-4 max-sm:z-10 max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:pb-4 max-sm:bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
+                <div className="mr-auto max-sm:w-full">
+                  <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-cinza">Peso total</span>
+                  <span className="block text-base font-extrabold tracking-tight tabular-nums text-tinta">
+                    {itensForm.reduce((acc, it) => acc + pesoItemFormulario(it, produtosDisponiveis), 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg
+                  </span>
+                </div>
                 {modoCliente && (
                   <div className="mr-auto max-sm:w-full">
                     <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-cinza">Total do pedido</span>
@@ -2163,6 +2182,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                           <th className="py-2.5 pl-4 pr-3 rounded-l-md">Produto</th>
                           <th className="py-2.5 px-3">Embalagem</th>
                           <th className="py-2.5 px-3 text-right">Qtd</th>
+                          <th className="py-2.5 px-3 text-right">Peso (kg)</th>
                           <th className="py-2.5 px-3 text-right">{modoExibicao === 'FARDO' ? 'Preço cx/fardo' : 'Preço unit.'}</th>
                           <th className="py-2.5 pl-3 pr-4 text-right rounded-r-md">Subtotal</th>
                         </tr>
@@ -2179,6 +2199,9 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                               <td className="py-2.5 px-3 text-right whitespace-nowrap">
                                 <span className="text-[13px] font-extrabold tabular-nums">{valores.quantidade.toLocaleString('pt-BR')}</span>
                                 <span className="text-[10px] text-[#6e7470] ml-1">{valores.unidadeRotulo}</span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right text-[12px] tabular-nums whitespace-nowrap">
+                                {(Number(it.peso_total_kg) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}
                               </td>
                               <td className="py-2.5 px-3 text-right text-[12px] tabular-nums whitespace-nowrap">
                                 {formatarMoeda(valores.preco)}
