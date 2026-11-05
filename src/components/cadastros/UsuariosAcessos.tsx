@@ -34,6 +34,8 @@ import {
   EVENTO_CADASTROS_ATUALIZADOS,
 } from '../../data/cadastrosData';
 import { carregarClientes } from '../../data/clientesData';
+import { enviarDadosDesteNavegador, existemDadosParaEnviar } from '../../lib/bancoEnvio';
+import { MODO_NUVEM } from '../../lib/supabase';
 import { formatarDataBR } from '../../lib/datas';
 import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
 import { StatusChip } from '../ui/StatusChip';
@@ -88,6 +90,25 @@ export function UsuariosAcessos() {
   const [form, setForm] = useState<FormUsuario>(FORM_VAZIO);
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
+  const [enviandoBanco, setEnviandoBanco] = useState(false);
+
+  // Envia o que está guardado neste navegador para o banco (não apaga nada daqui)
+  const enviarParaBanco = async () => {
+    if (!existemDadosParaEnviar()) {
+      window.alert('Não há dados guardados neste navegador para enviar.');
+      return;
+    }
+    if (!window.confirm('Enviar os dados deste navegador para o banco de dados?\n\nOs registros que já existem no banco serão atualizados. Nada é apagado daqui.')) return;
+    setEnviandoBanco(true);
+    try {
+      const r = await enviarDadosDesteNavegador();
+      window.alert(r.erros.length
+        ? 'Envio com problemas:\n\n' + r.erros.join('\n')
+        : `Envio concluído: ${r.linhas} registros em ${r.tabelas} tabelas.`);
+    } finally {
+      setEnviandoBanco(false);
+    }
+  };
   const [salvando, setSalvando] = useState(false);
   // Backup em arquivo
   const [ultimoBackup, setUltimoBackup] = useState<string | null>(() => obterDataUltimoBackup());
@@ -267,9 +288,16 @@ export function UsuariosAcessos() {
           titulo="Usuários e acessos"
           resumo={`${usuarios.length} ${usuarios.length === 1 ? 'login' : 'logins'} · ${ativosUsu} ${ativosUsu === 1 ? 'ativo' : 'ativos'} · login de RCA e cliente também pode ser criado no próprio cadastro`}
           acoes={
-            <BotaoPrimario onClick={abrirNovo} className="w-full sm:w-auto h-10 sm:h-9">
-              <Plus className="w-4 h-4" /> Novo usuário
-            </BotaoPrimario>
+            <div className="flex flex-wrap gap-2">
+              {MODO_NUVEM && (
+                <BotaoSecundario onClick={enviarParaBanco} disabled={enviandoBanco} className="w-full sm:w-auto h-10 sm:h-9">
+                  {enviandoBanco ? 'Enviando…' : 'Enviar dados deste navegador para o banco'}
+                </BotaoSecundario>
+              )}
+              <BotaoPrimario onClick={abrirNovo} className="w-full sm:w-auto h-10 sm:h-9">
+                <Plus className="w-4 h-4" /> Novo usuário
+              </BotaoPrimario>
+            </div>
           }
         />
       </div>
