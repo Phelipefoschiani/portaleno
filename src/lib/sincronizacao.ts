@@ -231,9 +231,14 @@ async function buscarChave(chave: string): Promise<boolean> {
     const soLa = remotas.filter(r => !idsLocais.has(r.id));
     if (soAqui.length > 0) marcarPendente(chave);
     let mudou = false;
-    if (soLa.length > 0) {
-      const atualLista = lerJson<unknown[]>(chave, []);
-      gravarLocal(chave, [...soLa.map(r => r.dados), ...(Array.isArray(atualLista) ? atualLista : [])]);
+    // Registro que existe nos dois lados: vale a versão do banco (ele é a fonte da verdade)
+    const porId = new Map(remotas.map(r => [r.id, r.dados]));
+    const atualLista = lerJson<unknown[]>(chave, []);
+    const locaisAtualizados = (Array.isArray(atualLista) ? atualLista : []).map((d: any) =>
+      d && porId.has(String(d.id)) && !soAqui.some(r => r.id === String(d.id)) ? porId.get(String(d.id)) : d
+    );
+    if (soLa.length > 0 || JSON.stringify(locaisAtualizados) !== JSON.stringify(atualLista)) {
+      gravarLocal(chave, [...soLa.map(r => r.dados), ...locaisAtualizados]);
       mudou = true;
     }
     if (!pendentes().has(chave)) {
