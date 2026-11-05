@@ -28,6 +28,8 @@ const EVENTOS_TELAS = [
 type Snapshot = Record<string, Record<string, string>>; // chave -> (id -> assinatura)
 
 let ligada = false;
+// Envio para o banco só depois da confirmação do administrador; a busca do banco sempre acontece
+let podeEnviar = true;
 let aplicandoRemoto = false;
 let timerEnvio: number | null = null;
 let timerBusca: number | null = null;
@@ -148,7 +150,7 @@ async function enviarChave(chave: string): Promise<void> {
 }
 
 async function enviarPendentes(): Promise<void> {
-  if (!ligada || enviando || !supabase) return;
+  if (!ligada || !podeEnviar || enviando || !supabase) return;
   enviando = true;
   try {
     for (const chave of [...pendentes()]) {
@@ -292,18 +294,26 @@ function acompanharGravacoes(): void {
 
 let acompanhando = false;
 
-/** Liga a sincronização (depois do login). */
-export function iniciarSincronizacaoBanco(): void {
+/** Liga a sincronização (depois do login). Com somenteBuscar, só recebe do banco até a confirmação. */
+export function iniciarSincronizacaoBanco(opcoes?: { somenteBuscar?: boolean }): void {
   if (!supabase || ligada) return;
   if (!acompanhando) {
     acompanharGravacoes();
     acompanhando = true;
   }
   ligada = true;
+  podeEnviar = !opcoes?.somenteBuscar;
   window.addEventListener('focus', buscarTudoDoBanco);
   timerBusca = window.setInterval(buscarTudoDoBanco, INTERVALO_BUSCA_MS);
-  // Primeiro envia o que ficou pendente, depois busca o que mudou no banco
-  enviarPendentes().then(buscarTudoDoBanco);
+  if (podeEnviar) enviarPendentes().then(buscarTudoDoBanco);
+  else buscarTudoDoBanco();
+}
+
+/** Depois da confirmação do administrador: libera o envio e começa a enviar o que estiver pendente. */
+export function liberarEnvioBanco(): void {
+  podeEnviar = true;
+  if (!ligada) iniciarSincronizacaoBanco();
+  else enviarPendentes().then(buscarTudoDoBanco);
 }
 
 /** Desliga a sincronização (ao sair). Não apaga nada. */

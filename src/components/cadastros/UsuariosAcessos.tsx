@@ -35,6 +35,7 @@ import {
 } from '../../data/cadastrosData';
 import { carregarClientes } from '../../data/clientesData';
 import { enviarDadosDesteNavegador, existemDadosParaEnviar } from '../../lib/bancoEnvio';
+import { liberarEnvioBanco } from '../../lib/sincronizacao';
 import { MODO_NUVEM } from '../../lib/supabase';
 import { formatarDataBR } from '../../lib/datas';
 import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
@@ -102,6 +103,7 @@ export function UsuariosAcessos() {
     setEnviandoBanco(true);
     try {
       const r = await enviarDadosDesteNavegador();
+      if (r.erros.length === 0) liberarEnvioBanco();
       window.alert(r.erros.length
         ? 'Envio com problemas:\n\n' + r.erros.join('\n')
         : `Envio concluído: ${r.linhas} registros em ${r.tabelas} tabelas.`);

@@ -11,7 +11,7 @@
 
 import { MODO_NUVEM, supabase } from './supabase';
 import { envioJaFeitoNeste, existemDadosParaEnviar, enviarDadosDesteNavegador } from './bancoEnvio';
-import { iniciarSincronizacaoBanco, pararSincronizacaoBanco } from './sincronizacao';
+import { iniciarSincronizacaoBanco, pararSincronizacaoBanco, liberarEnvioBanco } from './sincronizacao';
 
 export type PerfilUsuario = 'ADMIN' | 'AGRICULTOR' | 'RCA' | 'PROVISORIO' | 'PRODUCAO' | 'SITIO' | 'CLIENTE';
 
@@ -548,6 +548,7 @@ async function perguntarEnvioInicial(): Promise<void> {
     return;
   }
   const r = await enviarDadosDesteNavegador();
+  if (r.erros.length === 0) liberarEnvioBanco();
   window.alert(
     r.erros.length
       ? 'Envio com problemas:\n\n' + r.erros.join('\n') + '\n\nTente de novo ou me avise.'
@@ -585,7 +586,7 @@ export function iniciarAuthNuvem(): void {
       // Sincronização automática. Enquanto o administrador não respondeu o envio inicial, ela espera,
       // para nada subir sem a pergunta.
       const esperaDecisao = s.perfil === 'ADMIN' && existemDadosParaEnviar() && !envioJaFeitoNeste();
-      if (!esperaDecisao) iniciarSincronizacaoBanco();
+      iniciarSincronizacaoBanco({ somenteBuscar: esperaDecisao });
     } finally {
       carregandoNuvem = false;
       avisarMudanca();
