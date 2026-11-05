@@ -11,7 +11,7 @@
 
 import { MODO_NUVEM, supabase } from './supabase';
 import { envioJaFeitoNeste, existemDadosParaEnviar, enviarDadosDesteNavegador } from './bancoEnvio';
-import { iniciarSincronizacaoBanco, pararSincronizacaoBanco, liberarEnvioBanco } from './sincronizacao';
+import { iniciarSincronizacaoBanco, pararSincronizacaoBanco, liberarEnvioBanco, enviarPendentesAgora, limparDadosLocais, semPendencias } from './sincronizacao';
 
 export type PerfilUsuario = 'ADMIN' | 'AGRICULTOR' | 'RCA' | 'PROVISORIO' | 'PRODUCAO' | 'SITIO' | 'CLIENTE';
 
@@ -256,6 +256,8 @@ export function encerrarSessao(): void {
   if (typeof window === 'undefined') return;
   if (MODO_NUVEM) {
     sessaoNuvem = null;
+    // Ao sair, não deixa dados do sistema guardados no navegador (se houver algo pendente, fica)
+    if (semPendencias()) limparDadosLocais();
     supabase?.auth.signOut().catch(() => {});
     window.dispatchEvent(new Event(EVENTO_AUTH_ATUALIZADO));
     return;
@@ -586,6 +588,9 @@ export function iniciarAuthNuvem(): void {
       // Sincronização automática. Enquanto o administrador não respondeu o envio inicial, ela espera,
       // para nada subir sem a pergunta.
       const esperaDecisao = s.perfil === 'ADMIN' && existemDadosParaEnviar() && !envioJaFeitoNeste();
+      // Ao entrar: envia o que estiver pendente e limpa o navegador; depois o banco preenche tudo.
+      // Se o administrador ainda não respondeu o envio inicial, nada é apagado.
+      if (!esperaDecisao && (await enviarPendentesAgora())) limparDadosLocais();
       await iniciarSincronizacaoBanco({ somenteBuscar: esperaDecisao });
     } finally {
       carregandoNuvem = false;

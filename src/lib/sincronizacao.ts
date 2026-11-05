@@ -334,3 +334,32 @@ export function pararSincronizacaoBanco(): void {
   if (timerEnvio !== null) window.clearTimeout(timerEnvio);
   timerEnvio = null;
 }
+
+/** Envia o que está pendente agora (sem depender de a sincronização estar ligada). true = nada ficou pendente. */
+export async function enviarPendentesAgora(): Promise<boolean> {
+  if (!supabase) return false;
+  for (const chave of [...pendentes()]) {
+    try {
+      await enviarChave(chave);
+    } catch (e) {
+      console.warn('[sincronização] não enviou', chave, e instanceof Error ? e.message : e);
+    }
+  }
+  return pendentes().size === 0;
+}
+
+/** Não há nada guardado neste navegador que ainda não foi enviado ao banco. */
+export function semPendencias(): boolean {
+  return pendentes().size === 0;
+}
+
+/**
+ * Apaga do navegador os dados do sistema (o banco é a fonte). Só chamar quando não há nada pendente.
+ * Ao entrar de novo, a busca do banco preenche tudo outra vez.
+ */
+export function limparDadosLocais(): void {
+  if (!semPendencias()) return;
+  for (const chave of Object.keys(TABELAS_DO_SISTEMA)) localStorage.removeItem(chave);
+  localStorage.removeItem(CHAVE_SNAPSHOT);
+  localStorage.removeItem(CHAVE_PENDENTES);
+}
