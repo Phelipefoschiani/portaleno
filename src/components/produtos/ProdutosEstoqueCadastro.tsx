@@ -282,6 +282,8 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
       custo_total: parseFloat(calculosFormulario.custoTotal.toFixed(2)),
       tipo_acondicionamento: formData.tipo_acondicionamento,
       unidades_por_acondicionamento: formData.unidades_por_acondicionamento,
+      // Campo que o pedido e a tabela de preço leem: fardo/caixa com N unidades
+      unidades_por_fardo: formData.tipo_acondicionamento === 'Avulso' ? 1 : (formData.unidades_por_acondicionamento || 1),
       // Embalagem primária derivada do peso (compatibilidade com telas que leem tipo_embalagem)
       tipo_embalagem: derivarTipoEmbalagem(formData.peso_unitario_kg),
       // Preço/margem do produto são legados: o preço vem só das tabelas

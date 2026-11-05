@@ -89,6 +89,10 @@ const modoObrigatorioDaTabela = (tab?: TabelaPreco | null): 'FARDO' | 'UNITARIO'
 // Fator de conversão fardo/caixa -> pacotes (1 quando vendido avulso/saco)
 const fatorItem = (n?: number) => (Number(n) > 0 ? Number(n) : 1);
 
+// Embalagem que o pedido usa: o acondicionamento do produto (Fardo, Caixa, Saco) quando existe
+const tipoEmbalagemDoProduto = (p: any): string =>
+  p && p.tipo_acondicionamento && p.tipo_acondicionamento !== 'Avulso' ? p.tipo_acondicionamento : p?.tipo_embalagem;
+
 // Peso (kg) de um item do formulário: embalagens × pacotes por embalagem × peso do pacote
 function pesoItemFormulario(it: { produtoId: string; quantidade: number; unidadesPorFardo?: number; modo?: string }, produtos: any[]): number {
   const prod = produtos.find(p => p.id === it.produtoId);
@@ -558,9 +562,9 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
     if (modo === 'UNITARIO') {
       const qtdUnit = it.quantidade * fator;
       const precoUnit = it.preco_unitario / fator;
-      const unidadeNome = it.tipo_embalagem === 'Fardo 10x1kg' ? 'pct 1kg' : it.tipo_embalagem === 'Caixa' ? 'unid' : 'kg';
+      const unidadeNome = it.tipo_embalagem === 'Fardo 10x1kg' ? 'pct 1kg' : (it.tipo_embalagem === 'Caixa' || it.tipo_embalagem === 'Fardo') ? 'un' : 'kg';
       return {
-        apresentacao: `${it.tipo_embalagem} (${fator} ${unidadeNome})`,
+        apresentacao: fator > 1 ? `${it.tipo_embalagem} x ${fator} ${unidadeNome}` : `${it.tipo_embalagem} (${fator} ${unidadeNome})`,
         quantidade: qtdUnit,
         unidadeRotulo: unidadeNome,
         preco: precoUnit,
@@ -763,7 +767,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
       ...itensForm,
       {
         produtoId: defaultProd.id,
-        tipoEmbalagem: defaultProd.tipo_embalagem,
+        tipoEmbalagem: tipoEmbalagemDoProduto(defaultProd),
         quantidade: modoInicial === 'FARDO' ? 1 : fatorItem(defaultProd.unidades_por_fardo),
         precoUnitario: precoNoModo(defaultProd, modoInicial),
         unidadesPorFardo: fatorItem(defaultProd.unidades_por_fardo),
@@ -865,14 +869,14 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
     const itensBase = modoCliente
       ? itensForm.map(it => {
           const p = produtosFiltradosPorTabela.find(x => x.id === it.produtoId);
-          return p ? { ...it, tipoEmbalagem: p.tipo_embalagem || it.tipoEmbalagem, precoUnitario: precoNoModo(p, modoItem(it)) } : it;
+          return p ? { ...it, tipoEmbalagem: tipoEmbalagemDoProduto(p) || it.tipoEmbalagem, precoUnitario: precoNoModo(p, modoItem(it)) } : it;
         })
       : itensForm;
     const itensMapeados = itensBase.map(it => {
       const prod = produtosFiltradosPorTabela.find(p => p.id === it.produtoId) || produtosDisponiveis.find(p => p.id === it.produtoId);
       if (!prod) return null;
       let fator = fatorItem(it.unidadesPorFardo || prod.unidades_por_fardo);
-      let tipoEmbalagem = it.tipoEmbalagem || prod.tipo_embalagem;
+      let tipoEmbalagem = it.tipoEmbalagem || tipoEmbalagemDoProduto(prod);
       let qtdReal = it.quantidade;
       let precoReal = it.precoUnitario;
       const subtotal = it.quantidade * it.precoUnitario;
@@ -1705,7 +1709,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                                   const updated = [...itensForm];
                                   updated[idx].produtoId = e.target.value;
                                   if (newProd) {
-                                    updated[idx].tipoEmbalagem = newProd.tipo_embalagem;
+                                    updated[idx].tipoEmbalagem = tipoEmbalagemDoProduto(newProd);
                                     updated[idx].unidadesPorFardo = fatorItem(newProd.unidades_por_fardo);
                                     const opcoes = opcoesVendaItem(fatorItem(newProd.unidades_por_fardo), newProd.tipo_acondicionamento);
                                     const modoNovo = opcoes.find(o => o.modo === modoItem(updated[idx]))?.modo || opcoes[0]?.modo || modoLancamentoForm;
