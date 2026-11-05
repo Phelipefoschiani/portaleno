@@ -11,6 +11,7 @@
 
 import { MODO_NUVEM, supabase } from './supabase';
 import { envioJaFeitoNeste, existemDadosParaEnviar, enviarDadosDesteNavegador } from './bancoEnvio';
+import { iniciarSincronizacaoBanco, pararSincronizacaoBanco } from './sincronizacao';
 
 export type PerfilUsuario = 'ADMIN' | 'AGRICULTOR' | 'RCA' | 'PROVISORIO' | 'PRODUCAO' | 'SITIO' | 'CLIENTE';
 
@@ -565,6 +566,7 @@ export function iniciarAuthNuvem(): void {
       if (!uid) {
         sessaoNuvem = null;
         usuariosNuvem = [];
+        pararSincronizacaoBanco();
         return;
       }
       const s = await carregarPerfil(uid);
@@ -580,6 +582,10 @@ export function iniciarAuthNuvem(): void {
         await carregarUsuariosAdmin();
         await perguntarEnvioInicial();
       }
+      // Sincronização automática. Enquanto o administrador não respondeu o envio inicial, ela espera,
+      // para nada subir sem a pergunta.
+      const esperaDecisao = s.perfil === 'ADMIN' && existemDadosParaEnviar() && !envioJaFeitoNeste();
+      if (!esperaDecisao) iniciarSincronizacaoBanco();
     } finally {
       carregandoNuvem = false;
       avisarMudanca();
