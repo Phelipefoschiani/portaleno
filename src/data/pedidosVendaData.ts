@@ -203,8 +203,9 @@ export function obterProdutosVendaDisponiveis() {
       const produtosEstoque = carregarEstoqueProdutos();
       if (produtosEstoque && produtosEstoque.length > 0) {
         return produtosEstoque.map(p => {
-          const emb = (p.tipo_acondicionamento === 'Caixa' ? 'Caixa' : p.tipo_acondicionamento === 'Fardo' ? 'Fardo 10x1kg' : p.tipo_embalagem) as any;
-          const unidades = p.unidades_por_acondicionamento || (p.tipo_acondicionamento === 'Fardo' ? 10 : p.tipo_acondicionamento === 'Caixa' ? 10 : 1);
+          // Embalagem do cadastro do produto (Fardo, Caixa...) e quantas unidades vão em cada uma
+          const emb = (p.tipo_acondicionamento && p.tipo_acondicionamento !== 'Avulso' ? p.tipo_acondicionamento : p.tipo_embalagem) as any;
+          const unidades = p.unidades_por_acondicionamento || 1;
           // O produto não tem preço próprio: o orçamento aplica o preço da tabela (precosData.calcularPrecoNaTabela)
           const precoAcond = 0;
           
