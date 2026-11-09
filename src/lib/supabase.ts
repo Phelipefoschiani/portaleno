@@ -9,9 +9,33 @@ const CHAVE_PUBLICA = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | 
 /** true quando o site foi compilado com a conexão ao Supabase configurada. */
 export const SUPABASE_CONFIGURADO = !!URL_SUPABASE && !!CHAVE_PUBLICA;
 
+// "Lembrar acesso": marcado = a sessão fica no navegador mesmo depois de fechar; desmarcado = só até fechar.
+const CHAVE_LEMBRAR = 'eno_lembrar_acesso';
+const armazenamentoSessao = {
+  getItem: (k: string) => localStorage.getItem(k) ?? sessionStorage.getItem(k),
+  setItem: (k: string, v: string) => {
+    const lembrar = localStorage.getItem(CHAVE_LEMBRAR) !== '0';
+    (lembrar ? localStorage : sessionStorage).setItem(k, v);
+    (lembrar ? sessionStorage : localStorage).removeItem(k);
+  },
+  removeItem: (k: string) => {
+    localStorage.removeItem(k);
+    sessionStorage.removeItem(k);
+  },
+};
+
+/** Define antes do login se a sessão deve ficar guardada depois de fechar o navegador. */
+export function definirLembrarAcesso(lembrar: boolean): void {
+  try {
+    localStorage.setItem(CHAVE_LEMBRAR, lembrar ? '1' : '0');
+  } catch {
+    /* sem armazenamento: vale o padrão */
+  }
+}
+
 export const supabase = SUPABASE_CONFIGURADO
   ? createClient(URL_SUPABASE!, CHAVE_PUBLICA!, {
-      auth: { persistSession: true, autoRefreshToken: true, storageKey: 'eno_auth' },
+      auth: { persistSession: true, autoRefreshToken: true, storageKey: 'eno_auth', storage: armazenamentoSessao },
     })
   : null;
 

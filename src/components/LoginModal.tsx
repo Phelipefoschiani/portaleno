@@ -29,7 +29,12 @@ type LoginModalProps = {
 };
 
 export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps) {
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(() => {
+    try { return localStorage.getItem('eno_ultimo_usuario') || ''; } catch { return ''; }
+  });
+  const [lembrar, setLembrar] = useState(() => {
+    try { return localStorage.getItem('eno_lembrar_acesso') !== '0'; } catch { return true; }
+  });
   const [password, setPassword] = useState('');
   const [confirmacao, setConfirmacao] = useState('');
   const [error, setError] = useState('');
@@ -96,7 +101,8 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
         return;
       }
 
-      const resultado = await autenticar(username, password);
+      try { localStorage.setItem('eno_ultimo_usuario', username.trim()); localStorage.setItem('eno_lembrar_acesso', lembrar ? '1' : '0'); } catch { /* ignora */ }
+      const resultado = await autenticar(username, password, lembrar);
       if (resultado.ok === false) {
         setError(resultado.erro);
         setPassword('');
@@ -241,6 +247,13 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
                 Esqueci minha senha
               </button>
             </div>
+          )}
+
+          {!primeiroAcesso && (
+            <label className="flex items-center gap-2 text-[12.5px] text-tinta-2 cursor-pointer select-none">
+              <input type="checkbox" checked={lembrar} onChange={(e) => setLembrar(e.target.checked)} className="w-4 h-4 accent-eno-800" />
+              Lembrar acesso neste computador
+            </label>
           )}
 
           <button

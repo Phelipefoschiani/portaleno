@@ -9,7 +9,7 @@
 // Observação: por ser 100% local, quem tem acesso ao navegador com ferramentas de desenvolvedor
 // consegue alterar os dados. Quando houver servidor, a autenticação deve ser feita no backend.
 
-import { MODO_NUVEM, supabase } from './supabase';
+import { MODO_NUVEM, supabase, definirLembrarAcesso } from './supabase';
 import { envioJaFeitoNeste, existemDadosParaEnviar, enviarDadosDesteNavegador } from './bancoEnvio';
 import { iniciarSincronizacaoBanco, pararSincronizacaoBanco, liberarEnvioBanco, enviarPendentesAgora, limparDadosLocais, semPendencias } from './sincronizacao';
 
@@ -326,8 +326,8 @@ export async function criarPrimeiroAdministrador(usuario: string, senha: string,
 
 export type ResultadoLogin = { ok: true; sessao: SessaoUsuario } | { ok: false; erro: string };
 
-export async function autenticar(usuario: string, senha: string): Promise<ResultadoLogin> {
-  if (MODO_NUVEM) return autenticarNuvem(usuario, senha);
+export async function autenticar(usuario: string, senha: string, lembrar = true): Promise<ResultadoLogin> {
+  if (MODO_NUVEM) return autenticarNuvem(usuario, senha, lembrar);
   const u = normalizarUsuario(usuario);
   const restante = bloqueioRestanteMs(u);
   if (restante > 0) {
@@ -610,7 +610,8 @@ const MENSAGENS_LOGIN: Record<string, string> = {
   'Email not confirmed': 'Conta sem confirmação. Fale com o administrador.',
 };
 
-async function autenticarNuvem(usuario: string, senha: string): Promise<ResultadoLogin> {
+async function autenticarNuvem(usuario: string, senha: string, lembrar = true): Promise<ResultadoLogin> {
+  definirLembrarAcesso(lembrar);
   const { data, error } = await supabase!.auth.signInWithPassword({ email: emailDoLogin(usuario), password: senha });
   if (error || !data.user) {
     const msg = error?.message || '';
