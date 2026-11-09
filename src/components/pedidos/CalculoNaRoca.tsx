@@ -823,10 +823,12 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
             )
           }
           acoes={
-            <BotaoPrimario onClick={abrirModalNovo} className="w-full sm:w-auto h-10 sm:h-9">
-              <Plus className="w-4 h-4" />
-              Nova pesagem
-            </BotaoPrimario>
+            calculos.length > 0 ? (
+              <BotaoPrimario onClick={abrirModalNovo} className="w-full sm:w-auto h-10 sm:h-9">
+                <Plus className="w-4 h-4" />
+                Nova pesagem
+              </BotaoPrimario>
+            ) : undefined
           }
         />
 

@@ -689,7 +689,7 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
           titulo="Representantes"
           resumo={rcas.length === 0 ? 'Nenhum representante cadastrado' : `${rcas.length} ${rcas.length === 1 ? 'representante' : 'representantes'} · ${ativosRca} ${ativosRca === 1 ? 'ativo' : 'ativos'}`}
           acoes={
-            !isEditing ? (
+            !isEditing && rcas.length > 0 ? (
               <BotaoPrimario onClick={handleNovoRca} className="w-full sm:w-auto h-10 sm:h-9">
                 <Plus className="w-4 h-4" /> Novo representante
               </BotaoPrimario>

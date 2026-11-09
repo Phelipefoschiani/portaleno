@@ -337,9 +337,11 @@ export function PortalRCA({ onVoltar, rcaId, permitirSelecaoAdmin = false }: Por
                   <dt className="text-cinza">Comissão</dt>
                   <dd className="font-semibold text-tinta text-right">{modeloComissao}</dd>
                 </dl>
-                <BotaoSecundario onClick={irParaNovoCliente} className="mt-4 w-full h-11 sm:h-9">
-                  <UserPlus className="w-4 h-4" /> Adicionar cliente
-                </BotaoSecundario>
+                {clientesDoRca.length > 0 && (
+                  <BotaoSecundario onClick={irParaNovoCliente} className="mt-4 w-full h-11 sm:h-9">
+                    <UserPlus className="w-4 h-4" /> Adicionar cliente
+                  </BotaoSecundario>
+                )}
               </Painel>
             </div>
           </div>

@@ -731,7 +731,7 @@ export function FinanceiroLancarDespesas({ onNavigate }: Props) {
                 <span> · {pedidosProgramados.length} {pedidosProgramados.length === 1 ? 'compra programada' : 'compras programadas'}</span>
               </>
             }
-            acoes={botaoPrincipal}
+            acoes={temAlgo ? botaoPrincipal : undefined}
           />
 
           <div className="px-4 sm:px-6 pb-4">

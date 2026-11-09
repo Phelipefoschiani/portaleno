@@ -970,10 +970,12 @@ export function PedidoCompra() {
             )
           }
           acoes={
-            <BotaoPrimario onClick={abrirNovoPedido} className="w-full sm:w-auto h-10 sm:h-9">
-              <Plus className="w-4 h-4" />
-              Novo pedido de compra
-            </BotaoPrimario>
+            pedidos.length > 0 ? (
+              <BotaoPrimario onClick={abrirNovoPedido} className="w-full sm:w-auto h-10 sm:h-9">
+                <Plus className="w-4 h-4" />
+                Novo pedido de compra
+              </BotaoPrimario>
+            ) : undefined
           }
         />
 
