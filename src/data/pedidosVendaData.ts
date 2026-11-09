@@ -303,7 +303,8 @@ export function moverPedidoEtapa(
 
       if (novaEtapa === 'EM_PRODUCAO') {
         updated.tipo = 'PEDIDO_VENDA';
-        if (!updated.numero_pedido.startsWith('PED-')) {
+        // O número é gerado ao criar o pedido (ano-RCA-cliente-sequência); só cria um se faltar
+        if (!updated.numero_pedido) {
           updated.numero_pedido = `PED-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
         }
         if (!updated.data_inicio_producao) updated.data_inicio_producao = dataHoje;

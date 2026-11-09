@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { proximoCodigoCliente } from '../../lib/codigos';
 import { lerRascunho, apagarRascunho, useRascunho } from '../../lib/rascunho';
 import { mascaraCpfCnpj, mascaraInscricaoEstadual, ESTADOS_UF } from '../../lib/mascarasCadastro';
 import { 
@@ -482,6 +483,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
       // INSERT
       const novo: Cliente = {
         id: `cli_${Date.now()}`,
+        codigo_cliente: proximoCodigoCliente(base),
         empresa_id: 'emp_grupo_eno',
         tipo_pessoa: formData.tipo_pessoa,
         razao_nome: formData.razao_nome,

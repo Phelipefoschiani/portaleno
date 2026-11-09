@@ -32,6 +32,7 @@ export interface Cliente {
   tabela_preco_id?: string;
   tabela_preco_nome?: string;
   ativo: boolean;
+  codigo_cliente?: string; // CL0001, usado no número do pedido
   criado_em: string;
 }
 
