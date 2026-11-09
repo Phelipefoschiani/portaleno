@@ -242,6 +242,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
     'Orçamento' | 'Pedido Sugestivo' | 'Pedido'
   >('Orçamento');
   const [modoExibicao, setModoExibicao] = useState<'FARDO' | 'UNITARIO'>('FARDO');
+  // Documento com ou sem a foto dos produtos (escolha na barra de exportação)
+  const [comFotoDoc, setComFotoDoc] = useState(false);
   const [zoomDocumento, setZoomDocumento] = useState<number>(100);
   const [gerandoExportacao, setGerandoExportacao] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -676,7 +678,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
       clearTimeout(timer);
       if (url) URL.revokeObjectURL(url);
     };
-  }, [modalDetalhes, tipoDocumentoVisualizacao, modoExibicao]);
+  }, [modalDetalhes, tipoDocumentoVisualizacao, modoExibicao, comFotoDoc]);
 
   // Exportar Documento PDF Oficial A4
   const exportarPDF = async (pedido: PedidoVenda) => {
@@ -2199,7 +2201,17 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                           return (
                             <tr key={idx} className={`border-b border-[#e6e1d2] ${idx % 2 === 1 ? 'bg-[#f6f3ea]' : ''}`}>
                               <td className="py-2.5 pl-4 pr-3">
-                                <div className="text-[13px] font-bold">{it.produto_nome}</div>
+                                <div className="flex items-center gap-2.5">
+                                  {comFotoDoc && (
+                                    <img
+                                      src={produtosDisponiveis.find(p => p.id === it.produto_id)?.foto || ''}
+                                      alt=""
+                                      className="w-11 h-11 rounded object-cover border border-[#e6e1d2] shrink-0"
+                                      style={{ visibility: produtosDisponiveis.find(p => p.id === it.produto_id)?.foto ? 'visible' : 'hidden' }}
+                                    />
+                                  )}
+                                  <div className="text-[13px] font-bold">{it.produto_nome}</div>
+                                </div>
                               </td>
                               <td className="py-2.5 px-3 text-[11px] text-[#6e7470]">{valores.apresentacao}</td>
                               <td className="py-2.5 px-3 text-right whitespace-nowrap">
@@ -2280,6 +2292,16 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
             {/* 4. BARRA DE EXPORTAÇÃO INFERIOR */}
             <div className="p-3 sm:p-3.5 bg-eno-900 border-t border-eno-800 flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2 sm:gap-3 shrink-0">
               <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 max-sm:[&>button]:min-h-10 max-sm:[&>button]:justify-center">
+                {/* Com ou sem foto dos produtos no documento */}
+                <button
+                  onClick={() => setComFotoDoc(v => !v)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-md border border-white/25 text-white font-bold text-xs transition-colors cursor-pointer hover:bg-white/10"
+                  title="Incluir ou tirar a foto dos produtos no documento"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  <span>{comFotoDoc ? 'Sem foto' : 'Com foto'}</span>
+                </button>
+
                 {/* Exportar PNG */}
                 <button
                   onClick={() => exportarPNG(modalDetalhes)}

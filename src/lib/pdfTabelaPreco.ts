@@ -7,6 +7,7 @@ import { EMPRESA } from './empresa';
 
 export interface LinhaTabelaPrecoPdf {
   categoria: string;
+  foto?: string; // imagem quadrada (data URL)
   nome: string;
   codigo: string;
   peso: string;
@@ -25,6 +26,7 @@ export interface DadosTabelaPrecoPdf {
   frete: string;
   mostrarUnitario: boolean;
   mostrarAcondicionamento: boolean;
+  comFoto?: boolean;
   linhas: LinhaTabelaPrecoPdf[];
 }
 
@@ -175,11 +177,16 @@ export async function gerarPdfTabelaPreco(dados: DadosTabelaPrecoPdf): Promise<j
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9.5);
       doc.setTextColor(...TINTA);
-      doc.text(doc.splitTextToSize(l.nome, colPeso - M - 8)[0], M + 4, y + 4.6);
+      // Foto quadrada à esquerda (quando escolhido no documento); o texto recua para dar espaço
+      const recuo = dados.comFoto ? 12 : 0;
+      if (dados.comFoto && l.foto) {
+        try { doc.addImage(l.foto, 'JPEG', M + 3, y + 0.5, 9.5, 9.5); } catch { /* imagem inválida: segue sem foto */ }
+      }
+      doc.text(doc.splitTextToSize(l.nome, colPeso - M - 8 - recuo)[0], M + 4 + recuo, y + 4.6);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.8);
       doc.setTextColor(...CINZA);
-      doc.text(l.codigo, M + 4, y + 8.3);
+      doc.text(l.codigo, M + 4 + recuo, y + 8.3);
 
       doc.setFontSize(8.3);
       doc.setTextColor(...TINTA);

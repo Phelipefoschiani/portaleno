@@ -222,6 +222,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
     produtosDaTabelaPreco(tab).map(p => {
       const calc = calcularPrecoNaTabela(p, tab);
       return {
+        foto: (p as any).foto,
         categoria: p.categoria || 'Sem categoria',
         nome: p.nome,
         codigo: p.codigo,
@@ -233,6 +234,9 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       };
     });
 
+  // Escolha: documento com ou sem foto dos produtos
+  const [tabelaComFoto, setTabelaComFoto] = useState(false);
+
   const montarPdf = (tab: TabelaPreco) =>
     gerarPdfTabelaPreco({
       nome: tab.nome,
@@ -243,6 +247,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       frete: tab.frete_tipo,
       mostrarUnitario: mostraUnitario(tab),
       mostrarAcondicionamento: mostraAcondicionamento(tab),
+      comFoto: tabelaComFoto,
       linhas: linhasDocumento(tab)
     });
 
@@ -262,7 +267,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       cancelado = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [tabelaVisualizar]);
+  }, [tabelaVisualizar, tabelaComFoto]);
 
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const handlePdf = async (tab: TabelaPreco, acao: 'baixar' | 'imprimir') => {
@@ -809,6 +814,9 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
                 {copiado ? <Check className="w-4 h-4 text-st-pago" /> : <Copy className="w-4 h-4" />}
                 <span className="sm:hidden">{copiado ? 'Copiada' : 'WhatsApp'}</span>
                 <span className="hidden sm:inline">{copiado ? 'Tabela copiada' : 'Copiar para WhatsApp'}</span>
+              </BotaoSecundario>
+              <BotaoSecundario onClick={() => setTabelaComFoto(v => !v)} title="Incluir ou tirar a foto dos produtos no documento">
+                {tabelaComFoto ? 'Sem foto' : 'Com foto'}
               </BotaoSecundario>
               <BotaoSecundario onClick={() => handlePdf(tabelaVisualizar, 'imprimir')} disabled={gerandoPdf}>
                 <Printer className="w-4 h-4" />
