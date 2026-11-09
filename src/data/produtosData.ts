@@ -48,6 +48,7 @@ export interface ProdutoEstoque {
   id: string;
   codigo: string;
   nome: string;
+  foto?: string; // imagem quadrada (data URL)
   categoria: 'Féculas Nativas' | 'Féculas Especiais' | 'Polvilhos' | 'Tapiocas' | 'Farinhas' | 'Mandioca Gourmet' | string;
   tipo_embalagem: 'Saco 25kg' | 'Big Bag 1000kg' | 'Fardo 10x1kg' | 'Pacote 1kg' | 'Caixa' | string;
   peso_unitario_kg: number;

@@ -28,6 +28,7 @@ import { PrecosProdutoTabelas, tabelasDoCadastroDeProduto } from './PrecosProdut
 import { CategoriaProdutoCampo, useCategoriasProduto } from './CategoriaProdutoCampo';
 import { formatarMoeda } from '../../data/financeiroData';
 import { hojeISO } from '../../lib/datas';
+import { fotoQuadrada } from '../../lib/foto';
 
 const loteSugerido = () => `LOTE-ENO-${hojeISO().slice(2).replace(/-/g, '')}`;
 import { ProdutosNavTabs } from './ProdutosNavTabs';
@@ -55,6 +56,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
   const [formData, setFormData] = useState({
     codigo: '',
     nome: '',
+    foto: '',
     categoria: '' as ProdutoEstoque['categoria'],
     peso_unitario_kg: 1,
     estoque_atual_sacos: 0,
@@ -219,6 +221,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
     setFormData({
       codigo: `PRD-${Date.now().toString().slice(-4)}`,
       nome: recPadrao ? (recPadrao.nome || recPadrao.produto_nome || '') : '',
+      foto: '',
       categoria: filtroCategoria !== 'TODAS' ? filtroCategoria : categorias.length === 1 ? categorias[0] : '',
       peso_unitario_kg: recPadrao?.peso_por_pacote_kg || 1,
       estoque_atual_sacos: 0,
@@ -242,6 +245,7 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
     setFormData({
       codigo: prod.codigo,
       nome: prod.nome,
+      foto: prod.foto || '',
       categoria: prod.categoria,
       peso_unitario_kg: prod.peso_unitario_kg,
       estoque_atual_sacos: prod.estoque_atual_sacos,
@@ -541,12 +545,21 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
                       return (
                         <tr key={item.id} className={`${tabela.tr} group`}>
                           <Td className="max-w-[420px]">
+                            <div className="flex items-center gap-3 min-w-0">
+                              {item.foto ? (
+                                <img src={item.foto} alt="" className="w-10 h-10 rounded object-cover border border-linha shrink-0" />
+                              ) : (
+                                <div className="w-10 h-10 rounded border border-linha bg-papel-2 shrink-0" />
+                              )}
+                              <div className="min-w-0">
                             <button type="button" onClick={() => handleAbrirEdicao(item)} className="text-left font-semibold text-tinta group-hover:text-eno-700 cursor-pointer">
                               {item.nome}
                             </button>
                             <div className="text-[11.5px] text-cinza tabular-nums">
                               {item.codigo} · {item.tipo_embalagem}
                               {item.receita_nome && <> · receita {item.receita_nome}</>}
+                            </div>
+                              </div>
                             </div>
                             {consumo.length > 0 && (
                               <div className="text-[11px] text-cinza-claro leading-snug truncate" title={consumo.map(c => `${c.quantidade_por_pacote.toLocaleString('pt-BR', { maximumFractionDigits: 4 })} ${c.unidade_medida} ${c.materia_prima_nome}`).join(' · ')}>
@@ -722,6 +735,43 @@ export function ProdutosEstoqueCadastro({ onNavigate }: Props) {
           {/* 2. IDENTIFICAÇÃO */}
           <Secao numero="2" titulo="Identificação">
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+              <Campo rotulo="Foto do produto (quadrada)" className="sm:col-span-12" ajuda="A imagem é recortada no centro em quadrado. Formatos: JPG ou PNG.">
+                <div className="flex items-center gap-4">
+                  <div className="w-28 h-28 shrink-0 rounded-md border border-linha bg-papel-2 overflow-hidden flex items-center justify-center">
+                    {formData.foto ? (
+                      <img src={formData.foto} alt="Foto do produto" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-[11px] text-cinza text-center px-2">Sem foto</span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="inline-flex items-center justify-center h-9 px-3 rounded-md border border-eno-700 text-eno-800 text-xs font-bold bg-papel hover:bg-eno-50 cursor-pointer">
+                      {formData.foto ? 'Trocar foto' : 'Escolher foto'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const arquivo = e.target.files?.[0];
+                          e.target.value = '';
+                          if (!arquivo) return;
+                          try {
+                            const foto = await fotoQuadrada(arquivo);
+                            setFormData(f => ({ ...f, foto }));
+                          } catch (err) {
+                            alert(err instanceof Error ? err.message : 'Não foi possível usar essa imagem.');
+                          }
+                        }}
+                      />
+                    </label>
+                    {formData.foto && (
+                      <button type="button" onClick={() => setFormData(f => ({ ...f, foto: '' }))} className="h-9 px-3 rounded-md text-st-vencido text-xs font-bold hover:bg-st-vencido-bg cursor-pointer">
+                        Remover foto
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </Campo>
               <Campo rotulo="Nome comercial *" className="sm:col-span-6">
                 <input
                   type="text"
