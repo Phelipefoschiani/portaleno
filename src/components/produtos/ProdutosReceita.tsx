@@ -726,36 +726,7 @@ export function ProdutosReceita({ onNavigate }: Props) {
               <Campo rotulo="Código *" className="sm:col-span-4">
                 <input type="text" required value={formCodigo} onChange={(e) => setFormCodigo(e.target.value)} placeholder="Ex: REC-001" className={`${form.campo} tabular-nums`} />
               </Campo>
-              <Campo rotulo="Tipo de embalagem *" className="sm:col-span-4">
-                <div className="flex gap-2">
-                  <select value={formTipoEmbalagem} onChange={(e) => handleMudarTipoEmbalagem(e.target.value)} className={`${form.select} flex-1 min-w-0`}>
-                    {opcoesEmbalagem.map(op => (
-                      <option key={op} value={op}>{op === 'Big Bag 1000kg' ? 'Big Bag 1.000kg' : op}</option>
-                    ))}
-                  </select>
-                  <button type="button" onClick={() => setNovaEmbalagem({ aberto: true, nome: '', peso: '' })}
-                    className="shrink-0 px-3 rounded-md border border-eno-700 text-eno-800 text-xs font-bold bg-papel hover:bg-eno-50 cursor-pointer">
-                    + Nova
-                  </button>
-                </div>
-                {novaEmbalagem.aberto && (
-                  <div className="mt-2 p-3 rounded-md border border-linha bg-papel-2 space-y-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <input type="text" value={novaEmbalagem.nome} onChange={(e) => setNovaEmbalagem({ ...novaEmbalagem, nome: e.target.value })}
-                        placeholder="Nome (ex.: Pacote 500g)" className={form.campo} />
-                      <input type="text" inputMode="decimal" value={novaEmbalagem.peso} onChange={(e) => setNovaEmbalagem({ ...novaEmbalagem, peso: e.target.value })}
-                        placeholder="Peso de cada pacote em kg (ex.: 0,5)" className={`${form.campo} tabular-nums`} />
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                      <button type="button" onClick={() => setNovaEmbalagem({ aberto: false, nome: '', peso: '' })}
-                        className="px-3 py-1.5 rounded-md text-xs font-bold text-tinta-2 hover:bg-papel-3/60 cursor-pointer">Cancelar</button>
-                      <button type="button" onClick={confirmarNovaEmbalagem}
-                        className="px-3 py-1.5 rounded-md text-xs font-bold bg-eno-800 text-white hover:bg-eno-900 cursor-pointer">Usar esta embalagem</button>
-                    </div>
-                  </div>
-                )}
-              </Campo>
-              <Campo rotulo="Quantos pacotes rende *" className="sm:col-span-4" ajuda={`Custo total ÷ ${formRendimentoPacotes || 0} unidades`}>
+              <Campo rotulo="Quanto rende *" className="sm:col-span-4" ajuda={`Custo total ÷ ${formRendimentoPacotes || 0} unidades`}>
                 <input
                   type="number"
                   inputMode="numeric"
@@ -768,7 +739,7 @@ export function ProdutosReceita({ onNavigate }: Props) {
                   className={form.campoNumero}
                 />
               </Campo>
-              <Campo rotulo="Peso de cada pacote (kg) *" className="sm:col-span-4" ajuda={`Batelada: ${calculosFormulario.rendimentoTotalKg.toLocaleString('pt-BR')} kg`}>
+              <Campo rotulo="Peso de cada unidade (kg) *" className="sm:col-span-4" ajuda={`Batelada: ${calculosFormulario.rendimentoTotalKg.toLocaleString('pt-BR')} kg`}>
                 <input
                   type="number"
                   inputMode="decimal"
