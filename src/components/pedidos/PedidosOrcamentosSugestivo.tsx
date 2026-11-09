@@ -37,7 +37,7 @@ import {
   Maximize2,
   Pencil
 } from 'lucide-react';
-import { proximoNumeroPedido, siglaRca, codigoCliente } from '../../lib/codigos';
+import { numeroPedidoNovo, codigoDoCliente, aplicarCodigosNoArmazenamento } from '../../lib/codigos';
 import { FORMAS_PAGAMENTO, lerCondicao, normalizarDias, textoCondicao } from '../../lib/prazoPagamento';
 import {
   PedidoVenda,
@@ -931,7 +931,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
     const comissaoValor = comissaoCalc.valor;
 
     const prefixo = subtipoForm === 'Orçamento' ? 'ORC' : subtipoForm === 'Pedido Sugestivo' ? 'SUG' : 'PED';
-    const novoNum = proximoNumeroPedido(new Date().getFullYear(), siglaRca(rcaSel), codigoCliente(clienteSel), carregarPedidosVenda());
+    aplicarCodigosNoArmazenamento();
+    const novoNum = numeroPedidoNovo(hojeISO(), codigoDoCliente(clienteSel.id), carregarPedidosVenda());
 
     const tabelaSel = tabelasDisponiveis.find(t => t.id === tabelaIdForm);
 

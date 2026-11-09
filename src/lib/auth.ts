@@ -11,6 +11,7 @@
 
 import { MODO_NUVEM, supabase, definirLembrarAcesso } from './supabase';
 import { envioJaFeitoNeste, existemDadosParaEnviar, enviarDadosDesteNavegador } from './bancoEnvio';
+import { aplicarCodigosNoArmazenamento } from './codigos';
 import { iniciarSincronizacaoBanco, pararSincronizacaoBanco, liberarEnvioBanco, enviarPendentesAgora, limparDadosLocais, semPendencias } from './sincronizacao';
 
 export type PerfilUsuario = 'ADMIN' | 'AGRICULTOR' | 'RCA' | 'PROVISORIO' | 'PRODUCAO' | 'SITIO' | 'CLIENTE';
@@ -592,6 +593,8 @@ export function iniciarAuthNuvem(): void {
       // Se o administrador ainda não respondeu o envio inicial, nada é apagado.
       if (!esperaDecisao && (await enviarPendentesAgora())) limparDadosLocais();
       await iniciarSincronizacaoBanco({ somenteBuscar: esperaDecisao });
+      // Administrador: confere os códigos de RCA, cliente e pedido (grava só o que mudou)
+      if (s.perfil === 'ADMIN' && !esperaDecisao) aplicarCodigosNoArmazenamento();
     } finally {
       carregandoNuvem = false;
       avisarMudanca();
