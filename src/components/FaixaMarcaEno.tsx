@@ -1,5 +1,5 @@
 import React from 'react';
-import { EMPRESA, linhaContatoEmpresa, empresaAtual } from '../lib/empresa';
+import { empresaAtual } from '../lib/empresa';
 
 interface Props {
   rotulo: string; // ex.: 'Tabela de Preços'
@@ -35,7 +35,6 @@ export function FaixaMarcaEno({ rotulo, titulo, subtitulo, destaque }: Props) {
             {destaque && <div className="mt-2">{destaque}</div>}
           </div>
         </div>
-        <div className="relative mt-4 text-[10px] text-[#8abaa0]">{linhaContatoEmpresa()}</div>
       </div>
       <div className="h-[3px] bg-[linear-gradient(90deg,#9c7a2e,#e2c27a,#9c7a2e)]" />
     </>

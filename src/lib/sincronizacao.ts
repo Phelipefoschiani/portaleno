@@ -217,21 +217,21 @@ async function buscarChave(chave: string): Promise<boolean> {
   const inicio = new Date(Date.now() - 2000).toISOString(); // pequena folga para não perder nada
   const info = lerMeta().chaves[chave] || {};
 
-  // 1. Quais ids existem no banco (para saber o que foi excluído)
-  const idsLista = await buscarPaginado(de =>
-    supabase!.from(tabela).select('id').order('id').range(de, de + PAGINA - 1)
-  );
-  if (idsLista === null) return false;
-  const idsRemotos = new Set(idsLista.map((r: any) => String(r.id)));
-
-  // 2. O que mudou desde a última busca
-  let consulta = (de: number) => {
+  // 1 e 2 em paralelo: ids existentes (para achar exclusões) e o que mudou desde a última busca.
+  // Na primeira busca não há exclusões a achar, então a lista de ids não é necessária.
+  const consultaIds = info.ultima
+    ? buscarPaginado(de => supabase!.from(tabela).select('id').order('id').range(de, de + PAGINA - 1))
+    : Promise.resolve(null);
+  const consultaMudados = buscarPaginado(de => {
     let q = supabase!.from(tabela).select('id, dados, atualizado_em');
     if (info.ultima) q = q.gt('atualizado_em', info.ultima);
     return q.order('id').range(de, de + PAGINA - 1);
-  };
-  const mudados = await buscarPaginado(consulta);
-  if (mudados === null) return false;
+  });
+  const [idsLista, mudados] = await Promise.all([consultaIds, consultaMudados]);
+  if (mudados === null || (info.ultima && idsLista === null)) return false;
+  const idsRemotos = new Set(
+    (info.ultima ? idsLista! : mudados).map((r: any) => String(r.id))
+  );
 
   const locais = registrosDe(lerJson<unknown>(chave, null));
   const ehObjeto = locais.some(r => r.id === 'unico') || mudados.some((r: any) => r.id === 'unico');
@@ -276,14 +276,24 @@ async function buscarChave(chave: string): Promise<boolean> {
   return mudou;
 }
 
+// Quase todo o tempo é ida e volta até o banco (~0,35 s), então todas as tabelas saem juntas
+const BUSCAS_SIMULTANEAS = 34;
+
 async function buscarTudoDoBanco(): Promise<void> {
   if (!ligada || buscando || enviando || !supabase) return;
   buscando = true;
   try {
     let mudou = false;
-    for (const chave of Object.keys(TABELAS_DO_SISTEMA)) {
-      if (await buscarChave(chave)) mudou = true;
-    }
+    const chaves = Object.keys(TABELAS_DO_SISTEMA);
+    let proxima = 0;
+    // Várias tabelas ao mesmo tempo (em vez de uma por vez)
+    const trabalhador = async () => {
+      while (proxima < chaves.length) {
+        const chave = chaves[proxima++];
+        if (await buscarChave(chave)) mudou = true;
+      }
+    };
+    await Promise.all(Array.from({ length: BUSCAS_SIMULTANEAS }, trabalhador));
     if (mudou) avisarTelas();
   } finally {
     buscando = false;

@@ -380,7 +380,11 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
   const abrirEdicaoVenda = (pedido: PedidoVenda) => {
     if (!podeAlterar(pedido)) return;
     setPedidoEmEdicao(pedido);
-    setSubtipoForm(pedido.subtipo_venda || (pedido.tipo === 'PEDIDO_VENDA' ? 'Pedido' : 'Orçamento'));
+    // Mesma regra da lista (subtipoDe): pedido antigo sem subtipo gravado usa a origem/tipo
+    setSubtipoForm(
+      pedido.subtipo_venda ||
+        (pedido.origem === 'Sugestão Reposição' ? 'Pedido Sugestivo' : pedido.tipo === 'PEDIDO_VENDA' ? 'Pedido' : 'Orçamento')
+    );
     const modo = pedido.modo_exibicao_padrao || 'FARDO';
     setModoLancamentoForm(modo);
     setClienteIdForm(pedido.cliente_id);
