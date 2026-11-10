@@ -143,7 +143,7 @@ async function enviarChave(chave: string): Promise<void> {
   const removidos = Object.keys(anterior).filter(id => !(id in novo));
 
   // Cópia local vazia com registros conhecidos = cópia apagada, não exclusão. Não apaga nada no banco.
-  const apagarNoBanco = atuais.length > 0 || Object.keys(anterior).length === 0;
+  const apagarNoBanco = true; // tudo vem do banco: o que sumiu da tela sumiu do banco
   // Proteção: não apaga muita coisa de uma vez
   const apagarMuito = removidos.length >= 10 && removidos.length > Object.keys(anterior).length / 2;
 
@@ -321,6 +321,7 @@ export async function iniciarSincronizacaoBanco(usuarioId?: string): Promise<voi
   const primeira = (async () => {
     await enviarPendentes();
     await buscarTudoDoBanco();
+    await enviarPendentes(); // o que a busca marcou como só-local vai agora
   })();
   await Promise.race([primeira, new Promise<void>(r => window.setTimeout(r, 15_000))]);
 }
