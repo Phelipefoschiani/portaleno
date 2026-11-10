@@ -56,6 +56,9 @@ import {
   salvarVendasRca,
   montarClientesVinculados,
   montarVendasComissaoRca,
+  lancarAdiantamentoRca,
+  saldoAdiantamentoRca,
+  obterRcaPorId,
   EVENTO_CADASTROS_ATUALIZADOS,
   ModeloComissao,
   ComissaoGrupo,
@@ -158,6 +161,8 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
   const vendas = useMemo(() => montarVendasComissaoRca(pedidosVenda, vendasSalvas), [pedidosVenda, vendasSalvas, versaoDados]);
 
   const [busca, setBusca] = useState('');
+  const [adiantValor, setAdiantValor] = useState('');
+  const [adiantObs, setAdiantObs] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<string>('TODOS');
   const [filtroRegiao, setFiltroRegiao] = useState<string>('TODAS');
   
@@ -566,7 +571,9 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
         comissoes_por_grupo: formData.comissoes_por_grupo || [],
         comissoes_por_cliente: formData.comissoes_por_cliente || [],
         comissoes_por_produto: formData.comissoes_por_produto || [],
-        clientes_vinculados_ids: formData.clientes_vinculados_ids || []
+        clientes_vinculados_ids: formData.clientes_vinculados_ids || [],
+        // Adiantamentos são movimentos do financeiro: vêm sempre do cadastro atual, nunca do formulário
+        adiantamentos: obterRcaPorId(selectedRca.id)?.adiantamentos || []
       } as RCA;
 
       setRcas(prev => prev.map(r => r.id === selectedRca.id ? rcaAtualizado : r));
@@ -661,6 +668,31 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
       return;
     }
     setVersaoDados(v => v + 1);
+    setRcas(carregarRcas()); // o saldo de adiantamento pode ter sido descontado
+  };
+
+  // Lança um adiantamento ao RCA: sai do caixa agora e vira saldo a descontar das comissões pagas
+  const handleLancarAdiantamento = () => {
+    if (!selectedRca) return;
+    const valor = parseFloat(adiantValor.replace(/\./g, '').replace(',', '.')) || 0;
+    if (valor <= 0) {
+      alert('Informe o valor do adiantamento.');
+      return;
+    }
+    const nome = selectedRca.nome_fantasia || selectedRca.nome_completo;
+    if (!window.confirm(`Lançar adiantamento de R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para ${nome}? Sai do caixa agora e será descontado das próximas comissões pagas.`)) return;
+    try {
+      const atualizado = lancarAdiantamentoRca(selectedRca.id, {
+        valor,
+        data: formatarDataBR(hojeISO()),
+        observacao: adiantObs
+      });
+      setRcas(prev => prev.map(r => (r.id === atualizado.id ? atualizado : r)));
+      setAdiantValor('');
+      setAdiantObs('');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Não foi possível lançar o adiantamento.');
+    }
   };
 
   // Helper para rotular o modelo de comissão
@@ -1693,6 +1725,69 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                     R$ {statsRca.comissaoPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                   <span className="text-[11px] text-st-aguardando font-bold">Liberadas / Pendentes</span>
+                </div>
+
+                <div className={`bg-papel p-4 rounded-md border ${saldoAdiantamentoRca(selectedRca) > 0 ? 'border-st-aguardando' : 'border-linha'}`}>
+                  <span className="text-[11px] font-bold uppercase text-cinza block mb-1">Adiantamento a descontar</span>
+                  <p className="text-lg font-extrabold text-st-aguardando tabular-nums">
+                    R$ {saldoAdiantamentoRca(selectedRca).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                  <span className="text-[11px] text-cinza font-medium">Desconta das próximas comissões pagas</span>
+                </div>
+              </div>
+
+              {/* ADIANTAMENTOS AO RCA (dinheiro entregue antes das comissões) */}
+              <div className="bg-papel rounded-md border border-linha p-6 text-left">
+                <div className="pb-3 mb-4 border-b border-linha">
+                  <h3 className="text-sm font-extrabold text-tinta">Adiantamentos ao RCA</h3>
+                  <p className="text-[11px] text-cinza">Sai do caixa no lançamento e é descontado das comissões pagas, da mais antiga para a mais nova.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] gap-2 items-end">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wide text-tinta-2 mb-1">Valor (R$)</label>
+                    <input
+                      inputMode="decimal"
+                      value={adiantValor}
+                      onChange={e => setAdiantValor(e.target.value)}
+                      placeholder="0,00"
+                      className="w-full bg-papel-2 border border-linha rounded-md px-3 py-2 text-[13px] text-tinta tabular-nums focus:outline-none focus:border-eno-700"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wide text-tinta-2 mb-1">Observação</label>
+                    <input
+                      value={adiantObs}
+                      onChange={e => setAdiantObs(e.target.value)}
+                      placeholder="Ex: adiantamento da safra"
+                      className="w-full bg-papel-2 border border-linha rounded-md px-3 py-2 text-[13px] text-tinta focus:outline-none focus:border-eno-700"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleLancarAdiantamento}
+                    className="h-10 px-4 rounded-md bg-eno-900 hover:bg-eno-950 text-white font-bold text-[13px] cursor-pointer"
+                  >
+                    Lançar adiantamento
+                  </button>
+                </div>
+                <div className="mt-4 divide-y divide-linha">
+                  {(selectedRca.adiantamentos || []).length === 0 ? (
+                    <p className="text-[12px] text-cinza py-2">Nenhum adiantamento lançado.</p>
+                  ) : (
+                    [...(selectedRca.adiantamentos || [])].reverse().map(a => (
+                      <div key={a.id} className="py-2 flex flex-wrap items-center justify-between gap-2 text-[12.5px]">
+                        <span className="text-tinta">
+                          {a.data} · {a.observacao || 'Adiantamento'}
+                        </span>
+                        <span className="text-tinta-2 tabular-nums">
+                          R$ {a.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · descontado R$ {(a.descontado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ·{' '}
+                          <strong className={a.valor - (a.descontado || 0) > 0 ? 'text-st-aguardando' : 'text-eno-700'}>
+                            {a.valor - (a.descontado || 0) > 0 ? `falta R$ ${(a.valor - (a.descontado || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'quitado'}
+                          </strong>
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 

@@ -10,6 +10,7 @@ import {
 import {
   RCA,
   carregarRcas,
+  saldoAdiantamentoRca,
   carregarVendasRca,
   montarClientesVinculados,
   montarVendasComissaoRca,
@@ -80,6 +81,7 @@ export function PortalRCA({ onVoltar, rcaId, permitirSelecaoAdmin = false }: Por
 
   // Representante logado: SEMPRE o RCA vinculado ao usuário da sessão
   const rca: RCA | undefined = useMemo(() => rcas.find(r => r.id === rcaIdEfetivo), [rcas, rcaIdEfetivo]);
+  const saldoAdiantamento = useMemo(() => saldoAdiantamentoRca(rca), [rca]);
 
   const pedidosVenda = useMemo(() => carregarPedidosVenda(), [versao]);
   // Comissão de pedido excluído/estornado (ainda não paga) sai do Contas a Pagar
@@ -240,6 +242,16 @@ export function PortalRCA({ onVoltar, rcaId, permitirSelecaoAdmin = false }: Por
                 detalhe={modeloComissao}
                 onClick={() => setAbaAtiva('comissoes')}
               />
+              {saldoAdiantamento > 0 && (
+                <CardNumero
+                  rotulo="Você deve (adiantamento)"
+                  unidade="R$"
+                  unidadeAntes
+                  valor={valorBR(saldoAdiantamento)}
+                  detalhe="descontado das próximas comissões"
+                  alerta="aguardando"
+                />
+              )}
               <CardNumero rotulo="Já recebido" unidade="R$" unidadeAntes valor={valorBR(metricas.comissoesPagas)} detalhe="pago por PIX" />
               <CardNumero rotulo="Faturado" unidade="R$" unidadeAntes valor={valorBR(metricas.totalFaturado)} detalhe="pedidos da sua carteira" />
               <CardNumero rotulo="Clientes" valor={metricas.totalClientes} detalhe="na carteira" onClick={() => setAbaAtiva('clientes')} />

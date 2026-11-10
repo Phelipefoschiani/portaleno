@@ -6,7 +6,7 @@ import type { Agricultor, Fornecedor } from './mockStore';
 import type { CadastroProvisorio, PedidoPortifolio } from './portfolioData';
 import type { Cliente } from './clientesData';
 import type { PedidoVenda } from './pedidosVendaData';
-import { carregarTitulosPagar, statusEfetivoPagar } from './financeiroData';
+import { carregarTitulosPagar, statusEfetivoPagar, conferirSaldoParaPagar, registrarBaixaNoCaixa } from './financeiroData';
 
 export const EVENTO_CADASTROS_ATUALIZADOS = 'cadastros_updated';
 
@@ -206,7 +206,17 @@ export interface RCA {
   status: 'Ativo' | 'Inativo' | 'Em Férias';
   data_admissao_contrato: string;
   observacoes?: string;
+  /** Dinheiro entregue ao RCA antes das comissões: o saldo é descontado das comissões pagas */
+  adiantamentos?: AdiantamentoRca[];
   criado_em: string;
+}
+
+export interface AdiantamentoRca {
+  id: string;
+  data: string; // DD/MM/AAAA
+  valor: number;
+  descontado: number; // quanto já foi abatido de comissões
+  observacao?: string;
 }
 
 export interface VendaComissaoRCA {
@@ -243,6 +253,65 @@ export function salvarRcas(lista: RCA[]): void {
 export function obterRcaPorId(id?: string | null): RCA | undefined {
   if (!id) return undefined;
   return carregarRcas().find(r => r.id === id);
+}
+
+// ============================================================
+// ADIANTAMENTO AO RCA (dinheiro entregue antes; desconta das comissões pagas)
+// ============================================================
+
+const r2adiant = (v: number) => Math.round((Number(v) || 0) * 100) / 100;
+
+/** Quanto o RCA ainda deve: adiantamentos lançados menos o que já foi descontado de comissões. */
+export function saldoAdiantamentoRca(rca?: RCA | null): number {
+  return r2adiant((rca?.adiantamentos || []).reduce(
+    (acc, a) => acc + Math.max(0, (Number(a.valor) || 0) - (Number(a.descontado) || 0)),
+    0
+  ));
+}
+
+/** Lança um adiantamento: sai do caixa agora e vira saldo a descontar do RCA. */
+export function lancarAdiantamentoRca(rcaId: string, dados: { valor: number; data: string; observacao?: string }): RCA {
+  const valor = r2adiant(dados.valor);
+  if (valor <= 0) throw new Error('Informe um valor de adiantamento maior que zero.');
+  const rcas = carregarRcas();
+  const alvo = rcas.find(r => r.id === rcaId);
+  if (!alvo) throw new Error('RCA não encontrado.');
+  const semSaldo = conferirSaldoParaPagar(valor);
+  if (semSaldo) throw new Error(semSaldo);
+  const id = `adiant_${Date.now()}`;
+  const atualizado: RCA = {
+    ...alvo,
+    adiantamentos: [
+      ...(alvo.adiantamentos || []),
+      { id, data: dados.data, valor, descontado: 0, observacao: dados.observacao?.trim() || undefined }
+    ]
+  };
+  salvarRcas(rcas.map(r => (r.id === rcaId ? atualizado : r)));
+  registrarBaixaNoCaixa(`adiant_rca:${id}`, -valor, {
+    origem: 'Conta a pagar',
+    descricao: `Adiantamento ao RCA ${alvo.nome_fantasia || alvo.nome_completo}`
+  });
+  return atualizado;
+}
+
+/** Abate um valor dos adiantamentos do RCA, do mais antigo para o mais novo. Retorna quanto abateu. */
+export function abaterAdiantamentosRca(rcaId: string, valor: number): number {
+  let restante = r2adiant(valor);
+  if (restante <= 0) return 0;
+  const rcas = carregarRcas();
+  const alvo = rcas.find(r => r.id === rcaId);
+  if (!alvo || !alvo.adiantamentos?.length) return 0;
+  let abatido = 0;
+  const novos = alvo.adiantamentos.map(a => {
+    const aberto = r2adiant((Number(a.valor) || 0) - (Number(a.descontado) || 0));
+    if (restante <= 0 || aberto <= 0) return a;
+    const usar = Math.min(aberto, restante);
+    restante = r2adiant(restante - usar);
+    abatido = r2adiant(abatido + usar);
+    return { ...a, descontado: r2adiant((Number(a.descontado) || 0) + usar) };
+  });
+  if (abatido > 0) salvarRcas(rcas.map(r => (r.id === rcaId ? { ...alvo, adiantamentos: novos } : r)));
+  return abatido;
 }
 
 /**

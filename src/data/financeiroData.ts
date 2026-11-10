@@ -29,6 +29,8 @@ export interface TituloPagar {
   tipo_favorecido: 'Agricultor' | 'Fornecedor' | 'Operacional' | 'RCA';
   categoria: 'Mandioca / Matéria-Prima' | 'Lenha & Biomassa' | 'Embalagens' | 'Energia / Concessionárias' | 'Manutenção Mecânica' | 'Fretes' | 'Comissão de RCA';
   pedido_venda_id?: string; // Comissão de RCA: pedido de venda que gerou o título
+  valor_comissao_bruta?: number; // Comissão de RCA paga com desconto: valor antes do adiantamento abatido
+  desconto_adiantamento?: number; // Comissão de RCA: valor abatido do adiantamento ao RCA
   valor: number;
   data_emissao: string;
   data_vencimento: string;

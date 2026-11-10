@@ -6,7 +6,7 @@
 // - Pagamento ("Pago (PIX)") baixa o título e movimenta o caixa ('pagar:<id>').
 
 import type { RCA } from './cadastrosData';
-import { obterRcaPorId } from './cadastrosData';
+import { obterRcaPorId, saldoAdiantamentoRca, abaterAdiantamentosRca } from './cadastrosData';
 import type { PedidoVenda } from './pedidosVendaData';
 import { carregarEstoqueProdutos } from './produtosData';
 import {
@@ -266,11 +266,28 @@ export function baixarTituloComissao(pedido: PedidoVenda): TituloPagar | null {
   const titulo = gerarTituloComissaoAoFaturar(pedido);
   if (!titulo) return null;
   if (titulo.status === 'PAGO') return titulo;
+  // Adiantamento ao RCA: desconta do que é pago agora (mais antigo primeiro)
+  const bruto = titulo.valor;
+  const abate = Math.min(saldoAdiantamentoRca(obterRcaPorId(pedido.rca_id)), bruto);
+  const liquido = Math.round((bruto - abate) * 100) / 100;
   // Só paga se o caixa tiver saldo (a mensagem sobe para a tela)
-  const semSaldo = conferirSaldoParaPagar(titulo.valor);
+  const semSaldo = conferirSaldoParaPagar(liquido);
   if (semSaldo) throw new Error(semSaldo);
-  const pago: TituloPagar = { ...titulo, status: 'PAGO', data_pagamento: hojeISO() };
+  const pago: TituloPagar = {
+    ...titulo,
+    valor: liquido,
+    ...(abate > 0
+      ? {
+          valor_comissao_bruta: bruto,
+          desconto_adiantamento: abate,
+          observacoes: `${titulo.observacoes || ''} • Comissão ${bruto.toFixed(2)} − adiantamento ${abate.toFixed(2)}.`.trim()
+        }
+      : {}),
+    status: 'PAGO',
+    data_pagamento: hojeISO()
+  };
   salvarTitulosPagar(carregarTitulosPagar().map(t => (t.id === titulo.id ? pago : t)));
-  registrarBaixaNoCaixa(`pagar:${titulo.id}`, -titulo.valor);
+  if (abate > 0) abaterAdiantamentosRca(pedido.rca_id, abate);
+  if (liquido > 0) registrarBaixaNoCaixa(`pagar:${titulo.id}`, -liquido);
   return pago;
 }
