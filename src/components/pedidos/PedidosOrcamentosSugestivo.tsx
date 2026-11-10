@@ -58,7 +58,7 @@ import { calcularPrecoNaTabela, mostrarPrecoDaTabela, precoUnitarioNaTabela, tab
 import { calcularComissaoPedido, CamposComissaoPedido, removerTituloComissaoDoPedido, rotuloRegraComissao } from '../../data/comissoesData';
 import { formatarMoeda } from '../../data/financeiroData';
 import { carregarClientes } from '../../data/clientesData';
-import { hojeISO, somarDias, formatarDataBR } from '../../lib/datas';
+import { hojeISO, somarDias, formatarDataBR, paraISO } from '../../lib/datas';
 
 // Tabela utilizável na venda: não arquivada e dentro da vigência
 const tabelaPrecoUtilizavel = (t: TabelaPreco): boolean => tabelaPrecoAtiva(t);
@@ -235,6 +235,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
   // Pedido sendo editado (null = nova venda)
   const [pedidoEmEdicao, setPedidoEmEdicao] = useState<PedidoVenda | null>(null);
   const [diasValidadeForm, setDiasValidadeForm] = useState('7');
+  // Entrega prevista: opcional; em branco não aparece no pedido
+  const [entregaPrevistaForm, setEntregaPrevistaForm] = useState('');
   const [observacoesForm, setObservacoesForm] = useState('');
 
   // Controle de visualização e exportação do documento
@@ -354,6 +356,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
   const abrirNovaVenda = () => {
     setPedidoEmEdicao(null);
     setDiasValidadeForm('7');
+    setEntregaPrevistaForm('');
     setFormaPagamentoForm(FORMAS_PAGAMENTO[0]);
     setDiasPagamentoForm('28');
     setSubtipoForm(modoCliente ? 'Pedido' : 'Orçamento');
@@ -393,6 +396,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
         (new Date(`${pedido.data_validade_orcamento}T00:00:00`).getTime() - new Date(`${pedido.data_emissao}T00:00:00`).getTime()) / 86400000
       );
       setDiasValidadeForm(String(dias > 0 ? dias : 7));
+      setEntregaPrevistaForm(pedido.data_previsao_entrega ? (paraISO(pedido.data_previsao_entrega) || '') : '');
     }
     // Itens voltam no modo em que foram lançados
     setItensForm(pedido.itens.map(it => {
@@ -963,7 +967,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
       comissao_itens: comissaoCalc.itens,
       data_emissao: dataHojeStr,
       data_validade_orcamento: dataValidadeStr,
-      data_previsao_entrega: dataValidadeStr,
+      data_previsao_entrega: paraISO(entregaPrevistaForm) || '',
       itens: itensMapeados,
       peso_total_kg: pesoTotal,
       valor_total: valorTotal,
@@ -1620,6 +1624,16 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                 </div>
 
                 <div>
+                  <label className="block font-bold text-tinta-2 mb-1">Entrega prevista <span className="text-cinza font-normal">(opcional)</span></label>
+                  <input
+                    type="date"
+                    value={entregaPrevistaForm}
+                    onChange={(e) => setEntregaPrevistaForm(e.target.value)}
+                    className="w-full bg-papel-2 border border-linha rounded-lg px-3 py-2 text-tinta font-medium focus:outline-none focus:border-eno-700 tabular-nums"
+                  />
+                </div>
+
+                <div>
                   <label className="block font-bold text-tinta-2 mb-1">Tipo de Frete</label>
                   <select
                     value={tipoFreteForm}
@@ -2141,6 +2155,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                       <>
                         Emissão {formatarDataBR(modalDetalhes.data_emissao)}
                         {modalDetalhes.data_validade_orcamento && ` · Validade ${formatarDataBR(modalDetalhes.data_validade_orcamento)}`}
+                        {modalDetalhes.data_previsao_entrega && ` · Entrega prevista ${formatarDataBR(modalDetalhes.data_previsao_entrega)}`}
                       </>
                     }
                   />
