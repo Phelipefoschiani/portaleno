@@ -1008,6 +1008,10 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
 
   // Excluir Proposta / Venda
   const handleExcluir = (pedidoId: string) => {
+    if (modoRca) {
+      alert('O representante não pode excluir pedidos. Fale com a administração.');
+      return;
+    }
     const alvo = carregarPedidosVenda().find(p => p.id === pedidoId);
     if (!alvo || !podeAlterar(alvo)) {
       if (modoPortal) alert('Só é possível excluir pedidos seus que ainda aguardam aprovação.');
@@ -1232,7 +1236,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                         >
                           <Eye className="w-3.5 h-3.5" /> Ver / PDF
                         </button>
-                        {editavel && (
+                        {editavel && !modoRca && (
                           <button
                             type="button"
                             onClick={() => handleExcluir(item.id)}
@@ -1350,7 +1354,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                               <Eye className="w-3.5 h-3.5" />
                               Ver
                             </button>
-                            {podeAlterar(item) && (
+                            {podeAlterar(item) && !modoRca && (
                               <button
                                 type="button"
                                 onClick={() => handleExcluir(item.id)}
@@ -1687,6 +1691,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                   <span className="font-bold text-cinza uppercase tracking-[0.12em] text-[10.5px]">
                     Itens da Venda ({modoLancamentoForm === 'FARDO' ? 'Preço e Qtd por Fardo/Embalagem' : 'Preço e Qtd por Unitário/Kg'})
                   </span>
+                  {!(modoRca && pedidoEmEdicao) && (
                   <button
                     type="button"
                     onClick={handleAddItem}
@@ -1695,6 +1700,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                     <Plus className="w-3.5 h-3.5" />
                     <span>Adicionar Item</span>
                   </button>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -1721,6 +1727,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                             <div className="col-span-2 sm:flex-1 sm:min-w-[200px]">
                               <select
+                                disabled={modoRca && !!pedidoEmEdicao}
                                 value={item.produtoId}
                                 onChange={(e) => {
                                   const newProd = produtosFiltradosPorTabela.find(p => p.id === e.target.value);
@@ -1821,7 +1828,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                               )}
                             </div>
 
-                            {itensForm.length > 1 && (
+                            {itensForm.length > 1 && !(modoRca && pedidoEmEdicao) && (
                               <button
                                 type="button"
                                 onClick={() => handleRemoveItem(idx)}
