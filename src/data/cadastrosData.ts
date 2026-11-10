@@ -6,7 +6,7 @@ import type { Agricultor, Fornecedor } from './mockStore';
 import type { CadastroProvisorio, PedidoPortifolio } from './portfolioData';
 import type { Cliente } from './clientesData';
 import type { PedidoVenda } from './pedidosVendaData';
-import { carregarTitulosPagar, statusEfetivoPagar, conferirSaldoParaPagar, registrarBaixaNoCaixa } from './financeiroData';
+import { carregarTitulosPagar, statusEfetivoPagar, registrarBaixaNoCaixa } from './financeiroData';
 
 export const EVENTO_CADASTROS_ATUALIZADOS = 'cadastros_updated';
 
@@ -276,8 +276,7 @@ export function lancarAdiantamentoRca(rcaId: string, dados: { valor: number; dat
   const rcas = carregarRcas();
   const alvo = rcas.find(r => r.id === rcaId);
   if (!alvo) throw new Error('RCA não encontrado.');
-  const semSaldo = conferirSaldoParaPagar(valor);
-  if (semSaldo) throw new Error(semSaldo);
+  // Sem checar o caixa: o adiantamento pode deixar o caixa negativo (é o que se quer registrar)
   const id = `adiant_${Date.now()}`;
   const atualizado: RCA = {
     ...alvo,
