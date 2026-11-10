@@ -13,7 +13,6 @@ import { MODO_NUVEM, supabase, definirLembrarAcesso } from './supabase';
 import { envioJaFeitoNeste, existemDadosParaEnviar, enviarDadosDesteNavegador } from './bancoEnvio';
 import { aplicarCodigosNoArmazenamento } from './codigos';
 import { iniciarSincronizacaoBanco, pararSincronizacaoBanco, liberarEnvioBanco, enviarPendentesAgora } from './sincronizacao';
-import { temLegado, importarLegado, limparMemoria, apagarLegadoDoNavegador } from './memoria';
 
 export type PerfilUsuario = 'ADMIN' | 'AGRICULTOR' | 'RCA' | 'PROVISORIO' | 'PRODUCAO' | 'SITIO' | 'CLIENTE';
 
@@ -260,7 +259,6 @@ export function encerrarSessao(): void {
     sessaoNuvem = null;
     // Envia o que ainda estiver pendente, esvazia a memória desta página e sai
     enviarPendentesAgora().finally(() => {
-      limparMemoria();
       supabase?.auth.signOut().catch(() => {});
     });
     window.dispatchEvent(new Event(EVENTO_AUTH_ATUALIZADO));
@@ -587,18 +585,9 @@ export function iniciarAuthNuvem(): void {
       sessaoNuvem = s;
       if (s.perfil === 'ADMIN') {
         await carregarUsuariosAdmin();
-        // Dados que estavam no navegador de versões anteriores: sobem ao banco uma vez
-        if (temLegado()) {
-          importarLegado();
-          const r = await enviarDadosDesteNavegador();
-          if (r.erros.length) window.alert('Alguns dados antigos não subiram para o banco:\n\n' + r.erros.join('\n'));
-          else apagarLegadoDoNavegador();
-        }
-      } else if (temLegado()) {
-        window.alert('Havia dados antigos guardados neste computador. Só o administrador consegue enviá-los ao banco.');
       }
       // Tudo passa a vir do banco: a busca preenche as telas antes de abrir
-      await iniciarSincronizacaoBanco();
+      await iniciarSincronizacaoBanco(s.usuario_id);
       // Administrador: confere os códigos de RCA, cliente e pedido (grava só o que mudou)
       if (s.perfil === 'ADMIN') aplicarCodigosNoArmazenamento();
     } finally {

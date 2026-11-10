@@ -1,24 +1,18 @@
-// Sincronização automática entre os navegadores e o banco (Supabase).
-//
-// Como funciona:
-// - Cada chave do sistema tem uma tabela no banco. Cada registro vira uma linha (id + dados).
-// - Quando algo muda neste navegador, a chave fica "pendente" e é enviada em seguida.
-// - Periodicamente (e ao voltar para a janela), o sistema busca o que mudou no banco e atualiza o navegador.
-// - Um "retrato" (snapshot) guarda o que foi confirmado pelo banco, para saber o que mudou de verdade
-//   e para detectar exclusões feitas em outro aparelho.
-// - Nunca apaga dados locais que ainda não foram enviados: essas chaves ficam pendentes.
+// Sincronização com o banco (Supabase), no modelo de cópia local:
+// - O navegador guarda uma cópia dos dados, para abrir rápido.
+// - Ao entrar e a cada minuto: baixa só o que mudou no banco desde a última busca (e as exclusões).
+// - Ao gravar algo: envia a mudança ao banco logo em seguida.
+// - Se a cópia local tiver algo que o banco ainda não tem, envia.
 import { supabase } from './supabase';
 import { TABELAS_DO_SISTEMA } from './bancoEnvio';
-import { ouvirGravacao } from './memoria';
 
-const CHAVE_SNAPSHOT = 'eno_sync_snapshot_v1';
-const CHAVE_PENDENTES = 'eno_sync_pendentes_v1';
-const INTERVALO_BUSCA_MS = 60_000;
+const CHAVE_META = 'eno_sync_meta_v3';
+const CHAVE_DONO = 'eno_cache_usuario';
 const ATRASO_ENVIO_MS = 800;
-const TAMANHO_LOTE = 500;
+const INTERVALO_BUSCA_MS = 60_000;
+const LOTE = 500;
 const PAGINA = 1000;
 
-// Eventos que as telas escutam para se atualizarem
 const EVENTOS_TELAS = [
   'pedidos_venda_updated', 'pedidos_compra_updated', 'calculos_roca_updated', 'financeiro_updated', 'produtos_updated',
   'receitas_updated', 'fichas_tecnicas_updated', 'tabelas_preco_updated', 'categorias_produto_updated', 'clientes_updated',
@@ -26,17 +20,20 @@ const EVENTOS_TELAS = [
   'ordens_producao_updated', 'sistema_reset_updated', 'cadastros_provisorios_updated',
 ];
 
-type Snapshot = Record<string, Record<string, string>>; // chave -> (id -> assinatura)
+type Meta = {
+  pend: string[]; // chaves com alteração ainda não enviada
+  chaves: Record<string, { ultima?: string; ids?: Record<string, string> }>; // última busca e retrato do que está no banco
+};
 
 let ligada = false;
-// Envio para o banco só depois da confirmação do administrador; a busca do banco sempre acontece
-let podeEnviar = true;
-let aplicandoRemoto = false;
+let aplicando = false; // true enquanto a busca grava dados vindos do banco
+let instalado = false;
 let timerEnvio: number | null = null;
 let timerBusca: number | null = null;
-let buscando = false;
 let enviando = false;
-const CHAVE_DO_SISTEMA = new Set(Object.keys(TABELAS_DO_SISTEMA));
+let buscando = false;
+
+const CHAVES_DO_SISTEMA = new Set(Object.keys(TABELAS_DO_SISTEMA));
 
 // ---------- utilidades ----------
 
@@ -55,50 +52,29 @@ function lerJson<T>(chave: string, padrao: T): T {
   }
 }
 
-function gravarLocal(chave: string, valor: unknown): void {
-  aplicandoRemoto = true;
+function lerMeta(): Meta {
+  const m = lerJson<Partial<Meta>>(CHAVE_META, {});
+  return { pend: Array.isArray(m.pend) ? m.pend : [], chaves: m.chaves || {} };
+}
+
+function gravarMeta(m: Meta): void {
   try {
-    if (valor === null || valor === undefined) localStorage.removeItem(chave);
-    else localStorage.setItem(chave, JSON.stringify(valor));
-  } finally {
-    aplicandoRemoto = false;
-  }
-}
-
-function lerSnapshot(): Snapshot {
-  return lerJson<Snapshot>(CHAVE_SNAPSHOT, {});
-}
-
-function gravarSnapshot(s: Snapshot): void {
-  try {
-    localStorage.setItem(CHAVE_SNAPSHOT, JSON.stringify(s));
-  } catch {
-    /* sem espaço: a próxima busca refaz a comparação */
-  }
-}
-
-function pendentes(): Set<string> {
-  return new Set(lerJson<string[]>(CHAVE_PENDENTES, []));
-}
-
-function gravarPendentes(p: Set<string>): void {
-  try {
-    localStorage.setItem(CHAVE_PENDENTES, JSON.stringify([...p]));
+    localStorage.setItem(CHAVE_META, JSON.stringify(m));
   } catch {
     /* ignora */
   }
 }
 
 function marcarPendente(chave: string): void {
-  const p = pendentes();
-  p.add(chave);
-  gravarPendentes(p);
+  const m = lerMeta();
+  if (!m.pend.includes(chave)) {
+    m.pend.push(chave);
+    gravarMeta(m);
+  }
 }
 
-function desmarcarPendente(chave: string): void {
-  const p = pendentes();
-  p.delete(chave);
-  gravarPendentes(p);
+function desmarcarPendente(m: Meta, chave: string): void {
+  m.pend = m.pend.filter(c => c !== chave);
 }
 
 /** Registros de uma chave: lista vira uma linha por item; objeto vira a linha 'unico'. */
@@ -112,8 +88,40 @@ function registrosDe(valor: unknown): { id: string; dados: any }[] {
   return [];
 }
 
+function gravarDados(chave: string, valor: unknown): void {
+  aplicando = true;
+  try {
+    localStorage.setItem(chave, JSON.stringify(valor));
+  } finally {
+    aplicando = false;
+  }
+}
+
 function avisarTelas(): void {
   EVENTOS_TELAS.forEach(e => window.dispatchEvent(new Event(e)));
+}
+
+/** Acompanha as gravações feitas pelas telas (para enviar ao banco). */
+function instalarAcompanhamento(): void {
+  if (instalado) return;
+  instalado = true;
+  const proto = Storage.prototype;
+  const setOriginal = proto.setItem;
+  const removeOriginal = proto.removeItem;
+  proto.setItem = function (this: Storage, chave: string, valor: string) {
+    setOriginal.call(this, chave, valor);
+    if (this === window.localStorage && ligada && !aplicando && CHAVES_DO_SISTEMA.has(chave)) {
+      marcarPendente(chave);
+      agendarEnvio();
+    }
+  };
+  proto.removeItem = function (this: Storage, chave: string) {
+    removeOriginal.call(this, chave);
+    if (this === window.localStorage && ligada && !aplicando && CHAVES_DO_SISTEMA.has(chave)) {
+      marcarPendente(chave);
+      agendarEnvio();
+    }
+  };
 }
 
 // ---------- envio: navegador -> banco ----------
@@ -121,44 +129,52 @@ function avisarTelas(): void {
 async function enviarChave(chave: string): Promise<void> {
   const tabela = TABELAS_DO_SISTEMA[chave];
   if (!tabela || !supabase) return;
-  const valor = lerJson<unknown>(chave, null);
-  const atuais = registrosDe(valor);
-  const snap = lerSnapshot();
-  const anterior = snap[chave] || {};
+  const atuais = registrosDe(lerJson<unknown>(chave, null));
+  const m = lerMeta();
+  const anterior = m.chaves[chave]?.ids || {};
 
   const novo: Record<string, string> = {};
   const alterados: { id: string; dados: any; atualizado_em: string }[] = [];
-  const agora = new Date().toISOString();
   for (const r of atuais) {
     const assinatura = hash(JSON.stringify(r.dados));
     novo[r.id] = assinatura;
-    if (anterior[r.id] !== assinatura) alterados.push({ id: r.id, dados: r.dados, atualizado_em: agora });
+    if (anterior[r.id] !== assinatura) alterados.push({ id: r.id, dados: r.dados, atualizado_em: new Date().toISOString() });
   }
   const removidos = Object.keys(anterior).filter(id => !(id in novo));
 
-  for (let i = 0; i < alterados.length; i += TAMANHO_LOTE) {
-    const { error } = await supabase.from(tabela).upsert(alterados.slice(i, i + TAMANHO_LOTE), { onConflict: 'id' });
+  // Cópia local vazia com registros conhecidos = cópia apagada, não exclusão. Não apaga nada no banco.
+  const apagarNoBanco = atuais.length > 0 || Object.keys(anterior).length === 0;
+  // Proteção: não apaga muita coisa de uma vez
+  const apagarMuito = removidos.length >= 10 && removidos.length > Object.keys(anterior).length / 2;
+
+  for (let i = 0; i < alterados.length; i += LOTE) {
+    const { error } = await supabase.from(tabela).upsert(alterados.slice(i, i + LOTE), { onConflict: 'id' });
     if (error) throw new Error(`${tabela}: ${error.message}`);
   }
-  for (let i = 0; i < removidos.length; i += TAMANHO_LOTE) {
-    const { error } = await supabase.from(tabela).delete().in('id', removidos.slice(i, i + TAMANHO_LOTE));
-    if (error) throw new Error(`${tabela}: ${error.message}`);
+  if (apagarNoBanco && !apagarMuito) {
+    for (let i = 0; i < removidos.length; i += LOTE) {
+      const { error } = await supabase.from(tabela).delete().in('id', removidos.slice(i, i + LOTE));
+      if (error) throw new Error(`${tabela}: ${error.message}`);
+    }
+  } else if (apagarMuito) {
+    console.warn(`[sincronização] ${removidos.length} exclusões em ${tabela} não foram enviadas (proteção). Verifique.`);
   }
 
-  snap[chave] = novo;
-  gravarSnapshot(snap);
-  desmarcarPendente(chave);
+  const m2 = lerMeta();
+  m2.chaves[chave] = { ...(m2.chaves[chave] || {}), ids: novo };
+  desmarcarPendente(m2, chave);
+  gravarMeta(m2);
 }
 
 async function enviarPendentes(): Promise<void> {
-  if (!ligada || !podeEnviar || enviando || !supabase) return;
+  if (!ligada || enviando || !supabase) return;
   enviando = true;
   try {
-    for (const chave of [...pendentes()]) {
+    for (const chave of [...lerMeta().pend]) {
       try {
         await enviarChave(chave);
       } catch (e) {
-        // Fica pendente e tenta de novo na próxima rodada (ex.: sem permissão para esta tabela)
+        // Continua pendente e tenta de novo na próxima rodada
         console.warn('[sincronização] não enviou', chave, e instanceof Error ? e.message : e);
       }
     }
@@ -171,22 +187,22 @@ function agendarEnvio(): void {
   if (timerEnvio !== null) window.clearTimeout(timerEnvio);
   timerEnvio = window.setTimeout(() => {
     timerEnvio = null;
-    enviarPendentes();
+    enviarPendentes().then(() => {
+      if (lerMeta().pend.length === 0) return;
+      if (timerEnvio === null) timerEnvio = window.setTimeout(() => { timerEnvio = null; enviarPendentes(); }, 5000);
+    });
   }, ATRASO_ENVIO_MS);
 }
 
 // ---------- busca: banco -> navegador ----------
 
-async function buscarTudo(tabela: string): Promise<{ id: string; dados: any }[] | null> {
-  const linhas: { id: string; dados: any }[] = [];
+/** Todas as linhas de uma consulta, em páginas. null = erro (sem permissão ou tabela indisponível). */
+async function buscarPaginado(montar: (de: number) => any): Promise<any[] | null> {
+  const linhas: any[] = [];
   for (let de = 0; ; de += PAGINA) {
-    const { data, error } = await supabase!
-      .from(tabela)
-      .select('id, dados, atualizado_em')
-      .order('atualizado_em', { ascending: false })
-      .range(de, de + PAGINA - 1);
-    if (error) return null; // sem permissão ou tabela indisponível: não mexe no navegador
-    linhas.push(...(data || []).map((r: any) => ({ id: String(r.id), dados: r.dados })));
+    const { data, error } = await montar(de);
+    if (error) return null;
+    linhas.push(...(data || []));
     if (!data || data.length < PAGINA) break;
   }
   return linhas;
@@ -195,70 +211,69 @@ async function buscarTudo(tabela: string): Promise<{ id: string; dados: any }[] 
 async function buscarChave(chave: string): Promise<boolean> {
   const tabela = TABELAS_DO_SISTEMA[chave];
   if (!tabela || !supabase) return false;
-  // Com alteração local ainda não enviada, o navegador manda primeiro (não sobrescreve)
-  if (pendentes().has(chave)) return false;
+  // Alteração local ainda não enviada: o envio vem antes, então esta chave espera
+  if (lerMeta().pend.includes(chave)) return false;
 
-  const remotas = await buscarTudo(tabela);
-  if (remotas === null) return false;
+  const inicio = new Date(Date.now() - 2000).toISOString(); // pequena folga para não perder nada
+  const info = lerMeta().chaves[chave] || {};
 
-  const snap = lerSnapshot();
-  const jaSincronizada = !!snap[chave];
+  // 1. Quais ids existem no banco (para saber o que foi excluído)
+  const idsLista = await buscarPaginado(de =>
+    supabase!.from(tabela).select('id').order('id').range(de, de + PAGINA - 1)
+  );
+  if (idsLista === null) return false;
+  const idsRemotos = new Set(idsLista.map((r: any) => String(r.id)));
+
+  // 2. O que mudou desde a última busca
+  let consulta = (de: number) => {
+    let q = supabase!.from(tabela).select('id, dados, atualizado_em');
+    if (info.ultima) q = q.gt('atualizado_em', info.ultima);
+    return q.order('id').range(de, de + PAGINA - 1);
+  };
+  const mudados = await buscarPaginado(consulta);
+  if (mudados === null) return false;
+
   const locais = registrosDe(lerJson<unknown>(chave, null));
-  const ehObjeto = remotas.some(r => r.id === 'unico') || locais.some(r => r.id === 'unico');
+  const ehObjeto = locais.some(r => r.id === 'unico') || mudados.some((r: any) => r.id === 'unico');
 
   if (ehObjeto) {
-    // Dado único (ex.: configuração de caixa): se houver valor aqui, ele prevalece
-    if (locais.length > 0) {
-      if (!remotas.length || JSON.stringify(remotas[0].dados) !== JSON.stringify(locais[0].dados)) marcarPendente(chave);
-    } else if (remotas.length > 0) {
-      gravarLocal(chave, remotas[0].dados);
-      snap[chave] = { unico: hash(JSON.stringify(remotas[0].dados)) };
-      gravarSnapshot(snap);
+    // Dado único (ex.: configuração do caixa): o banco atualiza a cópia se mudou
+    const linha = mudados.find((r: any) => r.id === 'unico');
+    if (linha && JSON.stringify(linha.dados) !== JSON.stringify(locais[0]?.dados)) {
+      gravarDados(chave, linha.dados);
+      avisarTelas();
       return true;
-    }
-    if (!pendentes().has(chave) && locais.length > 0) {
-      snap[chave] = { unico: hash(JSON.stringify(locais[0].dados)) };
-      gravarSnapshot(snap);
     }
     return false;
   }
 
-  if (!jaSincronizada) {
-    // Primeira vez: junta o que está nos dois lados e não apaga nada daqui.
-    // O que só existe aqui vai para o banco no próximo envio (fica pendente).
-    const idsRemotos = new Set(remotas.map(r => r.id));
-    const idsLocais = new Set(locais.map(r => r.id));
-    const soAqui = locais.filter(r => !idsRemotos.has(r.id));
-    const soLa = remotas.filter(r => !idsLocais.has(r.id));
-    if (soAqui.length > 0) marcarPendente(chave);
-    let mudou = false;
-    // Registro que existe nos dois lados: vale a versão do banco (ele é a fonte da verdade)
-    const porId = new Map(remotas.map(r => [r.id, r.dados]));
-    const atualLista = lerJson<unknown[]>(chave, []);
-    const locaisAtualizados = (Array.isArray(atualLista) ? atualLista : []).map((d: any) =>
-      d && porId.has(String(d.id)) && !soAqui.some(r => r.id === String(d.id)) ? porId.get(String(d.id)) : d
-    );
-    if (soLa.length > 0 || JSON.stringify(locaisAtualizados) !== JSON.stringify(atualLista)) {
-      gravarLocal(chave, [...soLa.map(r => r.dados), ...locaisAtualizados]);
-      mudou = true;
-    }
-    if (!pendentes().has(chave)) {
-      const agoraLista = registrosDe(lerJson<unknown>(chave, null));
-      snap[chave] = Object.fromEntries(agoraLista.map(r => [r.id, hash(JSON.stringify(r.dados))]));
-      gravarSnapshot(snap);
-    }
-    return mudou;
+  // 3. Junta: remove o que foi excluído no banco (só o que já estava no retrato), aplica o que mudou
+  const retrato = info.ids || {};
+  const mudadosPorId = new Map<string, any>(mudados.map((r: any) => [String(r.id), r.dados]));
+  let lista = locais.filter(r => idsRemotos.has(r.id) || !(r.id in retrato)).map(r =>
+    mudadosPorId.has(r.id) ? { id: r.id, dados: mudadosPorId.get(r.id) } : r
+  );
+  const locaisPorId = new Set(lista.map(r => r.id));
+  const novos = [...mudadosPorId.entries()].filter(([id]) => !locaisPorId.has(id)).map(([id, dados]) => ({ id, dados }));
+  lista = [...novos, ...lista];
+
+  const mudou = JSON.stringify(lista.map(r => r.dados)) !== JSON.stringify(locais.map(r => r.dados));
+  if (mudou) {
+    gravarDados(chave, lista.map(r => r.dados));
+    avisarTelas();
   }
 
-  // Já sincronizada: o banco manda (não há alteração pendente aqui)
-  if (remotas.length === 0 && Object.keys(snap[chave] || {}).length === 0) return false;
-  const novoValor = remotas.map(r => r.dados);
-  const atual = lerJson<unknown>(chave, null);
-  if (JSON.stringify(atual) === JSON.stringify(novoValor)) return false;
-  gravarLocal(chave, novoValor);
-  snap[chave] = Object.fromEntries(remotas.map(r => [r.id, hash(JSON.stringify(r.dados))]));
-  gravarSnapshot(snap);
-  return true;
+  // 4. Atualiza o retrato e a data da última busca
+  const m = lerMeta();
+  // Itens só locais continuam pendentes para o envio
+  const soLocal = lista.some(r => !idsRemotos.has(r.id));
+  if (soLocal && !m.pend.includes(chave)) m.pend.push(chave);
+  m.chaves[chave] = {
+    ultima: inicio,
+    ids: Object.fromEntries(lista.filter(r => idsRemotos.has(r.id)).map(r => [r.id, hash(JSON.stringify(r.dados))])),
+  };
+  gravarMeta(m);
+  return mudou;
 }
 
 async function buscarTudoDoBanco(): Promise<void> {
@@ -277,46 +292,40 @@ async function buscarTudoDoBanco(): Promise<void> {
 
 // ---------- ligação ----------
 
-/** Acompanha as gravações feitas pelas telas para mandar ao banco. */
-function acompanharGravacoes(): void {
-  // As gravações chegam pela memória (ver memoria.ts); aqui só marcamos e enviamos
-  ouvirGravacao(chave => {
-    if (ligada && !aplicandoRemoto && CHAVE_DO_SISTEMA.has(chave)) {
-      marcarPendente(chave);
-      agendarEnvio();
-    }
-  });
+/** Ao entrar com outra pessoa, a cópia do navegador anterior é descartada. */
+function garantirCacheDoUsuario(usuarioId: string): void {
+  let atual = '';
+  try {
+    atual = localStorage.getItem(CHAVE_DONO) || '';
+  } catch {
+    /* ignora */
+  }
+  if (atual === usuarioId) return;
+  for (const chave of Object.keys(TABELAS_DO_SISTEMA)) localStorage.removeItem(chave);
+  localStorage.removeItem(CHAVE_META);
+  try {
+    localStorage.setItem(CHAVE_DONO, usuarioId);
+  } catch {
+    /* ignora */
+  }
 }
 
-let acompanhando = false;
-
-/** Liga a sincronização (depois do login). Com somenteBuscar, só recebe do banco até a confirmação. */
-export async function iniciarSincronizacaoBanco(opcoes?: { somenteBuscar?: boolean }): Promise<void> {
+/** Liga a sincronização: envia o pendente, depois baixa o que mudou. Resolve quando a primeira busca termina. */
+export async function iniciarSincronizacaoBanco(usuarioId?: string): Promise<void> {
   if (!supabase || ligada) return;
-  if (!acompanhando) {
-    acompanharGravacoes();
-    acompanhando = true;
-  }
+  if (usuarioId) garantirCacheDoUsuario(usuarioId);
+  instalarAcompanhamento();
   ligada = true;
-  podeEnviar = true; // sem confirmação: o que for gravado vai para o banco
   window.addEventListener('focus', buscarTudoDoBanco);
   timerBusca = window.setInterval(buscarTudoDoBanco, INTERVALO_BUSCA_MS);
-  // Espera a primeira busca (com limite de tempo), para a tela só abrir com os dados do banco
   const primeira = (async () => {
-    if (podeEnviar) await enviarPendentes();
+    await enviarPendentes();
     await buscarTudoDoBanco();
   })();
   await Promise.race([primeira, new Promise<void>(r => window.setTimeout(r, 15_000))]);
 }
 
-/** Depois da confirmação do administrador: libera o envio e começa a enviar o que estiver pendente. */
-export function liberarEnvioBanco(): void {
-  podeEnviar = true;
-  if (!ligada) iniciarSincronizacaoBanco();
-  else enviarPendentes().then(buscarTudoDoBanco);
-}
-
-/** Desliga a sincronização (ao sair). Não apaga nada. */
+/** Desliga a sincronização (ao sair). Mantém a cópia do navegador, para a próxima entrada ser rápida. */
 export function pararSincronizacaoBanco(): void {
   ligada = false;
   window.removeEventListener('focus', buscarTudoDoBanco);
@@ -326,31 +335,13 @@ export function pararSincronizacaoBanco(): void {
   timerEnvio = null;
 }
 
-/** Envia o que está pendente agora (sem depender de a sincronização estar ligada). true = nada ficou pendente. */
+/** Envia o que estiver pendente agora. Resolve true se nada ficou pendente. */
 export async function enviarPendentesAgora(): Promise<boolean> {
-  if (!supabase) return false;
-  for (const chave of [...pendentes()]) {
-    try {
-      await enviarChave(chave);
-    } catch (e) {
-      console.warn('[sincronização] não enviou', chave, e instanceof Error ? e.message : e);
-    }
-  }
-  return pendentes().size === 0;
+  await enviarPendentes();
+  return lerMeta().pend.length === 0;
 }
 
-/** Não há nada guardado neste navegador que ainda não foi enviado ao banco. */
-export function semPendencias(): boolean {
-  return pendentes().size === 0;
-}
-
-/**
- * Apaga do navegador os dados do sistema (o banco é a fonte). Só chamar quando não há nada pendente.
- * Ao entrar de novo, a busca do banco preenche tudo outra vez.
- */
-export function limparDadosLocais(): void {
-  if (!semPendencias()) return;
-  for (const chave of Object.keys(TABELAS_DO_SISTEMA)) localStorage.removeItem(chave);
-  localStorage.removeItem(CHAVE_SNAPSHOT);
-  localStorage.removeItem(CHAVE_PENDENTES);
+/** Compatibilidade: o envio já acontece sozinho; esta função só força uma rodada. */
+export function liberarEnvioBanco(): void {
+  enviarPendentes().then(buscarTudoDoBanco);
 }
