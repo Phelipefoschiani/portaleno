@@ -12,7 +12,8 @@
 import { MODO_NUVEM, supabase, definirLembrarAcesso } from './supabase';
 import { envioJaFeitoNeste, existemDadosParaEnviar, enviarDadosDesteNavegador } from './bancoEnvio';
 import { aplicarCodigosNoArmazenamento } from './codigos';
-import { iniciarSincronizacaoBanco, pararSincronizacaoBanco, liberarEnvioBanco, enviarPendentesAgora, limparDadosLocais, semPendencias } from './sincronizacao';
+import { iniciarSincronizacaoBanco, pararSincronizacaoBanco, liberarEnvioBanco, enviarPendentesAgora } from './sincronizacao';
+import { temLegado, importarLegado, limparMemoria, apagarLegadoDoNavegador } from './memoria';
 
 export type PerfilUsuario = 'ADMIN' | 'AGRICULTOR' | 'RCA' | 'PROVISORIO' | 'PRODUCAO' | 'SITIO' | 'CLIENTE';
 
@@ -257,9 +258,11 @@ export function encerrarSessao(): void {
   if (typeof window === 'undefined') return;
   if (MODO_NUVEM) {
     sessaoNuvem = null;
-    // Ao sair, não deixa dados do sistema guardados no navegador (se houver algo pendente, fica)
-    if (semPendencias()) limparDadosLocais();
-    supabase?.auth.signOut().catch(() => {});
+    // Envia o que ainda estiver pendente, esvazia a memória desta página e sai
+    enviarPendentesAgora().finally(() => {
+      limparMemoria();
+      supabase?.auth.signOut().catch(() => {});
+    });
     window.dispatchEvent(new Event(EVENTO_AUTH_ATUALIZADO));
     return;
   }
@@ -584,17 +587,20 @@ export function iniciarAuthNuvem(): void {
       sessaoNuvem = s;
       if (s.perfil === 'ADMIN') {
         await carregarUsuariosAdmin();
-        await perguntarEnvioInicial();
+        // Dados que estavam no navegador de versões anteriores: sobem ao banco uma vez
+        if (temLegado()) {
+          importarLegado();
+          const r = await enviarDadosDesteNavegador();
+          if (r.erros.length) window.alert('Alguns dados antigos não subiram para o banco:\n\n' + r.erros.join('\n'));
+          else apagarLegadoDoNavegador();
+        }
+      } else if (temLegado()) {
+        window.alert('Havia dados antigos guardados neste computador. Só o administrador consegue enviá-los ao banco.');
       }
-      // Sincronização automática. Enquanto o administrador não respondeu o envio inicial, ela espera,
-      // para nada subir sem a pergunta.
-      const esperaDecisao = s.perfil === 'ADMIN' && existemDadosParaEnviar() && !envioJaFeitoNeste();
-      // Ao entrar: envia o que estiver pendente e limpa o navegador; depois o banco preenche tudo.
-      // Se o administrador ainda não respondeu o envio inicial, nada é apagado.
-      if (!esperaDecisao && (await enviarPendentesAgora())) limparDadosLocais();
-      await iniciarSincronizacaoBanco({ somenteBuscar: esperaDecisao });
+      // Tudo passa a vir do banco: a busca preenche as telas antes de abrir
+      await iniciarSincronizacaoBanco();
       // Administrador: confere os códigos de RCA, cliente e pedido (grava só o que mudou)
-      if (s.perfil === 'ADMIN' && !esperaDecisao) aplicarCodigosNoArmazenamento();
+      if (s.perfil === 'ADMIN') aplicarCodigosNoArmazenamento();
     } finally {
       carregandoNuvem = false;
       avisarMudanca();

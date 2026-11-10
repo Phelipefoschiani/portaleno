@@ -9,6 +9,7 @@
 // - Nunca apaga dados locais que ainda não foram enviados: essas chaves ficam pendentes.
 import { supabase } from './supabase';
 import { TABELAS_DO_SISTEMA } from './bancoEnvio';
+import { ouvirGravacao } from './memoria';
 
 const CHAVE_SNAPSHOT = 'eno_sync_snapshot_v1';
 const CHAVE_PENDENTES = 'eno_sync_pendentes_v1';
@@ -278,23 +279,13 @@ async function buscarTudoDoBanco(): Promise<void> {
 
 /** Acompanha as gravações feitas pelas telas para mandar ao banco. */
 function acompanharGravacoes(): void {
-  const proto = Storage.prototype;
-  const setOriginal = proto.setItem;
-  const removeOriginal = proto.removeItem;
-  proto.setItem = function (this: Storage, k: string, v: string) {
-    setOriginal.call(this, k, v);
-    if (this === window.localStorage && ligada && !aplicandoRemoto && CHAVE_DO_SISTEMA.has(k)) {
-      marcarPendente(k);
+  // As gravações chegam pela memória (ver memoria.ts); aqui só marcamos e enviamos
+  ouvirGravacao(chave => {
+    if (ligada && !aplicandoRemoto && CHAVE_DO_SISTEMA.has(chave)) {
+      marcarPendente(chave);
       agendarEnvio();
     }
-  };
-  proto.removeItem = function (this: Storage, k: string) {
-    removeOriginal.call(this, k);
-    if (this === window.localStorage && ligada && !aplicandoRemoto && CHAVE_DO_SISTEMA.has(k)) {
-      marcarPendente(k);
-      agendarEnvio();
-    }
-  };
+  });
 }
 
 let acompanhando = false;
@@ -307,7 +298,7 @@ export async function iniciarSincronizacaoBanco(opcoes?: { somenteBuscar?: boole
     acompanhando = true;
   }
   ligada = true;
-  podeEnviar = !opcoes?.somenteBuscar;
+  podeEnviar = true; // sem confirmação: o que for gravado vai para o banco
   window.addEventListener('focus', buscarTudoDoBanco);
   timerBusca = window.setInterval(buscarTudoDoBanco, INTERVALO_BUSCA_MS);
   // Espera a primeira busca (com limite de tempo), para a tela só abrir com os dados do banco
