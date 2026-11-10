@@ -2141,7 +2141,6 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                       <>
                         Emissão {formatarDataBR(modalDetalhes.data_emissao)}
                         {modalDetalhes.data_validade_orcamento && ` · Validade ${formatarDataBR(modalDetalhes.data_validade_orcamento)}`}
-                        {modalDetalhes.data_previsao_entrega && tipoDocumentoVisualizacao !== 'Orçamento' && ` · Entrega prevista ${formatarDataBR(modalDetalhes.data_previsao_entrega)}`}
                       </>
                     }
                   />
