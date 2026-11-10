@@ -24,7 +24,6 @@ export function FaixaMarcaEno({ rotulo, titulo, subtitulo, destaque }: Props) {
             />
             <div>
               <div className="text-2xl font-black tracking-tight text-white leading-none">{empresaAtual().nome}</div>
-              <div className="text-[11px] text-[#a7d6ba] mt-1.5">{empresaAtual().subtitulo}</div>
             </div>
           </div>
           <div className="sm:text-right">
