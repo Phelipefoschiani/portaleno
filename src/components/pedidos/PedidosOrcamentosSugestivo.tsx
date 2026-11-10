@@ -3,7 +3,7 @@ import { CampoNumero } from '../ui/CampoNumero';
 import html2canvas from 'html2canvas-pro';
 import { gerarPdfDeElemento } from '../../lib/pdfDeElemento';
 import { FaixaMarcaEno } from '../FaixaMarcaEno';
-import { EMPRESA } from '../../lib/empresa';
+import { empresaAtual, EMPRESA } from '../../lib/empresa';
 import {
   FileText,
   Plus,
@@ -2289,13 +2289,13 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                       <span>De acordo do cliente</span>
                     </div>
                     <div>
-                      <div className="border-t border-[#171e1a]/40 pt-1.5 font-bold text-[#171e1a] text-[11px]">{modalDetalhes.rca_nome || EMPRESA.razao}</div>
-                      <span>Aprovação comercial · {EMPRESA.razao}</span>
+                      <div className="border-t border-[#171e1a]/40 pt-1.5 font-bold text-[#171e1a] text-[11px]">{modalDetalhes.rca_nome || empresaAtual().razao}</div>
+                      <span>Aprovação comercial · {empresaAtual().razao}</span>
                     </div>
                   </div>
 
                   <div className="px-6 sm:px-8 py-3 border-t border-[#ddd6c4] flex flex-wrap items-center justify-between gap-2 text-[10px] text-[#6e7470]">
-                    <span>{EMPRESA.razao} · Documento comercial nº {modalDetalhes.numero_pedido}</span>
+                    <span>{empresaAtual().razao} · Documento comercial nº {modalDetalhes.numero_pedido}</span>
                     <span className="tabular-nums">Gerado em {new Date().toLocaleDateString('pt-BR')}</span>
                   </div>
                   </div>

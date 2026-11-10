@@ -38,6 +38,7 @@ export const TABELAS_DO_SISTEMA: Record<string, string> = {
   grupo_eno_sitio_controle_despesas_v3: 'sitio_controle_despesas',
   grupo_eno_tabelas_preco_v1: 'tabelas_preco',
   grupo_eno_vendas_rca_v1: 'vendas_rca',
+  grupo_eno_empresa_v1: 'empresa',
 };
 
 /** Marca neste navegador que o envio já foi feito (não repete). */

@@ -38,6 +38,7 @@ import { carregarPedidosVenda } from '../data/pedidosVendaData';
 import { carregarOrdensProducao, EVENTO_OPS } from '../data/ordensProducaoData';
 import { carregarTitulosReceber, carregarTitulosPagar } from '../data/financeiroData';
 import { DentroDoShell } from './ui/ShellContext';
+import { ContaEmpresa } from './ContaEmpresa';
 
 type AdminDashboardProps = {
   onLogout: () => void;
@@ -174,6 +175,7 @@ export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: Admin
   };
 
   const [activePage, setActivePage] = useState<PaginaAtiva>(() => paginaPorId(initialPageId) || VISAO_GERAL);
+  const [contaAberta, setContaAberta] = useState(false);
   const [selectedClienteIdForNavigation, setSelectedClienteIdForNavigation] = useState<string | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [menuMovelAberto, setMenuMovelAberto] = useState(false);
@@ -346,10 +348,10 @@ export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: Admin
           <div className="ml-auto flex items-center gap-1 sm:gap-3">
             {seletorPortal('hidden lg:flex items-center gap-1 h-8 px-2.5 rounded-md border border-white/15 text-[12.5px] font-medium text-white/75 hover:text-white hover:border-white/30 transition-colors')}
             {sessao && (
-              <div className="hidden sm:block text-right leading-tight pl-1">
-                <div className="text-[13px] font-semibold text-white truncate max-w-[180px]">{sessao.nome || sessao.usuario}</div>
+              <button type="button" onClick={() => setContaAberta(true)} className="hidden sm:block text-right leading-tight pl-1 cursor-pointer" title="Ver e editar dados da empresa">
+                <div className="text-[13px] font-semibold text-white truncate max-w-[180px] hover:underline">{sessao.nome || sessao.usuario}</div>
                 <div className="text-[10.5px] text-white/50">{PERFIL_ROTULO[sessao.perfil] || sessao.perfil}</div>
-              </div>
+              </button>
             )}
             <button
               type="button"
@@ -406,10 +408,10 @@ export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: Admin
                 </div>
               ))}
               <div className="border-t border-white/10 pt-3 mt-1 flex flex-wrap items-center justify-between gap-3 text-[13px]">
-                <div className="text-white/80">
+                <button type="button" onClick={() => setContaAberta(true)} className="text-white/80 text-left cursor-pointer hover:underline">
                   {sessao?.nome || sessao?.usuario}
                   <span className="text-white/45"> · {PERFIL_ROTULO[sessao?.perfil || ''] || ''}</span>
-                </div>
+                </button>
                 <div className="flex items-center gap-2">
                   {seletorPortal('flex items-center gap-1 h-8 px-2.5 rounded-md border border-white/20 text-white/80')}
                   <button type="button" onClick={onLogout} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-white/20 text-white/80">
@@ -548,6 +550,7 @@ export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: Admin
           </div>
         </DentroDoShell.Provider>
       </main>
+      {contaAberta && <ContaEmpresa onFechar={() => setContaAberta(false)} />}
     </div>
   );
 }

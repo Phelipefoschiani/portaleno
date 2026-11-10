@@ -1,5 +1,5 @@
 import React from 'react';
-import { EMPRESA, linhaContatoEmpresa } from '../lib/empresa';
+import { EMPRESA, linhaContatoEmpresa, empresaAtual } from '../lib/empresa';
 
 interface Props {
   rotulo: string; // ex.: 'Tabela de Preços'
@@ -18,13 +18,13 @@ export function FaixaMarcaEno({ rotulo, titulo, subtitulo, destaque }: Props) {
         <div className="relative flex flex-col sm:flex-row sm:items-start justify-between gap-5">
           <div className="flex items-center gap-4">
             <img
-              src={EMPRESA.logo}
+              src={empresaAtual().logo}
               alt="Grupo ENO"
               className="h-16 w-auto object-contain shrink-0 drop-shadow-[0_6px_16px_rgba(0,0,0,0.45)]"
             />
             <div>
-              <div className="text-2xl font-black tracking-tight text-white leading-none">{EMPRESA.nome}</div>
-              <div className="text-[11px] text-[#a7d6ba] mt-1.5">{EMPRESA.subtitulo}</div>
+              <div className="text-2xl font-black tracking-tight text-white leading-none">{empresaAtual().nome}</div>
+              <div className="text-[11px] text-[#a7d6ba] mt-1.5">{empresaAtual().subtitulo}</div>
             </div>
           </div>
           <div className="sm:text-right">
