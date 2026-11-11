@@ -3,7 +3,7 @@
 // - logo PNG com transparência (sem fundo branco)
 
 import type { jsPDF } from 'jspdf';
-import { EMPRESA } from './empresa';
+import { EMPRESA, empresaAtual } from './empresa';
 
 // Logo reduzido mantendo a transparência
 export async function carregarLogoPng(lado = 260): Promise<{ dataUrl: string; proporcao: number } | null> {
@@ -107,14 +107,12 @@ export function desenharFaixaMarca(doc: jsPDF, dados: FaixaMarcaPdf, logo: { dat
     doc.addImage(logo.dataUrl, 'PNG', M, 9, larg, alt, 'logo_marca', 'FAST');
     xTexto = M + larg + 5;
   }
+  // Dados da empresa vêm da ficha do administrador (fallback: dados padrão)
+  const emp = empresaAtual();
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(19);
-  doc.text(EMPRESA.nome, xTexto, 20);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(167, 214, 186);
-  doc.text(EMPRESA.subtitulo, xTexto, 26);
+  doc.text(emp.nome, xTexto, 22);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
@@ -130,6 +128,7 @@ export function desenharFaixaMarca(doc: jsPDF, dados: FaixaMarcaPdf, logo: { dat
 
   doc.setFontSize(6.8);
   doc.setTextColor(138, 186, 158);
-  doc.text(`${EMPRESA.endereco}  ·  CNPJ ${EMPRESA.cnpj}  ·  ${EMPRESA.telefone}  ·  ${EMPRESA.email}`, M, 41.5);
+  const contato = [emp.endereco, emp.cnpj ? `CNPJ ${emp.cnpj}` : '', emp.telefone, emp.email].filter(Boolean).join('  ·  ');
+  doc.text(contato, M, 41.5);
   return altura + 1.1;
 }

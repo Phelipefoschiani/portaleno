@@ -3,7 +3,7 @@
 
 import { jsPDF } from 'jspdf';
 import { carregarLogoPng, desenharFaixaMarca } from './marcaEnoPdf';
-import { EMPRESA } from './empresa';
+import { empresaAtual } from './empresa';
 
 export interface LinhaTabelaPrecoPdf {
   categoria: string;
@@ -105,7 +105,7 @@ export async function gerarPdfTabelaPreco(dados: DadosTabelaPrecoPdf): Promise<j
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
     doc.setTextColor(255, 255, 255);
-    doc.text(`${EMPRESA.nome}  ·  Tabela ${dados.nome}`, M, 10);
+    doc.text(`${empresaAtual().nome}  ·  Tabela ${dados.nome}`, M, 10);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(167, 214, 186);
@@ -216,27 +216,6 @@ export async function gerarPdfTabelaPreco(dados: DadosTabelaPrecoPdf): Promise<j
     y += 3;
   });
 
-  // Condições comerciais (dados reais da tabela)
-  const condicoes = [
-    'Valores em reais (R$), válidos durante a vigência indicada no topo.',
-    `Pagamento: ${dados.pagamento || 'a combinar'}.  Frete: ${dados.frete || 'a combinar'}.`,
-    'Pedidos sujeitos à análise de crédito e à disponibilidade de estoque.'
-  ];
-  const alturaCond = 8 + condicoes.length * 4.6;
-  if (y + alturaCond + 4 > LIMITE) novaPagina();
-  y += 3;
-  doc.setDrawColor(...DOURADO);
-  doc.setLineWidth(0.4);
-  doc.line(M, y, M + 30, y);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...VERDE_TEXTO);
-  doc.text('CONDIÇÕES COMERCIAIS', M, y + 5);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(...TINTA);
-  condicoes.forEach((c, i) => doc.text(`·  ${c}`, M, y + 10 + i * 4.6));
-
   // Rodapé com paginação em todas as páginas
   const total = doc.getNumberOfPages();
   for (let p = 1; p <= total; p++) {
@@ -248,7 +227,7 @@ export async function gerarPdfTabelaPreco(dados: DadosTabelaPrecoPdf): Promise<j
     doc.setFontSize(7);
     doc.setTextColor(...CINZA);
     const qtd = dados.linhas.length;
-    doc.text(`Grupo ENO Agroindustrial  ·  Tabela ${dados.nome} (${dados.codigo})  ·  ${qtd} ${qtd === 1 ? 'produto' : 'produtos'}`, M, A - 9);
+    doc.text(`${empresaAtual().nome}  ·  Tabela ${dados.nome} (${dados.codigo})  ·  ${qtd} ${qtd === 1 ? 'produto' : 'produtos'}`, M, A - 9);
     doc.text(`Página ${p} de ${total}`, L - M, A - 9, { align: 'right' });
   }
 
