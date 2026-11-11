@@ -57,6 +57,8 @@ import {
   montarClientesVinculados,
   montarVendasComissaoRca,
   lancarAdiantamentoRca,
+  editarAdiantamentoRca,
+  excluirAdiantamentoRca,
   saldoAdiantamentoRca,
   obterRcaPorId,
   EVENTO_CADASTROS_ATUALIZADOS,
@@ -163,6 +165,9 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
   const [busca, setBusca] = useState('');
   const [adiantValor, setAdiantValor] = useState('');
   const [adiantObs, setAdiantObs] = useState('');
+  const [adiantEditandoId, setAdiantEditandoId] = useState<string | null>(null);
+  const [adiantEditValor, setAdiantEditValor] = useState('');
+  const [adiantEditObs, setAdiantEditObs] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<string>('TODOS');
   const [filtroRegiao, setFiltroRegiao] = useState<string>('TODAS');
   
@@ -692,6 +697,33 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
       setAdiantObs('');
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Não foi possível lançar o adiantamento.');
+    }
+  };
+
+  const lerValorBR = (texto: string) => parseFloat(texto.replace(/\./g, '').replace(',', '.')) || 0;
+
+  const handleSalvarEdicaoAdiantamento = () => {
+    if (!selectedRca || !adiantEditandoId) return;
+    try {
+      const atualizado = editarAdiantamentoRca(selectedRca.id, adiantEditandoId, {
+        valor: lerValorBR(adiantEditValor),
+        observacao: adiantEditObs
+      });
+      setRcas(prev => prev.map(r => (r.id === atualizado.id ? atualizado : r)));
+      setAdiantEditandoId(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Não foi possível editar o adiantamento.');
+    }
+  };
+
+  const handleExcluirAdiantamento = (adiantId: string, valor: number) => {
+    if (!selectedRca) return;
+    if (!window.confirm(`Excluir o adiantamento de R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}? O valor volta para o caixa.`)) return;
+    try {
+      const atualizado = excluirAdiantamentoRca(selectedRca.id, adiantId);
+      setRcas(prev => prev.map(r => (r.id === atualizado.id ? atualizado : r)));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Não foi possível excluir o adiantamento.');
     }
   };
 
@@ -1774,19 +1806,61 @@ export function CadastroRCA({ onNavigateToCliente }: CadastroRCAProps = {}) {
                   {(selectedRca.adiantamentos || []).length === 0 ? (
                     <p className="text-[12px] text-cinza py-2">Nenhum adiantamento lançado.</p>
                   ) : (
-                    [...(selectedRca.adiantamentos || [])].reverse().map(a => (
-                      <div key={a.id} className="py-2 flex flex-wrap items-center justify-between gap-2 text-[12.5px]">
-                        <span className="text-tinta">
-                          {a.data} · {a.observacao || 'Adiantamento'}
-                        </span>
-                        <span className="text-tinta-2 tabular-nums">
-                          R$ {a.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · descontado R$ {(a.descontado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ·{' '}
-                          <strong className={a.valor - (a.descontado || 0) > 0 ? 'text-st-aguardando' : 'text-eno-700'}>
-                            {a.valor - (a.descontado || 0) > 0 ? `falta R$ ${(a.valor - (a.descontado || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'quitado'}
-                          </strong>
-                        </span>
-                      </div>
-                    ))
+                    [...(selectedRca.adiantamentos || [])].reverse().map(a =>
+                      adiantEditandoId === a.id ? (
+                        <div key={a.id} className="py-2 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] gap-2 items-end">
+                          <input
+                            inputMode="decimal"
+                            value={adiantEditValor}
+                            onChange={e => setAdiantEditValor(e.target.value)}
+                            className="w-full bg-papel-2 border border-linha rounded-md px-3 py-2 text-[13px] text-tinta tabular-nums focus:outline-none focus:border-eno-700"
+                          />
+                          <input
+                            value={adiantEditObs}
+                            onChange={e => setAdiantEditObs(e.target.value)}
+                            className="w-full bg-papel-2 border border-linha rounded-md px-3 py-2 text-[13px] text-tinta focus:outline-none focus:border-eno-700"
+                          />
+                          <div className="flex gap-2">
+                            <button type="button" onClick={handleSalvarEdicaoAdiantamento} className="h-10 px-3 rounded-md bg-eno-900 hover:bg-eno-950 text-white font-bold text-[13px] cursor-pointer">Salvar</button>
+                            <button type="button" onClick={() => setAdiantEditandoId(null)} className="h-10 px-3 rounded-md bg-papel-3/60 hover:bg-linha text-tinta-2 font-bold text-[13px] cursor-pointer">Cancelar</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div key={a.id} className="py-2 flex flex-wrap items-center justify-between gap-2 text-[12.5px]">
+                          <span className="text-tinta">
+                            {a.data} · {a.observacao || 'Adiantamento'}
+                          </span>
+                          <span className="flex flex-wrap items-center gap-3">
+                            <span className="text-tinta-2 tabular-nums">
+                              R$ {a.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · descontado R$ {(a.descontado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ·{' '}
+                              <strong className={a.valor - (a.descontado || 0) > 0 ? 'text-st-aguardando' : 'text-eno-700'}>
+                                {a.valor - (a.descontado || 0) > 0 ? `falta R$ ${(a.valor - (a.descontado || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'quitado'}
+                              </strong>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdiantEditandoId(a.id);
+                                setAdiantEditValor(a.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
+                                setAdiantEditObs(a.observacao || '');
+                              }}
+                              className="font-bold text-eno-700 hover:underline cursor-pointer"
+                            >
+                              Editar
+                            </button>
+                            {(a.descontado || 0) === 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleExcluirAdiantamento(a.id, a.valor)}
+                                className="font-bold text-st-vencido hover:underline cursor-pointer"
+                              >
+                                Excluir
+                              </button>
+                            )}
+                          </span>
+                        </div>
+                      )
+                    )
                   )}
                 </div>
               </div>

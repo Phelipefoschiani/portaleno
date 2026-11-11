@@ -313,6 +313,52 @@ export function abaterAdiantamentosRca(rcaId: string, valor: number): number {
   return abatido;
 }
 
+/** Edita valor e observação de um adiantamento. A diferença de valor é ajustada no caixa. */
+export function editarAdiantamentoRca(rcaId: string, adiantId: string, dados: { valor: number; observacao?: string }): RCA {
+  const valor = r2adiant(dados.valor);
+  const rcas = carregarRcas();
+  const alvo = rcas.find(r => r.id === rcaId);
+  const atual = alvo?.adiantamentos?.find(a => a.id === adiantId);
+  if (!alvo || !atual) throw new Error('Adiantamento não encontrado.');
+  if (valor <= 0) throw new Error('Informe um valor maior que zero.');
+  if (valor < r2adiant(atual.descontado)) {
+    throw new Error(`O valor não pode ser menor que o já descontado de comissões (R$ ${r2adiant(atual.descontado).toFixed(2)}).`);
+  }
+  const diferenca = r2adiant(atual.valor - valor); // positivo = volta para o caixa
+  if (diferenca !== 0) {
+    registrarBaixaNoCaixa(`adiant_rca_ajuste:${adiantId}:${Date.now()}`, diferenca, {
+      origem: 'Conta a pagar',
+      descricao: `Ajuste de adiantamento ao RCA ${alvo.nome_fantasia || alvo.nome_completo}`
+    });
+  }
+  const atualizado: RCA = {
+    ...alvo,
+    adiantamentos: (alvo.adiantamentos || []).map(a =>
+      a.id === adiantId ? { ...a, valor, observacao: dados.observacao?.trim() || undefined } : a
+    )
+  };
+  salvarRcas(rcas.map(r => (r.id === rcaId ? atualizado : r)));
+  return atualizado;
+}
+
+/** Exclui um adiantamento que ainda não foi descontado. O valor volta para o caixa. */
+export function excluirAdiantamentoRca(rcaId: string, adiantId: string): RCA {
+  const rcas = carregarRcas();
+  const alvo = rcas.find(r => r.id === rcaId);
+  const atual = alvo?.adiantamentos?.find(a => a.id === adiantId);
+  if (!alvo || !atual) throw new Error('Adiantamento não encontrado.');
+  if (r2adiant(atual.descontado) > 0) {
+    throw new Error('Este adiantamento já foi descontado de comissões. Ajuste o valor em vez de excluir.');
+  }
+  registrarBaixaNoCaixa(`adiant_rca_estorno:${adiantId}`, r2adiant(atual.valor), {
+    origem: 'Conta a pagar',
+    descricao: `Estorno de adiantamento ao RCA ${alvo.nome_fantasia || alvo.nome_completo}`
+  });
+  const atualizado: RCA = { ...alvo, adiantamentos: (alvo.adiantamentos || []).filter(a => a.id !== adiantId) };
+  salvarRcas(rcas.map(r => (r.id === rcaId ? atualizado : r)));
+  return atualizado;
+}
+
 /**
  * Mantém o espelho RCA.clientes_vinculados_ids coerente com Cliente.vendedor_id (fonte da verdade):
  * o cliente fica só na carteira do RCA informado (ou de nenhum, se rcaId vazio).
