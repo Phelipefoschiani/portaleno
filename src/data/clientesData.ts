@@ -33,7 +33,42 @@ export interface Cliente {
   tabela_preco_nome?: string;
   ativo: boolean;
   codigo_cliente?: string; // CL0001, usado no número do pedido
+  /** Cliente cadastrado pelo RCA: 'pendente' até o administrador aceitar. Sem campo = aceito (cadastros antigos). */
+  aceite?: 'pendente' | 'aceito' | 'recusado';
+  recusado_em?: string;
+  /** Alteração enviada pelo RCA depois que o cliente foi aceito: só vale quando o administrador aceitar. */
+  solicitacao_edicao?: { enviado_em: string; proposta: Cliente };
   criado_em: string;
+}
+
+/** Dias que o RCA tem para editar um cliente recusado antes de ele ser removido. */
+export const PRAZO_CLIENTE_RECUSADO_DIAS = 7;
+
+export function situacaoAceite(c: Pick<Cliente, 'aceite'>): 'pendente' | 'aceito' | 'recusado' {
+  return c.aceite ?? 'aceito';
+}
+
+/** Campos que só o administrador controla: não mudam por alteração do RCA. */
+export const CAMPOS_CONTROLE_ADMIN: (keyof Cliente)[] = [
+  'id', 'empresa_id', 'codigo_cliente', 'criado_em', 'vendedor_id', 'vendedor_nome',
+  'tabela_preco_id', 'tabela_preco_nome', 'ativo', 'aceite', 'recusado_em', 'solicitacao_edicao'
+];
+
+/**
+ * Remove clientes recusados há mais que o prazo sem o RCA ter editado.
+ * clientesComPedido: ids com pedido de venda (esses ficam, para não quebrar o histórico).
+ * Retorna os ids removidos.
+ */
+export function removerRecusadosVencidos(clientesComPedido: Set<string>): string[] {
+  const limite = Date.now() - PRAZO_CLIENTE_RECUSADO_DIAS * 24 * 60 * 60 * 1000;
+  const lista = carregarClientes();
+  const remover = lista.filter(c =>
+    c.aceite === 'recusado' && !!c.recusado_em && Date.parse(c.recusado_em) < limite && !clientesComPedido.has(c.id)
+  );
+  if (remover.length === 0) return [];
+  const ids = new Set(remover.map(c => c.id));
+  salvarClientes(lista.filter(c => !ids.has(c.id)));
+  return remover.map(c => c.id);
 }
 
 export interface ClienteLookup {

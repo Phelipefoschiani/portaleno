@@ -22,6 +22,7 @@ import { ProdutosRelatorios } from './produtos/ProdutosRelatorios';
 import { ProdutosFichaTecnica } from './produtos/ProdutosFichaTecnica';
 import { ProdutosTabelaPreco } from './produtos/ProdutosTabelaPreco';
 import { ProdutosEtiqueta } from './produtos/ProdutosEtiqueta';
+import { NotificacoesAceites } from './notificacoes/NotificacoesAceites';
 import { FinanceiroAReceber } from './financeiro/FinanceiroAReceber';
 import { FinanceiroAPagar } from './financeiro/FinanceiroAPagar';
 import { FinanceiroLancarDespesas } from './financeiro/FinanceiroLancarDespesas';
@@ -37,6 +38,7 @@ import { EMPRESA } from '../lib/empresa';
 import { carregarPedidosVenda } from '../data/pedidosVendaData';
 import { carregarOrdensProducao, EVENTO_OPS } from '../data/ordensProducaoData';
 import { carregarTitulosReceber, carregarTitulosPagar } from '../data/financeiroData';
+import { carregarClientes } from '../data/clientesData';
 import { DentroDoShell } from './ui/ShellContext';
 import { ContaEmpresa } from './ContaEmpresa';
 
@@ -78,12 +80,13 @@ function useContagensSubmenu() {
       pedidos_entregues: porEtapa('ENTREGUE'),
       financeiro_a_receber: carregarTitulosReceber().filter(t => t.status !== 'PAGO').length,
       financeiro_a_pagar: carregarTitulosPagar().filter(t => t.status !== 'PAGO').length,
+      notificacoes_aceites: carregarClientes().filter(c => c.solicitacao_edicao || (c.aceite === 'pendente')).length,
     } as Record<string, number>;
   };
   const [contagens, setContagens] = useState(ler);
   useEffect(() => {
     const h = () => setContagens(ler());
-    const eventos = ['pedidos_venda_updated', EVENTO_OPS, 'financeiro_updated', 'sistema_reset_updated'];
+    const eventos = ['pedidos_venda_updated', EVENTO_OPS, 'financeiro_updated', 'sistema_reset_updated', 'clientes_updated'];
     eventos.forEach(ev => window.addEventListener(ev, h));
     return () => eventos.forEach(ev => window.removeEventListener(ev, h));
   }, []);
@@ -91,7 +94,7 @@ function useContagensSubmenu() {
 }
 
 // Itens cujo número pede ação (cor âmbar no submenu)
-const CONTAGEM_PEDE_ACAO = new Set(['pedidos_orcamentos_sugestivo', 'pedidos_a_faturar']);
+const CONTAGEM_PEDE_ACAO = new Set(['pedidos_orcamentos_sugestivo', 'pedidos_a_faturar', 'notificacoes_aceites']);
 
 const PERFIL_ROTULO: Record<string, string> = {
   ADMIN: 'Administrador',
@@ -164,6 +167,14 @@ export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: Admin
         { id: 'financeiro_notas_entrada', label: 'Notas fiscais de entrada', secao: 'Fiscal' },
       ],
     },
+    // Aceites do administrador (cadastros e alterações enviados pelos RCAs): logo após Financeiro
+    ...(ehAdmin ? [{
+      id: 'notificacoes',
+      label: 'Notificações',
+      items: [
+        { id: 'notificacoes_aceites', label: 'Aceites pendentes', secao: 'Clientes' },
+      ],
+    }] : []),
   ], [ehAdmin]);
 
   const paginaPorId = (pageId?: string): PaginaAtiva | null => {
@@ -530,6 +541,8 @@ export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: Admin
               <ProdutosTabelaPreco onNavigate={handleNavigateUniversal} />
             ) : activePage.id === 'produtos_etiqueta' ? (
               <ProdutosEtiqueta onNavigate={handleNavigateUniversal} />
+            ) : activePage.id === 'notificacoes_aceites' ? (
+              <NotificacoesAceites />
             ) : activePage.id === 'financeiro_a_receber' ? (
               <FinanceiroAReceber onNavigate={handleNavigateUniversal} />
             ) : activePage.id === 'financeiro_a_pagar' ? (

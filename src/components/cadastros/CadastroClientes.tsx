@@ -39,7 +39,14 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts';
-import { carregarClientes, salvarClientes, Cliente } from '../../data/clientesData';
+import {
+  carregarClientes,
+  salvarClientes,
+  Cliente,
+  situacaoAceite,
+  removerRecusadosVencidos,
+  PRAZO_CLIENTE_RECUSADO_DIAS,
+} from '../../data/clientesData';
 import { carregarRcas, EVENTO_CADASTROS_ATUALIZADOS, RCA, sincronizarEspelhoClienteRca } from '../../data/cadastrosData';
 import { carregarPedidosVenda, PedidoVenda } from '../../data/pedidosVendaData';
 import { carregarTitulosReceber } from '../../data/financeiroData';
@@ -178,6 +185,19 @@ export interface CadastroClientesProps {
 
 const soDigitos = (s?: string) => String(s || '').replace(/\D/g, '');
 
+// Situação do cadastro para o RCA (aceite do administrador)
+function textoSituacaoRca(c: Cliente): string | null {
+  if (c.solicitacao_edicao) return 'Alteração aguardando o aceite do administrador';
+  const s = situacaoAceite(c);
+  if (s === 'pendente') return 'Aguardando o aceite do administrador';
+  if (s === 'recusado') {
+    const decorridos = c.recusado_em ? Math.floor((Date.now() - Date.parse(c.recusado_em)) / (24 * 60 * 60 * 1000)) : 0;
+    const restantes = Math.max(0, PRAZO_CLIENTE_RECUSADO_DIAS - decorridos);
+    return `Recusado pelo administrador · edite para reenviar (${restantes} ${restantes === 1 ? 'dia' : 'dias'} restantes)`;
+  }
+  return null;
+}
+
 export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }: CadastroClientesProps = {}) {
   const modoRca = !!rcaFixoId;
   const abrirNovoRef = React.useRef<() => void>(() => {});
@@ -221,6 +241,15 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
 
   // RCAs cadastrados (Cadastro de RCA) para o vínculo vendedor_id do cliente
   const [rcasCadastrados, setRcasCadastrados] = useState<RCA[]>(() => carregarRcas());
+
+  // Cliente recusado que o RCA não editou no prazo sai do banco (exceto se já tem pedido)
+  React.useEffect(() => {
+    const comPedido = new Set(carregarPedidosVenda().map(p => p.cliente_id));
+    const removidos = removerRecusadosVencidos(comPedido);
+    if (removidos.length === 0) return;
+    removidos.forEach(id => sincronizarEspelhoClienteRca(id, undefined));
+    setClientes(carregarClientes());
+  }, []);
   React.useEffect(() => {
     const handleRcas = () => setRcasCadastrados(carregarRcas());
     window.addEventListener(EVENTO_CADASTROS_ATUALIZADOS, handleRcas);
@@ -442,8 +471,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
 
     if (clienteSelecionado) {
       // UPDATE
-      const atualizados = base.map(c => c.id === clienteSelecionado.id ? {
-        ...c,
+      const campos = {
         tipo_pessoa: formData.tipo_pessoa,
         razao_nome: formData.razao_nome,
         fantasia: formData.fantasia,
@@ -469,10 +497,34 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
         tabela_preco_id: formData.tabela_preco_id,
         tabela_preco_nome: tab?.nome,
         ativo: formData.ativo,
-      } : c);
+      };
+      const atualCliente = base.find(c => c.id === clienteSelecionado.id);
+      // RCA não altera cliente já aceito: a alteração vai para o administrador aceitar
+      const pedirAceite = modoRca && !!atualCliente && situacaoAceite(atualCliente) === 'aceito';
+      const atualizados = base.map(c => {
+        if (c.id !== clienteSelecionado.id) return c;
+        if (pedirAceite) {
+          return {
+            ...c,
+            solicitacao_edicao: {
+              enviado_em: new Date().toISOString(),
+              proposta: { ...c, ...campos, solicitacao_edicao: undefined },
+            },
+          };
+        }
+        return {
+          ...c,
+          ...campos,
+          // Cliente recusado que o RCA editou volta para análise do administrador
+          ...(modoRca && c.aceite === 'recusado' ? { aceite: 'pendente' as const, recusado_em: undefined } : {}),
+        };
+      });
       setClientes(atualizados);
       salvarClientes(atualizados);
       sincronizarEspelhoClienteRca(clienteSelecionado.id, rcaSel?.id);
+      if (pedirAceite) {
+        alert('Alteração enviada. Ela só passa a valer depois que o administrador aceitar. Até lá, o cadastro continua como está.');
+      }
       setSalvandoCliente(true);
       try {
         await gravarAcessoCliente(planoAcesso, clienteSelecionado.id, nomeAcesso);
@@ -509,6 +561,8 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
         tabela_preco_id: formData.tabela_preco_id,
         tabela_preco_nome: tab?.nome,
         ativo: formData.ativo,
+        // Cadastro feito pelo RCA fica pendente até o administrador aceitar
+        aceite: modoRca ? 'pendente' : 'aceito',
         criado_em: new Date().toISOString(),
       };
       const atualizados = [novo, ...base];
@@ -747,6 +801,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                                 {cli.tipo_pessoa === 'PJ' ? 'Empresa' : 'Pessoa física'}{cli.fantasia ? ` · ${cli.fantasia}` : ''}
                               </div>
                               {cli.codigo_cliente && <div className="text-[11.5px] font-semibold text-eno-700 tabular-nums">Código {cli.codigo_cliente}</div>}
+                              {modoRca && textoSituacaoRca(cli) && <div className="text-[11.5px] font-semibold text-st-aguardando">{textoSituacaoRca(cli)}</div>}
                             </Td>
                             <Td className="tabular-nums whitespace-nowrap">
                               <div>{cli.cpf_cnpj}</div>
@@ -828,6 +883,20 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
 {/* CORPO DO FORMULÁRIO */}
           <div className="flex-1 overflow-y-auto px-3 sm:px-8 py-4 sm:py-6 space-y-6 bg-papel-2/40">
             
+            {modoRca && (
+              <div className="text-[12.5px] text-tinta-2 bg-papel border border-linha rounded-md px-4 py-3">
+                {!clienteSelecionado
+                  ? 'Este cadastro fica pendente até o administrador aceitar.'
+                  : clienteSelecionado.solicitacao_edicao
+                    ? `Há uma alteração aguardando o aceite do administrador (enviada em ${new Date(clienteSelecionado.solicitacao_edicao.enviado_em).toLocaleDateString('pt-BR')}). Salvar de novo substitui essa alteração.`
+                    : situacaoAceite(clienteSelecionado) === 'recusado'
+                      ? 'Recusado pelo administrador. Edite e salve para reenviar para análise.'
+                      : situacaoAceite(clienteSelecionado) === 'aceito'
+                        ? 'Cliente já aceito. Ao salvar, a alteração vai para o aceite do administrador e o cadastro continua como está até lá.'
+                        : 'Cadastro pendente de aceite do administrador.'}
+              </div>
+            )}
+
             {/* SEÇÃO 1: CLASSIFICAÇÃO & DOCUMENTOS */}
             <div className="p-4 sm:p-6 rounded-md bg-papel border border-linha/90  space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-linha">
