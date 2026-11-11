@@ -127,7 +127,7 @@ export function PortalCliente({ onVoltar, clienteId, permitirSelecaoAdmin = fals
     <MolduraPortal<AbaPortal>
       portal="Portal do Cliente"
       conta={nomeCliente(cliente)}
-      contexto={cidade}
+      contexto={[cliente.codigo_cliente ? `Código ${cliente.codigo_cliente}` : '', cidade].filter(Boolean).join(' · ')}
       onVoltar={onVoltar}
       ehAdmin={permitirSelecaoAdmin}
       seletorAdmin={seletorAdmin}

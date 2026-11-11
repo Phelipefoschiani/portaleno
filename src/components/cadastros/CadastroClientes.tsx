@@ -746,6 +746,7 @@ export function CadastroClientes({ clienteIdInicial, rcaFixoId, abrirNovoSinal }
                               <div className="text-[11.5px] text-cinza">
                                 {cli.tipo_pessoa === 'PJ' ? 'Empresa' : 'Pessoa física'}{cli.fantasia ? ` · ${cli.fantasia}` : ''}
                               </div>
+                              {cli.codigo_cliente && <div className="text-[11.5px] font-semibold text-eno-700 tabular-nums">Código {cli.codigo_cliente}</div>}
                             </Td>
                             <Td className="tabular-nums whitespace-nowrap">
                               <div>{cli.cpf_cnpj}</div>
