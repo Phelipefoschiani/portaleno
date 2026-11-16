@@ -10,6 +10,7 @@
 // na leitura (produtosData → carregarTabelasPreco).
 
 import type { ImpostoProduto, ProdutoEstoque, TabelaPreco } from './produtosData';
+import { carregarSegmentosVenda } from './segmentosData';
 import { calcularImpostosVenda, carregarTabelasPreco, salvarTabelasPreco } from './produtosData';
 import { hojeISO, parseData, formatarDataBR } from '../lib/datas';
 
@@ -205,7 +206,7 @@ export function criarTabelaRapida(nome: string, mostrar_preco: MostrarPrecoTabel
     id: `tab_${Date.now()}`,
     codigo: `TAB-${Date.now().toString().slice(-4)}`,
     nome: String(nome || '').trim() || 'Nova Tabela',
-    tipo: 'Atacado / Distribuidor',
+    tipo: carregarSegmentosVenda()[0]?.nome || '',
     ...camposDePreco({}),
     mostrar_preco,
     prazo_padrao: 'Boleto Bancário 28 Dias',

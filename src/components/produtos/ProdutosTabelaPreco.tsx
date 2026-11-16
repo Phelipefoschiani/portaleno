@@ -95,7 +95,7 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
   const formVazio = () => ({
     codigo: `TAB-${Date.now().toString().slice(-4)}`,
     nome: '',
-    tipo: 'Atacado / Distribuidor' as TabelaPreco['tipo'],
+    tipo: (carregarSegmentosVenda()[0]?.nome || '') as TabelaPreco['tipo'],
     mostrar_preco: 'AMBOS' as MostrarPrecoTabela,
     precos_fixos: {} as Record<string, number>,
     prazo_padrao: 'Boleto Bancário 28 Dias',
