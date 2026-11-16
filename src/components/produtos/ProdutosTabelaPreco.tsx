@@ -26,6 +26,8 @@ import {
 import { formatarMoeda } from '../../data/financeiroData';
 import { formatarDataBR, hojeISO } from '../../lib/datas';
 import { ProdutosNavTabs } from './ProdutosNavTabs';
+import { SegmentosVendaModal } from './SegmentosVendaModal';
+import { SegmentoVenda, carregarSegmentosVenda } from '../../data/segmentosData';
 import { CampoPrecoTabela } from './CampoPrecoTabela';
 import { gerarPdfTabelaPreco, LinhaTabelaPrecoPdf } from '../../lib/pdfTabelaPreco';
 
@@ -53,6 +55,13 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
 
   // Modais
   const [modalFormAberto, setModalFormAberto] = useState(false);
+  const [segmentos, setSegmentos] = useState<SegmentoVenda[]>(() => carregarSegmentosVenda());
+  const [modalSegmentos, setModalSegmentos] = useState(false);
+  useEffect(() => {
+    const atualizar = () => setSegmentos(carregarSegmentosVenda());
+    window.addEventListener('segmentos_venda_updated', atualizar);
+    return () => window.removeEventListener('segmentos_venda_updated', atualizar);
+  }, []);
   const [tabelaEmEdicao, setTabelaEmEdicao] = useState<TabelaPreco | null>(null);
   const [tabelaVisualizar, setTabelaVisualizar] = useState<TabelaPreco | null>(null);
   const [buscaProdutoForm, setBuscaProdutoForm] = useState('');
@@ -529,6 +538,9 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       </div>
 
       {/* MODAL CRIAR / EDITAR TABELA DE PREÇO */}
+      {modalSegmentos && (
+        <SegmentosVendaModal onFechar={() => setModalSegmentos(false)} />
+      )}
       {modalFormAberto && (
         <ModalFolha
           titulo={tabelaEmEdicao ? `Editar ${tabelaEmEdicao.nome}` : 'Nova tabela de preço'}
@@ -598,12 +610,21 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
               </div>
 
               <Campo rotulo="Segmento / canal de venda" className="sm:col-span-6">
-                <select value={formData.tipo} onChange={(e) => setFormData({ ...formData, tipo: e.target.value as TabelaPreco['tipo'] })} className={form.select}>
-                  <option value="Atacado / Distribuidor">Atacado / Distribuidor</option>
-                  <option value="Grandes Indústrias (Carga Fechada)">Grandes Indústrias (Carga Fechada)</option>
-                  <option value="Varejo / Padarias">Varejo / Padarias</option>
-                  <option value="Pagamento à Vista (FOB)">Pagamento à Vista (FOB)</option>
+                <select value={formData.tipo} onChange={(e) => setFormData({ ...formData, tipo: e.target.value })} className={form.select}>
+                  {segmentos.map(s => (
+                    <option key={s.id} value={s.nome}>{s.nome}</option>
+                  ))}
+                  {formData.tipo && !segmentos.some(s => s.nome === formData.tipo) && (
+                    <option value={formData.tipo}>{formData.tipo}</option>
+                  )}
                 </select>
+                <button
+                  type="button"
+                  onClick={() => setModalSegmentos(true)}
+                  className="mt-2 text-[12.5px] font-semibold text-eno-700 hover:underline cursor-pointer"
+                >
+                  Gerenciar segmentos (adicionar, renomear ou remover)
+                </button>
               </Campo>
               <Campo rotulo="Frete" className="sm:col-span-6">
                 <select value={formData.frete_tipo} onChange={(e) => setFormData({ ...formData, frete_tipo: e.target.value as TabelaPreco['frete_tipo'] })} className={form.select}>

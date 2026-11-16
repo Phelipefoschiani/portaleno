@@ -122,7 +122,7 @@ export interface TabelaPreco {
   id: string;
   codigo: string;
   nome: string;
-  tipo: 'Atacado / Distribuidor' | 'Grandes Indústrias (Carga Fechada)' | 'Varejo / Padarias' | 'Pagamento à Vista (FOB)';
+  tipo: string; // segmento / canal de venda (lista editável em segmentosData)
   /**
    * A tabela tem só valor por produto: sempre 'PRECO_FIXO'. Os modos antigos (acréscimo/desconto e
    * margem sobre o custo) são convertidos na leitura em valor fixo pelo preço que davam (congelados).

@@ -37,6 +37,7 @@ export const TABELAS_DO_SISTEMA: Record<string, string> = {
   grupo_eno_romaneios_mandioca_v1: 'romaneios_mandioca',
   grupo_eno_sitio_controle_despesas_v3: 'sitio_controle_despesas',
   grupo_eno_tabelas_preco_v1: 'tabelas_preco',
+  grupo_eno_segmentos_venda_v1: 'segmentos_venda',
   grupo_eno_vendas_rca_v1: 'vendas_rca',
   grupo_eno_empresa_v1: 'empresa',
 };
