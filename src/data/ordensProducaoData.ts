@@ -484,6 +484,38 @@ export function cancelarOrdemProducao(opId: string): OrdemProducao | null {
   });
 }
 
+// Motivo para a OP cancelada não voltar à produção (vazio = pode voltar)
+export function motivoNaoReabrirOP(op: OrdemProducao, lista: OrdemProducao[] = carregarOrdensProducao()): string {
+  if (op.status !== 'CANCELADA') return 'Só dá para voltar para produção uma OP cancelada.';
+  if (op.ciclo_encerrado) {
+    return 'Esta OP é de um ciclo que o pedido já encerrou (o pedido voltou para orçamento). Para produzir, mande o pedido para produção de novo.';
+  }
+  if (op.origem === 'PEDIDO' && op.pedido_id && typeof op.item_index === 'number') {
+    const pedido = carregarPedidosVenda().find(p => p.id === op.pedido_id);
+    if (!pedido || pedido.etapa !== 'EM_PRODUCAO') {
+      return `O pedido ${op.pedido_numero || ''} não está em produção no momento.`;
+    }
+    const outra = lista.find(o =>
+      o.id !== op.id && o.pedido_id === op.pedido_id && o.item_index === op.item_index &&
+      !o.ciclo_encerrado && o.status !== 'CANCELADA'
+    );
+    if (outra) return `Este item do pedido já tem a ${outra.numero} em aberto. Cancele ela antes de voltar esta.`;
+  }
+  return '';
+}
+
+// Volta a OP cancelada para a produção: PLANEJADA, ou EM_PRODUCAO se já tinha pacotes apontados
+export function reabrirOrdemProducao(opId: string): OrdemProducao | null {
+  const lista = carregarOrdensProducao();
+  const op = lista.find(o => o.id === opId);
+  if (!op || motivoNaoReabrirOP(op, lista)) return null;
+  return atualizarOP(opId, o => ({
+    ...o,
+    status: (o.quantidade_produzida_pacotes || 0) > 0 ? 'EM_PRODUCAO' : 'PLANEJADA',
+    data_cancelamento: undefined
+  }));
+}
+
 /**
  * Pedido passa para A_FATURAR: conclui as OPs abertas do pedido com o que foi apontado no item
  * (OPs já concluídas não entram de novo) e integra pelo modo legado só os itens sem OP.

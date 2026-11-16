@@ -13,7 +13,8 @@ import {
   ShoppingBag,
   Warehouse,
   Tag,
-  PenLine
+  PenLine,
+  RotateCcw
 } from 'lucide-react';
 import {
   OrdemProducao,
@@ -25,6 +26,8 @@ import {
   apontarProducaoOP,
   concluirOrdemProducao,
   cancelarOrdemProducao,
+  reabrirOrdemProducao,
+  motivoNaoReabrirOP,
   necessidadeMateriaPrimaOP,
   garantirOrdensDosPedidosEmProducao,
   validadePadraoProduto,
@@ -280,6 +283,19 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
     if (confirm(`Cancelar a ${op.numero} (${op.produto_nome})?${extra}`)) cancelarOrdemProducao(op.id);
   };
 
+  const handleReabrir = (op: OrdemProducao) => {
+    const motivo = motivoNaoReabrirOP(op);
+    if (motivo) {
+      alert(motivo);
+      return;
+    }
+    const destino = (op.quantidade_produzida_pacotes || 0) > 0 ? 'Em Produção' : 'Planejada';
+    if (confirm(`Voltar a ${op.numero} (${op.produto_nome}) para a produção? Ela fica ${destino}.`)) {
+      reabrirOrdemProducao(op.id);
+      setFiltro('ABERTAS');
+    }
+  };
+
   const handleConfirmarAcao = (e: React.FormEvent) => {
     e.preventDefault();
     if (!opAcao) return;
@@ -514,6 +530,11 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
                     {aberta && modo === 'ADMIN' && (
                       <button onClick={() => handleCancelar(op)} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-st-vencido hover:bg-st-vencido-bg text-[12.5px] font-bold cursor-pointer">
                         <XCircle className="w-4 h-4" /> Cancelar
+                      </button>
+                    )}
+                    {op.status === 'CANCELADA' && modo === 'ADMIN' && (
+                      <button onClick={() => handleReabrir(op)} className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md bg-papel border border-eno-700 text-eno-800 hover:bg-eno-50 text-[12.5px] font-bold cursor-pointer">
+                        <RotateCcw className="w-4 h-4" /> Voltar para produção
                       </button>
                     )}
                   </div>
