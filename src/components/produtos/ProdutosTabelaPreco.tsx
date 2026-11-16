@@ -538,9 +538,6 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
       </div>
 
       {/* MODAL CRIAR / EDITAR TABELA DE PREÇO */}
-      {modalSegmentos && (
-        <SegmentosVendaModal onFechar={() => setModalSegmentos(false)} />
-      )}
       {modalFormAberto && (
         <ModalFolha
           titulo={tabelaEmEdicao ? `Editar ${tabelaEmEdicao.nome}` : 'Nova tabela de preço'}
@@ -912,6 +909,10 @@ export function ProdutosTabelaPreco({ onNavigate }: Props) {
             })()}
           </div>
         </ModalFolha>
+      )}
+      {/* Por último no HTML, para ficar à frente da tabela de preço */}
+      {modalSegmentos && (
+        <SegmentosVendaModal onFechar={() => setModalSegmentos(false)} />
       )}
     </div>
   );
