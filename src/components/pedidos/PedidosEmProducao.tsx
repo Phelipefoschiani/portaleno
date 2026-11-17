@@ -8,6 +8,7 @@ import {
   Package,
   Layers,
   HardHat,
+  ArrowLeft,
   Eye,
   AlertCircle,
   X,
@@ -139,6 +140,14 @@ export function PedidosEmProducao({ onNavigate }: Props) {
   }, [pedidos, versaoEstoque]);
 
   // Abrir Modal de Apontamento por Produto (com opção de escolher produto inicial)
+  // Tira o pedido da produção e devolve para Vendas (orçamento). As OPs abertas do pedido são canceladas.
+  const handleVoltarParaVendas = (p: PedidoVenda) => {
+    const msg = `Voltar o pedido ${p.numero_pedido} para Vendas (orçamento)?\n\nAs ordens de produção abertas deste pedido serão canceladas. O que já foi apontado continua registrado.`;
+    if (!confirm(msg)) return;
+    moverPedidoEtapa(p.id, 'ORCAMENTO');
+    recarregar();
+  };
+
   const handleAbrirProducao = (p: PedidoVenda, produtoIdInicial?: string) => {
     setModalProducao(p);
     setErroApontamento('');
@@ -531,6 +540,14 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                         </button>
                         <button
                           type="button"
+                          onClick={() => handleVoltarParaVendas(item)}
+                          aria-label={`Voltar pedido ${item.numero_pedido} para vendas`}
+                          className="h-10 px-3 inline-flex items-center justify-center gap-1.5 rounded-md border border-linha-forte text-st-vencido text-[12.5px] font-semibold active:bg-papel-3"
+                        >
+                          <ArrowLeft className="w-3.5 h-3.5" /> Vendas
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleTentarConcluirProducao(item)}
                           className={`flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-md text-[12.5px] font-semibold ${
                             liberadoParaFaturar ? 'bg-eno-800 text-white' : 'bg-st-aguardando-bg text-st-aguardando'
@@ -636,6 +653,14 @@ export function PedidosEmProducao({ onNavigate }: Props) {
                               title="Apontar produção por produto, registrar lote e vencimento"
                             >
                               <HardHat className="w-3.5 h-3.5" /> Apontar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleVoltarParaVendas(item)}
+                              className="inline-flex items-center gap-1 h-7 px-2 rounded-[5px] text-st-vencido hover:bg-st-vencido-bg text-[12px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                              title="Devolver o pedido para Vendas (cancela as OPs abertas deste pedido)"
+                            >
+                              <ArrowLeft className="w-3.5 h-3.5" /> Vendas
                             </button>
                             <button
                               type="button"
