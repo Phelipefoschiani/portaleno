@@ -123,6 +123,10 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
     const todosPedidos = carregarPedidosVenda();
     const aguardando = todosPedidos.filter(p => p.etapa === 'ORCAMENTO');
     const aFaturar = todosPedidos.filter(p => p.etapa === 'A_FATURAR');
+    const emProducao = todosPedidos.filter(p => p.etapa === 'EM_PRODUCAO');
+    const faturadosMes = todosPedidos.filter(
+      p => (p.etapa === 'FATURADO' || p.etapa === 'ENTREGUE') && !!p.data_faturamento && dataNoMesAtual(p.data_faturamento)
+    );
     const somaPedidos = (l: PedidoVenda[]) => l.reduce((a, p) => a + numeroSeguro(p.valor_total), 0);
 
     const opsAbertas = carregarOrdensProducao().filter(o => o.status === 'PLANEJADA' || o.status === 'EM_PRODUCAO');
@@ -191,6 +195,12 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
         titulo: plural(aFaturar.length, 'pedido pronto para faturar', 'pedidos prontos para faturar'),
         detalhe: listaNomes(aFaturar.map(x => x.cliente_nome).filter(Boolean)),
       });
+    if (emProducao.length)
+      p.push({
+        id: 'pedidos_producao', tom: 'producao', destino: 'pedidos_em_producao', valor: somaPedidos(emProducao),
+        titulo: plural(emProducao.length, 'pedido em produção', 'pedidos em produção'),
+        detalhe: listaNomes(emProducao.map(x => x.cliente_nome).filter(Boolean)),
+      });
     if (prodBaixo.length)
       p.push({
         id: 'prod_baixo', tom: prodBaixo.some(x => x.status === 'CRITICO') ? 'vencido' : 'aguardando', destino: 'produtos_estoque_cadastro',
@@ -214,6 +224,7 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
 
     return {
       faturamentoMes,
+      pedidosFaturadosMes: somaPedidos(faturadosMes),
       aReceber: soma(recAbertos),
       recVencidosValor: soma(recVencidos),
       recVencidosQtd: recVencidos.length,
@@ -305,7 +316,7 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
               unidade="R$"
               unidadeAntes
               valor={moedaSemSimbolo(painel.faturamentoMes)}
-              detalhe={`Lucro acumulado ${formatarMoeda(consolidado.lucroLiquido)}`}
+              detalhe={`Pedidos faturados ${formatarMoeda(painel.pedidosFaturadosMes)} · Lucro acumulado ${formatarMoeda(consolidado.lucroLiquido)}`}
               onClick={() => onNavigate('financeiro_a_receber')}
             />
             <CardNumero
