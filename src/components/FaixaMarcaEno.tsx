@@ -31,7 +31,7 @@ export function FaixaMarcaEno({ rotulo, titulo, subtitulo, destaque }: Props) {
             <div className="text-3xl sm:text-[34px] font-black tracking-tight text-white leading-tight mt-1 uppercase break-words">
               {titulo}
             </div>
-            <div className="text-[11px] text-[#a7d6ba] mt-1 tabular-nums">{subtitulo}</div>
+            <div className="text-[12px] text-white font-bold mt-1 tabular-nums">{subtitulo}</div>
             {destaque && <div className="mt-2">{destaque}</div>}
           </div>
         </div>
