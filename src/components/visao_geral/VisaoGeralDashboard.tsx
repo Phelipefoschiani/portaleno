@@ -225,6 +225,11 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
     return {
       faturamentoMes,
       pedidosFaturadosMes: somaPedidos(faturadosMes),
+      faturadosMesQtd: faturadosMes.length,
+      emProducaoValor: somaPedidos(emProducao),
+      emProducaoQtd: emProducao.length,
+      aFaturarValor: somaPedidos(aFaturar),
+      aFaturarQtd: aFaturar.length,
       aReceber: soma(recAbertos),
       recVencidosValor: soma(recVencidos),
       recVencidosQtd: recVencidos.length,
@@ -316,8 +321,32 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
               unidade="R$"
               unidadeAntes
               valor={moedaSemSimbolo(painel.faturamentoMes)}
-              detalhe={`Pedidos faturados ${formatarMoeda(painel.pedidosFaturadosMes)} · Lucro acumulado ${formatarMoeda(consolidado.lucroLiquido)}`}
+              detalhe={`Lucro acumulado ${formatarMoeda(consolidado.lucroLiquido)}`}
               onClick={() => onNavigate('financeiro_a_receber')}
+            />
+            <CardNumero
+              rotulo="Em produção"
+              unidade="R$"
+              unidadeAntes
+              valor={moedaSemSimbolo(painel.emProducaoValor)}
+              detalhe={`${painel.emProducaoQtd} ${painel.emProducaoQtd === 1 ? 'pedido' : 'pedidos'}`}
+              onClick={() => onNavigate('pedidos_em_producao')}
+            />
+            <CardNumero
+              rotulo="A faturar"
+              unidade="R$"
+              unidadeAntes
+              valor={moedaSemSimbolo(painel.aFaturarValor)}
+              detalhe={`${painel.aFaturarQtd} ${painel.aFaturarQtd === 1 ? 'pedido' : 'pedidos'}`}
+              onClick={() => onNavigate('pedidos_a_faturar')}
+            />
+            <CardNumero
+              rotulo={`Faturado em ${mesAtual}`}
+              unidade="R$"
+              unidadeAntes
+              valor={moedaSemSimbolo(painel.pedidosFaturadosMes)}
+              detalhe={`${painel.faturadosMesQtd} ${painel.faturadosMesQtd === 1 ? 'pedido' : 'pedidos'}`}
+              onClick={() => onNavigate('pedidos_faturados')}
             />
             <CardNumero
               rotulo="A receber"
