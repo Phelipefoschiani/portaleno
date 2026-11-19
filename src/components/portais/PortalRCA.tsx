@@ -6,6 +6,7 @@ import {
   ShoppingCart,
   Wallet,
   UserPlus,
+  Route,
 } from 'lucide-react';
 import {
   RCA,
@@ -30,6 +31,7 @@ import { EstadoVazio } from '../ui/EstadoVazio';
 import { CampoBusca, SeletorFiltro } from '../ui/BarraFiltros';
 import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
 import { MolduraPortal, SeletorAdminPortal } from './MolduraPortal';
+import { RotasRCA } from './RotasRCA';
 
 interface PortalRCAProps {
   onVoltar: () => void;
@@ -39,7 +41,7 @@ interface PortalRCAProps {
   permitirSelecaoAdmin?: boolean;
 }
 
-type AbaPortal = 'resumo' | 'pedidos' | 'clientes' | 'comissoes';
+type AbaPortal = 'resumo' | 'pedidos' | 'clientes' | 'rotas' | 'comissoes';
 
 const moeda = (v: number) => `R$ ${(Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -213,6 +215,7 @@ export function PortalRCA({ onVoltar, rcaId, permitirSelecaoAdmin = false }: Por
         { id: 'resumo', rotulo: 'Resumo', Icone: LayoutDashboard },
         { id: 'pedidos', rotulo: 'Meus pedidos', curto: 'Pedidos', Icone: ShoppingCart, badge: aguardandoAprovacao },
         { id: 'clientes', rotulo: 'Meus clientes', curto: 'Clientes', Icone: Users },
+        { id: 'rotas', rotulo: 'Rotas', Icone: Route },
         { id: 'comissoes', rotulo: 'Comissões', Icone: Wallet },
       ]}
       abaAtiva={abaAtiva}
@@ -376,6 +379,16 @@ export function PortalRCA({ onVoltar, rcaId, permitirSelecaoAdmin = false }: Por
       {abaAtiva === 'clientes' && (
         <div key={`cli_${rca.id}`} className="px-3 sm:px-5 pt-4 flex flex-col md:h-[calc(100dvh-6.25rem-2rem)] md:min-h-[520px]">
           <CadastroClientes rcaFixoId={rca.id} abrirNovoSinal={abrirFormCliente} />
+        </div>
+      )}
+
+      {/* ================= ROTAS ================= */}
+      {abaAtiva === 'rotas' && (
+        <div className="px-3 sm:px-5 pt-4 pb-8">
+          <CabecalhoPagina titulo="Rotas" resumo="Escolha os clientes, use sua localização e veja a melhor ordem de visita" />
+          <div className="mt-4">
+            <RotasRCA clientes={clientesDoRca} />
+          </div>
         </div>
       )}
 

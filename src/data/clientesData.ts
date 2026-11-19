@@ -38,6 +38,10 @@ export interface Cliente {
   recusado_em?: string;
   /** Alteração enviada pelo RCA depois que o cliente foi aceito: só vale quando o administrador aceitar. */
   solicitacao_edicao?: { enviado_em: string; proposta: Cliente };
+  /** Posição no mapa: geocodificada pelo endereço ou ajustada à mão. endereco_chave diz de que endereço veio. */
+  geo?: { lat: number; lng: number; origem: 'GEOCODIFICADO' | 'MANUAL'; endereco_chave: string };
+  /** Foto da fachada (URL pública no Supabase Storage). */
+  fachada_url?: string;
   criado_em: string;
 }
 

@@ -23,6 +23,7 @@ import { ProdutosFichaTecnica } from './produtos/ProdutosFichaTecnica';
 import { ProdutosTabelaPreco } from './produtos/ProdutosTabelaPreco';
 import { ProdutosEtiqueta } from './produtos/ProdutosEtiqueta';
 import { NotificacoesAceites } from './notificacoes/NotificacoesAceites';
+import { MapeamentoClientes } from './mapeamento/MapeamentoClientes';
 import { FinanceiroAReceber } from './financeiro/FinanceiroAReceber';
 import { FinanceiroAPagar } from './financeiro/FinanceiroAPagar';
 import { FinanceiroLancarDespesas } from './financeiro/FinanceiroLancarDespesas';
@@ -173,6 +174,14 @@ export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: Admin
       label: 'Notificações',
       items: [
         { id: 'notificacoes_aceites', label: 'Aceites pendentes', secao: 'Clientes' },
+      ],
+    }] : []),
+    // Mapa dos clientes: fachada, dados, últimas compras e localização
+    ...(ehAdmin ? [{
+      id: 'mapeamento',
+      label: 'Mapeamento',
+      items: [
+        { id: 'mapeamento_clientes', label: 'Clientes no mapa', secao: 'Clientes' },
       ],
     }] : []),
   ], [ehAdmin]);
@@ -543,6 +552,8 @@ export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: Admin
               <ProdutosEtiqueta onNavigate={handleNavigateUniversal} />
             ) : activePage.id === 'notificacoes_aceites' ? (
               <NotificacoesAceites />
+            ) : activePage.id === 'mapeamento_clientes' ? (
+              <MapeamentoClientes />
             ) : activePage.id === 'financeiro_a_receber' ? (
               <FinanceiroAReceber onNavigate={handleNavigateUniversal} />
             ) : activePage.id === 'financeiro_a_pagar' ? (
