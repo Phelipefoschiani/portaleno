@@ -34,6 +34,7 @@ import {
   moverPedidoEtapa
 } from '../../data/pedidosVendaData';
 import { pesoDoItemKg, pacotesDoItem } from '../../data/pedidosVendaData';
+import { formatarMoeda } from '../../data/financeiroData';
 import { PedidosNavTabs } from './PedidosNavTabs';
 import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
 import { BarraFiltros, CampoBusca, Segmentado, SeletorFiltro } from '../ui/BarraFiltros';
@@ -415,6 +416,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
     const volumeTotalKg = pedidos.reduce((acc, p) => acc + p.peso_total_kg, 0);
     const volumeProduzidoAcumuladoKg = pedidos.reduce((acc, p) => acc + (p.quantidade_produzida_acumulada_kg || 0), 0);
     const pedidosSemLote = pedidos.filter(p => !p.lote_producao || !p.data_vencimento).length;
+    const valorTotal = pedidos.reduce((acc, p) => acc + (Number(p.valor_total) || 0), 0);
 
     let sacos25kg = 0;
     let bigBags = 0;
@@ -426,7 +428,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
       });
     });
 
-    return { total, volumeTotalKg, volumeProduzidoAcumuladoKg, sacos25kg, bigBags, pedidosSemLote };
+    return { total, volumeTotalKg, volumeProduzidoAcumuladoKg, sacos25kg, bigBags, pedidosSemLote, valorTotal };
   }, [pedidos]);
 
   // Filtros
@@ -458,6 +460,7 @@ export function PedidosEmProducao({ onNavigate }: Props) {
             ) : (
               <>
                 {metricas.total} {metricas.total === 1 ? 'pedido' : 'pedidos'} · {toneladas(metricas.volumeProduzidoAcumuladoKg)} de {toneladas(metricas.volumeTotalKg)} produzidas
+                {' · '}<strong className="text-tinta">{formatarMoeda(metricas.valorTotal)}</strong> em pedidos
                 {' · '}{metricas.sacos25kg.toLocaleString('pt-BR')} sacos 25 kg · {metricas.bigBags} big bags
                 {metricas.pedidosSemLote > 0 && (
                   <span className="text-st-aguardando font-semibold"> · {metricas.pedidosSemLote} sem lote/vencimento</span>
