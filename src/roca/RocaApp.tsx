@@ -3,10 +3,13 @@ import { calcularDescontoRoca, totaisDaPesagem, SacoRoca, PesagemRoca } from './
 import {
   listarAgricultoresLocais,
   gravarAgricultorLocal,
+  removerAgricultorLocal,
   enfileirar,
   listarPendentes,
+  removerPendente,
   Pendente,
 } from './banco';
+import { pesagemEmPdf, pesagemEmImagem, compartilharArquivo } from './documento';
 import { iniciarSincronizacao, sincronizarAgora as sincronizar, StatusSync } from './sincronizar';
 
 // Agricultor como fica no banco e no aparelho
@@ -62,6 +65,12 @@ export function RocaApp() {
   // Cadastro de agricultor
   const [novo, setNovo] = useState({ nome: '', propriedade: '', cpf: '', telefone: '', municipio: '', uf: '', pix: '' });
 
+  // Edição de itens pendentes (ainda não enviados) e menu do item tocado
+  const [editandoPesagemId, setEditandoPesagemId] = useState<string | null>(null);
+  const [editandoAgricultorId, setEditandoAgricultorId] = useState<string | null>(null);
+  const [itemAberto, setItemAberto] = useState<Pendente | null>(null);
+  const [gerando, setGerando] = useState(false);
+
   const recarregarLocais = async () => {
     setAgricultores((await listarAgricultoresLocais<AgricultorApp>()).sort((a, b) => a.nome_completo.localeCompare(b.nome_completo)));
     setPendentes(await listarPendentes());
@@ -115,11 +124,11 @@ export function RocaApp() {
     if (totais.pesoLiquido <= 0) return avisar('erro', 'O desconto não pode zerar o peso.');
     if (pesador.trim()) localStorage.setItem(CHAVE_PESADOR, pesador.trim());
 
-    const id = `pes_app_${Date.now()}`;
+    const id = editandoPesagemId || `pes_app_${Date.now()}`;
     const pesagem: PesagemRoca & { id: string } = {
       id,
       data,
-      criado_em: new Date().toISOString(),
+      criado_em: editandoPesagemId ? pendentes.find(p => p.id === editandoPesagemId)?.criado_em || new Date().toISOString() : new Date().toISOString(),
       agricultor_id: agricultor.id,
       agricultor_nome: agricultor.nome_completo,
       agricultor_propriedade: agricultor.nome_propriedade,
@@ -140,8 +149,10 @@ export function RocaApp() {
       observacoes: observacao.trim() || undefined,
     };
     await enfileirar('PESAGEM', pesagem, id);
+    const eraEdicao = !!editandoPesagemId;
+    setEditandoPesagemId(null);
     limparPesagem();
-    avisar('ok', 'Pesagem salva no aparelho. Vai para o sistema quando tiver internet.');
+    avisar('ok', eraEdicao ? 'Pesagem alterada. Vai para o sistema quando tiver internet.' : 'Pesagem salva no aparelho. Vai para o sistema quando tiver internet.');
     recarregarLocais();
     setStatus(s => ({ ...s, pendentes: s.pendentes + 1 }));
   };
@@ -150,7 +161,7 @@ export function RocaApp() {
     if (!novo.nome.trim() || !novo.municipio.trim() || !novo.uf.trim()) {
       return avisar('erro', 'Informe nome, município e UF.');
     }
-    const id = `agr_app_${Date.now()}`;
+    const id = editandoAgricultorId || `agr_app_${Date.now()}`;
     const dados: AgricultorApp = {
       id,
       empresa_id: 'emp_grupo_eno',
@@ -170,8 +181,10 @@ export function RocaApp() {
     };
     await gravarAgricultorLocal(dados); // já aparece para usar na pesagem, mesmo sem internet
     await enfileirar('AGRICULTOR', dados, id);
+    const eraEdicao = !!editandoAgricultorId;
+    setEditandoAgricultorId(null);
     setNovo({ nome: '', propriedade: '', cpf: '', telefone: '', municipio: '', uf: '', pix: '' });
-    avisar('ok', 'Agricultor salvo. Já pode ser usado na pesagem.');
+    avisar('ok', eraEdicao ? 'Agricultor alterado.' : 'Agricultor salvo. Já pode ser usado na pesagem.');
     recarregarLocais();
   };
 
@@ -181,6 +194,70 @@ export function RocaApp() {
     setStatus(s => ({ ...s, sincronizando: false, ultimoErro: r.ok ? undefined : r.erro }));
     recarregarLocais();
     avisar(r.ok ? 'ok' : 'erro', r.ok ? 'Tudo enviado.' : `Não enviou: ${r.erro}`);
+  };
+
+  // Abre o item pendente no formulário para corrigir (só o que ainda não foi enviado)
+  const editarPendente = (p: Pendente) => {
+    setItemAberto(null);
+    if (p.tipo === 'PESAGEM') {
+      const d = p.dados as PesagemRoca & { id: string };
+      setEditandoPesagemId(d.id);
+      setAgricultorId(d.agricultor_id);
+      setData(d.data);
+      setPesador(d.pesador_responsavel);
+      setPrecoKg(String(d.preco_por_kg).replace('.', ','));
+      setSacos(d.sacos);
+      setPctDesconto(d.desconto_percentual ? String(d.desconto_percentual).replace('.', ',') : '');
+      setTara(d.desconto_tara_kg ? String(d.desconto_tara_kg).replace('.', ',') : '');
+      setMotivo(d.motivo_desconto || '');
+      setObservacao(d.observacoes || '');
+      setAba('PESAGEM');
+    } else {
+      const d = p.dados as AgricultorApp;
+      setEditandoAgricultorId(d.id);
+      setNovo({
+        nome: d.nome_completo,
+        propriedade: d.nome_propriedade,
+        cpf: d.cpf_cnpj,
+        telefone: d.telefone,
+        municipio: d.endereco.municipio,
+        uf: d.endereco.uf,
+        pix: d.chave_pix,
+      });
+      setAba('AGRICULTORES');
+    }
+  };
+
+  // Apaga um item que ainda não foi enviado (pesagem ou agricultor)
+  const excluirPendente = async (p: Pendente) => {
+    const nome = p.tipo === 'PESAGEM' ? 'esta pesagem' : 'este agricultor';
+    if (!window.confirm(`Apagar ${nome}? Ela não vai para o sistema.`)) return;
+    await removerPendente(p.id);
+    if (p.tipo === 'AGRICULTOR') await removerAgricultorLocal(p.id);
+    if (editandoPesagemId === p.id) setEditandoPesagemId(null);
+    if (editandoAgricultorId === p.id) setEditandoAgricultorId(null);
+    setItemAberto(null);
+    avisar('ok', 'Apagado.');
+    recarregarLocais();
+  };
+
+  // Gera o comprovante da pesagem e abre o compartilhamento (escolher WhatsApp)
+  const enviarComprovante = async (p: Pendente, formato: 'IMAGEM' | 'PDF') => {
+    if (p.tipo !== 'PESAGEM') return;
+    const d = p.dados as PesagemRoca;
+    setGerando(true);
+    try {
+      const base = `pesagem_${d.data}_${d.agricultor_nome.replace(/\s+/g, '_').slice(0, 30)}`;
+      const r = formato === 'IMAGEM'
+        ? await compartilharArquivo(await pesagemEmImagem(d), `${base}.png`, 'image/png', `Pesagem · ${d.agricultor_nome}`)
+        : await compartilharArquivo(pesagemEmPdf(d), `${base}.pdf`, 'application/pdf', `Pesagem · ${d.agricultor_nome}`);
+      setItemAberto(null);
+      if (r === 'baixado') avisar('ok', 'Arquivo baixado. Envie pelo WhatsApp pela galeria/downloads.');
+    } catch (e) {
+      avisar('erro', e instanceof Error ? e.message : 'Não foi possível gerar o arquivo.');
+    } finally {
+      setGerando(false);
+    }
   };
 
   return (
@@ -230,6 +307,12 @@ export function RocaApp() {
 
       {aba === 'PESAGEM' && (
         <div className="p-4 space-y-4">
+          {editandoPesagemId && (
+            <div className="rounded-xl bg-amber-100 text-amber-900 px-4 py-3 text-[14px] font-semibold flex items-center justify-between gap-3">
+              Editando uma pesagem ainda não enviada.
+              <button type="button" onClick={() => { setEditandoPesagemId(null); limparPesagem(); }} className="underline shrink-0">Cancelar</button>
+            </div>
+          )}
           <section className="bg-white rounded-2xl p-4 space-y-3 shadow-sm">
             <div>
               <label className={rotulo}>Agricultor</label>
@@ -328,7 +411,12 @@ export function RocaApp() {
       {aba === 'AGRICULTORES' && (
         <div className="p-4 space-y-4">
           <section className="bg-white rounded-2xl p-4 space-y-3 shadow-sm">
-            <div className="text-[13px] font-bold text-stone-700">Novo agricultor</div>
+            <div className="flex items-center justify-between text-[13px] font-bold text-stone-700">
+              {editandoAgricultorId ? 'Editando agricultor (ainda não enviado)' : 'Novo agricultor'}
+              {editandoAgricultorId && (
+                <button type="button" onClick={() => { setEditandoAgricultorId(null); setNovo({ nome: '', propriedade: '', cpf: '', telefone: '', municipio: '', uf: '', pix: '' }); }} className="underline font-semibold">Cancelar</button>
+              )}
+            </div>
             <input className={campo} placeholder="Nome completo" value={novo.nome} onChange={e => setNovo({ ...novo, nome: e.target.value })} />
             <input className={campo} placeholder="Propriedade" value={novo.propriedade} onChange={e => setNovo({ ...novo, propriedade: e.target.value })} />
             <div className="grid grid-cols-2 gap-3">
@@ -359,7 +447,12 @@ export function RocaApp() {
         <div className="p-4 space-y-3">
           {pendentes.length === 0 && <div className="bg-white rounded-2xl p-4 text-[14px] text-stone-600 shadow-sm">Tudo enviado para o sistema.</div>}
           {pendentes.map(p => (
-            <div key={p.id} className="bg-white rounded-2xl p-4 shadow-sm">
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setItemAberto(p)}
+              className="w-full text-left bg-white rounded-2xl p-4 shadow-sm active:bg-stone-50"
+            >
               <div className="flex items-center justify-between">
                 <span className="font-bold">{p.tipo === 'PESAGEM' ? 'Pesagem' : 'Agricultor'}</span>
                 <span className="text-[12px] text-stone-500">{new Date(p.criado_em).toLocaleString('pt-BR')}</span>
@@ -367,9 +460,43 @@ export function RocaApp() {
               {p.tipo === 'PESAGEM' && (
                 <div className="text-[13px] text-stone-600">{(p.dados as PesagemRoca).agricultor_nome} · {kg((p.dados as PesagemRoca).peso_liquido_kg)} kg</div>
               )}
+              {p.tipo === 'AGRICULTOR' && (
+                <div className="text-[13px] text-stone-600">{(p.dados as AgricultorApp).nome_completo}</div>
+              )}
               {p.ultimo_erro && <div className="mt-1 text-[12px] text-red-700">Não enviou ainda: {p.ultimo_erro}</div>}
-            </div>
+              <div className="mt-2 text-[12px] font-bold text-emerald-800">Toque para editar, apagar ou enviar</div>
+            </button>
           ))}
+        </div>
+      )}
+
+      {/* Menu do item pendente */}
+      {itemAberto && (
+        <div className="fixed inset-0 z-40 flex items-end bg-black/40" onClick={() => setItemAberto(null)}>
+          <div className="w-full bg-white rounded-t-2xl p-4 space-y-2" onClick={e => e.stopPropagation()}>
+            <div className="font-black text-[16px] pb-2">
+              {itemAberto.tipo === 'PESAGEM' ? (itemAberto.dados as PesagemRoca).agricultor_nome : (itemAberto.dados as AgricultorApp).nome_completo}
+            </div>
+            <button type="button" onClick={() => editarPendente(itemAberto)} className="w-full h-12 rounded-xl border border-stone-300 font-bold">
+              Editar
+            </button>
+            {itemAberto.tipo === 'PESAGEM' && (
+              <>
+                <button type="button" disabled={gerando} onClick={() => enviarComprovante(itemAberto, 'IMAGEM')} className="w-full h-12 rounded-xl bg-emerald-800 text-white font-bold disabled:opacity-50">
+                  {gerando ? 'Gerando...' : 'Enviar como imagem (WhatsApp)'}
+                </button>
+                <button type="button" disabled={gerando} onClick={() => enviarComprovante(itemAberto, 'PDF')} className="w-full h-12 rounded-xl bg-emerald-800 text-white font-bold disabled:opacity-50">
+                  {gerando ? 'Gerando...' : 'Enviar como PDF (WhatsApp)'}
+                </button>
+              </>
+            )}
+            <button type="button" onClick={() => excluirPendente(itemAberto)} className="w-full h-12 rounded-xl bg-red-700 text-white font-bold">
+              Apagar
+            </button>
+            <button type="button" onClick={() => setItemAberto(null)} className="w-full h-12 text-stone-600 font-bold">
+              Fechar
+            </button>
+          </div>
         </div>
       )}
     </div>

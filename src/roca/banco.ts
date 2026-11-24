@@ -71,6 +71,10 @@ export async function gravarAgricultorLocal<T extends { id: string }>(item: T): 
   await requisicao(GAVETA_AGRICULTORES, 'readwrite', s => s.put(item));
 }
 
+export async function removerAgricultorLocal(id: string): Promise<void> {
+  await requisicao(GAVETA_AGRICULTORES, 'readwrite', s => s.delete(id));
+}
+
 // ---------- Pendentes (fila de envio) ----------
 
 export async function enfileirar(tipo: TipoPendente, dados: unknown, idFixo?: string): Promise<Pendente> {
