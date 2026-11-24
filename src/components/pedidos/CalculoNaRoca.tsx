@@ -22,6 +22,7 @@ import {
   ShoppingBag,
   Pencil,
   Eye,
+  XCircle,
   MapPin,
   Calendar
 } from 'lucide-react';
@@ -425,7 +426,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
   // Excluir pesagem
   const handleExcluirCalculo = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (window.confirm('Deseja realmente excluir este registro de pesagem na roça? O pedido de compra gerado (se ainda não pago) também será removido.')) {
+    if (window.confirm('Cancelar esta pesagem? Ela sai da lista e o pedido de compra gerado (se ainda não pago) também é removido.')) {
       const res = excluirCalculoNaRoca(id);
       setCalculos(carregarCalculosNaRoca());
       if (!res.sucesso) alert(res.mensagem);
@@ -487,16 +488,18 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       doc.rect(14, 12, 182, 1.5, 'F');
 
       // Cabeçalho da Empresa
+      // Logo da empresa (proporção do arquivo: 276 x 240)
+      doc.addImage(EMPRESA.logo, 'PNG', 14, 14, 20, 17.4);
+
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(16);
       doc.setTextColor(verdeEscuro[0], verdeEscuro[1], verdeEscuro[2]);
-      doc.text(EMPRESA.razao.toUpperCase(), 14, 20);
+      doc.text(EMPRESA.razao.toUpperCase(), 38, 20);
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       doc.setTextColor(cinzaTexto[0], cinzaTexto[1], cinzaTexto[2]);
-      doc.text('Indústria & Comércio de Féculas e Farinhas de Mandioca', 14, 25);
-      doc.text(`CNPJ: ${EMPRESA.cnpj} • ${EMPRESA.endereco} • ${EMPRESA.telefone}`, 14, 29);
+      doc.text(`CNPJ: ${EMPRESA.cnpj} • ${EMPRESA.endereco} • ${EMPRESA.telefone}`, 38, 25);
 
       // Caixa do Ticket
       doc.setFont('helvetica', 'bold');
@@ -1019,6 +1022,14 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                               title="Ver romaneio / ticket de pesagem"
                             >
                               <Eye className="w-3.5 h-3.5" /> Ticket
+                            </button>
+                            <button
+                              type="button"
+                              onClick={e => handleExcluirCalculo(item.id, e)}
+                              className="inline-flex items-center gap-1 h-7 px-2 rounded-[5px] text-st-vencido hover:bg-st-vencido-bg text-[12px] font-semibold transition-colors cursor-pointer"
+                              title="Cancelar esta pesagem (sai da lista e o pedido de compra não pago é removido)"
+                            >
+                              <XCircle className="w-3.5 h-3.5" /> Cancelar
                             </button>
                           </div>
                         </Td>
@@ -1559,16 +1570,16 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
               >
                 {/* CABEÇALHO DO TICKET */}
                 <div style={{ borderBottom: '2px solid #064e3b', paddingBottom: '16px' }} className="flex items-start justify-between">
-                  <div>
-                    <h1 style={{ color: '#064e3b', fontWeight: 900, fontSize: '22px', margin: 0 }}>
-                      {EMPRESA.razao.toUpperCase()}
-                    </h1>
-                    <p style={{ color: '#475569', fontSize: '12px', fontWeight: 600, margin: '2px 0 0 0' }}>
-                      Indústria & Comércio de Féculas e Farinhas de Mandioca
-                    </p>
-                    <p style={{ color: '#64748b', fontSize: '11px', fontFamily: 'monospace', margin: '2px 0 0 0' }}>
-                      CNPJ: {EMPRESA.cnpj} • {EMPRESA.endereco} • {EMPRESA.telefone}
-                    </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <img src={EMPRESA.logo} alt="Grupo ENO" style={{ height: '64px', width: 'auto' }} />
+                    <div>
+                      <h1 style={{ color: '#064e3b', fontWeight: 900, fontSize: '22px', margin: 0 }}>
+                        {EMPRESA.razao.toUpperCase()}
+                      </h1>
+                      <p style={{ color: '#64748b', fontSize: '11px', fontFamily: 'monospace', margin: '2px 0 0 0' }}>
+                        CNPJ: {EMPRESA.cnpj} • {EMPRESA.endereco} • {EMPRESA.telefone}
+                      </p>
+                    </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <span style={{ color: '#64748b', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>
