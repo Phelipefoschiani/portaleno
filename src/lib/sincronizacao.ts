@@ -17,7 +17,7 @@ const EVENTOS_TELAS = [
   'pedidos_venda_updated', 'pedidos_compra_updated', 'calculos_roca_updated', 'financeiro_updated', 'produtos_updated',
   'receitas_updated', 'fichas_tecnicas_updated', 'tabelas_preco_updated', 'categorias_produto_updated', 'clientes_updated',
   'cadastros_updated', 'comprovantes_updated', 'sitio_controle_despesas_updated', 'lotes_materia_prima_updated',
-  'ordens_producao_updated', 'sistema_reset_updated', 'cadastros_provisorios_updated',
+  'ordens_producao_updated', 'sistema_reset_updated', 'cadastros_provisorios_updated', 'metas_updated',
 ];
 
 type Meta = {

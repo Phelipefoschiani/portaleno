@@ -1,0 +1,313 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
+import { CabecalhoPagina } from '../ui/CabecalhoPagina';
+import { carregarClientes } from '../../data/clientesData';
+import { carregarRcas } from '../../data/cadastrosData';
+import { carregarEstoqueProdutos, ProdutoEstoque } from '../../data/produtosData';
+import { carregarPedidosVenda, PedidoVenda } from '../../data/pedidosVendaData';
+import { formatarMoeda } from '../../data/financeiroData';
+import { hojeISO, formatarDataBR } from '../../lib/datas';
+import {
+  carregarMetas,
+  salvarMetas,
+  EVENTO_METAS,
+  DestinatarioMeta,
+  EscopoMeta,
+  UnidadeMeta,
+  MetaVenda,
+  realizadoMeta,
+  rotuloEscopo,
+  rotuloUnidade,
+} from '../../data/metasData';
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const primeiroDiaDoMes = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
+};
+const ultimoDiaDoMes = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())}`;
+};
+
+const fmtValor = (m: Pick<MetaVenda, 'unidade'>, v: number) =>
+  m.unidade === 'VALOR' ? formatarMoeda(v) : `${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`;
+
+const campo = 'h-10 w-full rounded-md border border-linha bg-papel px-3 text-[14px]';
+const rotulo = 'block text-[12px] font-bold text-tinta-2 mb-1';
+
+/** Cadastro e acompanhamento das metas de venda (menu Vendas). */
+export function MetasVendas() {
+  const [metas, setMetas] = useState<MetaVenda[]>([]);
+  const [pedidos, setPedidos] = useState<PedidoVenda[]>([]);
+  const [produtos, setProdutos] = useState<ProdutoEstoque[]>([]);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [erro, setErro] = useState('');
+
+  // Formulário
+  const [destinatario, setDestinatario] = useState<DestinatarioMeta>('CLIENTE');
+  const [destinatarioId, setDestinatarioId] = useState('');
+  const [escopo, setEscopo] = useState<EscopoMeta>('TOTAL');
+  const [escopoValor, setEscopoValor] = useState('');
+  const [unidade, setUnidade] = useState<UnidadeMeta>('VALOR');
+  const [valorMeta, setValorMeta] = useState('');
+  const [inicio, setInicio] = useState(primeiroDiaDoMes());
+  const [fim, setFim] = useState(ultimoDiaDoMes());
+
+  const recarregar = () => {
+    setMetas(carregarMetas());
+    setPedidos(carregarPedidosVenda());
+    setProdutos(carregarEstoqueProdutos());
+  };
+
+  useEffect(() => {
+    recarregar();
+    const eventos = [EVENTO_METAS, 'pedidos_venda_updated', 'clientes_updated', 'cadastros_updated', 'produtos_updated'];
+    eventos.forEach(ev => window.addEventListener(ev, recarregar));
+    return () => eventos.forEach(ev => window.removeEventListener(ev, recarregar));
+  }, []);
+
+  const clientes = useMemo(() => carregarClientes().filter(c => c.ativo !== false), [metas]);
+  const rcas = useMemo(() => carregarRcas(), [metas]);
+  const categorias = useMemo(
+    () => Array.from(new Set(produtos.map(p => p.categoria).filter(Boolean))).sort(),
+    [produtos]
+  );
+
+  const nomeDestinatario = (tipo: DestinatarioMeta, id: string) => {
+    if (tipo === 'CLIENTE') {
+      const c = clientes.find(x => x.id === id);
+      return c ? c.fantasia || c.razao_nome : '';
+    }
+    const r = rcas.find(x => x.id === id);
+    return r ? r.nome_fantasia || r.nome_completo : '';
+  };
+
+  const limparForm = () => {
+    setEditandoId(null);
+    setDestinatarioId('');
+    setEscopo('TOTAL');
+    setEscopoValor('');
+    setUnidade('VALOR');
+    setValorMeta('');
+    setInicio(primeiroDiaDoMes());
+    setFim(ultimoDiaDoMes());
+    setErro('');
+  };
+
+  const editar = (m: MetaVenda) => {
+    setEditandoId(m.id);
+    setDestinatario(m.destinatario);
+    setDestinatarioId(m.destinatario_id);
+    setEscopo(m.escopo);
+    setEscopoValor(m.escopo_valor || '');
+    setUnidade(m.unidade);
+    setValorMeta(String(m.valor_meta).replace('.', ','));
+    setInicio(m.inicio);
+    setFim(m.fim);
+    setErro('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const salvar = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErro('');
+    const valor = parseFloat(valorMeta.replace(/\./g, '').replace(',', '.')) || 0;
+    if (!destinatarioId) return setErro(`Escolha o ${destinatario === 'CLIENTE' ? 'cliente' : 'representante'}.`);
+    if (escopo === 'PRODUTO' && !escopoValor) return setErro('Escolha o produto.');
+    if (escopo === 'CATEGORIA' && !escopoValor) return setErro('Escolha a categoria.');
+    if (valor <= 0) return setErro('Informe o valor da meta.');
+    if (!inicio || !fim || inicio > fim) return setErro('Confira o período: o início precisa ser antes do fim.');
+
+    const escopoNome =
+      escopo === 'PRODUTO' ? produtos.find(p => p.id === escopoValor)?.nome || '' :
+      escopo === 'CATEGORIA' ? escopoValor : undefined;
+
+    const dados: MetaVenda = {
+      id: editandoId || `meta_${Date.now()}`,
+      destinatario,
+      destinatario_id: destinatarioId,
+      destinatario_nome: nomeDestinatario(destinatario, destinatarioId),
+      escopo,
+      escopo_valor: escopo === 'TOTAL' ? undefined : escopoValor,
+      escopo_nome: escopoNome,
+      unidade,
+      valor_meta: valor,
+      inicio,
+      fim,
+      criado_em: editandoId ? (metas.find(m => m.id === editandoId)?.criado_em || hojeISO()) : hojeISO(),
+    };
+    const lista = carregarMetas();
+    salvarMetas(editandoId ? lista.map(m => (m.id === editandoId ? dados : m)) : [dados, ...lista]);
+    limparForm();
+  };
+
+  const excluir = (m: MetaVenda) => {
+    if (!confirm(`Excluir a meta de ${m.destinatario_nome}?`)) return;
+    salvarMetas(carregarMetas().filter(x => x.id !== m.id));
+    if (editandoId === m.id) limparForm();
+  };
+
+  const listaOrdenada = useMemo(
+    () => [...metas].sort((a, b) => b.fim.localeCompare(a.fim) || a.destinatario_nome.localeCompare(b.destinatario_nome)),
+    [metas]
+  );
+
+  return (
+    <div className="h-full w-full overflow-y-auto bg-papel-2 text-tinta">
+      <div className="mx-auto w-full max-w-[1200px] px-4 sm:px-6 pb-8">
+        <CabecalhoPagina
+          titulo="Metas"
+          resumo={`${metas.length} ${metas.length === 1 ? 'meta cadastrada' : 'metas cadastradas'} · o realizado conta pedidos faturados ou entregues no período`}
+        />
+
+        <form onSubmit={salvar} className="mt-4 rounded-lg border border-linha bg-papel p-4 space-y-4">
+          <div className="text-[13px] font-bold">{editandoId ? 'Editar meta' : 'Nova meta'}</div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <span className={rotulo}>Para quem</span>
+              <div className="inline-flex rounded-md border border-linha overflow-hidden">
+                {(['CLIENTE', 'RCA'] as DestinatarioMeta[]).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => { setDestinatario(t); setDestinatarioId(''); }}
+                    className={`h-10 px-4 text-[13px] font-semibold ${destinatario === t ? 'bg-eno-800 text-white' : 'bg-papel'}`}
+                  >
+                    {t === 'CLIENTE' ? 'Cliente' : 'Representante'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className={rotulo}>{destinatario === 'CLIENTE' ? 'Cliente' : 'Representante'}</label>
+              <select className={campo} value={destinatarioId} onChange={e => setDestinatarioId(e.target.value)}>
+                <option value="">Escolha...</option>
+                {(destinatario === 'CLIENTE' ? clientes.map(c => ({ id: c.id, nome: c.fantasia || c.razao_nome })) : rcas.map(r => ({ id: r.id, nome: r.nome_fantasia || r.nome_completo })))
+                  .sort((a, b) => a.nome.localeCompare(b.nome))
+                  .map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <span className={rotulo}>Meta sobre</span>
+              <div className="inline-flex rounded-md border border-linha overflow-hidden">
+                {([['TOTAL', 'Total'], ['PRODUTO', 'Produto'], ['CATEGORIA', 'Categoria']] as [EscopoMeta, string][]).map(([id, nome]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => { setEscopo(id); setEscopoValor(''); }}
+                    className={`h-10 px-4 text-[13px] font-semibold ${escopo === id ? 'bg-eno-800 text-white' : 'bg-papel'}`}
+                  >
+                    {nome}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {escopo === 'PRODUTO' && (
+              <div>
+                <label className={rotulo}>Produto</label>
+                <select className={campo} value={escopoValor} onChange={e => setEscopoValor(e.target.value)}>
+                  <option value="">Escolha...</option>
+                  {produtos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                </select>
+              </div>
+            )}
+            {escopo === 'CATEGORIA' && (
+              <div>
+                <label className={rotulo}>Categoria</label>
+                <select className={campo} value={escopoValor} onChange={e => setEscopoValor(e.target.value)}>
+                  <option value="">Escolha...</option>
+                  {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <span className={rotulo}>Medida</span>
+              <div className="inline-flex rounded-md border border-linha overflow-hidden">
+                {(['VALOR', 'KG'] as UnidadeMeta[]).map(u => (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => setUnidade(u)}
+                    className={`h-10 px-4 text-[13px] font-semibold ${unidade === u ? 'bg-eno-800 text-white' : 'bg-papel'}`}
+                  >
+                    {rotuloUnidade(u)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className={rotulo}>{unidade === 'VALOR' ? 'Valor da meta (R$)' : 'Quantidade da meta (kg)'}</label>
+              <input className={campo} inputMode="decimal" value={valorMeta} onChange={e => setValorMeta(e.target.value)} placeholder={unidade === 'VALOR' ? '0,00' : '0'} />
+            </div>
+
+            <div>
+              <label className={rotulo}>Início</label>
+              <input type="date" className={campo} value={inicio} onChange={e => setInicio(e.target.value)} />
+            </div>
+            <div>
+              <label className={rotulo}>Fim</label>
+              <input type="date" className={campo} value={fim} onChange={e => setFim(e.target.value)} />
+            </div>
+          </div>
+
+          {erro && <div className="rounded-md bg-st-vencido-bg text-st-vencido text-[13px] px-3 py-2">{erro}</div>}
+
+          <div className="flex gap-2">
+            <button type="submit" className="h-10 px-5 rounded-md bg-eno-800 text-white text-[13px] font-bold">
+              {editandoId ? 'Salvar alteração' : 'Cadastrar meta'}
+            </button>
+            {editandoId && (
+              <button type="button" onClick={limparForm} className="h-10 px-4 rounded-md border border-linha-forte text-[13px] font-semibold">
+                Cancelar
+              </button>
+            )}
+          </div>
+        </form>
+
+        <div className="mt-6 space-y-3">
+          {listaOrdenada.length === 0 && (
+            <div className="rounded-lg border border-linha bg-papel p-6 text-center text-cinza text-[14px]">Nenhuma meta cadastrada ainda.</div>
+          )}
+          {listaOrdenada.map(m => {
+            const realizado = realizadoMeta(m, pedidos, produtos);
+            const pct = m.valor_meta > 0 ? Math.min(100, (realizado / m.valor_meta) * 100) : 0;
+            const falta = Math.max(0, m.valor_meta - realizado);
+            return (
+              <div key={m.id} className="rounded-lg border border-linha bg-papel p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[15px] font-extrabold truncate">{m.destinatario_nome || '(sem nome)'}</div>
+                    <div className="text-[12.5px] text-cinza">
+                      {m.destinatario === 'CLIENTE' ? 'Cliente' : 'Representante'} · {rotuloEscopo(m)} · {rotuloUnidade(m.unidade)}
+                    </div>
+                    <div className="text-[12px] text-cinza">Período: {formatarDataBR(m.inicio)} a {formatarDataBR(m.fim)}</div>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button type="button" onClick={() => editar(m)} className="h-8 w-8 rounded-md hover:bg-papel-3 flex items-center justify-center" aria-label="Editar meta">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button type="button" onClick={() => excluir(m)} className="h-8 w-8 rounded-md hover:bg-st-vencido-bg text-st-vencido flex items-center justify-center" aria-label="Excluir meta">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-baseline justify-between text-[13px]">
+                  <span>Realizado <strong className="tabular-nums">{fmtValor(m, realizado)}</strong> de {fmtValor(m, m.valor_meta)}</span>
+                  <span className="font-bold tabular-nums">{pct.toFixed(0)}%</span>
+                </div>
+                <div className="mt-1.5 h-2.5 rounded-full bg-papel-3 overflow-hidden">
+                  <div className={`h-full ${pct >= 100 ? 'bg-st-pago' : 'bg-eno-700'}`} style={{ width: `${pct}%` }} />
+                </div>
+                {falta > 0 && <div className="mt-1 text-[12px] text-cinza">Faltam {fmtValor(m, falta)}</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

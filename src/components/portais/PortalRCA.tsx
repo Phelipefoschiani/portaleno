@@ -32,6 +32,7 @@ import { CampoBusca, SeletorFiltro } from '../ui/BarraFiltros';
 import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
 import { MolduraPortal, SeletorAdminPortal } from './MolduraPortal';
 import { RotasRCA } from './RotasRCA';
+import { MetasResumo } from '../metas/MetasResumo';
 
 interface PortalRCAProps {
   onVoltar: () => void;
@@ -225,6 +226,9 @@ export function PortalRCA({ onVoltar, rcaId, permitirSelecaoAdmin = false }: Por
       {/* ================= RESUMO ================= */}
       {abaAtiva === 'resumo' && (
         <>
+          <div className="px-3 sm:px-5 pt-4">
+            <MetasResumo destinatario="RCA" id={rca.id} />
+          </div>
           <CabecalhoPagina
             titulo={nomeRca}
             resumo={

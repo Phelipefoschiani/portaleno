@@ -21,6 +21,7 @@ import { Painel } from '../ui/Painel';
 import { StatusChip } from '../ui/StatusChip';
 import { EstadoVazio } from '../ui/EstadoVazio';
 import { MolduraPortal, SeletorAdminPortal } from './MolduraPortal';
+import { MetasResumo } from '../metas/MetasResumo';
 
 interface PortalClienteProps {
   onVoltar: () => void;
@@ -165,6 +166,7 @@ export function PortalCliente({ onVoltar, clienteId, permitirSelecaoAdmin = fals
             className="!px-3 sm:!px-5"
           />
           <div className="px-3 sm:px-5 space-y-4">
+            <MetasResumo destinatario="CLIENTE" id={cliente.id} />
             <FaixaNumeros>
               <CardNumero
                 destaque

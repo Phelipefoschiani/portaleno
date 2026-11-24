@@ -24,6 +24,7 @@ import { ProdutosTabelaPreco } from './produtos/ProdutosTabelaPreco';
 import { ProdutosEtiqueta } from './produtos/ProdutosEtiqueta';
 import { NotificacoesAceites } from './notificacoes/NotificacoesAceites';
 import { MapeamentoClientes } from './mapeamento/MapeamentoClientes';
+import { MetasVendas } from './pedidos/MetasVendas';
 import { FinanceiroAReceber } from './financeiro/FinanceiroAReceber';
 import { FinanceiroAPagar } from './financeiro/FinanceiroAPagar';
 import { FinanceiroLancarDespesas } from './financeiro/FinanceiroLancarDespesas';
@@ -132,6 +133,7 @@ export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: Admin
       label: 'Pedidos',
       items: [
         { id: 'pedidos_orcamentos_sugestivo', label: 'Vendas', secao: 'Venda' },
+        { id: 'pedidos_metas', label: 'Metas', secao: 'Venda' },
         { id: 'pedidos_em_producao', label: 'Em produção', secao: 'Venda' },
         { id: 'pedidos_ordens_producao', label: 'Ordens de produção', secao: 'Venda' },
         { id: 'pedidos_a_faturar', label: 'A faturar', secao: 'Expedição' },
@@ -518,6 +520,8 @@ export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: Admin
               <CadastroProducao />
             ) : activePage.id === 'usuarios_acessos' && ehAdmin ? (
               <UsuariosAcessos />
+            ) : activePage.id === 'pedidos_metas' ? (
+              <MetasVendas />
             ) : activePage.id === 'cadastro_controle_sitio' ? (
               <PortalControleSitio onVoltar={handleSelectVisaoGeral} />
             ) : activePage.id === 'pedidos_compra' ? (
