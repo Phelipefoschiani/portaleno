@@ -46,7 +46,8 @@ import {
   moverPedidoEtapa,
   obterProdutosVendaDisponiveis,
   obterClientesDisponiveis,
-  pesoDoItemKg
+  pesoDoItemKg,
+  descontoUnitario
 } from '../../data/pedidosVendaData';
 import {
   carregarTabelasPreco,
@@ -246,6 +247,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
   const [modoExibicao, setModoExibicao] = useState<'FARDO' | 'UNITARIO'>('FARDO');
   // Documento com ou sem a foto dos produtos (escolha na barra de exportação)
   const [comFotoDoc, setComFotoDoc] = useState(false);
+  // Desconto dos itens no documento (escolha na barra de exportação); por padrão o cliente vê só o preço final
+  const [comDescontoDoc, setComDescontoDoc] = useState(false);
   const [zoomDocumento, setZoomDocumento] = useState<number>(100);
   const [gerandoExportacao, setGerandoExportacao] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -255,7 +258,9 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
     produtoId: string;
     tipoEmbalagem: 'Saco 25kg' | 'Big Bag 1000kg' | 'Fardo 10x1kg' | 'Caixa' | 'Granel' | string;
     quantidade: number;
-    precoUnitario: number;
+    precoUnitario: number; // preço da tabela (antes do desconto), na medida do modo do item
+    descontoTipo?: 'VALOR' | 'PERCENTUAL';
+    descontoInformado?: number; // R$ por embalagem/unidade, ou %
     unidadesPorFardo?: number;
     modo?: 'FARDO' | 'UNITARIO'; // cada item pode ser por caixa/fardo ou por unidade (conforme a tabela)
   }>>([]); // itens só entram depois de escolher a tabela de preço
@@ -407,12 +412,15 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
       const fator = fatorItem(it.unidades_por_fardo);
       const fatorProduto = fatorItem(produtosDisponiveis.find(p => p.id === it.produto_id)?.unidades_por_fardo ?? it.unidades_por_fardo);
       // Item gravado como unidade avulsa volta como "unidade" com a embalagem real do produto
+      const precoTab = it.preco_tabela ?? it.preco_unitario; // antes do desconto
       if (fator <= 1 && fatorProduto > 1) {
         return {
           produtoId: it.produto_id,
           tipoEmbalagem: it.tipo_embalagem,
           quantidade: it.quantidade,
-          precoUnitario: it.preco_unitario,
+          precoUnitario: precoTab,
+          descontoTipo: it.desconto_tipo,
+          descontoInformado: it.desconto_informado,
           unidadesPorFardo: fatorProduto,
           modo: 'UNITARIO' as const
         };
@@ -422,7 +430,10 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
         produtoId: it.produto_id,
         tipoEmbalagem: it.tipo_embalagem,
         quantidade: emUnitario ? it.quantidade * fator : it.quantidade,
-        precoUnitario: emUnitario ? it.preco_unitario / fator : it.preco_unitario,
+        precoUnitario: emUnitario ? precoTab / fator : precoTab,
+        // Desconto em R$ por embalagem acompanha a conversão de fardo para unidade
+        descontoTipo: it.desconto_tipo,
+        descontoInformado: emUnitario && it.desconto_tipo === 'VALOR' ? (Number(it.desconto_informado) || 0) / fator : it.desconto_informado,
         unidadesPorFardo: it.unidades_por_fardo,
         modo
       };
@@ -686,7 +697,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
       clearTimeout(timer);
       if (url) URL.revokeObjectURL(url);
     };
-  }, [modalDetalhes, tipoDocumentoVisualizacao, modoExibicao, comFotoDoc]);
+  }, [modalDetalhes, tipoDocumentoVisualizacao, modoExibicao, comFotoDoc, comDescontoDoc]);
 
   // Exportar Documento PDF Oficial A4
   const exportarPDF = async (pedido: PedidoVenda) => {
@@ -889,14 +900,21 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
       let fator = fatorItem(it.unidadesPorFardo || prod.unidades_por_fardo);
       let tipoEmbalagem = it.tipoEmbalagem || tipoEmbalagemDoProduto(prod);
       let qtdReal = it.quantidade;
-      let precoReal = it.precoUnitario;
-      const subtotal = it.quantidade * it.precoUnitario;
+      // Desconto por embalagem (na medida do modo do item); o preço final é o que vale no pedido
+      const descUnit = descontoUnitario(it.precoUnitario, it.descontoTipo, it.descontoInformado);
+      const precoFinalForm = it.precoUnitario - descUnit;
+      let precoReal = precoFinalForm;
+      let precoTabelaReal = it.precoUnitario;
+      let descontoReal = descUnit;
+      const subtotal = it.quantidade * precoFinalForm;
 
       // Lançado em unitário: vira fardos quando fecha embalagens inteiras; senão fica avulso (sem arredondar)
       if (modoItem(it) === 'UNITARIO' && fator > 1) {
         if (it.quantidade % fator === 0) {
           qtdReal = it.quantidade / fator;
-          precoReal = it.precoUnitario * fator;
+          precoReal = precoFinalForm * fator;
+          precoTabelaReal = it.precoUnitario * fator;
+          descontoReal = descUnit * fator;
         } else {
           fator = 1;
           tipoEmbalagem = 'Unitário (avulso)';
@@ -911,6 +929,10 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
         peso_unitario_kg: prod.peso_unitario_kg,
         peso_total_kg: 0,
         preco_unitario: precoReal,
+        preco_tabela: precoTabelaReal,
+        desconto_tipo: it.descontoTipo,
+        desconto_informado: it.descontoInformado,
+        desconto_unitario: descontoReal,
         subtotal,
         unidades_por_fardo: fator
       };
@@ -1822,8 +1844,48 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                               />
                             </div>
 
+                            {/* Desconto do item: em % ou em R$ por embalagem (o cliente não lança desconto) */}
+                            {!modoCliente && (
+                              <div className="sm:w-40">
+                                <label className="text-[10px] text-cinza block -mb-0.5">Desconto</label>
+                                <div className="flex gap-1">
+                                  <select
+                                    value={item.descontoTipo || 'PERCENTUAL'}
+                                    aria-label="Tipo do desconto"
+                                    onChange={(e) => {
+                                      const updated = [...itensForm];
+                                      updated[idx] = { ...updated[idx], descontoTipo: e.target.value as 'VALOR' | 'PERCENTUAL' };
+                                      setItensForm(updated);
+                                    }}
+                                    className="w-16 bg-papel border border-linha rounded px-1 py-1 text-xs font-semibold cursor-pointer"
+                                  >
+                                    <option value="PERCENTUAL">%</option>
+                                    <option value="VALOR">R$</option>
+                                  </select>
+                                  <CampoNumero
+                                    step="0.01"
+                                    min={0}
+                                    casas={2}
+                                    value={item.descontoInformado ?? 0}
+                                    aria-label="Valor do desconto"
+                                    onChange={(n) => {
+                                      const updated = [...itensForm];
+                                      updated[idx] = { ...updated[idx], descontoInformado: Math.max(0, n) };
+                                      setItensForm(updated);
+                                    }}
+                                    className="w-full bg-papel border border-linha rounded px-2 py-1 text-center tabular-nums font-bold"
+                                  />
+                                </div>
+                              </div>
+                            )}
+
                             <div className="sm:w-32 sm:text-right tabular-nums font-bold text-tinta max-sm:text-[15px] max-sm:self-center">
-                              {(item.quantidade * item.precoUnitario).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              {(item.quantidade * (item.precoUnitario - descontoUnitario(item.precoUnitario, item.descontoTipo, item.descontoInformado))).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              {descontoUnitario(item.precoUnitario, item.descontoTipo, item.descontoInformado) > 0 && (
+                                <div className="text-[10px] font-sans font-medium text-st-vencido">
+                                  desconto de {formatarMoeda(descontoUnitario(item.precoUnitario, item.descontoTipo, item.descontoInformado))} por {modoItem(item) === 'FARDO' ? 'caixa/fardo' : 'unidade'}
+                                </div>
+                              )}
                               {rcaIdForm && comissaoItem && !modoCliente && (
                                 <div className="text-[10px] font-sans font-medium text-st-producao" title={`Regra aplicada: ${comissaoItem.regra}${comissaoItem.grupo ? ` • Grupo: ${comissaoItem.grupo}` : ''}`}>
                                   Comissão {comissaoItem.percentual}% • {formatarMoeda(comissaoItem.valor)}
@@ -1992,7 +2054,7 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                   <div className="mr-auto max-sm:w-full">
                     <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-cinza">Total do pedido</span>
                     <span className="block text-xl font-extrabold tracking-tight tabular-nums text-eno-800">
-                      {formatarMoeda(itensForm.reduce((acc, it) => acc + (Number(it.quantidade) || 0) * (Number(it.precoUnitario) || 0), 0))}
+                      {formatarMoeda(itensForm.reduce((acc, it) => acc + (Number(it.quantidade) || 0) * ((Number(it.precoUnitario) || 0) - descontoUnitario(Number(it.precoUnitario) || 0, it.descontoTipo, it.descontoInformado)), 0))}
                     </span>
                   </div>
                 )}
@@ -2217,12 +2279,21 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                           <th className="py-2.5 px-3 text-right">Qtd</th>
                           <th className="py-2.5 px-3 text-right">Peso (kg)</th>
                           <th className="py-2.5 px-3 text-right">{modoExibicao === 'FARDO' ? 'Preço cx/fardo' : 'Preço unit.'}</th>
+                          {comDescontoDoc && <th className="py-2.5 px-3 text-right">Preço tabela</th>}
+                          {comDescontoDoc && <th className="py-2.5 px-3 text-right">Desconto</th>}
                           <th className="py-2.5 pl-3 pr-4 text-right rounded-r-md">Subtotal</th>
                         </tr>
                       </thead>
                       <tbody>
                         {modalDetalhes.itens.map((it, idx) => {
                           const valores = calcularValoresItem(it, modoExibicao);
+                          // Preço de tabela e desconto na mesma medida do preço mostrado (só aparecem se a pessoa escolher)
+                          const precoTabelaItem = calcularValoresItem({ ...it, preco_unitario: it.preco_tabela ?? it.preco_unitario }, modoExibicao).preco;
+                          const descontoItem = calcularValoresItem({ ...it, preco_unitario: it.desconto_unitario || 0 }, modoExibicao).preco;
+                          const basePct = it.preco_tabela ?? it.preco_unitario;
+                          const pctDesconto = (Number(it.desconto_unitario) || 0) > 0 && basePct > 0
+                            ? ` (${((Number(it.desconto_unitario) / basePct) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%)`
+                            : '';
                           return (
                             <tr key={idx} className={`border-b border-[#e6e1d2] ${idx % 2 === 1 ? 'bg-[#f6f3ea]' : ''}`}>
                               <td className="py-2.5 pl-4 pr-3">
@@ -2249,6 +2320,16 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                               <td className="py-2.5 px-3 text-right text-[12px] tabular-nums whitespace-nowrap">
                                 {formatarMoeda(valores.preco)}
                               </td>
+                              {comDescontoDoc && (
+                                <td className="py-2.5 px-3 text-right text-[12px] tabular-nums whitespace-nowrap text-[#6e7470]">
+                                  {formatarMoeda(precoTabelaItem)}
+                                </td>
+                              )}
+                              {comDescontoDoc && (
+                                <td className="py-2.5 px-3 text-right text-[12px] tabular-nums whitespace-nowrap text-[#b42318]">
+                                  {(Number(it.desconto_unitario) || 0) > 0 ? `- ${formatarMoeda(descontoItem)}${pctDesconto}` : '—'}
+                                </td>
+                              )}
                               <td className="py-2.5 pl-3 pr-4 text-right text-[14px] font-extrabold tabular-nums text-[#064e3b] whitespace-nowrap">
                                 {formatarMoeda(valores.subtotal)}
                               </td>
@@ -2325,6 +2406,15 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                 >
                   <ImageIcon className="w-4 h-4" />
                   <span>{comFotoDoc ? 'Sem foto' : 'Com foto'}</span>
+                </button>
+
+                {/* Com ou sem o desconto dos itens no documento (PDF e PNG) */}
+                <button
+                  onClick={() => setComDescontoDoc(v => !v)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-md border border-white/25 text-white font-bold text-xs transition-colors cursor-pointer hover:bg-white/10"
+                  title="Mostrar ou ocultar o desconto de cada item no documento"
+                >
+                  <span>{comDescontoDoc ? 'Ocultar desconto' : 'Mostrar desconto'}</span>
                 </button>
 
                 {/* Exportar PNG */}

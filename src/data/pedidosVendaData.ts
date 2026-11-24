@@ -27,6 +27,11 @@ export interface ItemPedidoVenda {
   subtotal: number;
   lote_producao?: string;
   unidades_por_fardo?: number; // Para conversão Fardo <-> Unitário
+  // Desconto do item: preco_unitario já é o preço final (com desconto); preco_tabela é antes do desconto
+  preco_tabela?: number;
+  desconto_tipo?: 'VALOR' | 'PERCENTUAL';
+  desconto_informado?: number; // o que foi digitado: R$ por embalagem/unidade, ou %
+  desconto_unitario?: number;  // R$ descontados por embalagem/unidade (preco_tabela - preco_unitario)
   comissao_percentual?: number;
   comissao_valor?: number;
   comissao_regra?: string;
@@ -149,6 +154,16 @@ export interface PedidoVenda {
 export function unidadesPorEmbalagemItem(item: Pick<ItemPedidoVenda, 'unidades_por_fardo'>): number {
   const f = Number(item.unidades_por_fardo);
   return f > 0 ? f : 1;
+}
+
+/** R$ de desconto por embalagem/unidade. Em valor: limitado ao preço; em %: limitado a 100%. */
+export function descontoUnitario(precoTabela: number, tipo?: 'VALOR' | 'PERCENTUAL', informado?: number): number {
+  const preco = Number(precoTabela) || 0;
+  const v = Number(informado) || 0;
+  if (preco <= 0 || v <= 0) return 0;
+  // Sem tipo informado, o desconto é em percentual (padrão da tela)
+  const desc = tipo === 'VALOR' ? Math.min(v, preco) : preco * (Math.min(v, 100) / 100);
+  return Math.round(desc * 10000) / 10000;
 }
 
 // Pacotes correspondentes a uma quantidade de embalagens do item
