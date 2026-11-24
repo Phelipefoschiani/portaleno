@@ -224,6 +224,13 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
 
     return {
       faturamentoMes,
+      // Tudo que está em Vendas (orçamento, produção, a faturar, faturado e entregue), somado
+      totalVendas: somaPedidos(todosPedidos),
+      totalVendasQtd: todosPedidos.length,
+      vendasOrcamento: somaPedidos(aguardando),
+      vendasProducao: somaPedidos(emProducao),
+      vendasAFaturar: somaPedidos(aFaturar),
+      vendasFaturado: somaPedidos(todosPedidos.filter(p => p.etapa === 'FATURADO' || p.etapa === 'ENTREGUE')),
       pedidosFaturadosMes: somaPedidos(faturadosMes),
       faturadosMesQtd: faturadosMes.length,
       emProducaoValor: somaPedidos(emProducao),
@@ -339,6 +346,14 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
               valor={moedaSemSimbolo(painel.aFaturarValor)}
               detalhe={`${painel.aFaturarQtd} ${painel.aFaturarQtd === 1 ? 'pedido' : 'pedidos'}`}
               onClick={() => onNavigate('pedidos_a_faturar')}
+            />
+            <CardNumero
+              rotulo="Total em vendas"
+              unidade="R$"
+              unidadeAntes
+              valor={moedaSemSimbolo(painel.totalVendas)}
+              detalhe={`${painel.totalVendasQtd} ${painel.totalVendasQtd === 1 ? 'pedido' : 'pedidos'} · Orçamento ${formatarMoeda(painel.vendasOrcamento)} · Produção ${formatarMoeda(painel.vendasProducao)} · A faturar ${formatarMoeda(painel.vendasAFaturar)} · Faturado ${formatarMoeda(painel.vendasFaturado)}`}
+              onClick={() => onNavigate('pedidos_orcamentos_sugestivo')}
             />
             <CardNumero
               rotulo={`Faturado em ${mesAtual}`}
