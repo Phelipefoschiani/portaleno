@@ -335,7 +335,8 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
       clienteIdForm,
       itensForm.map(it => ({
         produto_id: it.produtoId,
-        subtotal: (Number(it.quantidade) || 0) * (Number(it.precoUnitario) || 0),
+        // Comissão sobre o valor já com desconto
+        subtotal: (Number(it.quantidade) || 0) * ((Number(it.precoUnitario) || 0) - descontoUnitario(Number(it.precoUnitario) || 0, it.descontoTipo, it.descontoInformado)),
         categoria: produtosDisponiveis.find(p => p.id === it.produtoId)?.categoria
       }))
     );
