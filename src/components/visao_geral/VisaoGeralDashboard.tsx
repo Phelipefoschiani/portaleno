@@ -31,7 +31,6 @@ import {
   carregarCaixaInvestimento,
   statusEfetivoReceber,
   statusEfetivoPagar,
-  dataNoMesAtual,
   formatarMoeda as formatarMoedaSegura,
   numeroSeguro
 } from '../../data/financeiroData';
@@ -69,12 +68,35 @@ const plural = (n: number, um: string, varios: string) => `${n.toLocaleString('p
 const listaNomes = (nomes: string[], max = 3) =>
   nomes.slice(0, max).join(', ') + (nomes.length > max ? ` e mais ${nomes.length - max}` : '');
 
+// Mês no formato AAAA-MM (chave do filtro de mês)
+const chaveMesDe = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+const chaveMesDaData = (valor?: string | null) => {
+  const d = parseData(valor);
+  return d ? chaveMesDe(d) : '';
+};
+const rotuloMesChave = (chave: string) => {
+  const [ano, mes] = chave.split('-').map(Number);
+  const d = new Date(ano, mes - 1, 1);
+  const nome = d.toLocaleDateString('pt-BR', { month: 'long' });
+  return chave === chaveMesDe(new Date()) ? nome : `${nome} de ${ano}`;
+};
+// Últimos 12 meses, do atual para trás
+const OPCOES_MES = Array.from({ length: 12 }, (_, i) => {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - i);
+  const chave = chaveMesDe(d);
+  return { chave, rotulo: rotuloMesChave(chave) };
+});
+
 export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
   const [pedidos, setPedidos] = useState<PedidoVenda[]>([]);
   const [produtos, setProdutos] = useState<ProdutoEstoque[]>([]);
   const [calculosRoca, setCalculosRoca] = useState<CalculoNaRoca[]>([]);
   const [consolidado, setConsolidado] = useState(() => obterConsolidadoGeral());
   const [atualizadoEm, setAtualizadoEm] = useState(() => new Date());
+  // Mês usado nos cards de faturamento (padrão: mês atual)
+  const [mesFiltro, setMesFiltro] = useState(() => chaveMesDe(new Date()));
 
   const recarregar = () => {
     setPedidos(carregarPedidosVenda());
@@ -111,7 +133,8 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
     const soma = (l: { valor: unknown }[]) => l.reduce((a, t) => a + numeroSeguro(t.valor), 0);
 
     const faturamentoMes =
-      soma(receber.filter(t => dataNoMesAtual(t.data_emissao))) + soma(extras.filter(r => dataNoMesAtual(r.data)));
+      soma(receber.filter(t => chaveMesDaData(t.data_emissao) === mesFiltro)) +
+      soma(extras.filter(r => chaveMesDaData(r.data) === mesFiltro));
 
     const recAbertos = receber.filter(t => statusEfetivoReceber(t) !== 'PAGO');
     const recVencidos = recAbertos.filter(t => statusEfetivoReceber(t) === 'VENCIDO');
@@ -125,7 +148,7 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
     const aFaturar = todosPedidos.filter(p => p.etapa === 'A_FATURAR');
     const emProducao = todosPedidos.filter(p => p.etapa === 'EM_PRODUCAO');
     const faturadosMes = todosPedidos.filter(
-      p => (p.etapa === 'FATURADO' || p.etapa === 'ENTREGUE') && !!p.data_faturamento && dataNoMesAtual(p.data_faturamento)
+      p => (p.etapa === 'FATURADO' || p.etapa === 'ENTREGUE') && chaveMesDaData(p.data_faturamento) === mesFiltro
     );
     const somaPedidos = (l: PedidoVenda[]) => l.reduce((a, p) => a + numeroSeguro(p.valor_total), 0);
 
@@ -247,7 +270,7 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
       reservaSafra: numeroSeguro(caixa.fundo_reserva_safra),
       pendencias: p,
     };
-  }, [consolidado, pedidos, produtos]);
+  }, [consolidado, pedidos, produtos, mesFiltro]);
 
   // Gráfico de faturamento real das últimas 5 semanas (títulos a receber por emissão + receitas extras por data)
   const dadosFaturamento = useMemo(() => {
@@ -296,7 +319,7 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
   };
 
   const nPend = painel.pendencias.length;
-  const mesAtual = new Date().toLocaleDateString('pt-BR', { month: 'long' });
+  const mesAtual = rotuloMesChave(mesFiltro);
   const eixo = { fontSize: 11, fill: CORES.cinza };
   const tooltip = { borderRadius: 6, border: `1px solid ${CORES.linha}`, background: CORES.papel, fontSize: 12 };
 
@@ -312,10 +335,22 @@ export function VisaoGeralDashboard({ onNavigate }: VisaoGeralProps) {
             </>
           }
           acoes={
-            <BotaoSecundario onClick={recarregar} title="Recarregar os números">
-              <RefreshCw className="w-3.5 h-3.5" />
-              Atualizar
-            </BotaoSecundario>
+            <div className="flex items-center gap-2">
+              <select
+                value={mesFiltro}
+                onChange={e => setMesFiltro(e.target.value)}
+                title="Mês do faturamento"
+                className="h-8 rounded-md border border-linha bg-papel px-2 text-[12.5px] font-semibold text-tinta cursor-pointer"
+              >
+                {OPCOES_MES.map(o => (
+                  <option key={o.chave} value={o.chave}>{o.rotulo}</option>
+                ))}
+              </select>
+              <BotaoSecundario onClick={recarregar} title="Recarregar os números">
+                <RefreshCw className="w-3.5 h-3.5" />
+                Atualizar
+              </BotaoSecundario>
+            </div>
           }
         />
 
