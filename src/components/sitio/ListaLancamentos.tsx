@@ -138,6 +138,8 @@ export function DetalheLancamento({ d, onFechar }: { d: DespesaSitio; onFechar: 
             <Linha k="Pagamento" v={d.formaPagamento || nota?.formaPagamento} />
             <Linha k="Situação" v={d.situacao === 'A_PAGAR' ? `A pagar · vence ${formatarDataBR(d.vencimento)}` : d.situacao === 'PAGO' ? 'Pago' : undefined} />
             <Linha k="Observação" v={d.observacao || nota?.observacoes} />
+            <Linha k="Lançado por" v={d.lancado_por || d.responsavel ? `${d.lancado_por || d.responsavel}${d.lancado_em ? ` · ${formatarDataBR(d.lancado_em.slice(0, 10))}` : ''}` : undefined} />
+            <Linha k="Editado por" v={d.editado_por ? `${d.editado_por}${d.editado_em ? ` · ${formatarDataBR(d.editado_em.slice(0, 10))}` : ''}` : undefined} />
           </dl>
           {nota?.numero && (
             <div className="mt-4 rounded-2xl bg-papel-2 border border-linha p-4">

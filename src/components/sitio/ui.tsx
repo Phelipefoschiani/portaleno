@@ -38,7 +38,7 @@ export interface PropsAba {
   irPara?: (aba: AbaSitio) => void;
 }
 
-export type AbaSitio = 'PAINEL' | 'COMBUSTIVEL' | 'HORAS' | 'DESPESAS' | 'MAQUINAS';
+export type AbaSitio = 'PAINEL' | 'COMBUSTIVEL' | 'HORAS' | 'DESPESAS' | 'MAQUINAS' | 'RELATORIOS';
 
 // ============================================================
 // Estilos de formulário (alvos grandes para uso no celular)

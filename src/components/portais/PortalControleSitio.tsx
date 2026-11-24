@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { LogOut, LayoutDashboard, Fuel, Timer, Receipt, Tractor, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LogOut, LayoutDashboard, Fuel, Timer, Receipt, Tractor, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react';
 import {
   ControleSitioCompleto,
   DespesaSitio,
@@ -18,6 +18,7 @@ import { AbaCombustivel } from '../sitio/AbaCombustivel';
 import { AbaHoras } from '../sitio/AbaHoras';
 import { AbaDespesas } from '../sitio/AbaDespesas';
 import { AbaMaquinas } from '../sitio/AbaMaquinas';
+import { AbaRelatorios } from '../sitio/AbaRelatorios';
 
 interface PortalControleSitioProps {
   onVoltar: () => void;
@@ -28,7 +29,8 @@ const ABAS: { id: AbaSitio; rotulo: string; curto: string; icone: React.Componen
   { id: 'COMBUSTIVEL', rotulo: 'Combustível', curto: 'Combust.', icone: Fuel },
   { id: 'HORAS', rotulo: 'Horas de Máquina', curto: 'Horas', icone: Timer },
   { id: 'DESPESAS', rotulo: 'Despesas', curto: 'Despesas', icone: Receipt },
-  { id: 'MAQUINAS', rotulo: 'Máquinas', curto: 'Máquinas', icone: Tractor }
+  { id: 'MAQUINAS', rotulo: 'Máquinas', curto: 'Máquinas', icone: Tractor },
+  { id: 'RELATORIOS', rotulo: 'Relatórios', curto: 'Relatórios', icone: BarChart3 }
 ];
 
 function deslocarMes(chave: string, delta: number): string {
@@ -83,7 +85,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
   const ehMesAtual = mes === mesAtualKey();
 
   return (
-    <div className="min-h-screen bg-papel-2 text-tinta flex flex-col font-sans">
+    <div className="h-full w-full overflow-y-auto bg-papel-2 text-tinta flex flex-col font-sans">
       <header className="bg-eno-900 text-white sticky top-0 z-30 shadow-md shadow-emerald-950/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -171,6 +173,7 @@ export function PortalControleSitio({ onVoltar }: PortalControleSitioProps) {
         {aba === 'HORAS' && <AbaHoras {...props} />}
         {aba === 'DESPESAS' && <AbaDespesas {...props} />}
         {aba === 'MAQUINAS' && <AbaMaquinas {...props} />}
+        {aba === 'RELATORIOS' && <AbaRelatorios {...props} />}
       </main>
 
       {/* Navegação inferior (celular) */}

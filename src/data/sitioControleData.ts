@@ -4,6 +4,7 @@
 // o formato antigo (tanque único + lista de despesas) é migrado na leitura sem perder registros.
 
 import { hojeISO, mesAtualKey, parseData, paraISO } from '../lib/datas';
+import { obterSessao } from '../lib/auth';
 
 // ============================================================
 // TIPOS
@@ -81,6 +82,11 @@ export interface DespesaSitio {
   situacao?: SituacaoPagamento;
   vencimento?: string;
   observacao?: string;
+  // Quem lançou e quem editou por último (preenchido automaticamente ao salvar)
+  lancado_por?: string;
+  lancado_em?: string;
+  editado_por?: string;
+  editado_em?: string;
 }
 
 export interface TanqueCombustivel {
@@ -477,9 +483,61 @@ export function carregarControleSitio(): ControleSitioCompleto {
   return estadoVazio();
 }
 
+// Campos de controle de quem lançou/editou não contam como alteração do lançamento
+const CAMPOS_DE_AUTORIA = ['lancado_por', 'lancado_em', 'editado_por', 'editado_em'];
+
+/** JSON com as chaves em ordem, para comparar dois lançamentos sem falsas diferenças. */
+function assinatura(valor: unknown): string {
+  return JSON.stringify(valor, (_k, v) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)))
+      : v
+  );
+}
+
+function semAutoria(d: DespesaSitio): Omit<DespesaSitio, 'lancado_por' | 'lancado_em' | 'editado_por' | 'editado_em'> {
+  const copia: Record<string, unknown> = { ...d };
+  CAMPOS_DE_AUTORIA.forEach(c => delete copia[c]);
+  return copia as Omit<DespesaSitio, 'lancado_por' | 'lancado_em' | 'editado_por' | 'editado_em'>;
+}
+
+/** Quem está usando o sistema agora (nome de login). */
+function quemEstaLogado(): string {
+  const s = obterSessao();
+  return s?.nome || s?.usuario || '';
+}
+
+/**
+ * Compara com o que estava salvo: lançamento novo ganha "lançado por"; lançamento alterado ganha "editado por".
+ * Assim fica registrado quem fez cada coisa, sem cada tela precisar lembrar disso.
+ */
+function marcarAutoria(novo: ControleSitioCompleto): ControleSitioCompleto {
+  const anteriores = new Map<string, DespesaSitio>();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SITIO_DESPESAS);
+    if (raw) (JSON.parse(raw)?.despesas as DespesaSitio[] | undefined)?.forEach(d => anteriores.set(d.id, d));
+  } catch {
+    /* sem histórico anterior: todos entram como novos */
+  }
+  const quem = quemEstaLogado();
+  const agora = new Date().toISOString();
+  const despesas = novo.despesas.map(d => {
+    const antes = anteriores.get(d.id);
+    if (!antes) {
+      return { ...d, lancado_por: d.lancado_por || quem, lancado_em: d.lancado_em || agora };
+    }
+    const alterou = assinatura(semAutoria(antes)) !== assinatura(semAutoria(d));
+    if (!alterou) {
+      return { ...d, lancado_por: d.lancado_por ?? antes.lancado_por, lancado_em: d.lancado_em ?? antes.lancado_em, editado_por: d.editado_por ?? antes.editado_por, editado_em: d.editado_em ?? antes.editado_em };
+    }
+    return { ...d, lancado_por: d.lancado_por ?? antes.lancado_por, lancado_em: d.lancado_em ?? antes.lancado_em, editado_por: quem, editado_em: agora };
+  });
+  return { ...novo, despesas };
+}
+
 export function salvarControleSitio(dados: ControleSitioState): void {
   try {
-    const estado = normalizarEstadoSitio({ ...dados, versao: VERSAO_SITIO });
+    const estado = marcarAutoria(normalizarEstadoSitio({ ...dados, versao: VERSAO_SITIO }));
     localStorage.setItem(STORAGE_KEY_SITIO_DESPESAS, JSON.stringify(estado));
     window.dispatchEvent(new Event(EVENTO_SITIO_ATUALIZADO));
   } catch (e) {
