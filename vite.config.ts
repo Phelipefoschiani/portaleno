@@ -39,6 +39,15 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    build: {
+      rollupOptions: {
+        // Duas páginas: o sistema (index.html) e o app da roça (roca.html, instalável no celular)
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          roca: path.resolve(__dirname, 'roca.html'),
+        },
+      },
+    },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify; file watching is disabled to prevent flickering during agent edits.

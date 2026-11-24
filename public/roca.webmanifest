@@ -1,0 +1,16 @@
+{
+  "name": "Roça · Grupo ENO",
+  "short_name": "Roça ENO",
+  "description": "Pesagem e cálculo da mandioca na roça, com ou sem internet.",
+  "start_url": "/roca.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#042013",
+  "theme_color": "#042013",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "/favicon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

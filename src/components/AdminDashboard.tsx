@@ -24,6 +24,7 @@ import { ProdutosTabelaPreco } from './produtos/ProdutosTabelaPreco';
 import { ProdutosEtiqueta } from './produtos/ProdutosEtiqueta';
 import { NotificacoesAceites } from './notificacoes/NotificacoesAceites';
 import { MapeamentoClientes } from './mapeamento/MapeamentoClientes';
+import { AplicativoRoca } from './aplicativo/AplicativoRoca';
 import { MetasVendas } from './pedidos/MetasVendas';
 import { FinanceiroAReceber } from './financeiro/FinanceiroAReceber';
 import { FinanceiroAPagar } from './financeiro/FinanceiroAPagar';
@@ -184,6 +185,14 @@ export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: Admin
       label: 'Mapeamento',
       items: [
         { id: 'mapeamento_clientes', label: 'Clientes no mapa', secao: 'Clientes' },
+      ],
+    }] : []),
+    // App da roça (instalável no celular Android)
+    ...(ehAdmin ? [{
+      id: 'aplicativo',
+      label: 'Aplicativo',
+      items: [
+        { id: 'aplicativo_roca', label: 'App da roça', secao: 'Campo' },
       ],
     }] : []),
   ], [ehAdmin]);
@@ -558,6 +567,8 @@ export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: Admin
               <NotificacoesAceites />
             ) : activePage.id === 'mapeamento_clientes' ? (
               <MapeamentoClientes />
+            ) : activePage.id === 'aplicativo_roca' ? (
+              <AplicativoRoca />
             ) : activePage.id === 'financeiro_a_receber' ? (
               <FinanceiroAReceber onNavigate={handleNavigateUniversal} />
             ) : activePage.id === 'financeiro_a_pagar' ? (

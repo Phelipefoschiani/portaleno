@@ -41,6 +41,7 @@ import {
 } from '../../data/calculoRocaData';
 import { CampoAnexoComprovante, ArquivoComprovante, ModalComprovantes, useExtratoRoca } from './ComprovantesRoca';
 import { Agricultor } from '../../data/mockStore';
+import { importarPesagensDoApp } from '../../roca/importarPesagens';
 import { carregarAgricultores, EVENTO_CADASTROS_ATUALIZADOS } from '../../data/cadastrosData';
 import { hojeISO, paraISO, formatarDataBR, somarDias } from '../../lib/datas';
 import { EMPRESA } from '../../lib/empresa';
@@ -55,6 +56,10 @@ interface Props {
 }
 
 export function CalculoNaRocaComponent({ onNavigate }: Props) {
+  // Pesagens feitas no app da roça (sem internet, depois enviadas) entram aqui como cálculos
+  useEffect(() => {
+    importarPesagensDoApp().catch(e => console.error('Erro ao importar pesagens do app da roça:', e));
+  }, []);
   const [calculos, setCalculos] = useState<CalculoNaRoca[]>(carregarCalculosNaRoca());
   const [agricultores, setAgricultores] = useState<Agricultor[]>(() => carregarAgricultores());
 
