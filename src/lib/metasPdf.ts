@@ -65,12 +65,13 @@ export function gerarPdfMetas(
     y += 10;
 
     // Tabela
+    // Colunas: Meta (14–84) | Período (86–126) | Valor da meta (148) | Realizado (178) | % (194)
     const colunas = [
       { t: 'Meta', x: 14 },
-      { t: 'Período', x: 80 },
-      { t: 'Meta', x: 118, dir: true },
-      { t: 'Realizado', x: 150, dir: true },
-      { t: '%', x: 190, dir: true },
+      { t: 'Período', x: 86 },
+      { t: 'Meta', x: 148, dir: true },
+      { t: 'Realizado', x: 178, dir: true },
+      { t: '%', x: 195, dir: true },
     ];
     pdf.setFillColor(VERDE[0], VERDE[1], VERDE[2]);
     pdf.rect(14, y - 5, 182, 7, 'F');
@@ -93,20 +94,23 @@ export function gerarPdfMetas(
       }
       const realizado = realizadoMeta(m, pedidos, produtos);
       const pct = m.valor_meta > 0 ? Math.min(100, (realizado / m.valor_meta) * 100) : 0;
-      if (i % 2 === 1) {
-        pdf.setFillColor(243, 244, 246);
-        pdf.rect(14, y - 4.5, 182, 7, 'F');
-      }
       pdf.setTextColor(0, 0, 0);
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9);
-      pdf.text(`${rotuloEscopo(m)} · ${rotuloUnidade(m.unidade)}`, 14, y, { maxWidth: 62 });
-      pdf.text(`${formatarDataBR(m.inicio)} a ${formatarDataBR(m.fim)}`, 80, y);
-      pdf.text(fmt(m, m.valor_meta), 118, y, { align: 'right' });
-      pdf.text(fmt(m, realizado), 150, y, { align: 'right' });
+      const nomeLinhas = pdf.splitTextToSize(`${rotuloEscopo(m)} · ${rotuloUnidade(m.unidade)}`, 68) as string[];
+      const periodo = pdf.splitTextToSize(`${formatarDataBR(m.inicio)} a ${formatarDataBR(m.fim)}`, 38) as string[];
+      const altura = Math.max(nomeLinhas.length, periodo.length) * 4.2 + 3;
+      if (i % 2 === 1) {
+        pdf.setFillColor(243, 244, 246);
+        pdf.rect(14, y - 4.5, 182, altura, 'F');
+      }
+      pdf.text(nomeLinhas, 14, y);
+      pdf.text(periodo, 86, y);
+      pdf.text(fmt(m, m.valor_meta), 148, y, { align: 'right' });
+      pdf.text(fmt(m, realizado), 178, y, { align: 'right' });
       pdf.setFont('helvetica', 'bold');
-      pdf.text(`${pct.toFixed(0)}%`, 190, y, { align: 'right' });
-      y += 7.5;
+      pdf.text(`${pct.toFixed(0)}%`, 195, y, { align: 'right' });
+      y += altura;
     });
 
     // Resumo
