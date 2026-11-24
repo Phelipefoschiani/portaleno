@@ -7,6 +7,7 @@ import { carregarEstoqueProdutos, ProdutoEstoque } from '../../data/produtosData
 import { carregarPedidosVenda, PedidoVenda } from '../../data/pedidosVendaData';
 import { formatarMoeda } from '../../data/financeiroData';
 import { hojeISO, formatarDataBR } from '../../lib/datas';
+import { gerarPdfMetas } from '../../lib/metasPdf';
 import {
   carregarMetas,
   salvarMetas,
@@ -43,6 +44,24 @@ export function MetasVendas() {
   const [produtos, setProdutos] = useState<ProdutoEstoque[]>([]);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [erro, setErro] = useState('');
+  const [rcaPdf, setRcaPdf] = useState('');
+
+  // Folha A4 com as metas do representante (ou uma página por representante, se "todos")
+  const gerarA4 = () => {
+    if (!rcaPdf) return;
+    const escolhidos = rcaPdf === 'TODOS' ? rcas : rcas.filter(r => r.id === rcaPdf);
+    const reps = escolhidos
+      .map(r => ({
+        id: r.id,
+        nome: r.nome_fantasia || r.nome_completo,
+        metas: metas.filter(m => m.destinatario === 'RCA' && m.destinatario_id === r.id),
+      }))
+      .filter(r => rcaPdf !== 'TODOS' || r.metas.length > 0);
+    if (reps.length === 0) return setErro('Nenhum representante com meta para gerar.');
+    const pdf = gerarPdfMetas(reps, pedidos, produtos);
+    const nome = rcaPdf === 'TODOS' ? 'representantes' : reps[0].nome.replace(/\s+/g, '_');
+    pdf.save(`Metas_${nome}.pdf`);
+  };
 
   // Formulário
   const [destinatario, setDestinatario] = useState<DestinatarioMeta>('CLIENTE');
@@ -160,6 +179,23 @@ export function MetasVendas() {
           titulo="Metas"
           resumo={`${metas.length} ${metas.length === 1 ? 'meta cadastrada' : 'metas cadastradas'} · o realizado conta pedidos faturados ou entregues no período`}
         />
+
+        <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-linha bg-papel p-3">
+          <span className="text-[13px] font-bold">Folha A4 para o representante</span>
+          <select className="h-10 min-w-[220px] rounded-md border border-linha bg-papel px-3 text-[14px]" value={rcaPdf} onChange={e => setRcaPdf(e.target.value)}>
+            <option value="">Escolha...</option>
+            <option value="TODOS">Todos os representantes (uma página para cada)</option>
+            {rcas.map(r => <option key={r.id} value={r.id}>{r.nome_fantasia || r.nome_completo}</option>)}
+          </select>
+          <button
+            type="button"
+            onClick={gerarA4}
+            disabled={!rcaPdf}
+            className="h-10 px-4 rounded-md bg-eno-800 text-white text-[13px] font-bold disabled:opacity-40"
+          >
+            Gerar A4 (PDF)
+          </button>
+        </div>
 
         <form onSubmit={salvar} className="mt-4 rounded-lg border border-linha bg-papel p-4 space-y-4">
           <div className="text-[13px] font-bold">{editandoId ? 'Editar meta' : 'Nova meta'}</div>
