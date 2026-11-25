@@ -5,8 +5,11 @@ import { Check, ClipboardList, Lock, Minus, Pencil, Plus, RefreshCw, Trash2, Wif
 import '../index.css';
 import {
   ApontamentoApp,
+  ConclusaoApp,
   OPApp,
+  gravarConclusao,
   gravarPendente,
+  listarConclusoes,
   listarHistorico,
   listarOPsLocais,
   listarPendentes,
@@ -16,7 +19,7 @@ import {
 } from './banco';
 import { iniciarSincronizacao, sincronizarAgora, StatusSync } from './sincronizar';
 
-type Aba = 'PRODUZIR' | 'HISTORICO';
+type Aba = 'PRODUZIR' | 'HISTORICO' | 'CONCLUIDOS';
 type Mensagem = { tom: 'ok' | 'erro'; texto: string } | null;
 
 const CHAVE_OPERADOR = 'eno_producao_operador';
@@ -80,6 +83,7 @@ export function ProducaoApp() {
   const [ops, setOps] = useState<OPApp[]>([]);
   const [fila, setFila] = useState<ApontamentoApp[]>([]);
   const [historico, setHistorico] = useState<ApontamentoApp[]>([]);
+  const [conclusoes, setConclusoes] = useState<ConclusaoApp[]>([]);
   const [operador, setOperador] = useState(lerOperador);
   const [mensagem, setMensagem] = useState<Mensagem>(null);
 
@@ -97,6 +101,7 @@ export function ProducaoApp() {
     setOps(await listarOPsLocais());
     setFila(await listarPendentes());
     setHistorico(await listarHistorico());
+    setConclusoes(await listarConclusoes());
   };
 
   useEffect(() => {
@@ -224,6 +229,44 @@ export function ProducaoApp() {
     }
   };
 
+  /** Pede ao escritório a conclusão da OP: ela sai da lista de abertas e vai para "Concluídos". */
+  const concluirOP = async (op: OPApp) => {
+    if (fila.some(a => a.op_id === op.id)) {
+      setMensagem({ tom: 'erro', texto: `Ainda tem apontamento da ${op.numero} sem enviar. Envie antes de concluir.` });
+      return;
+    }
+    const apontados = op.quantidade_produzida_pacotes;
+    const texto =
+      `Concluir a ${op.numero} (${op.produto_nome})?\n\n` +
+      `Pacotes apontados: ${numero(apontados)}.\n` +
+      'A OP sai da lista de abertas. O escritório confirma a conclusão no sistema.';
+    if (!window.confirm(texto)) return;
+    try {
+      await gravarConclusao({
+        id: `conc_${op.id}`,
+        op_id: op.id,
+        op_numero: op.numero,
+        produto_nome: op.produto_nome,
+        operador: operador.trim() || undefined,
+        pacotes_apontados: apontados,
+        criado_em: new Date().toISOString(),
+        enviada: false,
+      });
+      setAba('CONCLUIDOS');
+      setMensagem({
+        tom: 'ok',
+        texto: navigator.onLine ? `${op.numero} concluída. Enviando ao escritório…` : `${op.numero} concluída. Envia quando tiver internet.`,
+      });
+      await recarregar();
+      if (navigator.onLine) sincronizarAgora();
+    } catch {
+      setMensagem({ tom: 'erro', texto: 'Não consegui concluir no celular. Tente de novo.' });
+    }
+  };
+
+  // OPs já pedidas para conclusão deste celular saem da lista na hora
+  const opsVisiveis = ops.filter(op => !conclusoes.some(c => c.op_id === op.id));
+
   const enviarAgora = async () => {
     const r = await sincronizarAgora();
     setMensagem(r.ok ? { tom: 'ok', texto: 'Tudo enviado.' } : { tom: 'erro', texto: r.erro || 'Não foi possível enviar.' });
@@ -301,7 +344,7 @@ export function ProducaoApp() {
             </button>
           </div>
 
-          {ops.length === 0 ? (
+          {opsVisiveis.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-papel/20 px-5 py-8 text-center">
               <ClipboardList className="w-8 h-8 mx-auto text-ouro/70" />
               <p className="mt-3 font-semibold">Nenhuma ordem aberta agora.</p>
@@ -311,7 +354,7 @@ export function ProducaoApp() {
             </div>
           ) : (
             <ul className="space-y-3">
-              {ops.map(op => {
+              {opsVisiveis.map(op => {
                 const planejado = Math.max(1, op.quantidade_planejada_pacotes);
                 const pct = Math.min(100, Math.round((op.quantidade_produzida_pacotes / planejado) * 100));
                 const restante = Math.max(0, op.quantidade_planejada_pacotes - op.quantidade_produzida_pacotes);
@@ -356,6 +399,20 @@ export function ProducaoApp() {
                         </div>
                       )}
                     </button>
+                    {op.do_estoque_pacotes ? (
+                      <div className="mt-1.5 px-1 text-[12.5px] text-ouro-claro tabular-nums">
+                        {numero(op.do_estoque_pacotes)} pacotes já vieram do estoque
+                      </div>
+                    ) : null}
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => concluirOP(op)}
+                        className="h-10 px-4 rounded-lg border border-ouro/50 text-[14px] font-bold text-ouro-claro"
+                      >
+                        Concluir OP
+                      </button>
+                    </div>
                   </li>
                 );
               })}
@@ -428,13 +485,55 @@ export function ProducaoApp() {
         </main>
       )}
 
+      {aba === 'CONCLUIDOS' && (
+        <main className="px-4 pt-4 space-y-3">
+          <h2 className="text-[13px] font-bold uppercase tracking-[0.14em] text-papel/60">Ordens concluídas</h2>
+          {conclusoes.length === 0 ? (
+            <p className="text-[14px] text-papel/65">Nenhuma ordem concluída ainda. Quando a produção concluir uma OP, ela aparece aqui.</p>
+          ) : (
+            <ul className="space-y-3">
+              {conclusoes.map(c => {
+                const situacao = c.concluido_em
+                  ? { texto: 'Concluída no sistema', classe: 'bg-eno-600/30 text-[#bfe6cc]' }
+                  : c.enviada
+                    ? { texto: 'Enviada ao escritório', classe: 'bg-papel/15 text-papel/80' }
+                    : { texto: 'Aguardando envio', classe: 'bg-st-aguardando/25 text-ouro-claro' };
+                return (
+                  <li key={c.id} className="rounded-2xl bg-papel/[0.07] border border-papel/10 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] font-bold ${situacao.classe}`}>
+                        {c.concluido_em && <Check className="w-3 h-3" />}
+                        {situacao.texto}
+                      </span>
+                      <span className="text-[12px] text-papel/55">{hora(c.criado_em)}</span>
+                    </div>
+                    <div className="mt-2 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-mono text-[12px] text-ouro-claro">{c.op_numero}</div>
+                        <div className="font-extrabold leading-snug">{c.produto_nome}</div>
+                        {c.operador && <div className="mt-1 text-[13px] text-papel/70">{c.operador}</div>}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-[26px] font-black tabular-nums leading-none">{numero(c.pacotes_apontados)}</div>
+                        <div className="text-[12px] text-papel/65">pacotes apontados</div>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </main>
+      )}
+
       {/* Barra de abas no rodapé, ao alcance do polegar */}
       <nav className="fixed bottom-0 inset-x-0 z-20 bg-eno-950 border-t border-ouro/20 pb-[env(safe-area-inset-bottom)]">
-        <div className="grid grid-cols-2">
+        <div className="grid grid-cols-3">
           {(
             [
               ['PRODUZIR', 'Produzir'],
               ['HISTORICO', pendentes > 0 ? `Histórico (${numero(pendentes)})` : 'Histórico'],
+              ['CONCLUIDOS', 'Concluídos'],
             ] as [Aba, string][]
           ).map(([id, rotulo]) => (
             <button

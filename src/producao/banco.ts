@@ -3,10 +3,27 @@
 // e "historico" (apontamentos já enviados, guardados no celular para consulta e ajuste).
 
 const NOME_BANCO = 'eno_producao';
-const VERSAO = 2;
+const VERSAO = 3;
 const GAVETA_OPS = 'ops';
 const GAVETA_PENDENTES = 'pendentes';
 const GAVETA_HISTORICO = 'historico';
+const GAVETA_CONCLUSOES = 'conclusoes';
+
+/** Pedido de conclusão de uma OP feito pela produção. Vai ao escritório, que conclui no sistema. */
+export interface ConclusaoApp {
+  id: string;
+  op_id: string;
+  op_numero: string;
+  produto_nome: string;
+  operador?: string;
+  /** Pacotes apontados na OP no momento do pedido (informativo). */
+  pacotes_apontados: number;
+  criado_em: string;
+  /** Já foi enviada ao banco? (controle só deste celular) */
+  enviada?: boolean;
+  /** Preenchido quando o escritório concluiu a OP no sistema (vem do banco). */
+  concluido_em?: string;
+}
 
 /** Ordem de produção como o app precisa dela (subconjunto do que está no banco). */
 export interface OPApp {
@@ -22,6 +39,8 @@ export interface OPApp {
   lote?: string;
   data_fabricacao?: string;
   data_validade?: string;
+  /** Pacotes que já vieram do estoque quando a OP foi criada (entram como feitos). */
+  do_estoque_pacotes?: number;
   /** Pacotes que cabem em cada fardo/caixa (para mostrar fardos prontos). */
   unidades_por_embalagem?: number;
   /** Peso de cada pacote, em kg (para mostrar o total de kg). */
@@ -44,6 +63,8 @@ export interface ApontamentoApp {
   data_validade?: string;
   criado_em: string;
   editado_em?: string;
+  /** Linhas de pedido de conclusão também passam pela tabela; estas têm tipo 'CONCLUSAO'. */
+  tipo?: 'APONTAMENTO' | 'CONCLUSAO';
   /** Preenchido quando a pessoa exclui um apontamento já enviado: o envio apaga do banco. */
   excluido_em?: string;
   /** Preenchido pelo escritório quando o apontamento é lançado na OP (vem do banco). */
@@ -61,6 +82,7 @@ function abrir(): Promise<IDBDatabase> {
         if (!db.objectStoreNames.contains(GAVETA_OPS)) db.createObjectStore(GAVETA_OPS, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(GAVETA_PENDENTES)) db.createObjectStore(GAVETA_PENDENTES, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(GAVETA_HISTORICO)) db.createObjectStore(GAVETA_HISTORICO, { keyPath: 'id' });
+        if (!db.objectStoreNames.contains(GAVETA_CONCLUSOES)) db.createObjectStore(GAVETA_CONCLUSOES, { keyPath: 'id' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -147,4 +169,37 @@ export async function substituirHistorico(lista: ApontamentoApp[]): Promise<void
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+// ---------- Conclusões pedidas pela produção ----------
+
+export async function gravarConclusao(item: ConclusaoApp): Promise<void> {
+  await requisicao(GAVETA_CONCLUSOES, 'readwrite', s => s.put(item));
+}
+
+export async function listarConclusoes(): Promise<ConclusaoApp[]> {
+  const lista = await requisicao<ConclusaoApp[]>(GAVETA_CONCLUSOES, 'readonly', s => s.getAll());
+  return lista.sort((a, b) => b.criado_em.localeCompare(a.criado_em));
+}
+
+/** Troca a lista local pela do banco, mantendo as que este celular ainda não enviou. */
+export async function substituirConclusoes(lista: ConclusaoApp[]): Promise<void> {
+  const db = await abrir();
+  const atuais = await listarConclusoes();
+  const naoEnviadas = atuais.filter(c => !c.enviada);
+  const ids = new Set(lista.map(c => c.id));
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(GAVETA_CONCLUSOES, 'readwrite');
+    const store = tx.objectStore(GAVETA_CONCLUSOES);
+    store.clear();
+    lista.forEach(item => store.put(item));
+    naoEnviadas.filter(c => !ids.has(c.id)).forEach(item => store.put(item));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function marcarConclusaoEnviada(id: string): Promise<void> {
+  const atual = (await listarConclusoes()).find(c => c.id === id);
+  if (atual) await gravarConclusao({ ...atual, enviada: true });
 }

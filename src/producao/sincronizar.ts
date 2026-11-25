@@ -6,8 +6,12 @@ import {
   substituirOPsLocais,
   gravarHistorico,
   substituirHistorico,
+  listarConclusoes,
+  substituirConclusoes,
+  marcarConclusaoEnviada,
   OPApp,
   ApontamentoApp,
+  ConclusaoApp,
 } from './banco';
 
 export const TABELA_OPS = 'ordens_producao';
@@ -92,8 +96,37 @@ async function atualizarHistorico(): Promise<string | undefined> {
   const naFila = new Set((await listarPendentes()).map(p => p.id));
   const lista = (data || [])
     .map(l => l.dados as ApontamentoApp | null)
-    .filter((a): a is ApontamentoApp => !!a && !!a.id && !naFila.has(a.id));
+    .filter((a): a is ApontamentoApp => !!a && !!a.id && a.tipo !== 'CONCLUSAO' && !naFila.has(a.id));
   await substituirHistorico(lista);
+  return undefined;
+}
+
+/** Envia os pedidos de conclusão feitos neste celular (ficam no banco até o escritório concluir a OP). */
+async function enviarConclusoes(): Promise<string | undefined> {
+  if (!supabase) return 'Banco não configurado.';
+  const pendentes = (await listarConclusoes()).filter(c => !c.enviada);
+  for (const c of pendentes) {
+    const { error } = await supabase
+      .from(TABELA_APONTAMENTOS)
+      .upsert({ id: c.id, dados: { ...c, tipo: 'CONCLUSAO', enviada: undefined }, atualizado_em: new Date().toISOString() }, { onConflict: 'id' });
+    if (error) return error.message;
+    await marcarConclusaoEnviada(c.id);
+  }
+  return undefined;
+}
+
+/** Baixa os pedidos de conclusão de todos os celulares e o que o escritório já concluiu. */
+async function atualizarConclusoes(): Promise<string | undefined> {
+  if (!supabase) return 'Banco não configurado.';
+  const { data, error } = await supabase
+    .from(TABELA_APONTAMENTOS)
+    .select('id, dados')
+    .filter('dados->>tipo', 'eq', 'CONCLUSAO')
+    .order('atualizado_em', { ascending: false })
+    .limit(LIMITE_HISTORICO);
+  if (error) return error.message;
+  const lista = (data || []).map(l => l.dados as ConclusaoApp).filter(c => !!c && !!c.id);
+  await substituirConclusoes(lista.map(c => ({ ...c, enviada: true })));
   return undefined;
 }
 
@@ -101,10 +134,14 @@ export async function sincronizarAgora(): Promise<{ ok: boolean; erro?: string }
   if (!navigator.onLine) return { ok: false, erro: 'Sem internet.' };
   const erroEnvio = await enviarFila();
   if (erroEnvio) return { ok: false, erro: erroEnvio };
+  const erroConclusoesEnvio = await enviarConclusoes();
+  if (erroConclusoesEnvio) return { ok: false, erro: erroConclusoesEnvio };
   const erroOPs = await puxarOPs();
   if (erroOPs) return { ok: false, erro: erroOPs };
   const erroHistorico = await atualizarHistorico();
   if (erroHistorico) return { ok: false, erro: erroHistorico };
+  const erroConclusoes = await atualizarConclusoes();
+  if (erroConclusoes) return { ok: false, erro: erroConclusoes };
   return { ok: true };
 }
 

@@ -7,7 +7,8 @@
 import {
   carregarEstoqueProdutos,
   carregarReceitas,
-  carregarFichasTecnicas
+  carregarFichasTecnicas,
+  verificarDisponibilidadeProduto
 } from './produtosData';
 import {
   aplicarProducaoNoEstoque,
@@ -59,6 +60,8 @@ export interface OrdemProducao {
   // Quantidades em PACOTES
   quantidade_planejada_pacotes: number;
   quantidade_produzida_pacotes: number;
+  /** Pacotes que já estavam em estoque quando a OP foi criada: entram como feitos, sem produzir de novo. */
+  do_estoque_pacotes?: number;
   apontamentos?: ApontamentoOP[];
   // Rastreabilidade
   lote?: string;
@@ -217,6 +220,18 @@ export function criarOrdemProducaoEstoque(params: {
 }
 
 /**
+ * Pacotes do estoque que ainda estão livres para novas OPs: o estoque atual menos o que as OPs abertas
+ * já reservaram como "do estoque" (evita dois pedidos usarem o mesmo estoque).
+ */
+function estoqueLivreProduto(produtoId: string, lista: OrdemProducao[]): number {
+  const disponivel = verificarDisponibilidadeProduto(produtoId, 0).disponivel;
+  const reservado = lista
+    .filter(o => o.produto_id === produtoId && (o.status === 'PLANEJADA' || o.status === 'EM_PRODUCAO') && !o.ciclo_encerrado)
+    .reduce((acc, o) => acc + (Number(o.do_estoque_pacotes) || 0), 0);
+  return Math.max(0, disponivel - reservado);
+}
+
+/**
  * Pedido entrou em produção: cria uma OP por item (se o pedido ainda não tem OPs no ciclo atual).
  * `novoCiclo`: pedido saiu de orçamento — OPs abertas anteriores são canceladas e as concluídas deixam de cobrir.
  */
@@ -237,6 +252,8 @@ export function gerarOrdensDoPedido(pedido: PedidoVenda, opcoes?: { novoCiclo?: 
     if (existentes.some(o => o.item_index === i)) return;
     const pacotes = pacotesDoItem(item);
     if (pacotes <= 0) return;
+    // O que já está em estoque entra como feito: a OP só produz o que falta
+    const doEstoque = Math.min(pacotes, estoqueLivreProduto(item.produto_id, [...lista, ...novas]));
     novas.push(
       montarOP(
         {
@@ -249,7 +266,8 @@ export function gerarOrdensDoPedido(pedido: PedidoVenda, opcoes?: { novoCiclo?: 
           tipo_embalagem: item.tipo_embalagem,
           produto_id: item.produto_id,
           produto_nome: item.produto_nome,
-          quantidade_planejada_pacotes: pacotes,
+          quantidade_planejada_pacotes: pacotes - doEstoque,
+          do_estoque_pacotes: doEstoque,
           quantidade_produzida_pacotes: pacotesDoItem(item, Number(item.quantidade_produzida) || 0),
           lote: item.lote_producao || pedido.lote_producao,
           data_prevista: paraISO(pedido.data_previsao_entrega) || undefined

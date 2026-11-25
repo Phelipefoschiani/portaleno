@@ -3,10 +3,22 @@
 import React, { useEffect, useState } from 'react';
 import { Check, RefreshCw, Smartphone } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { apontarProducaoOP, EVENTO_OPS } from '../../data/ordensProducaoData';
+import { apontarProducaoOP, carregarOrdensProducao, concluirOrdemProducao, EVENTO_OPS } from '../../data/ordensProducaoData';
 import { formatarDataBR } from '../../lib/datas';
 
 const TABELA = 'apontamentos_producao_app';
+
+/** Pedido de conclusão feito pela produção (celular). */
+interface ConclusaoRecebida {
+  id: string;
+  op_id: string;
+  op_numero: string;
+  produto_nome: string;
+  operador?: string;
+  pacotes_apontados: number;
+  criado_em: string;
+  concluido_em?: string;
+}
 
 interface ApontamentoRecebido {
   id: string;
@@ -31,6 +43,8 @@ export function ApontamentosAppProducao() {
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [lancandoId, setLancandoId] = useState<string | null>(null);
+  const [conclusoes, setConclusoes] = useState<ConclusaoRecebida[]>([]);
+  const [concluindoId, setConcluindoId] = useState<string | null>(null);
 
   const carregar = async () => {
     if (!supabase) {
@@ -49,8 +63,45 @@ export function ApontamentosAppProducao() {
     }
     setErro(null);
     // Excluídos pelo celular não entram para lançar
-    const itens = (data || []).map(l => l.dados as ApontamentoRecebido).filter(a => !!a && !!a.id && !a.excluido_em);
+    const linhas = (data || []).map(l => l.dados as ApontamentoRecebido & ConclusaoRecebida & { tipo?: string }).filter(a => !!a && !!a.id);
+    // Excluídos pelo celular não entram para lançar; pedidos de conclusão têm lista própria
+    const itens = linhas.filter(a => a.tipo !== 'CONCLUSAO' && !a.excluido_em);
     setLista(itens.sort((a, b) => a.criado_em.localeCompare(b.criado_em)));
+    const pedidos = linhas.filter(a => a.tipo === 'CONCLUSAO' && !a.concluido_em);
+    setConclusoes(pedidos.sort((a, b) => a.criado_em.localeCompare(b.criado_em)));
+  };
+
+  /** Conclui a OP no sistema (mesma regra da tela de ordens) e marca o pedido como concluído. */
+  const concluir = async (c: ConclusaoRecebida) => {
+    setErro(null);
+    const aLancar = lista.filter(a => a.op_id === c.op_id);
+    if (aLancar.length > 0) {
+      setErro(`Lance antes os ${aLancar.length} apontamento(s) da ${c.op_numero} na OP, depois conclua.`);
+      return;
+    }
+    const op = carregarOrdensProducao().find(o => o.id === c.op_id);
+    if (!op) {
+      setErro(`Não encontrei a ${c.op_numero} aqui no sistema.`);
+      return;
+    }
+    if (op.status === 'CANCELADA') {
+      setErro(`A ${c.op_numero} está cancelada: não há o que concluir.`);
+      return;
+    }
+    setConcluindoId(c.id);
+    if (op.status !== 'CONCLUIDA') {
+      concluirOrdemProducao(op.id, { pacotes_produzidos: op.quantidade_produzida_pacotes });
+    }
+    const concluidoEm = new Date().toISOString();
+    const { error } = await supabase!
+      .from(TABELA)
+      .upsert({ id: c.id, dados: { ...c, tipo: 'CONCLUSAO', concluido_em: concluidoEm }, atualizado_em: concluidoEm }, { onConflict: 'id' });
+    setConcluindoId(null);
+    if (error) {
+      setErro(`A OP foi concluída, mas não consegui marcar pedido como concluído: ${error.message}. Não conclua de novo.`);
+      return;
+    }
+    setConclusoes(atual => atual.filter(x => x.id !== c.id));
   };
 
   useEffect(() => {
@@ -114,6 +165,35 @@ export function ApontamentosAppProducao() {
         </div>
 
         {erro && <p className="mt-3 rounded-lg bg-st-vencido-bg px-3 py-2 text-[13px] font-semibold text-st-vencido">{erro}</p>}
+
+        {conclusoes.length > 0 && (
+          <div className="mt-4 rounded-xl border border-linha bg-papel-2/60 p-3">
+            <div className="text-[12.5px] font-bold uppercase tracking-[0.12em] text-cinza">Pedidos de conclusão da produção</div>
+            <ul className="mt-2 divide-y divide-linha">
+              {conclusoes.map(c => (
+                <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <div className="text-[13px] text-cinza tabular-nums">
+                      <span className="font-mono font-semibold text-tinta">{c.op_numero}</span> · {formatarDataBR(c.criado_em.slice(0, 10))}
+                      {c.operador ? ` · ${c.operador}` : ''}
+                    </div>
+                    <div className="text-[14.5px] font-bold text-tinta">{c.produto_nome}</div>
+                    <div className="text-[13px] text-tinta-2">{c.pacotes_apontados.toLocaleString('pt-BR')} pacotes apontados pela produção</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => concluir(c)}
+                    disabled={concluindoId === c.id}
+                    className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-eno-900 px-4 text-[13.5px] font-bold text-white hover:bg-eno-950 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Check className="h-4 w-4" />
+                    {concluindoId === c.id ? 'Concluindo…' : 'Concluir OP'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {lista.length > 0 && (
           <ul className="mt-4 divide-y divide-linha">
