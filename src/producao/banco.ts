@@ -15,11 +15,16 @@ export interface OPApp {
   produto_nome: string;
   tipo_embalagem?: string;
   status: 'PLANEJADA' | 'EM_PRODUCAO' | 'CONCLUIDA' | 'CANCELADA';
+  /** Quantidades da OP são sempre em PACOTES (unidades). */
   quantidade_planejada_pacotes: number;
   quantidade_produzida_pacotes: number;
+  /** Pacotes que cabem em cada fardo/caixa (para mostrar fardos prontos). */
+  unidades_por_embalagem?: number;
+  /** Peso de cada pacote, em kg (para mostrar o total de kg). */
+  peso_unitario_kg?: number;
 }
 
-/** Apontamento feito na produção. */
+/** Apontamento feito na produção. A quantidade é sempre em pacotes. */
 export interface ApontamentoApp {
   id: string;
   op_id: string;

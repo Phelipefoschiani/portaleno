@@ -22,6 +22,20 @@ type Mensagem = { tom: 'ok' | 'erro'; texto: string } | null;
 const CHAVE_OPERADOR = 'eno_producao_operador';
 const inteiro = (s: string) => parseInt(s.replace(/\D/g, ''), 10) || 0;
 const numero = (v: number) => v.toLocaleString('pt-BR');
+const kgTexto = (v: number) => `${v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg`;
+
+/** Fardos completos e pacotes soltos a partir de uma quantidade em pacotes. Sem pacotes por fardo, não há conta. */
+function fardosDe(pacotes: number, porFardo?: number): { cheios: number; resto: number } | null {
+  if (!porFardo || porFardo <= 0) return null;
+  return { cheios: Math.floor(pacotes / porFardo), resto: pacotes % porFardo };
+}
+
+/** Texto curto: "3 fardos + 2 pacotes", "4 fardos" ou nada (sem conta de fardo). */
+function textoFardos(pacotes: number, porFardo?: number): string | null {
+  const f = fardosDe(pacotes, porFardo);
+  if (!f) return null;
+  return f.resto > 0 ? `${f.cheios} fardos + ${f.resto} pacotes` : `${f.cheios} fardos`;
+}
 const hora = (iso: string) =>
   new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
@@ -48,6 +62,8 @@ interface Alvo {
   produto_nome: string;
   tipo_embalagem?: string;
   restante?: number;
+  unidades_por_embalagem?: number;
+  peso_unitario_kg?: number;
 }
 
 /** Já lançado na OP pelo escritório: não pode mais ser alterado pelo celular. */
@@ -97,6 +113,8 @@ export function ProducaoApp() {
       produto_nome: op.produto_nome,
       tipo_embalagem: op.tipo_embalagem,
       restante: Math.max(0, op.quantidade_planejada_pacotes - op.quantidade_produzida_pacotes),
+      unidades_por_embalagem: op.unidades_por_embalagem,
+      peso_unitario_kg: op.peso_unitario_kg,
     });
     setEditando(null);
     setPacotes('');
@@ -109,7 +127,15 @@ export function ProducaoApp() {
       setMensagem({ tom: 'erro', texto: 'Esse apontamento já foi lançado na ordem. Peça para o escritório ajustar.' });
       return;
     }
-    setAlvo({ op_id: apt.op_id, op_numero: apt.op_numero, produto_nome: apt.produto_nome, tipo_embalagem: apt.tipo_embalagem });
+    const op = ops.find(o => o.id === apt.op_id);
+    setAlvo({
+      op_id: apt.op_id,
+      op_numero: apt.op_numero,
+      produto_nome: apt.produto_nome,
+      tipo_embalagem: apt.tipo_embalagem,
+      unidades_por_embalagem: op?.unidades_por_embalagem,
+      peso_unitario_kg: op?.peso_unitario_kg,
+    });
     setEditando(apt);
     setPacotes(String(apt.pacotes));
     setObservacao(apt.observacao || '');
@@ -191,6 +217,14 @@ export function ProducaoApp() {
   const enviadosVisiveis = historico.filter(a => !a.excluido_em);
   const excluidosVisiveis = historico.filter(a => !!a.excluido_em);
 
+  // Conta ao vivo: quantos fardos e quantos kg dá a quantidade digitada na folha
+  const contaAtual = alvo
+    ? {
+        fardos: textoFardos(inteiro(pacotes), alvo.unidades_por_embalagem),
+        kg: alvo.peso_unitario_kg ? kgTexto(inteiro(pacotes) * alvo.peso_unitario_kg) : null,
+      }
+    : null;
+
   return (
     <div className="min-h-dvh w-full bg-eno-900 text-papel pb-28">
       {/* Cabeçalho: estado da conexão sempre visível */}
@@ -264,6 +298,11 @@ export function ProducaoApp() {
                 const planejado = Math.max(1, op.quantidade_planejada_pacotes);
                 const pct = Math.min(100, Math.round((op.quantidade_produzida_pacotes / planejado) * 100));
                 const restante = Math.max(0, op.quantidade_planejada_pacotes - op.quantidade_produzida_pacotes);
+                const fardosProd = fardosDe(op.quantidade_produzida_pacotes, op.unidades_por_embalagem);
+                const fardosPlan = fardosDe(op.quantidade_planejada_pacotes, op.unidades_por_embalagem);
+                const textoRestante = textoFardos(restante, op.unidades_por_embalagem);
+                const kgProd = op.peso_unitario_kg ? op.quantidade_produzida_pacotes * op.peso_unitario_kg : null;
+                const kgPlan = op.peso_unitario_kg ? op.quantidade_planejada_pacotes * op.peso_unitario_kg : null;
                 return (
                   <li key={op.id}>
                     <button
@@ -283,12 +322,22 @@ export function ProducaoApp() {
                       </div>
                       <div className="mt-2 flex items-center justify-between text-[13px] tabular-nums">
                         <span className="text-papel/75">
-                          {numero(op.quantidade_produzida_pacotes)} de {numero(op.quantidade_planejada_pacotes)} {op.tipo_embalagem || 'pacotes'}
+                          {numero(op.quantidade_produzida_pacotes)} de {numero(op.quantidade_planejada_pacotes)} pacotes
                         </span>
                         <span className={restante > 0 ? 'font-bold text-ouro-claro' : 'font-bold text-[#bfe6cc]'}>
-                          {restante > 0 ? `faltam ${numero(restante)}` : 'meta batida'}
+                          {restante > 0 ? `faltam ${numero(restante)} pacotes` : 'meta batida'}
                         </span>
                       </div>
+                      {(fardosPlan || kgPlan !== null) && (
+                        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 text-[12.5px] text-papel/70 tabular-nums">
+                          <span>
+                            {fardosProd && fardosPlan ? `${fardosProd.cheios} de ${fardosPlan.cheios} fardos prontos` : ''}
+                            {fardosProd && fardosPlan && kgProd !== null ? ' · ' : ''}
+                            {kgProd !== null && kgPlan !== null ? `${kgTexto(kgProd)} de ${kgTexto(kgPlan)}` : ''}
+                          </span>
+                          {textoRestante && restante > 0 && <span>faltam {textoRestante}</span>}
+                        </div>
+                      )}
                     </button>
                   </li>
                 );
@@ -414,7 +463,9 @@ export function ProducaoApp() {
                 <div className="text-[21px] font-black leading-tight">{alvo.produto_nome}</div>
                 {alvo.restante !== undefined && (
                   <div className="mt-1 text-[13px] text-eno-700 font-semibold">
-                    {alvo.restante > 0 ? `Faltam ${numero(alvo.restante)} ${alvo.tipo_embalagem || 'pacotes'} para a meta` : 'Meta já batida'}
+                    {alvo.restante > 0
+                      ? `Faltam ${numero(alvo.restante)} pacotes${textoFardos(alvo.restante, alvo.unidades_por_embalagem) ? ` (${textoFardos(alvo.restante, alvo.unidades_por_embalagem)})` : ''} para a meta`
+                      : 'Meta já batida'}
                   </div>
                 )}
               </div>
@@ -425,7 +476,7 @@ export function ProducaoApp() {
 
             <div className="mt-6">
               <div className="text-[12px] font-bold uppercase tracking-[0.14em] text-eno-700 text-center">
-                Quantos {alvo.tipo_embalagem ? alvo.tipo_embalagem.toLowerCase() + 's' : 'pacotes'} saíram
+                Quantos pacotes saíram
               </div>
               <div className="mt-3 flex items-center justify-between gap-3">
                 <button
@@ -466,6 +517,12 @@ export function ProducaoApp() {
                 ))}
               </div>
             </div>
+
+            {contaAtual && (
+              <div className="mt-4 rounded-xl bg-eno-900/5 px-4 py-3 text-center text-[14px] font-semibold text-eno-800 tabular-nums">
+                {[contaAtual.fardos, contaAtual.kg].filter(Boolean).join(' · ') || 'Digite a quantidade de pacotes'}
+              </div>
+            )}
 
             <label className="mt-6 block">
               <span className="block text-[13px] font-bold text-eno-800 mb-1.5">Observação (opcional)</span>
@@ -545,7 +602,7 @@ function CartaoApontamento({
         </div>
         <div className="shrink-0 text-right">
           <div className={`text-[26px] font-black tabular-nums leading-none ${muted ? 'line-through' : ''}`}>{numero(apt.pacotes)}</div>
-          <div className="text-[12px] text-papel/65">{apt.tipo_embalagem || 'pacotes'}</div>
+          <div className="text-[12px] text-papel/65">pacotes</div>
         </div>
       </div>
       {mostrarAcoes && (

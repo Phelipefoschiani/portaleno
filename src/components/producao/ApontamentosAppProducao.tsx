@@ -126,7 +126,7 @@ export function ApontamentosAppProducao() {
                     <div className="text-[20px] font-black tabular-nums text-tinta leading-none">
                       {apt.pacotes.toLocaleString('pt-BR')}
                     </div>
-                    <div className="text-[12px] text-cinza">{apt.tipo_embalagem || 'pacotes'}</div>
+                    <div className="text-[12px] text-cinza">pacotes</div>
                   </div>
                   <button
                     type="button"
