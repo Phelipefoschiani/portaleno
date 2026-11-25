@@ -31,21 +31,11 @@ const dataCurta = (iso: string) => {
   return `${d}/${m}`;
 };
 
-/** Agrupa as OPs por cliente. Cliente com entrega mais próxima fica em cima; dentro dele, a entrega mais próxima primeiro. */
-function agruparPorCliente(ops: OPApp[]) {
-  const ordem = (a: OPApp, b: OPApp) =>
-    (a.data_prevista || '9999').localeCompare(b.data_prevista || '9999') || a.numero.localeCompare(b.numero);
-  const mapa = new Map<string, OPApp[]>();
-  ops.forEach(op => {
-    const cliente = op.cliente_nome?.trim() || 'Sem cliente';
-    mapa.set(cliente, [...(mapa.get(cliente) || []), op]);
-  });
-  return [...mapa.entries()]
-    .map(([cliente, lista]) => {
-      const ordenadas = [...lista].sort(ordem);
-      return { cliente, ops: ordenadas, prazo: ordenadas.find(o => o.data_prevista)?.data_prevista };
-    })
-    .sort((a, b) => (a.prazo || '9999').localeCompare(b.prazo || '9999') || a.cliente.localeCompare(b.cliente));
+/** Ordens com entrega mais próxima em cima; sem data vai para o fim. */
+function ordenarPorEntrega(ops: OPApp[]): OPApp[] {
+  return [...ops].sort(
+    (a, b) => (a.data_prevista || '9999').localeCompare(b.data_prevista || '9999') || a.numero.localeCompare(b.numero)
+  );
 }
 
 /** Data de hoje no fuso do celular, em AAAA-MM-DD. */
@@ -289,7 +279,7 @@ export function ProducaoApp() {
 
   // OPs já pedidas para conclusão deste celular saem da lista na hora
   const opsVisiveis = ops.filter(op => !conclusoes.some(c => c.op_id === op.id));
-  const gruposOP = agruparPorCliente(opsVisiveis);
+  const opsOrdenadas = ordenarPorEntrega(opsVisiveis);
 
   const enviarAgora = async () => {
     const r = await sincronizarAgora();
@@ -377,17 +367,8 @@ export function ProducaoApp() {
               </p>
             </div>
           ) : (
-            <div className="space-y-6">
-              {gruposOP.map(grupo => (
-                <section key={grupo.cliente} className="space-y-3">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <h3 className="text-[16px] font-black leading-tight">{grupo.cliente}</h3>
-                    {grupo.prazo && (
-                      <span className="shrink-0 text-[12.5px] font-bold text-ouro-claro whitespace-nowrap">entrega {dataCurta(grupo.prazo)}</span>
-                    )}
-                  </div>
-                  <ul className="space-y-3">
-              {grupo.ops.map(op => {
+            <ul className="space-y-3">
+              {opsOrdenadas.map(op => {
                 const planejado = Math.max(1, op.quantidade_planejada_pacotes);
                 const pct = Math.min(100, Math.round((op.quantidade_produzida_pacotes / planejado) * 100));
                 const restante = Math.max(0, op.quantidade_planejada_pacotes - op.quantidade_produzida_pacotes);
@@ -410,6 +391,7 @@ export function ProducaoApp() {
                             {op.data_prevista ? <span className="font-sans font-bold text-ouro-claro"> · entrega {dataCurta(op.data_prevista)}</span> : null}
                           </div>
                           <div className="mt-0.5 text-[19px] font-extrabold leading-snug">{op.produto_nome}</div>
+                          <div className="mt-0.5 text-[14px] font-bold text-papel/85">{op.cliente_nome || 'Sem cliente'}</div>
                         </div>
                         <span className="shrink-0 rounded-lg bg-ouro text-eno-950 text-[13px] font-black px-3 py-2">Apontar</span>
                       </div>
@@ -452,10 +434,7 @@ export function ProducaoApp() {
                   </li>
                 );
               })}
-                  </ul>
-                </section>
-              ))}
-            </div>
+            </ul>
           )}
         </main>
       )}
