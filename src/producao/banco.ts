@@ -35,6 +35,9 @@ export interface OPApp {
   /** Quantidades da OP são sempre em PACOTES (unidades). */
   quantidade_planejada_pacotes: number;
   quantidade_produzida_pacotes: number;
+  /** Pedido de venda de onde veio a OP: cliente e data de entrega (AAAA-MM-DD). */
+  cliente_nome?: string;
+  data_prevista?: string;
   /** Rastreabilidade atual da OP (lote, fabricação e validade). */
   lote?: string;
   data_fabricacao?: string;
