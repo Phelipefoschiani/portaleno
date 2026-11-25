@@ -122,3 +122,16 @@ export async function listarHistorico(): Promise<ApontamentoApp[]> {
 export async function removerHistorico(id: string): Promise<void> {
   await requisicao(GAVETA_HISTORICO, 'readwrite', s => s.delete(id));
 }
+
+/** Troca o histórico local pela lista vinda do banco (apontamentos de todos os celulares). */
+export async function substituirHistorico(lista: ApontamentoApp[]): Promise<void> {
+  const db = await abrir();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(GAVETA_HISTORICO, 'readwrite');
+    const store = tx.objectStore(GAVETA_HISTORICO);
+    store.clear();
+    lista.forEach(item => store.put(item));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}

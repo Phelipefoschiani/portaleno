@@ -342,7 +342,7 @@ export function ProducaoApp() {
           <section className="space-y-3">
             <h2 className="text-[13px] font-bold uppercase tracking-[0.14em] text-papel/60">Já enviados</h2>
             {enviadosVisiveis.length === 0 ? (
-              <p className="text-[14px] text-papel/65">Nenhum apontamento enviado neste celular ainda.</p>
+              <p className="text-[14px] text-papel/65">Nenhum apontamento enviado ainda. Quem aponta aparece aqui depois que o celular pegar internet.</p>
             ) : (
               <ul className="space-y-3">
                 {enviadosVisiveis.map(apt => (

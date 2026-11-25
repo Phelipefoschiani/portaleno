@@ -5,13 +5,15 @@ import {
   removerPendente,
   substituirOPsLocais,
   gravarHistorico,
-  listarHistorico,
+  substituirHistorico,
   OPApp,
   ApontamentoApp,
 } from './banco';
 
 export const TABELA_OPS = 'ordens_producao';
 export const TABELA_APONTAMENTOS = 'apontamentos_producao_app';
+/** Quantos apontamentos mais recentes o celular guarda para consulta. */
+const LIMITE_HISTORICO = 500;
 
 export interface StatusSync {
   online: boolean;
@@ -57,7 +59,9 @@ async function enviarFila(): Promise<string | undefined> {
       continue;
     }
 
-    const { error } = await supabase.from(TABELA_APONTAMENTOS).upsert({ id: item.id, dados: item }, { onConflict: 'id' });
+    const { error } = await supabase
+      .from(TABELA_APONTAMENTOS)
+      .upsert({ id: item.id, dados: item, atualizado_em: new Date().toISOString() }, { onConflict: 'id' });
     if (error) return error.message;
     await gravarHistorico(item);
     await removerPendente(item.id);
@@ -65,21 +69,24 @@ async function enviarFila(): Promise<string | undefined> {
   return undefined;
 }
 
-/** Atualiza no histórico do celular o que o escritório já lançou na OP. */
-async function atualizarHistorico(): Promise<void> {
-  if (!supabase) return;
-  const locais = (await listarHistorico()).slice(0, 200);
-  if (locais.length === 0) return;
-  const { data, error } = await supabase.from(TABELA_APONTAMENTOS).select('id, dados').in('id', locais.map(a => a.id));
-  if (error || !data) return;
-  for (const linha of data) {
-    const noBanco = linha.dados as ApontamentoApp | null;
-    const local = locais.find(a => a.id === linha.id);
-    if (!local || !noBanco) continue;
-    if (noBanco.lancado_em !== local.lancado_em) {
-      await gravarHistorico({ ...local, lancado_em: noBanco.lancado_em });
-    }
-  }
+/**
+ * Baixa o histórico de todos os apontamentos (de todos os celulares), com o que já foi lançado na OP.
+ * Os que ainda estão na fila deste celular ficam de fora aqui, porque a fila tem a versão mais nova.
+ */
+async function atualizarHistorico(): Promise<string | undefined> {
+  if (!supabase) return 'Banco não configurado.';
+  const { data, error } = await supabase
+    .from(TABELA_APONTAMENTOS)
+    .select('id, dados')
+    .order('atualizado_em', { ascending: false })
+    .limit(LIMITE_HISTORICO);
+  if (error) return error.message;
+  const naFila = new Set((await listarPendentes()).map(p => p.id));
+  const lista = (data || [])
+    .map(l => l.dados as ApontamentoApp | null)
+    .filter((a): a is ApontamentoApp => !!a && !!a.id && !naFila.has(a.id));
+  await substituirHistorico(lista);
+  return undefined;
 }
 
 export async function sincronizarAgora(): Promise<{ ok: boolean; erro?: string }> {
@@ -88,7 +95,8 @@ export async function sincronizarAgora(): Promise<{ ok: boolean; erro?: string }
   if (erroEnvio) return { ok: false, erro: erroEnvio };
   const erroOPs = await puxarOPs();
   if (erroOPs) return { ok: false, erro: erroOPs };
-  await atualizarHistorico();
+  const erroHistorico = await atualizarHistorico();
+  if (erroHistorico) return { ok: false, erro: erroHistorico };
   return { ok: true };
 }
 
