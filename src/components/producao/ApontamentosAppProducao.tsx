@@ -19,6 +19,7 @@ interface ApontamentoRecebido {
   observacao?: string;
   criado_em: string;
   editado_em?: string;
+  excluido_em?: string;
   lancado_em?: string;
 }
 
@@ -44,7 +45,8 @@ export function ApontamentosAppProducao() {
       return;
     }
     setErro(null);
-    const itens = (data || []).map(l => l.dados as ApontamentoRecebido).filter(a => !!a && !!a.id);
+    // Excluídos pelo celular não entram para lançar
+    const itens = (data || []).map(l => l.dados as ApontamentoRecebido).filter(a => !!a && !!a.id && !a.excluido_em);
     setLista(itens.sort((a, b) => a.criado_em.localeCompare(b.criado_em)));
   };
 

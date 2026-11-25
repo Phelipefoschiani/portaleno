@@ -1,10 +1,12 @@
 // Armazenamento do app da produção no próprio aparelho (IndexedDB próprio, separado do app da roça).
-// Duas gavetas: "ops" (cópia das ordens de produção abertas) e "pendentes" (apontamentos ainda não enviados).
+// Três gavetas: "ops" (cópia das ordens de produção abertas), "pendentes" (apontamentos ainda não enviados)
+// e "historico" (apontamentos já enviados, guardados no celular para consulta e ajuste).
 
 const NOME_BANCO = 'eno_producao';
-const VERSAO = 1;
+const VERSAO = 2;
 const GAVETA_OPS = 'ops';
 const GAVETA_PENDENTES = 'pendentes';
+const GAVETA_HISTORICO = 'historico';
 
 /** Ordem de produção como o app precisa dela (subconjunto do que está no banco). */
 export interface OPApp {
@@ -17,7 +19,7 @@ export interface OPApp {
   quantidade_produzida_pacotes: number;
 }
 
-/** Apontamento feito na produção. Fica na fila até o banco confirmar. */
+/** Apontamento feito na produção. */
 export interface ApontamentoApp {
   id: string;
   op_id: string;
@@ -29,6 +31,10 @@ export interface ApontamentoApp {
   observacao?: string;
   criado_em: string;
   editado_em?: string;
+  /** Preenchido quando a pessoa exclui um apontamento já enviado (vai ao banco como exclusão). */
+  excluido_em?: string;
+  /** Preenchido pelo escritório quando o apontamento é lançado na OP (vem do banco). */
+  lancado_em?: string;
 }
 
 let conexao: Promise<IDBDatabase> | null = null;
@@ -41,6 +47,7 @@ function abrir(): Promise<IDBDatabase> {
         const db = req.result;
         if (!db.objectStoreNames.contains(GAVETA_OPS)) db.createObjectStore(GAVETA_OPS, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(GAVETA_PENDENTES)) db.createObjectStore(GAVETA_PENDENTES, { keyPath: 'id' });
+        if (!db.objectStoreNames.contains(GAVETA_HISTORICO)) db.createObjectStore(GAVETA_HISTORICO, { keyPath: 'id' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -82,7 +89,7 @@ export async function substituirOPsLocais(lista: OPApp[]): Promise<void> {
   });
 }
 
-// ---------- Fila de apontamentos ----------
+// ---------- Fila de envio (ainda não chegou ao sistema) ----------
 
 export function novoIdApontamento(): string {
   return `apt_app_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -99,4 +106,19 @@ export async function listarPendentes(): Promise<ApontamentoApp[]> {
 
 export async function removerPendente(id: string): Promise<void> {
   await requisicao(GAVETA_PENDENTES, 'readwrite', s => s.delete(id));
+}
+
+// ---------- Histórico (já enviados: consulta, ajuste enquanto não for lançado) ----------
+
+export async function gravarHistorico(item: ApontamentoApp): Promise<void> {
+  await requisicao(GAVETA_HISTORICO, 'readwrite', s => s.put(item));
+}
+
+export async function listarHistorico(): Promise<ApontamentoApp[]> {
+  const lista = await requisicao<ApontamentoApp[]>(GAVETA_HISTORICO, 'readonly', s => s.getAll());
+  return lista.sort((a, b) => b.criado_em.localeCompare(a.criado_em));
+}
+
+export async function removerHistorico(id: string): Promise<void> {
+  await requisicao(GAVETA_HISTORICO, 'readwrite', s => s.delete(id));
 }

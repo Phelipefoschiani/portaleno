@@ -1,20 +1,22 @@
 // App da produção: a funcionária escolhe a ordem aberta e informa quantos pacotes saíram.
-// Funciona sem internet; o apontamento vai para a fila e é enviado quando o celular pegar sinal.
-import { useEffect, useState } from 'react';
-import { Check, ClipboardList, Minus, Pencil, Plus, RefreshCw, Trash2, Wifi, WifiOff, X } from 'lucide-react';
+// Funciona sem internet; o apontamento fica no histórico do celular (enviando ou já enviado) até o escritório lançar na OP.
+import { Fragment, useEffect, useState } from 'react';
+import { Check, ClipboardList, Lock, Minus, Pencil, Plus, RefreshCw, Trash2, Wifi, WifiOff, X } from 'lucide-react';
 import '../index.css';
 import {
   ApontamentoApp,
   OPApp,
   gravarPendente,
+  listarHistorico,
   listarOPsLocais,
   listarPendentes,
   novoIdApontamento,
+  removerHistorico,
   removerPendente,
 } from './banco';
 import { iniciarSincronizacao, sincronizarAgora, StatusSync } from './sincronizar';
 
-type Aba = 'PRODUZIR' | 'FILA';
+type Aba = 'PRODUZIR' | 'HISTORICO';
 type Mensagem = { tom: 'ok' | 'erro'; texto: string } | null;
 
 const CHAVE_OPERADOR = 'eno_producao_operador';
@@ -48,15 +50,19 @@ interface Alvo {
   restante?: number;
 }
 
+/** Já lançado na OP pelo escritório: não pode mais ser alterado pelo celular. */
+const travado = (apt: ApontamentoApp) => !!apt.lancado_em;
+
 export function ProducaoApp() {
   const [aba, setAba] = useState<Aba>('PRODUZIR');
   const [status, setStatus] = useState<StatusSync>({ online: navigator.onLine, pendentes: 0, sincronizando: false });
   const [ops, setOps] = useState<OPApp[]>([]);
   const [fila, setFila] = useState<ApontamentoApp[]>([]);
+  const [historico, setHistorico] = useState<ApontamentoApp[]>([]);
   const [operador, setOperador] = useState(lerOperador);
   const [mensagem, setMensagem] = useState<Mensagem>(null);
 
-  // Folha de apontamento (novo ou edição de um pendente)
+  // Folha de apontamento (novo ou edição de um apontamento)
   const [alvo, setAlvo] = useState<Alvo | null>(null);
   const [editando, setEditando] = useState<ApontamentoApp | null>(null);
   const [pacotes, setPacotes] = useState('');
@@ -66,6 +72,7 @@ export function ProducaoApp() {
   const recarregar = async () => {
     setOps(await listarOPsLocais());
     setFila(await listarPendentes());
+    setHistorico(await listarHistorico());
   };
 
   useEffect(() => {
@@ -98,6 +105,10 @@ export function ProducaoApp() {
   };
 
   const abrirEdicao = (apt: ApontamentoApp) => {
+    if (travado(apt)) {
+      setMensagem({ tom: 'erro', texto: 'Esse apontamento já foi lançado na ordem. Peça para o escritório ajustar.' });
+      return;
+    }
     setAlvo({ op_id: apt.op_id, op_numero: apt.op_numero, produto_nome: apt.produto_nome, tipo_embalagem: apt.tipo_embalagem });
     setEditando(apt);
     setPacotes(String(apt.pacotes));
@@ -132,7 +143,9 @@ export function ProducaoApp() {
       editado_em: editando ? agora : undefined,
     };
     try {
+      // Alteração volta para a fila de envio; a cópia do histórico sai até o envio confirmar
       await gravarPendente(item);
+      if (editando) await removerHistorico(item.id);
       guardarOperador(nomeOperador);
       fecharFolha();
       setMensagem({ tom: 'ok', texto: navigator.onLine ? 'Apontamento salvo. Enviando…' : 'Salvo no celular. Envia quando tiver internet.' });
@@ -143,11 +156,28 @@ export function ProducaoApp() {
     }
   };
 
-  const excluirPendente = async (apt: ApontamentoApp) => {
-    if (!window.confirm(`Excluir o apontamento de ${numero(apt.pacotes)} pacotes da ${apt.op_numero}?`)) return;
-    await removerPendente(apt.id);
-    setMensagem({ tom: 'ok', texto: 'Apontamento excluído.' });
-    recarregar();
+  /** Apontamento ainda na fila: some direto. Já enviado: vai ao sistema como exclusão (fica registrado). */
+  const excluirApontamento = async (apt: ApontamentoApp, enviado: boolean) => {
+    if (travado(apt)) {
+      setMensagem({ tom: 'erro', texto: 'Esse apontamento já foi lançado na ordem. Peça para o escritório ajustar.' });
+      return;
+    }
+    const texto = `Excluir o apontamento de ${numero(apt.pacotes)} pacotes da ${apt.op_numero}?`;
+    if (!window.confirm(enviado ? `${texto}\n\nA exclusão vai para o sistema quando tiver internet.` : texto)) return;
+    try {
+      if (enviado) {
+        await gravarPendente({ ...apt, excluido_em: new Date().toISOString() });
+        await removerHistorico(apt.id);
+        setMensagem({ tom: 'ok', texto: navigator.onLine ? 'Exclusão salva. Enviando…' : 'Exclusão salva. Envia quando tiver internet.' });
+        if (navigator.onLine) sincronizarAgora();
+      } else {
+        await removerPendente(apt.id);
+        setMensagem({ tom: 'ok', texto: 'Apontamento excluído.' });
+      }
+      await recarregar();
+    } catch {
+      setMensagem({ tom: 'erro', texto: 'Não consegui excluir no celular. Tente de novo.' });
+    }
   };
 
   const enviarAgora = async () => {
@@ -158,6 +188,8 @@ export function ProducaoApp() {
 
   const pendentes = fila.length;
   const ligado = status.online;
+  const enviadosVisiveis = historico.filter(a => !a.excluido_em);
+  const excluidosVisiveis = historico.filter(a => !!a.excluido_em);
 
   return (
     <div className="min-h-dvh w-full bg-eno-900 text-papel pb-28">
@@ -177,7 +209,7 @@ export function ProducaoApp() {
               {ligado ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
               {ligado ? 'Com internet' : 'Sem internet'}
             </span>
-            {pendentes > 0 && <span className="text-[12px] text-ouro-claro font-semibold">{numero(pendentes)} na fila</span>}
+            {pendentes > 0 && <span className="text-[12px] text-ouro-claro font-semibold">{numero(pendentes)} aguardando envio</span>}
           </div>
         </div>
       </header>
@@ -266,71 +298,78 @@ export function ProducaoApp() {
         </main>
       )}
 
-      {aba === 'FILA' && (
-        <main className="px-4 pt-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-[13px] font-bold uppercase tracking-[0.14em] text-papel/60">Aguardando envio</h2>
-            {pendentes > 0 && (
-              <button
-                type="button"
-                onClick={enviarAgora}
-                disabled={status.sincronizando || !ligado}
-                className="h-10 px-4 rounded-lg bg-ouro text-eno-950 text-[14px] font-black disabled:opacity-40"
-              >
-                {status.sincronizando ? 'Enviando…' : 'Enviar agora'}
-              </button>
-            )}
-          </div>
-
-          {status.ultimoErro && pendentes > 0 && (
-            <p className="text-[13px] text-ouro-claro">Ainda não enviou: {status.ultimoErro}. Tenta de novo sozinho.</p>
-          )}
-
-          {fila.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-papel/20 px-5 py-8 text-center">
-              <Check className="w-8 h-8 mx-auto text-[#bfe6cc]" />
-              <p className="mt-3 font-semibold">Nada aguardando envio.</p>
-              <p className="mt-1 text-[14px] text-papel/65">Todos os apontamentos já estão no sistema.</p>
+      {aba === 'HISTORICO' && (
+        <main className="px-4 pt-4 space-y-6">
+          {/* Aguardando envio */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[13px] font-bold uppercase tracking-[0.14em] text-papel/60">Aguardando envio</h2>
+              {pendentes > 0 && (
+                <button
+                  type="button"
+                  onClick={enviarAgora}
+                  disabled={status.sincronizando || !ligado}
+                  className="h-10 px-4 rounded-lg bg-ouro text-eno-950 text-[14px] font-black disabled:opacity-40"
+                >
+                  {status.sincronizando ? 'Enviando…' : 'Enviar agora'}
+                </button>
+              )}
             </div>
-          ) : (
-            <ul className="space-y-3">
-              {fila.map(apt => (
-                <li key={apt.id} className="rounded-2xl bg-papel/[0.07] border border-papel/10 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="font-mono text-[12px] text-ouro-claro">{apt.op_numero}</div>
-                      <div className="font-extrabold leading-snug">{apt.produto_nome}</div>
-                      <div className="mt-1 text-[13px] text-papel/70">
-                        {apt.operador ? `${apt.operador} · ` : ''}
-                        {hora(apt.criado_em)}
-                        {apt.editado_em ? ' · editado' : ''}
-                      </div>
-                      {apt.observacao && <div className="mt-1 text-[13px] text-papel/80">“{apt.observacao}”</div>}
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className="text-[26px] font-black tabular-nums leading-none">{numero(apt.pacotes)}</div>
-                      <div className="text-[12px] text-papel/65">{apt.tipo_embalagem || 'pacotes'}</div>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => abrirEdicao(apt)}
-                      className="h-10 px-3 rounded-lg bg-papel/10 text-[14px] font-semibold inline-flex items-center gap-1.5"
-                    >
-                      <Pencil className="w-4 h-4" /> Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => excluirPendente(apt)}
-                      className="h-10 px-3 rounded-lg bg-papel/10 text-[14px] font-semibold text-[#f2b8a8] inline-flex items-center gap-1.5"
-                    >
-                      <Trash2 className="w-4 h-4" /> Excluir
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+
+            {status.ultimoErro && pendentes > 0 && (
+              <p className="text-[13px] text-ouro-claro">Ainda não enviou: {status.ultimoErro}. Tenta de novo sozinho.</p>
+            )}
+
+            {fila.length === 0 ? (
+              <p className="text-[14px] text-papel/65">Nada aguardando envio.</p>
+            ) : (
+              <ul className="space-y-3">
+                {fila.map(apt => (
+                  <Fragment key={apt.id}>
+                    <CartaoApontamento
+                      apt={apt}
+                      situacao={apt.excluido_em ? 'EXCLUSAO_PENDENTE' : 'AGUARDANDO'}
+                      onEditar={() => abrirEdicao(apt)}
+                      onExcluir={() => excluirApontamento(apt, false)}
+                    />
+                  </Fragment>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Já enviados: ficam aqui para consulta e ajuste, enquanto o escritório não lançar */}
+          <section className="space-y-3">
+            <h2 className="text-[13px] font-bold uppercase tracking-[0.14em] text-papel/60">Já enviados</h2>
+            {enviadosVisiveis.length === 0 ? (
+              <p className="text-[14px] text-papel/65">Nenhum apontamento enviado neste celular ainda.</p>
+            ) : (
+              <ul className="space-y-3">
+                {enviadosVisiveis.map(apt => (
+                  <Fragment key={apt.id}>
+                    <CartaoApontamento
+                      apt={apt}
+                      situacao={travado(apt) ? 'LANCADO' : 'NO_SISTEMA'}
+                      onEditar={() => abrirEdicao(apt)}
+                      onExcluir={() => excluirApontamento(apt, true)}
+                    />
+                  </Fragment>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {excluidosVisiveis.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-[13px] font-bold uppercase tracking-[0.14em] text-papel/60">Excluídos</h2>
+              <ul className="space-y-3">
+                {excluidosVisiveis.map(apt => (
+                  <Fragment key={apt.id}>
+                    <CartaoApontamento apt={apt} situacao="EXCLUIDO" onEditar={() => {}} onExcluir={() => {}} />
+                  </Fragment>
+                ))}
+              </ul>
+            </section>
           )}
         </main>
       )}
@@ -341,7 +380,7 @@ export function ProducaoApp() {
           {(
             [
               ['PRODUZIR', 'Produzir'],
-              ['FILA', pendentes > 0 ? `Fila (${numero(pendentes)})` : 'Fila'],
+              ['HISTORICO', pendentes > 0 ? `Histórico (${numero(pendentes)})` : 'Histórico'],
             ] as [Aba, string][]
           ).map(([id, rotulo]) => (
             <button
@@ -457,5 +496,76 @@ export function ProducaoApp() {
         </div>
       )}
     </div>
+  );
+}
+
+type SituacaoCartao = 'AGUARDANDO' | 'EXCLUSAO_PENDENTE' | 'NO_SISTEMA' | 'LANCADO' | 'EXCLUIDO';
+
+const ROTULO_SITUACAO: Record<SituacaoCartao, { texto: string; classe: string }> = {
+  AGUARDANDO: { texto: 'Aguardando envio', classe: 'bg-st-aguardando/25 text-ouro-claro' },
+  EXCLUSAO_PENDENTE: { texto: 'Exclusão aguardando envio', classe: 'bg-st-aguardando/25 text-ouro-claro' },
+  NO_SISTEMA: { texto: 'Enviado', classe: 'bg-eno-600/30 text-[#bfe6cc]' },
+  LANCADO: { texto: 'Lançado na OP', classe: 'bg-papel/15 text-papel/80' },
+  EXCLUIDO: { texto: 'Excluído', classe: 'bg-papel/10 text-papel/55' },
+};
+
+function CartaoApontamento({
+  apt,
+  situacao,
+  onEditar,
+  onExcluir,
+}: {
+  apt: ApontamentoApp;
+  situacao: SituacaoCartao;
+  onEditar: () => void;
+  onExcluir: () => void;
+}) {
+  const muted = situacao === 'EXCLUIDO';
+  const mostrarAcoes = situacao === 'AGUARDANDO' || situacao === 'NO_SISTEMA';
+  const rot = ROTULO_SITUACAO[situacao];
+  return (
+    <li className={`rounded-2xl border border-papel/10 p-4 ${muted ? 'bg-papel/[0.03] opacity-70' : 'bg-papel/[0.07]'}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] font-bold ${rot.classe}`}>
+          {situacao === 'LANCADO' && <Lock className="w-3 h-3" />}
+          {situacao === 'NO_SISTEMA' && <Check className="w-3 h-3" />}
+          {rot.texto}
+        </span>
+        <span className="text-[12px] text-papel/55">{hora(apt.criado_em)}</span>
+      </div>
+      <div className="flex items-start justify-between gap-3 mt-2">
+        <div className="min-w-0">
+          <div className="font-mono text-[12px] text-ouro-claro">{apt.op_numero}</div>
+          <div className="font-extrabold leading-snug">{apt.produto_nome}</div>
+          <div className="mt-1 text-[13px] text-papel/70">
+            {apt.operador ? `${apt.operador} · ` : ''}
+            {apt.editado_em ? 'editado' : ''}
+          </div>
+          {apt.observacao && <div className="mt-1 text-[13px] text-papel/80">“{apt.observacao}”</div>}
+        </div>
+        <div className="shrink-0 text-right">
+          <div className={`text-[26px] font-black tabular-nums leading-none ${muted ? 'line-through' : ''}`}>{numero(apt.pacotes)}</div>
+          <div className="text-[12px] text-papel/65">{apt.tipo_embalagem || 'pacotes'}</div>
+        </div>
+      </div>
+      {mostrarAcoes && (
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={onEditar}
+            className="h-10 px-3 rounded-lg bg-papel/10 text-[14px] font-semibold inline-flex items-center gap-1.5"
+          >
+            <Pencil className="w-4 h-4" /> Editar
+          </button>
+          <button
+            type="button"
+            onClick={onExcluir}
+            className="h-10 px-3 rounded-lg bg-papel/10 text-[14px] font-semibold text-[#f2b8a8] inline-flex items-center gap-1.5"
+          >
+            <Trash2 className="w-4 h-4" /> Excluir
+          </button>
+        </div>
+      )}
+    </li>
   );
 }
