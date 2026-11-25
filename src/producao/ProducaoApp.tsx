@@ -388,10 +388,12 @@ export function ProducaoApp() {
                         <div className="min-w-0">
                           <div className="font-mono text-[12px] text-ouro-claro">
                             {op.numero}
-                            {op.data_prevista ? <span className="font-sans font-bold text-ouro-claro"> · entrega {dataCurta(op.data_prevista)}</span> : null}
                           </div>
                           <div className="mt-0.5 text-[19px] font-extrabold leading-snug">{op.produto_nome}</div>
                           <div className="mt-0.5 text-[14px] font-bold text-papel/85">{op.cliente_nome || 'Sem cliente'}</div>
+                          <div className="mt-1 text-[13.5px] font-black text-ouro-claro tabular-nums">
+                            {op.data_prevista ? `Entrega ${dataCurta(op.data_prevista)}` : 'Sem data de entrega'}
+                          </div>
                         </div>
                         <span className="shrink-0 rounded-lg bg-ouro text-eno-950 text-[13px] font-black px-3 py-2">Apontar</span>
                       </div>
