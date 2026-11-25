@@ -18,6 +18,10 @@ export interface OPApp {
   /** Quantidades da OP são sempre em PACOTES (unidades). */
   quantidade_planejada_pacotes: number;
   quantidade_produzida_pacotes: number;
+  /** Rastreabilidade atual da OP (lote, fabricação e validade). */
+  lote?: string;
+  data_fabricacao?: string;
+  data_validade?: string;
   /** Pacotes que cabem em cada fardo/caixa (para mostrar fardos prontos). */
   unidades_por_embalagem?: number;
   /** Peso de cada pacote, em kg (para mostrar o total de kg). */
@@ -34,9 +38,13 @@ export interface ApontamentoApp {
   pacotes: number;
   operador?: string;
   observacao?: string;
+  /** Rastreabilidade informada na produção (AAAA-MM-DD). Vazio: o sistema usa o padrão. */
+  lote?: string;
+  data_fabricacao?: string;
+  data_validade?: string;
   criado_em: string;
   editado_em?: string;
-  /** Preenchido quando a pessoa exclui um apontamento já enviado (vai ao banco como exclusão). */
+  /** Preenchido quando a pessoa exclui um apontamento já enviado: o envio apaga do banco. */
   excluido_em?: string;
   /** Preenchido pelo escritório quando o apontamento é lançado na OP (vem do banco). */
   lancado_em?: string;

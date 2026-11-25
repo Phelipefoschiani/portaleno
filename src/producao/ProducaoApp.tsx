@@ -22,6 +22,11 @@ type Mensagem = { tom: 'ok' | 'erro'; texto: string } | null;
 const CHAVE_OPERADOR = 'eno_producao_operador';
 const inteiro = (s: string) => parseInt(s.replace(/\D/g, ''), 10) || 0;
 const numero = (v: number) => v.toLocaleString('pt-BR');
+/** Data de hoje no fuso do celular, em AAAA-MM-DD. */
+const hojeLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const kgTexto = (v: number) => `${v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg`;
 
 /** Fardos completos e pacotes soltos a partir de uma quantidade em pacotes. Sem pacotes por fardo, não há conta. */
@@ -84,6 +89,9 @@ export function ProducaoApp() {
   const [pacotes, setPacotes] = useState('');
   const [observacao, setObservacao] = useState('');
   const [erroFolha, setErroFolha] = useState('');
+  const [lote, setLote] = useState('');
+  const [fabricacao, setFabricacao] = useState('');
+  const [validade, setValidade] = useState('');
 
   const recarregar = async () => {
     setOps(await listarOPsLocais());
@@ -119,6 +127,10 @@ export function ProducaoApp() {
     setEditando(null);
     setPacotes('');
     setObservacao('');
+    // Rastreabilidade já vem preenchida: lote da OP (se existir) e fabricação de hoje
+    setLote(op.lote || '');
+    setFabricacao(hojeLocal());
+    setValidade(op.data_validade || '');
     setErroFolha('');
   };
 
@@ -139,6 +151,9 @@ export function ProducaoApp() {
     setEditando(apt);
     setPacotes(String(apt.pacotes));
     setObservacao(apt.observacao || '');
+    setLote(apt.lote || '');
+    setFabricacao(apt.data_fabricacao || hojeLocal());
+    setValidade(apt.data_validade || '');
     setErroFolha('');
   };
 
@@ -165,6 +180,9 @@ export function ProducaoApp() {
       pacotes: n,
       operador: nomeOperador || undefined,
       observacao: observacao.trim() || undefined,
+      lote: lote.trim() || undefined,
+      data_fabricacao: fabricacao || undefined,
+      data_validade: validade || undefined,
       criado_em: editando ? editando.criado_em : agora,
       editado_em: editando ? agora : undefined,
     };
@@ -214,8 +232,7 @@ export function ProducaoApp() {
 
   const pendentes = fila.length;
   const ligado = status.online;
-  const enviadosVisiveis = historico.filter(a => !a.excluido_em);
-  const excluidosVisiveis = historico.filter(a => !!a.excluido_em);
+  const enviadosVisiveis = historico;
 
   // Conta ao vivo: quantos fardos e quantos kg dá a quantidade digitada na folha
   const contaAtual = alvo
@@ -408,18 +425,6 @@ export function ProducaoApp() {
             )}
           </section>
 
-          {excluidosVisiveis.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-[13px] font-bold uppercase tracking-[0.14em] text-papel/60">Excluídos</h2>
-              <ul className="space-y-3">
-                {excluidosVisiveis.map(apt => (
-                  <Fragment key={apt.id}>
-                    <CartaoApontamento apt={apt} situacao="EXCLUIDO" onEditar={() => {}} onExcluir={() => {}} />
-                  </Fragment>
-                ))}
-              </ul>
-            </section>
-          )}
         </main>
       )}
 
@@ -517,6 +522,37 @@ export function ProducaoApp() {
                 ))}
               </div>
             </div>
+
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <label className="block">
+                <span className="block text-[13px] font-bold text-eno-800 mb-1.5">Lote</span>
+                <input
+                  value={lote}
+                  onChange={e => setLote(e.target.value)}
+                  placeholder="Ex.: 2611A"
+                  className="w-full h-12 rounded-xl border border-eno-900/20 bg-white px-3 text-[16px] focus:outline-none focus:ring-2 focus:ring-eno-600"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-[13px] font-bold text-eno-800 mb-1.5">Fabricação</span>
+                <input
+                  type="date"
+                  value={fabricacao}
+                  onChange={e => setFabricacao(e.target.value)}
+                  className="w-full h-12 rounded-xl border border-eno-900/20 bg-white px-3 text-[16px] focus:outline-none focus:ring-2 focus:ring-eno-600"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-[13px] font-bold text-eno-800 mb-1.5">Validade</span>
+                <input
+                  type="date"
+                  value={validade}
+                  onChange={e => setValidade(e.target.value)}
+                  className="w-full h-12 rounded-xl border border-eno-900/20 bg-white px-3 text-[16px] focus:outline-none focus:ring-2 focus:ring-eno-600"
+                />
+              </label>
+            </div>
+            <p className="mt-1.5 text-[12px] text-eno-700">Deixe a validade em branco para o sistema calcular pelo produto.</p>
 
             {contaAtual && (
               <div className="mt-4 rounded-xl bg-eno-900/5 px-4 py-3 text-center text-[14px] font-semibold text-eno-800 tabular-nums">

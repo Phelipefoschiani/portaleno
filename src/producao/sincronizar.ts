@@ -53,8 +53,16 @@ async function enviarFila(): Promise<string | undefined> {
 
     const lancadoNoBanco = (atual?.dados as ApontamentoApp | undefined)?.lancado_em;
     if (lancadoNoBanco) {
-      // Já lançado na OP: não reenvia (senão o lançamento seria apagado e poderia duplicar)
-      await gravarHistorico({ ...item, lancado_em: lancadoNoBanco });
+      // Já lançado na OP: não reenvia nem apaga (senão o lançamento sumiria ou poderia duplicar)
+      await gravarHistorico({ ...item, lancado_em: lancadoNoBanco, excluido_em: undefined });
+      await removerPendente(item.id);
+      continue;
+    }
+
+    if (item.excluido_em) {
+      // Exclusão: apaga de vez do banco e sai do celular
+      const { error } = await supabase.from(TABELA_APONTAMENTOS).delete().eq('id', item.id);
+      if (error) return error.message;
       await removerPendente(item.id);
       continue;
     }

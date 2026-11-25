@@ -17,6 +17,9 @@ interface ApontamentoRecebido {
   pacotes: number;
   operador?: string;
   observacao?: string;
+  lote?: string;
+  data_fabricacao?: string;
+  data_validade?: string;
   criado_em: string;
   editado_em?: string;
   excluido_em?: string;
@@ -64,6 +67,9 @@ export function ApontamentosAppProducao() {
     const op = apontarProducaoOP(apt.op_id, apt.pacotes, {
       operador: apt.operador,
       observacao: apt.observacao,
+      lote: apt.lote,
+      data_fabricacao: apt.data_fabricacao,
+      data_validade: apt.data_validade,
     });
     if (!op) {
       setLancandoId(null);
