@@ -1,0 +1,17 @@
+{
+  "id": "/producao.html",
+  "name": "Produção · Grupo ENO",
+  "short_name": "Produção ENO",
+  "description": "Apontamento do que sai da produção, com ou sem internet.",
+  "start_url": "/producao.html",
+  "scope": "/producao.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#042013",
+  "theme_color": "#042013",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "/favicon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

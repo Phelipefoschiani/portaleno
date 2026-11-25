@@ -2,7 +2,14 @@
 import { jsPDF } from 'jspdf';
 import { EMPRESA } from './empresa';
 import { hojeISO, formatarDataBR } from './datas';
-import { MetaVenda, realizadoMeta, rotuloEscopo, rotuloUnidade } from '../data/metasData';
+import {
+  MetaVenda,
+  realizadoMeta,
+  realizadoDaParteDoCliente,
+  rotuloEscopo,
+  rotuloModoDistribuicao,
+  rotuloUnidade,
+} from '../data/metasData';
 import { PedidoVenda } from '../data/pedidosVendaData';
 import { ProdutoEstoque } from '../data/produtosData';
 
@@ -111,6 +118,25 @@ export function gerarPdfMetas(
       pdf.setFont('helvetica', 'bold');
       pdf.text(`${pct.toFixed(0)}%`, 195, y, { align: 'right' });
       y += altura;
+
+      // Parte de cada cliente, abaixo da meta do representante (mesmas colunas, recuo na coluna Meta)
+      (m.distribuicao || []).filter(d => d.valor > 0).forEach(d => {
+        if (y > 265) {
+          pdf.addPage();
+          y = 20;
+        }
+        const parte = realizadoDaParteDoCliente(m, d, pedidos, produtos);
+        const pctParte = parte.alvo > 0 ? Math.min(100, (parte.realizado / parte.alvo) * 100) : 0;
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(CINZA[0], CINZA[1], CINZA[2]);
+        const nomeCliente = pdf.splitTextToSize(`- ${d.cliente_nome} · ${rotuloModoDistribuicao(d)}`, 62) as string[];
+        pdf.text(nomeCliente, 20, y);
+        pdf.text(fmt({ unidade: parte.unidade }, parte.alvo), 148, y, { align: 'right' });
+        pdf.text(fmt({ unidade: parte.unidade }, parte.realizado), 178, y, { align: 'right' });
+        pdf.text(`${pctParte.toFixed(0)}%`, 195, y, { align: 'right' });
+        y += Math.max(1, nomeCliente.length) * 4 + 1.5;
+      });
     });
 
     // Resumo

@@ -39,6 +39,7 @@ import { carregarColaboradoresProducao } from '../../data/cadastrosData';
 import { carregarLotesMP, lotesDisponiveisMP, rotuloLoteMP, EVENTO_LOTES_MP, LoteMateriaPrima } from '../../data/lotesMateriaPrimaData';
 import { formatarDataBR, hojeISO } from '../../lib/datas';
 import { PedidosNavTabs } from '../pedidos/PedidosNavTabs';
+import { ApontamentosAppProducao } from './ApontamentosAppProducao';
 import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
 import { BarraFiltros, CampoBusca, Segmentado, SeletorFiltro } from '../ui/BarraFiltros';
 import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
@@ -388,6 +389,7 @@ export function OrdensProducaoPainel({ modo = 'ADMIN', onNavigate }: Props) {
 
   const conteudo = (
     <>
+      <ApontamentosAppProducao />
       <div className="mx-auto w-full max-w-[1700px] shrink-0">
         <CabecalhoPagina
           titulo="Ordens de produção"

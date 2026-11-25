@@ -9,6 +9,17 @@ export type DestinatarioMeta = 'CLIENTE' | 'RCA';
 export type EscopoMeta = 'TOTAL' | 'PRODUTO' | 'CATEGORIA';
 export type UnidadeMeta = 'VALOR' | 'KG';
 
+/** Como a parte de cada cliente é definida dentro da meta do representante. */
+export type ModoDistribuicao = 'PERCENTUAL' | 'PESO' | 'VALOR';
+
+/** Parte de um cliente na meta do representante: % da meta, kg ou R$. */
+export interface DistribuicaoMeta {
+  cliente_id: string;
+  cliente_nome: string;
+  modo: ModoDistribuicao;
+  valor: number;
+}
+
 export interface MetaVenda {
   id: string;
   destinatario: DestinatarioMeta;
@@ -22,7 +33,30 @@ export interface MetaVenda {
   inicio: string; // AAAA-MM-DD
   fim: string;    // AAAA-MM-DD
   criado_em: string;
+  /** Só em metas de RCA: meta de cada cliente dele. Metas antigas não têm; tratadas como antes. */
+  distribuicao?: DistribuicaoMeta[];
 }
+
+/** Meta de um cliente já calculada a partir da distribuição de uma meta de RCA. */
+export interface MetaCliente extends MetaVenda {
+  /** id da meta do RCA de onde veio */
+  derivada_de: string;
+}
+
+/** Valor da meta do cliente, na unidade que o próprio modo define. */
+export function metaDoClienteNaDistribuicao(
+  m: Pick<MetaVenda, 'unidade' | 'valor_meta'>,
+  d: DistribuicaoMeta
+): { unidade: UnidadeMeta; valor: number } {
+  if (d.modo === 'PERCENTUAL') return { unidade: m.unidade, valor: Math.round(m.valor_meta * d.valor) / 100 };
+  if (d.modo === 'PESO') return { unidade: 'KG', valor: d.valor };
+  return { unidade: 'VALOR', valor: d.valor };
+}
+
+export const rotuloModoDistribuicao = (d: Pick<DistribuicaoMeta, 'modo' | 'valor'>) =>
+  d.modo === 'PERCENTUAL' ? `${d.valor.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% da meta`
+  : d.modo === 'PESO' ? `${d.valor.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`
+  : `R$ ${d.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const STORAGE_KEY_METAS = 'grupo_eno_metas_v1';
 export const EVENTO_METAS = 'metas_updated';
@@ -78,7 +112,78 @@ export function realizadoMeta(
 
 /** Metas de um destinatário que estão valendo hoje (período em andamento). */
 export function metasAtivasDo(destinatario: DestinatarioMeta, id: string, hoje: string): MetaVenda[] {
-  return carregarMetas().filter(m =>
+  const proprias = carregarMetas().filter(m =>
     m.destinatario === destinatario && m.destinatario_id === id && m.inicio <= hoje && m.fim >= hoje
   );
+  if (destinatario !== 'CLIENTE') return proprias;
+  return [...proprias, ...metasDerivadasDoCliente(id, hoje)];
+}
+
+/** Metas do cliente que vêm da divisão feita nas metas dos representantes (valendo hoje). */
+export function metasDerivadasDoCliente(clienteId: string, hoje: string): MetaCliente[] {
+  const saida: MetaCliente[] = [];
+  carregarMetas().forEach(m => {
+    if (m.destinatario !== 'RCA' || !m.distribuicao || m.inicio > hoje || m.fim < hoje) return;
+    m.distribuicao.forEach(d => {
+      if (d.cliente_id !== clienteId || !(d.valor > 0)) return;
+      const alvo = metaDoClienteNaDistribuicao(m, d);
+      saida.push({
+        ...m,
+        id: `${m.id}__${clienteId}`,
+        derivada_de: m.id,
+        destinatario: 'CLIENTE',
+        destinatario_id: clienteId,
+        destinatario_nome: d.cliente_nome,
+        unidade: alvo.unidade,
+        valor_meta: alvo.valor,
+        distribuicao: undefined,
+      });
+    });
+  });
+  return saida;
+}
+
+/**
+ * Distribuição para editar numa meta de RCA. Meta sem divisão ainda: divide igualmente em % entre os clientes do RCA.
+ * Meta já dividida: mantém o que estava e põe clientes novos com 0 (o usuário escolhe quanto dão).
+ */
+export function distribuicaoInicial(
+  existente: DistribuicaoMeta[] | undefined,
+  clientesDoRca: { id: string; nome: string }[]
+): DistribuicaoMeta[] {
+  if (!existente) {
+    const n = clientesDoRca.length;
+    const parte = n > 0 ? Math.round((100 / n) * 100) / 100 : 0;
+    return clientesDoRca.map(c => ({ cliente_id: c.id, cliente_nome: c.nome, modo: 'PERCENTUAL' as ModoDistribuicao, valor: parte }));
+  }
+  const porId = new Map(existente.map(d => [d.cliente_id, d]));
+  const listaRca = clientesDoRca.map(c =>
+    porId.get(c.id)
+      ? { ...porId.get(c.id)!, cliente_nome: c.nome }
+      : { cliente_id: c.id, cliente_nome: c.nome, modo: 'PERCENTUAL' as ModoDistribuicao, valor: 0 }
+  );
+  const idsRca = new Set(clientesDoRca.map(c => c.id));
+  // Clientes que saíram do RCA continuam listados só se já tinham parte (para não perder a conta)
+  const sobra = existente.filter(d => !idsRca.has(d.cliente_id) && d.valor > 0);
+  return [...listaRca, ...sobra];
+}
+
+/** Quanto um cliente já vendeu para a parte dele numa meta de RCA (mesma regra do realizadoMeta). */
+export function realizadoDaParteDoCliente(
+  m: MetaVenda,
+  d: DistribuicaoMeta,
+  pedidos: PedidoVenda[] = carregarPedidosVenda(),
+  produtos: ProdutoEstoque[] = carregarEstoqueProdutos()
+): { realizado: number; alvo: number; unidade: UnidadeMeta } {
+  const alvo = metaDoClienteNaDistribuicao(m, d);
+  const parte: MetaVenda = {
+    ...m,
+    id: `${m.id}__${d.cliente_id}`,
+    destinatario: 'CLIENTE',
+    destinatario_id: d.cliente_id,
+    unidade: alvo.unidade,
+    valor_meta: alvo.valor,
+    distribuicao: undefined,
+  };
+  return { realizado: realizadoMeta(parte, pedidos, produtos), alvo: alvo.valor, unidade: alvo.unidade };
 }

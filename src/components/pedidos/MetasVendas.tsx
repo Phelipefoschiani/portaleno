@@ -13,11 +13,17 @@ import {
   salvarMetas,
   EVENTO_METAS,
   DestinatarioMeta,
+  DistribuicaoMeta,
   EscopoMeta,
+  ModoDistribuicao,
   UnidadeMeta,
   MetaVenda,
+  distribuicaoInicial,
+  metaDoClienteNaDistribuicao,
+  realizadoDaParteDoCliente,
   realizadoMeta,
   rotuloEscopo,
+  rotuloModoDistribuicao,
   rotuloUnidade,
 } from '../../data/metasData';
 
@@ -31,8 +37,11 @@ const ultimoDiaDoMes = () => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())}`;
 };
 
-const fmtValor = (m: Pick<MetaVenda, 'unidade'>, v: number) =>
-  m.unidade === 'VALOR' ? formatarMoeda(v) : `${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`;
+const fmtUnidade = (unidade: UnidadeMeta, v: number) =>
+  unidade === 'VALOR' ? formatarMoeda(v) : `${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`;
+const fmtValor = (m: Pick<MetaVenda, 'unidade'>, v: number) => fmtUnidade(m.unidade, v);
+
+const MODOS: [ModoDistribuicao, string][] = [['PERCENTUAL', '% da meta'], ['PESO', 'Kg'], ['VALOR', 'R$']];
 
 const campo = 'h-10 w-full rounded-md border border-linha bg-papel px-3 text-[14px]';
 const rotulo = 'block text-[12px] font-bold text-tinta-2 mb-1';
@@ -72,6 +81,8 @@ export function MetasVendas() {
   const [valorMeta, setValorMeta] = useState('');
   const [inicio, setInicio] = useState(primeiroDiaDoMes());
   const [fim, setFim] = useState(ultimoDiaDoMes());
+  // Parte de cada cliente, quando o destinatário é um representante
+  const [distribuicaoForm, setDistribuicaoForm] = useState<DistribuicaoMeta[]>([]);
 
   const recarregar = () => {
     setMetas(carregarMetas());
@@ -102,6 +113,10 @@ export function MetasVendas() {
     return r ? r.nome_fantasia || r.nome_completo : '';
   };
 
+  // Clientes ativos vinculados ao representante (campo vendedor do cliente)
+  const clientesDoRca = (rcaId: string) =>
+    clientes.filter(c => c.vendedor_id === rcaId).map(c => ({ id: c.id, nome: c.fantasia || c.razao_nome }));
+
   const limparForm = () => {
     setEditandoId(null);
     setDestinatarioId('');
@@ -111,6 +126,7 @@ export function MetasVendas() {
     setValorMeta('');
     setInicio(primeiroDiaDoMes());
     setFim(ultimoDiaDoMes());
+    setDistribuicaoForm([]);
     setErro('');
   };
 
@@ -124,19 +140,29 @@ export function MetasVendas() {
     setValorMeta(String(m.valor_meta).replace('.', ','));
     setInicio(m.inicio);
     setFim(m.fim);
+    setDistribuicaoForm(m.destinatario === 'RCA' ? distribuicaoInicial(m.distribuicao, clientesDoRca(m.destinatario_id)) : []);
     setErro('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const valorNumerico = parseFloat(valorMeta.replace(/\./g, '').replace(',', '.')) || 0;
+  const somaPercentual = distribuicaoForm
+    .filter(d => d.modo === 'PERCENTUAL')
+    .reduce((a, d) => a + (Number(d.valor) || 0), 0);
+
+  const alterarParte = (i: number, patch: Partial<DistribuicaoMeta>) =>
+    setDistribuicaoForm(lista => lista.map((d, j) => (j === i ? { ...d, ...patch } : d)));
+
   const salvar = (e: React.FormEvent) => {
     e.preventDefault();
     setErro('');
-    const valor = parseFloat(valorMeta.replace(/\./g, '').replace(',', '.')) || 0;
+    const valor = valorNumerico;
     if (!destinatarioId) return setErro(`Escolha o ${destinatario === 'CLIENTE' ? 'cliente' : 'representante'}.`);
     if (escopo === 'PRODUTO' && !escopoValor) return setErro('Escolha o produto.');
     if (escopo === 'CATEGORIA' && !escopoValor) return setErro('Escolha a categoria.');
     if (valor <= 0) return setErro('Informe o valor da meta.');
     if (!inicio || !fim || inicio > fim) return setErro('Confira o período: o início precisa ser antes do fim.');
+    if (destinatario === 'RCA' && somaPercentual > 100) return setErro('A soma das porcentagens dos clientes passa de 100%.');
 
     const escopoNome =
       escopo === 'PRODUTO' ? produtos.find(p => p.id === escopoValor)?.nome || '' :
@@ -155,6 +181,9 @@ export function MetasVendas() {
       inicio,
       fim,
       criado_em: editandoId ? (metas.find(m => m.id === editandoId)?.criado_em || hojeISO()) : hojeISO(),
+      ...(destinatario === 'RCA'
+        ? { distribuicao: distribuicaoForm.filter(d => d.valor > 0).map(d => ({ ...d })) }
+        : {}),
     };
     const lista = carregarMetas();
     salvarMetas(editandoId ? lista.map(m => (m.id === editandoId ? dados : m)) : [dados, ...lista]);
@@ -208,7 +237,7 @@ export function MetasVendas() {
                   <button
                     key={t}
                     type="button"
-                    onClick={() => { setDestinatario(t); setDestinatarioId(''); }}
+                    onClick={() => { setDestinatario(t); setDestinatarioId(''); setDistribuicaoForm([]); }}
                     className={`h-10 px-4 text-[13px] font-semibold ${destinatario === t ? 'bg-eno-800 text-white' : 'bg-papel'}`}
                   >
                     {t === 'CLIENTE' ? 'Cliente' : 'Representante'}
@@ -218,7 +247,15 @@ export function MetasVendas() {
             </div>
             <div>
               <label className={rotulo}>{destinatario === 'CLIENTE' ? 'Cliente' : 'Representante'}</label>
-              <select className={campo} value={destinatarioId} onChange={e => setDestinatarioId(e.target.value)}>
+              <select
+                className={campo}
+                value={destinatarioId}
+                onChange={e => {
+                  setDestinatarioId(e.target.value);
+                  // Troca de representante: a divisão começa de novo (igual entre os clientes dele)
+                  setDistribuicaoForm(destinatario === 'RCA' && e.target.value ? distribuicaoInicial(undefined, clientesDoRca(e.target.value)) : []);
+                }}
+              >
                 <option value="">Escolha...</option>
                 {(destinatario === 'CLIENTE' ? clientes.map(c => ({ id: c.id, nome: c.fantasia || c.razao_nome })) : rcas.map(r => ({ id: r.id, nome: r.nome_fantasia || r.nome_completo })))
                   .sort((a, b) => a.nome.localeCompare(b.nome))
@@ -290,6 +327,58 @@ export function MetasVendas() {
             </div>
           </div>
 
+          {destinatario === 'RCA' && destinatarioId && (
+            <div className="rounded-md border border-linha p-3 space-y-3">
+              <div>
+                <div className="text-[13px] font-bold">Meta de cada cliente deste representante</div>
+                <div className="text-[12px] text-cinza">
+                  Escolha como cada cliente entra: % da meta, kg ou R$. Quem ficar com zero não tem meta. Cada cliente recebe a meta automaticamente no portal dele.
+                </div>
+              </div>
+              {distribuicaoForm.length === 0 && (
+                <div className="text-[13px] text-cinza">
+                  Nenhum cliente ativo vinculado a este representante. Vincule o cliente ao representante no cadastro de clientes.
+                </div>
+              )}
+              {distribuicaoForm.map((d, i) => {
+                const alvo = metaDoClienteNaDistribuicao({ unidade, valor_meta: valorNumerico }, d);
+                return (
+                  <div key={d.cliente_id} className="grid grid-cols-[minmax(0,1fr)_120px_120px] sm:grid-cols-[minmax(0,1fr)_130px_140px_minmax(0,1fr)] gap-2 items-center">
+                    <div className="min-w-0 truncate text-[13.5px] font-semibold">{d.cliente_nome}</div>
+                    <select
+                      className="h-10 rounded-md border border-linha bg-papel px-2 text-[13px]"
+                      value={d.modo}
+                      onChange={e => alterarParte(i, { modo: e.target.value as ModoDistribuicao })}
+                      aria-label={`Medida da meta de ${d.cliente_nome}`}
+                    >
+                      {MODOS.map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
+                    </select>
+                    <input
+                      type="number"
+                      min={0}
+                      step="any"
+                      inputMode="decimal"
+                      className="h-10 rounded-md border border-linha bg-papel px-3 text-[14px] tabular-nums"
+                      value={d.valor || ''}
+                      placeholder="0"
+                      onChange={e => alterarParte(i, { valor: Math.max(0, Number(e.target.value) || 0) })}
+                      aria-label={`Valor da meta de ${d.cliente_nome}`}
+                    />
+                    <div className="hidden sm:block text-[12.5px] text-cinza tabular-nums truncate">
+                      {d.valor > 0 ? `= ${fmtUnidade(alvo.unidade, alvo.valor)}` : 'sem meta'}
+                    </div>
+                  </div>
+                );
+              })}
+              {distribuicaoForm.some(d => d.modo === 'PERCENTUAL') && (
+                <div className={`text-[12.5px] tabular-nums ${somaPercentual > 100 ? 'text-st-vencido font-bold' : 'text-cinza'}`}>
+                  Porcentagens somadas: {somaPercentual.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%
+                  {somaPercentual > 100 ? ' · passou de 100%' : ''}
+                </div>
+              )}
+            </div>
+          )}
+
           {erro && <div className="rounded-md bg-st-vencido-bg text-st-vencido text-[13px] px-3 py-2">{erro}</div>}
 
           <div className="flex gap-2">
@@ -339,6 +428,38 @@ export function MetasVendas() {
                   <div className={`h-full ${pct >= 100 ? 'bg-st-pago' : 'bg-eno-700'}`} style={{ width: `${pct}%` }} />
                 </div>
                 {falta > 0 && <div className="mt-1 text-[12px] text-cinza">Faltam {fmtValor(m, falta)}</div>}
+
+                {m.destinatario === 'RCA' && (
+                  <div className="mt-3 border-t border-linha pt-3 space-y-3">
+                    <div className="text-[12px] font-bold text-tinta-2">Clientes</div>
+                    {m.distribuicao === undefined && (
+                      <div className="text-[12.5px] text-cinza">Meta sem divisão por cliente. Clique em editar para dividir entre os clientes.</div>
+                    )}
+                    {m.distribuicao !== undefined && m.distribuicao.every(d => !(d.valor > 0)) && (
+                      <div className="text-[12.5px] text-cinza">Nenhum cliente com meta nesta data.</div>
+                    )}
+                    {(m.distribuicao || []).filter(d => d.valor > 0).map(d => {
+                      const parte = realizadoDaParteDoCliente(m, d, pedidos, produtos);
+                      const pctParte = parte.alvo > 0 ? Math.min(100, (parte.realizado / parte.alvo) * 100) : 0;
+                      return (
+                        <div key={d.cliente_id}>
+                          <div className="flex items-baseline justify-between gap-2 text-[13px]">
+                            <span className="min-w-0 truncate">
+                              <strong>{d.cliente_nome}</strong> <span className="text-cinza">· {rotuloModoDistribuicao(d)}</span>
+                            </span>
+                            <span className="font-bold tabular-nums">{pctParte.toFixed(0)}%</span>
+                          </div>
+                          <div className="mt-1 h-1.5 rounded-full bg-papel-3 overflow-hidden">
+                            <div className={`h-full ${pctParte >= 100 ? 'bg-st-pago' : 'bg-eno-700'}`} style={{ width: `${pctParte}%` }} />
+                          </div>
+                          <div className="mt-1 text-[12px] text-cinza tabular-nums">
+                            {fmtUnidade(parte.unidade, parte.realizado)} de {fmtUnidade(parte.unidade, parte.alvo)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}

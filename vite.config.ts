@@ -41,10 +41,11 @@ export default defineConfig(() => {
     },
     build: {
       rollupOptions: {
-        // Duas páginas: o sistema (index.html) e o app da roça (roca.html, instalável no celular)
+        // Três páginas: o sistema (index.html), o app da roça (roca.html) e o app da produção (producao.html)
         input: {
           main: path.resolve(__dirname, 'index.html'),
           roca: path.resolve(__dirname, 'roca.html'),
+          producao: path.resolve(__dirname, 'producao.html'),
         },
       },
     },

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Produção · Grupo ENO</title>
+    <link rel="manifest" href="/producao.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#042013" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Produção ENO" />
+    <meta name="application-name" content="Produção ENO" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Funciona sem internet depois da primeira abertura.
+      // Escopo próprio (/producao.html), para não brigar com o service worker da roça.
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/producao-sw.js', { scope: '/producao.html' }).catch(function () {});
+        });
+      }
+    </script>
+    <script type="module" src="/src/producao/main.tsx"></script>
+  </body>
+</html>
