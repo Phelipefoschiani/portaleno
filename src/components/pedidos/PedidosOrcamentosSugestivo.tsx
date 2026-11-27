@@ -1062,8 +1062,6 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
     setFiltroOrigem('TODAS');
     setFiltroSubtipo('TODOS');
   };
-  const hojeLista = hojeISO();
-  const validadeVencida = (d?: string) => !!d && d < hojeLista;
   const moedaBR = (v: unknown) => formatarMoeda(v);
   const vazioPorFiltro = filtrosAtivos && pedidosNaEtapa.length > 0;
 
@@ -1287,7 +1285,6 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                     {!modoCliente && <Th>Cliente</Th>}
                     <Th>{modoPortal ? 'Situação' : 'RCA'}</Th>
                     <Th>Itens</Th>
-                    <Th>Validade</Th>
                     <Th numero>Valor</Th>
                     <Th className="text-right">Ações</Th>
                   </tr>
@@ -1296,7 +1293,6 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                   {pedidosFiltrados.map(item => {
                     const itensResumo = item.itens.map(i => `${i.quantidade}x ${i.tipo_embalagem}`).join(' + ');
                     const origem = ROTULO_ORIGEM[origemEfetiva(item)] || origemEfetiva(item);
-                    const vencida = item.etapa === 'ORCAMENTO' && validadeVencida(item.data_validade_orcamento);
                     return (
                       <tr
                         key={item.id}
@@ -1332,17 +1328,6 @@ export function PedidosOrcamentosSugestivo({ onNavigate, rcaFixoId, clienteFixoI
                         <Td className="max-w-[240px]">
                           <div className="truncate" title={itensResumo}>{itensResumo}</div>
                           <div className="text-[11.5px] text-cinza tabular-nums">{textoPeso(item.peso_total_kg)}</div>
-                        </Td>
-                        <Td className="whitespace-nowrap tabular-nums">
-                          {item.data_validade_orcamento ? (
-                            vencida ? (
-                              <StatusChip tom="vencido">Venceu {formatarDataBR(item.data_validade_orcamento)}</StatusChip>
-                            ) : (
-                              formatarDataBR(item.data_validade_orcamento)
-                            )
-                          ) : (
-                            <span className="text-cinza-claro">—</span>
-                          )}
                         </Td>
                         <Td numero>
                           <div className="font-bold text-tinta text-[13.5px]">{moedaBR(item.valor_total)}</div>
