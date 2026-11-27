@@ -1,4 +1,4 @@
-// Folha A4 com as metas de representantes, para mandar a eles.
+// Folha A4 com os objetivos de representantes, para mandar a eles.
 import { jsPDF } from 'jspdf';
 import { EMPRESA } from './empresa';
 import { hojeISO, formatarDataBR } from './datas';
@@ -9,6 +9,7 @@ import {
   rotuloEscopo,
   rotuloModoDistribuicao,
   rotuloUnidade,
+  formatarValorMeta,
 } from '../data/metasData';
 import { PedidoVenda } from '../data/pedidosVendaData';
 import { ProdutoEstoque } from '../data/produtosData';
@@ -19,10 +20,7 @@ export interface RepresentanteMeta {
   metas: MetaVenda[];
 }
 
-const fmt = (m: Pick<MetaVenda, 'unidade'>, v: number) =>
-  m.unidade === 'VALOR'
-    ? `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : `${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`;
+const fmt = (m: Pick<MetaVenda, 'unidade'>, v: number) => formatarValorMeta(m.unidade, v);
 
 const VERDE: [number, number, number] = [6, 78, 59];
 const CINZA: [number, number, number] = [100, 116, 139];
@@ -59,7 +57,7 @@ export function gerarPdfMetas(
     pdf.setTextColor(VERDE[0], VERDE[1], VERDE[2]);
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(18);
-    pdf.text('Metas de venda', 14, y);
+    pdf.text('Objetivos de venda', 14, y);
     y += 8;
     pdf.setFontSize(12);
     pdf.setTextColor(0, 0, 0);
@@ -74,9 +72,9 @@ export function gerarPdfMetas(
     // Tabela
     // Colunas: Meta (14–84) | Período (86–126) | Valor da meta (148) | Realizado (178) | % (194)
     const colunas = [
-      { t: 'Meta', x: 14 },
+      { t: 'Objetivo', x: 14 },
       { t: 'Período', x: 86 },
-      { t: 'Meta', x: 148, dir: true },
+      { t: 'Objetivo', x: 148, dir: true },
       { t: 'Realizado', x: 178, dir: true },
       { t: '%', x: 195, dir: true },
     ];
@@ -92,7 +90,7 @@ export function gerarPdfMetas(
     if (metas.length === 0) {
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(0, 0, 0);
-      pdf.text('Nenhuma meta cadastrada para este representante.', 14, y + 4);
+      pdf.text('Nenhum objetivo cadastrado para este representante.', 14, y + 4);
     }
     metas.forEach((m, i) => {
       if (y > 265) {
@@ -147,7 +145,7 @@ export function gerarPdfMetas(
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(9);
         pdf.setTextColor(CINZA[0], CINZA[1], CINZA[2]);
-        pdf.text('Os valores consideram pedidos faturados ou entregues no período de cada meta.', 14, y);
+        pdf.text('Os valores consideram pedidos faturados ou entregues no período de cada objetivo.', 14, y);
       }
     }
   });

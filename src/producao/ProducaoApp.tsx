@@ -405,7 +405,7 @@ export function ProducaoApp() {
                           {numero(op.quantidade_produzida_pacotes)} de {numero(op.quantidade_planejada_pacotes)} pacotes
                         </span>
                         <span className={restante > 0 ? 'font-bold text-ouro-claro' : 'font-bold text-[#bfe6cc]'}>
-                          {restante > 0 ? `faltam ${numero(restante)} pacotes` : 'meta batida'}
+                          {restante > 0 ? `faltam ${numero(restante)} pacotes` : 'ordem completa'}
                         </span>
                       </div>
                       {(fardosPlan || kgPlan !== null) && (
@@ -588,8 +588,8 @@ export function ProducaoApp() {
                 {alvo.restante !== undefined && (
                   <div className="mt-1 text-[13px] text-eno-700 font-semibold">
                     {alvo.restante > 0
-                      ? `Faltam ${numero(alvo.restante)} pacotes${textoFardos(alvo.restante, alvo.unidades_por_embalagem) ? ` (${textoFardos(alvo.restante, alvo.unidades_por_embalagem)})` : ''} para a meta`
-                      : 'Meta já batida'}
+                      ? `Faltam ${numero(alvo.restante)} pacotes${textoFardos(alvo.restante, alvo.unidades_por_embalagem) ? ` (${textoFardos(alvo.restante, alvo.unidades_por_embalagem)})` : ''} para completar a ordem`
+                      : 'Ordem já completa'}
                   </div>
                 )}
               </div>

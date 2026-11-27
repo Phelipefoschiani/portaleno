@@ -25,6 +25,8 @@ import {
   rotuloEscopo,
   rotuloModoDistribuicao,
   rotuloUnidade,
+  formatarValorMeta,
+  UNIDADES_META,
 } from '../../data/metasData';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -37,16 +39,22 @@ const ultimoDiaDoMes = () => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())}`;
 };
 
-const fmtUnidade = (unidade: UnidadeMeta, v: number) =>
-  unidade === 'VALOR' ? formatarMoeda(v) : `${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`;
+const fmtUnidade = (unidade: UnidadeMeta, v: number) => formatarValorMeta(unidade, v);
 const fmtValor = (m: Pick<MetaVenda, 'unidade'>, v: number) => fmtUnidade(m.unidade, v);
 
-const MODOS: [ModoDistribuicao, string][] = [['PERCENTUAL', '% da meta'], ['PESO', 'Kg'], ['VALOR', 'R$']];
+const MODOS: [ModoDistribuicao, string][] = [
+  ['PERCENTUAL', '% do objetivo'],
+  ['VALOR', 'R$'],
+  ['PESO', 'Kg'],
+  ['CAIXA', 'Caixas'],
+  ['FARDO', 'Fardos'],
+  ['UNIDADE', 'Unidades'],
+];
 
 const campo = 'h-10 w-full rounded-md border border-linha bg-papel px-3 text-[14px]';
 const rotulo = 'block text-[12px] font-bold text-tinta-2 mb-1';
 
-/** Cadastro e acompanhamento das metas de venda (menu Vendas). */
+/** Cadastro e acompanhamento dos objetivos de venda (menu Vendas). */
 export function MetasVendas() {
   const [metas, setMetas] = useState<MetaVenda[]>([]);
   const [pedidos, setPedidos] = useState<PedidoVenda[]>([]);
@@ -66,7 +74,7 @@ export function MetasVendas() {
         metas: metas.filter(m => m.destinatario === 'RCA' && m.destinatario_id === r.id),
       }))
       .filter(r => rcaPdf !== 'TODOS' || r.metas.length > 0);
-    if (reps.length === 0) return setErro('Nenhum representante com meta para gerar.');
+    if (reps.length === 0) return setErro('Nenhum representante com objetivo para gerar.');
     const pdf = gerarPdfMetas(reps, pedidos, produtos);
     const nome = rcaPdf === 'TODOS' ? 'representantes' : reps[0].nome.replace(/\s+/g, '_');
     pdf.save(`Metas_${nome}.pdf`);
@@ -160,7 +168,7 @@ export function MetasVendas() {
     if (!destinatarioId) return setErro(`Escolha o ${destinatario === 'CLIENTE' ? 'cliente' : 'representante'}.`);
     if (escopo === 'PRODUTO' && !escopoValor) return setErro('Escolha o produto.');
     if (escopo === 'CATEGORIA' && !escopoValor) return setErro('Escolha a categoria.');
-    if (valor <= 0) return setErro('Informe o valor da meta.');
+    if (valor <= 0) return setErro('Informe o valor do objetivo.');
     if (!inicio || !fim || inicio > fim) return setErro('Confira o período: o início precisa ser antes do fim.');
     if (destinatario === 'RCA' && somaPercentual > 100) return setErro('A soma das porcentagens dos clientes passa de 100%.');
 
@@ -191,7 +199,7 @@ export function MetasVendas() {
   };
 
   const excluir = (m: MetaVenda) => {
-    if (!confirm(`Excluir a meta de ${m.destinatario_nome}?`)) return;
+    if (!confirm(`Excluir o objetivo de ${m.destinatario_nome}?`)) return;
     salvarMetas(carregarMetas().filter(x => x.id !== m.id));
     if (editandoId === m.id) limparForm();
   };
@@ -205,8 +213,8 @@ export function MetasVendas() {
     <div className="h-full w-full overflow-y-auto bg-papel-2 text-tinta">
       <div className="mx-auto w-full max-w-[1200px] px-4 sm:px-6 pb-8">
         <CabecalhoPagina
-          titulo="Metas"
-          resumo={`${metas.length} ${metas.length === 1 ? 'meta cadastrada' : 'metas cadastradas'} · o realizado conta pedidos faturados ou entregues no período`}
+          titulo="Objetivos"
+          resumo={`${metas.length} ${metas.length === 1 ? 'objetivo cadastrado' : 'objetivos cadastrados'} · o realizado conta pedidos faturados ou entregues no período`}
         />
 
         <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-linha bg-papel p-3">
@@ -227,7 +235,7 @@ export function MetasVendas() {
         </div>
 
         <form onSubmit={salvar} className="mt-4 rounded-lg border border-linha bg-papel p-4 space-y-4">
-          <div className="text-[13px] font-bold">{editandoId ? 'Editar meta' : 'Nova meta'}</div>
+          <div className="text-[13px] font-bold">{editandoId ? 'Editar objetivo' : 'Novo objetivo'}</div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -264,7 +272,7 @@ export function MetasVendas() {
             </div>
 
             <div>
-              <span className={rotulo}>Meta sobre</span>
+              <span className={rotulo}>Objetivo sobre</span>
               <div className="inline-flex rounded-md border border-linha overflow-hidden">
                 {([['TOTAL', 'Total'], ['PRODUTO', 'Produto'], ['CATEGORIA', 'Categoria']] as [EscopoMeta, string][]).map(([id, nome]) => (
                   <button
@@ -299,13 +307,13 @@ export function MetasVendas() {
 
             <div>
               <span className={rotulo}>Medida</span>
-              <div className="inline-flex rounded-md border border-linha overflow-hidden">
-                {(['VALOR', 'KG'] as UnidadeMeta[]).map(u => (
+              <div className="flex flex-wrap gap-1.5">
+                {UNIDADES_META.map(u => (
                   <button
                     key={u}
                     type="button"
                     onClick={() => setUnidade(u)}
-                    className={`h-10 px-4 text-[13px] font-semibold ${unidade === u ? 'bg-eno-800 text-white' : 'bg-papel'}`}
+                    className={`h-10 px-4 rounded-md border text-[13px] font-semibold ${unidade === u ? 'bg-eno-800 border-eno-800 text-white' : 'bg-papel border-linha'}`}
                   >
                     {rotuloUnidade(u)}
                   </button>
@@ -313,7 +321,7 @@ export function MetasVendas() {
               </div>
             </div>
             <div>
-              <label className={rotulo}>{unidade === 'VALOR' ? 'Valor da meta (R$)' : 'Quantidade da meta (kg)'}</label>
+              <label className={rotulo}>{unidade === 'VALOR' ? 'Valor do objetivo (R$)' : `Quantidade do objetivo (${rotuloUnidade(unidade).toLowerCase()})`}</label>
               <input className={campo} inputMode="decimal" value={valorMeta} onChange={e => setValorMeta(e.target.value)} placeholder={unidade === 'VALOR' ? '0,00' : '0'} />
             </div>
 
@@ -330,9 +338,9 @@ export function MetasVendas() {
           {destinatario === 'RCA' && destinatarioId && (
             <div className="rounded-md border border-linha p-3 space-y-3">
               <div>
-                <div className="text-[13px] font-bold">Meta de cada cliente deste representante</div>
+                <div className="text-[13px] font-bold">Objetivo de cada cliente deste representante</div>
                 <div className="text-[12px] text-cinza">
-                  Escolha como cada cliente entra: % da meta, kg ou R$. Quem ficar com zero não tem meta. Cada cliente recebe a meta automaticamente no portal dele.
+                  Escolha como cada cliente entra: % do objetivo, R$, kg, caixas, fardos ou unidades. Quem ficar com zero não tem objetivo. Cada cliente recebe o objetivo automaticamente no portal dele.
                 </div>
               </div>
               {distribuicaoForm.length === 0 && (
@@ -349,7 +357,7 @@ export function MetasVendas() {
                       className="h-10 rounded-md border border-linha bg-papel px-2 text-[13px]"
                       value={d.modo}
                       onChange={e => alterarParte(i, { modo: e.target.value as ModoDistribuicao })}
-                      aria-label={`Medida da meta de ${d.cliente_nome}`}
+                      aria-label={`Medida do objetivo de ${d.cliente_nome}`}
                     >
                       {MODOS.map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
                     </select>
@@ -362,10 +370,10 @@ export function MetasVendas() {
                       value={d.valor || ''}
                       placeholder="0"
                       onChange={e => alterarParte(i, { valor: Math.max(0, Number(e.target.value) || 0) })}
-                      aria-label={`Valor da meta de ${d.cliente_nome}`}
+                      aria-label={`Valor do objetivo de ${d.cliente_nome}`}
                     />
                     <div className="hidden sm:block text-[12.5px] text-cinza tabular-nums truncate">
-                      {d.valor > 0 ? `= ${fmtUnidade(alvo.unidade, alvo.valor)}` : 'sem meta'}
+                      {d.valor > 0 ? `= ${fmtUnidade(alvo.unidade, alvo.valor)}` : 'sem objetivo'}
                     </div>
                   </div>
                 );
@@ -383,7 +391,7 @@ export function MetasVendas() {
 
           <div className="flex gap-2">
             <button type="submit" className="h-10 px-5 rounded-md bg-eno-800 text-white text-[13px] font-bold">
-              {editandoId ? 'Salvar alteração' : 'Cadastrar meta'}
+              {editandoId ? 'Salvar alteração' : 'Cadastrar objetivo'}
             </button>
             {editandoId && (
               <button type="button" onClick={limparForm} className="h-10 px-4 rounded-md border border-linha-forte text-[13px] font-semibold">
@@ -395,7 +403,7 @@ export function MetasVendas() {
 
         <div className="mt-6 space-y-3">
           {listaOrdenada.length === 0 && (
-            <div className="rounded-lg border border-linha bg-papel p-6 text-center text-cinza text-[14px]">Nenhuma meta cadastrada ainda.</div>
+            <div className="rounded-lg border border-linha bg-papel p-6 text-center text-cinza text-[14px]">Nenhum objetivo cadastrado ainda.</div>
           )}
           {listaOrdenada.map(m => {
             const realizado = realizadoMeta(m, pedidos, produtos);
@@ -412,10 +420,10 @@ export function MetasVendas() {
                     <div className="text-[12px] text-cinza">Período: {formatarDataBR(m.inicio)} a {formatarDataBR(m.fim)}</div>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <button type="button" onClick={() => editar(m)} className="h-8 w-8 rounded-md hover:bg-papel-3 flex items-center justify-center" aria-label="Editar meta">
+                    <button type="button" onClick={() => editar(m)} className="h-8 w-8 rounded-md hover:bg-papel-3 flex items-center justify-center" aria-label="Editar objetivo">
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button type="button" onClick={() => excluir(m)} className="h-8 w-8 rounded-md hover:bg-st-vencido-bg text-st-vencido flex items-center justify-center" aria-label="Excluir meta">
+                    <button type="button" onClick={() => excluir(m)} className="h-8 w-8 rounded-md hover:bg-st-vencido-bg text-st-vencido flex items-center justify-center" aria-label="Excluir objetivo">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -433,10 +441,10 @@ export function MetasVendas() {
                   <div className="mt-3 border-t border-linha pt-3 space-y-3">
                     <div className="text-[12px] font-bold text-tinta-2">Clientes</div>
                     {m.distribuicao === undefined && (
-                      <div className="text-[12.5px] text-cinza">Meta sem divisão por cliente. Clique em editar para dividir entre os clientes.</div>
+                      <div className="text-[12.5px] text-cinza">Objetivo sem divisão por cliente. Clique em editar para dividir entre os clientes.</div>
                     )}
                     {m.distribuicao !== undefined && m.distribuicao.every(d => !(d.valor > 0)) && (
-                      <div className="text-[12.5px] text-cinza">Nenhum cliente com meta nesta data.</div>
+                      <div className="text-[12.5px] text-cinza">Nenhum cliente com objetivo nesta data.</div>
                     )}
                     {(m.distribuicao || []).filter(d => d.valor > 0).map(d => {
                       const parte = realizadoDaParteDoCliente(m, d, pedidos, produtos);

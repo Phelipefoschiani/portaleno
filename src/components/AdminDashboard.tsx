@@ -134,7 +134,7 @@ export function AdminDashboard({ onLogout, initialPageId, onAbrirPortal }: Admin
       label: 'Pedidos',
       items: [
         { id: 'pedidos_orcamentos_sugestivo', label: 'Vendas', secao: 'Venda' },
-        { id: 'pedidos_metas', label: 'Metas', secao: 'Venda' },
+        { id: 'pedidos_metas', label: 'Objetivos', secao: 'Venda' },
         { id: 'pedidos_em_producao', label: 'Em produção', secao: 'Venda' },
         { id: 'pedidos_ordens_producao', label: 'Ordens de produção', secao: 'Venda' },
         { id: 'pedidos_a_faturar', label: 'A faturar', secao: 'Expedição' },

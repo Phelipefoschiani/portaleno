@@ -3,15 +3,14 @@ import { carregarPedidosVenda, PedidoVenda } from '../../data/pedidosVendaData';
 import { carregarEstoqueProdutos, ProdutoEstoque } from '../../data/produtosData';
 import { formatarMoeda } from '../../data/financeiroData';
 import { hojeISO, formatarDataBR } from '../../lib/datas';
-import { EVENTO_METAS, DestinatarioMeta, MetaVenda, metasAtivasDo, realizadoMeta, rotuloEscopo, rotuloUnidade } from '../../data/metasData';
+import { EVENTO_METAS, DestinatarioMeta, MetaVenda, metasAtivasDo, realizadoMeta, rotuloEscopo, rotuloUnidade, formatarValorMeta } from '../../data/metasData';
 
 interface Props {
   destinatario: DestinatarioMeta;
   id: string;
 }
 
-const fmt = (m: Pick<MetaVenda, 'unidade'>, v: number) =>
-  m.unidade === 'VALOR' ? formatarMoeda(v) : `${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`;
+const fmt = (m: Pick<MetaVenda, 'unidade'>, v: number) => formatarValorMeta(m.unidade, v);
 
 /** Metas valendo hoje para o cliente ou representante, com o quanto já foi vendido. Não aparece se não houver meta. */
 export function MetasResumo({ destinatario, id }: Props) {
@@ -37,7 +36,7 @@ export function MetasResumo({ destinatario, id }: Props) {
 
   return (
     <section className="rounded-lg border border-linha bg-papel p-4">
-      <div className="text-[12px] font-bold uppercase tracking-wide text-cinza mb-3">Minhas metas</div>
+      <div className="text-[12px] font-bold uppercase tracking-wide text-cinza mb-3">Meus objetivos</div>
       <div className="space-y-4">
         {metas.map(m => {
           const realizado = realizadoMeta(m, pedidos, produtos);
@@ -56,7 +55,7 @@ export function MetasResumo({ destinatario, id }: Props) {
                 <div className={`h-full ${pct >= 100 ? 'bg-st-pago' : 'bg-eno-700'}`} style={{ width: `${pct}%` }} />
               </div>
               <div className="mt-1 text-[12.5px] text-cinza tabular-nums">
-                {fmt(m, realizado)} de {fmt(m, m.valor_meta)}{falta > 0 ? ` · faltam ${fmt(m, falta)}` : ' · meta batida'}
+                {fmt(m, realizado)} de {fmt(m, m.valor_meta)}{falta > 0 ? ` · faltam ${fmt(m, falta)}` : ' · objetivo batido'}
               </div>
             </div>
           );

@@ -1,16 +1,46 @@
-// Metas de venda do Grupo ENO: por cliente ou por representante (RCA).
-// Escopo: total, produto ou categoria. Unidade: valor (R$) ou quantidade (kg).
+// Objetivos de venda do Grupo ENO (no código ainda chamados de "metas"): por cliente ou por representante (RCA).
+// Escopo: total, produto ou categoria. Unidade: valor (R$), peso (kg), caixas, fardos ou unidades.
 // O realizado conta pedidos FATURADOS ou ENTREGUES, pela data de faturamento (ou emissão), dentro do período.
-import { carregarPedidosVenda, PedidoVenda } from './pedidosVendaData';
+import { carregarPedidosVenda, PedidoVenda, ItemPedidoVenda, pacotesDoItem } from './pedidosVendaData';
 import { carregarEstoqueProdutos, ProdutoEstoque } from './produtosData';
 import { paraISO } from '../lib/datas';
 
 export type DestinatarioMeta = 'CLIENTE' | 'RCA';
 export type EscopoMeta = 'TOTAL' | 'PRODUTO' | 'CATEGORIA';
-export type UnidadeMeta = 'VALOR' | 'KG';
+export type UnidadeMeta = 'VALOR' | 'KG' | 'CAIXA' | 'FARDO' | 'UNIDADE';
 
-/** Como a parte de cada cliente é definida dentro da meta do representante. */
-export type ModoDistribuicao = 'PERCENTUAL' | 'PESO' | 'VALOR';
+export const UNIDADES_META: UnidadeMeta[] = ['VALOR', 'KG', 'CAIXA', 'FARDO', 'UNIDADE'];
+
+/** Como a parte de cada cliente é definida dentro do objetivo do representante. PESO = kg (nome antigo). */
+export type ModoDistribuicao = 'PERCENTUAL' | 'PESO' | 'VALOR' | 'CAIXA' | 'FARDO' | 'UNIDADE';
+
+/** Valor formatado na unidade do objetivo: "R$ 1.200,00", "350 kg", "40 caixas", "12 fardos", "500 unidades". */
+export function formatarValorMeta(unidade: UnidadeMeta, v: number): string {
+  const n = (Number(v) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+  if (unidade === 'VALOR') return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  if (unidade === 'KG') return `${n} kg`;
+  if (unidade === 'CAIXA') return `${n} ${v === 1 ? 'caixa' : 'caixas'}`;
+  if (unidade === 'FARDO') return `${n} ${v === 1 ? 'fardo' : 'fardos'}`;
+  return `${n} ${v === 1 ? 'unidade' : 'unidades'}`;
+}
+
+/** Unidade que um modo de distribuição usa (PERCENTUAL segue a do objetivo do representante). */
+function unidadeDoModo(modo: ModoDistribuicao, unidadeDoObjetivo: UnidadeMeta): UnidadeMeta {
+  if (modo === 'PERCENTUAL') return unidadeDoObjetivo;
+  if (modo === 'PESO') return 'KG';
+  return modo;
+}
+
+/** Quanto um item do pedido conta para o objetivo, na unidade dele. */
+function quantidadeDoItem(item: ItemPedidoVenda, unidade: UnidadeMeta): number {
+  if (unidade === 'VALOR') return Number(item.subtotal) || 0;
+  if (unidade === 'KG') return Number(item.peso_total_kg) || 0;
+  if (unidade === 'UNIDADE') return pacotesDoItem(item);
+  // Caixa ou fardo: conta a quantidade dos itens vendidos nessa embalagem
+  const embalagem = (item.tipo_embalagem || '').toLowerCase();
+  const alvo = unidade === 'CAIXA' ? 'caixa' : 'fardo';
+  return embalagem.includes(alvo) ? Number(item.quantidade) || 0 : 0;
+}
 
 /** Parte de um cliente na meta do representante: % da meta, kg ou R$. */
 export interface DistribuicaoMeta {
@@ -49,14 +79,13 @@ export function metaDoClienteNaDistribuicao(
   d: DistribuicaoMeta
 ): { unidade: UnidadeMeta; valor: number } {
   if (d.modo === 'PERCENTUAL') return { unidade: m.unidade, valor: Math.round(m.valor_meta * d.valor) / 100 };
-  if (d.modo === 'PESO') return { unidade: 'KG', valor: d.valor };
-  return { unidade: 'VALOR', valor: d.valor };
+  return { unidade: unidadeDoModo(d.modo, m.unidade), valor: d.valor };
 }
 
 export const rotuloModoDistribuicao = (d: Pick<DistribuicaoMeta, 'modo' | 'valor'>) =>
-  d.modo === 'PERCENTUAL' ? `${d.valor.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% da meta`
-  : d.modo === 'PESO' ? `${d.valor.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`
-  : `R$ ${d.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  d.modo === 'PERCENTUAL'
+    ? `${d.valor.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% do objetivo`
+    : formatarValorMeta(unidadeDoModo(d.modo, 'VALOR'), d.valor);
 
 const STORAGE_KEY_METAS = 'grupo_eno_metas_v1';
 export const EVENTO_METAS = 'metas_updated';
@@ -81,7 +110,8 @@ export function salvarMetas(lista: MetaVenda[]): void {
 export const rotuloEscopo = (m: Pick<MetaVenda, 'escopo' | 'escopo_nome'>) =>
   m.escopo === 'TOTAL' ? 'Total de vendas' : m.escopo === 'PRODUTO' ? `Produto: ${m.escopo_nome || ''}` : `Categoria: ${m.escopo_nome || ''}`;
 
-export const rotuloUnidade = (u: UnidadeMeta) => (u === 'VALOR' ? 'Valor (R$)' : 'Quantidade (kg)');
+export const rotuloUnidade = (u: UnidadeMeta) =>
+  u === 'VALOR' ? 'Valor (R$)' : u === 'KG' ? 'Peso (kg)' : u === 'CAIXA' ? 'Caixas' : u === 'FARDO' ? 'Fardos' : 'Unidades';
 
 function dentroDoPeriodo(data: string | undefined, inicio: string, fim: string): boolean {
   const iso = paraISO(data) || '';
@@ -104,7 +134,7 @@ export function realizadoMeta(
     p.itens.forEach(item => {
       if (meta.escopo === 'PRODUTO' && item.produto_id !== meta.escopo_valor) return;
       if (meta.escopo === 'CATEGORIA' && categoriaDe(item.produto_id) !== meta.escopo_valor) return;
-      total += meta.unidade === 'VALOR' ? Number(item.subtotal) || 0 : Number(item.peso_total_kg) || 0;
+      total += quantidadeDoItem(item, meta.unidade);
     });
   });
   return Math.round(total * 100) / 100;
