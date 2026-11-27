@@ -63,6 +63,7 @@ function faltasEstoquePedido(p: PedidoVenda): FaltaEstoqueFaturar[] {
   return faltas;
 }
 import { hojeISO, paraISO, formatarDataBR } from '../../lib/datas';
+import { lerDanfePdf } from '../../lib/lerDanfePdf';
 import { lerNFeXml, chaveNFeValida, situacaoNFe, mesmoDocumento, formatarDocumento, DadosNFe } from '../../lib/nfeXml';
 import { carregarNotasSaida } from '../../data/financeiroData';
 
@@ -93,6 +94,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
   // Dados lidos do XML (conferência com o pedido) e aviso de leitura/validação
   const [dadosNfe, setDadosNfe] = useState<DadosNFe | null>(null);
   const [erroNf, setErroNf] = useState('');
+  const [lendoPdf, setLendoPdf] = useState(false);
 
   // Dados de Transporte e Expedição
   const [placaInput, setPlacaInput] = useState('');
@@ -203,6 +205,26 @@ export function PedidosAFaturar({ onNavigate }: Props) {
     } else {
       reader.onload = (ev) => setArquivoConteudo(ev.target?.result as string);
       reader.readAsDataURL(file);
+      // PDF (DANFE): lê o texto e preenche o que achar; o resto o usuário confere e digita
+      setLendoPdf(true);
+      lerDanfePdf(file)
+        .then(d => {
+          if (d.numero) setNumeroNfImport(d.numero);
+          if (d.serie) setSerieNfImport(d.serie);
+          if (d.chave) setChaveAcessoImport(d.chave);
+          if (d.data_emissao) setDataEmissaoImport(d.data_emissao);
+          if (d.valor_total && d.valor_total > 0) setValorNfImport(d.valor_total.toFixed(2));
+          if (d.transportadora) setTransportadoraInput(d.transportadora);
+          if (d.placa) setPlacaInput(d.placa);
+          if (!d.chave) {
+            setErroNf(
+              d.numero
+                ? 'Peguei só o número da nota pelo nome do arquivo. Confira e digite a chave de acesso (o PDF parece ser imagem).'
+                : 'Não consegui ler os dados deste PDF (parece ser imagem). Digite os números ou importe o XML.'
+            );
+          }
+        })
+        .finally(() => setLendoPdf(false));
     }
   };
 
@@ -557,7 +579,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                     Importar arquivo da nota (XML ou PDF)
                   </button>
                   <p className="text-[10px] text-cinza mt-1">
-                    O <strong>XML</strong> preenche número, série, chave, data, valor, peso e transporte sozinho. O PDF (DANFE) só fica guardado.
+                    O <strong>XML</strong> ou o <strong>PDF</strong> (DANFE) preenchem número, série, chave, data, valor e transporte sozinhos. Confira antes de guardar.
                   </p>
                 </div>
 
@@ -569,7 +591,7 @@ export function PedidosAFaturar({ onNavigate }: Props) {
                       <FileCode className="w-4 h-4 text-eno-700" />
                     )}
                     <span>{nomeArquivoAnexado}</span>
-                    <span className="text-[10px] text-eno-700 font-sans font-normal">{dadosNfe ? '(lido)' : '(pronto p/ guardar)'}</span>
+                    <span className="text-[10px] text-eno-700 font-sans font-normal">{lendoPdf ? '(lendo…)' : dadosNfe || (tipoArquivoAnexado === 'PDF' && chaveAcessoImport.length === 44) ? '(lido)' : '(pronto p/ guardar)'}</span>
                   </div>
                 )}
               </div>
