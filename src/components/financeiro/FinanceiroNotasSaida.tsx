@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Copy, Check, Printer, Eye } from 'lucide-react';
+import { Copy, Check, Eye, FileText } from 'lucide-react';
+import { abrirArquivoNota, notaGuardadaDoPedido } from '../../lib/arquivoNota';
 import { CabecalhoPagina, BotaoPrimario, BotaoSecundario } from '../ui/CabecalhoPagina';
 import { BarraFiltros, CampoBusca } from '../ui/BarraFiltros';
 import { TabelaDados, Th, Td, tabela } from '../ui/TabelaDados';
@@ -25,6 +26,17 @@ export function FinanceiroNotasSaida({ onNavigate }: Props) {
   const [busca, setBusca] = useState('');
   const [copiadoId, setCopiadoId] = useState<string | null>(null);
   const [modalVisualizar, setModalVisualizar] = useState<NotaFiscalSaida | null>(null);
+
+  // Arquivo importado no faturamento (PDF ou XML), achado pelo pedido de venda da nota
+  const arquivoDe = (n: NotaFiscalSaida) => {
+    const nf = notaGuardadaDoPedido(n.chave_acesso, n.numero);
+    return nf?.arquivo_conteudo ? nf : undefined;
+  };
+  const rotuloArquivo = (n: NotaFiscalSaida) => (arquivoDe(n)?.tipo_arquivo === 'PDF' ? 'Abrir PDF' : 'Baixar XML');
+  const abrirNota = (n: NotaFiscalSaida) => {
+    const nf = arquivoDe(n);
+    if (!nf || !abrirArquivoNota(nf)) alert('Esta nota não tem arquivo guardado. Importe o XML ou o PDF em Pedidos > A faturar.');
+  };
 
   // Lê do armazenamento e acompanha atualizações feitas em outras telas
   useEffect(() => {
@@ -122,6 +134,12 @@ export function FinanceiroNotasSaida({ onNavigate }: Props) {
                           className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-md border border-linha-forte text-tinta-2 text-[13px] font-semibold active:bg-papel-3">
                           <Eye className="w-4 h-4" /> Ver espelho
                         </button>
+                        {arquivoDe(item) && (
+                          <button type="button" onClick={() => abrirNota(item)}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-md border border-linha-forte text-tinta-2 text-[13px] font-semibold active:bg-papel-3">
+                            <FileText className="w-4 h-4" /> {rotuloArquivo(item)}
+                          </button>
+                        )}
                       </div>
                     </ItemCartao>
                   ))}
@@ -166,7 +184,12 @@ export function FinanceiroNotasSaida({ onNavigate }: Props) {
                           <div className="font-bold text-tinta text-[13.5px]">{formatarMoeda(item.valor_total)}</div>
                           <div className="text-[11.5px] text-cinza font-normal">{toneladas(item)} t</div>
                         </Td>
-                        <Td className="text-right">
+                        <Td className="text-right whitespace-nowrap">
+                          {arquivoDe(item) && (
+                            <button type="button" onClick={() => abrirNota(item)} className={`${botaoLinhaSecundario} mr-1.5`} title="Abrir o arquivo da nota importado no faturamento">
+                              <FileText className="w-3.5 h-3.5" /> {rotuloArquivo(item)}
+                            </button>
+                          )}
                           <button type="button" onClick={() => setModalVisualizar(item)} className={botaoLinhaSecundario} title="Ver espelho fiscal">
                             <Eye className="w-3.5 h-3.5" /> Ver
                           </button>
@@ -190,7 +213,9 @@ export function FinanceiroNotasSaida({ onNavigate }: Props) {
           zIndex="z-50"
           rodape={
             <>
-              <BotaoSecundario onClick={() => window.print()}><Printer className="w-4 h-4" /> Imprimir DANFE</BotaoSecundario>
+              {arquivoDe(modalVisualizar) && (
+                <BotaoSecundario onClick={() => abrirNota(modalVisualizar)}><FileText className="w-4 h-4" /> {rotuloArquivo(modalVisualizar)}</BotaoSecundario>
+              )}
               <BotaoPrimario onClick={() => setModalVisualizar(null)}>Fechar</BotaoPrimario>
             </>
           }

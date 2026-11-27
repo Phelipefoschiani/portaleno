@@ -1,3 +1,4 @@
+import { abrirArquivoNota } from '../../lib/arquivoNota';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   FileCheck2,
@@ -95,23 +96,10 @@ export function PedidosFaturados({ onNavigate }: Props) {
 
   // Baixar / Visualizar arquivo fiscal guardado
   const handleBaixarArquivoFiscal = (nf: NonNullable<PedidoVenda['nota_fiscal']>) => {
-    if (nf.arquivo_conteudo) {
-      if (nf.tipo_arquivo === 'PDF' && nf.arquivo_conteudo.startsWith('data:')) {
-        const a = document.createElement('a');
-        a.href = nf.arquivo_conteudo;
-        a.download = nf.arquivo_anexado || `NF_${nf.numero}.pdf`;
-        a.click();
-      } else {
-        const blob = new Blob([nf.arquivo_conteudo], { type: 'text/xml;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = nf.arquivo_anexado || `NF_${nf.numero}.xml`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-    } else {
-      alert(`Arquivo fiscal guardado no sistema: ${nf.arquivo_anexado || 'NF_' + nf.numero + '.xml'}\n\nChave de Acesso: ${nf.chave_acesso}`);
+    if (!abrirArquivoNota(nf)) {
+      alert(`Arquivo fiscal guardado no sistema: ${nf.arquivo_anexado || 'NF_' + nf.numero + '.xml'}
+
+Chave de Acesso: ${nf.chave_acesso}`);
     }
   };
 

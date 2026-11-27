@@ -127,5 +127,12 @@ export async function lerDanfePdf(arquivo: File): Promise<DadosDanfe> {
     const m = arquivo.name.match(/NF[\s._-]*(?:E[\s._-]*)?(\d{3,9})/i);
     if (m) dados.numero = String(Number(m[1]));
   }
+  if (!dados.data_emissao) {
+    // Data no nome do arquivo: "19112026", "19-11-2026" ou "19.11.2026" (dia, mês, ano)
+    const m = arquivo.name.match(/(?:^|\D)(\d{2})[-._]?(\d{2})[-._]?(20\d{2})(?:\D|$)/);
+    if (m && Number(m[1]) >= 1 && Number(m[1]) <= 31 && Number(m[2]) >= 1 && Number(m[2]) <= 12) {
+      dados.data_emissao = `${m[3]}-${m[2]}-${m[1]}`;
+    }
+  }
   return dados;
 }
