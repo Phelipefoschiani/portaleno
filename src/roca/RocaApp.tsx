@@ -34,6 +34,33 @@ interface AgricultorApp {
 type Aba = 'PESAGEM' | 'AGRICULTORES' | 'PENDENTES';
 
 const CHAVE_PESADOR = 'eno_roca_pesador';
+// Pesagem em andamento: gravada a cada saco. Se a bateria acabar, ao abrir de novo continua de onde parou.
+const CHAVE_RASCUNHO = 'eno_roca_rascunho_pesagem';
+
+interface RascunhoPesagem {
+  agricultorId: string;
+  data: string;
+  precoKg: string;
+  pesoSaco: string;
+  sacos: SacoRoca[];
+  pctDesconto: string;
+  tara: string;
+  motivo: string;
+  observacao: string;
+  editandoPesagemId: string | null;
+  salvo_em: string;
+}
+
+function lerRascunho(): RascunhoPesagem | null {
+  try {
+    const bruto = localStorage.getItem(CHAVE_RASCUNHO);
+    if (!bruto) return null;
+    const r = JSON.parse(bruto) as RascunhoPesagem;
+    return r && Array.isArray(r.sacos) ? r : null;
+  } catch {
+    return null;
+  }
+}
 const hoje = () => new Date().toISOString().slice(0, 10);
 const kg = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 const reais = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -50,23 +77,25 @@ export function RocaApp() {
   const [pendentes, setPendentes] = useState<Pendente[]>([]);
   const [mensagem, setMensagem] = useState<{ tom: 'ok' | 'erro'; texto: string } | null>(null);
 
-  // Pesagem
-  const [agricultorId, setAgricultorId] = useState('');
-  const [data, setData] = useState(hoje());
+  // Pesagem (começa pelo rascunho salvo, se o app fechou no meio de uma pesagem)
+  const [rascunho] = useState(lerRascunho);
+  const [agricultorId, setAgricultorId] = useState(rascunho?.agricultorId || '');
+  const [data, setData] = useState(rascunho?.data || hoje());
   const [pesador, setPesador] = useState(() => localStorage.getItem(CHAVE_PESADOR) || '');
-  const [precoKg, setPrecoKg] = useState('');
-  const [pesoSaco, setPesoSaco] = useState('');
-  const [sacos, setSacos] = useState<SacoRoca[]>([]);
-  const [pctDesconto, setPctDesconto] = useState('');
-  const [tara, setTara] = useState('');
-  const [motivo, setMotivo] = useState('');
-  const [observacao, setObservacao] = useState('');
+  const [precoKg, setPrecoKg] = useState(rascunho?.precoKg || '');
+  const [pesoSaco, setPesoSaco] = useState(rascunho?.pesoSaco || '');
+  const [sacos, setSacos] = useState<SacoRoca[]>(rascunho?.sacos || []);
+  const [pctDesconto, setPctDesconto] = useState(rascunho?.pctDesconto || '');
+  const [tara, setTara] = useState(rascunho?.tara || '');
+  const [motivo, setMotivo] = useState(rascunho?.motivo || '');
+  const [observacao, setObservacao] = useState(rascunho?.observacao || '');
+  const [recuperado, setRecuperado] = useState(() => (rascunho?.sacos.length || 0) > 0);
 
   // Cadastro de agricultor
   const [novo, setNovo] = useState({ nome: '', propriedade: '', cpf: '', telefone: '', municipio: '', uf: '', pix: '' });
 
   // Edição de itens pendentes (ainda não enviados) e menu do item tocado
-  const [editandoPesagemId, setEditandoPesagemId] = useState<string | null>(null);
+  const [editandoPesagemId, setEditandoPesagemId] = useState<string | null>(rascunho?.editandoPesagemId || null);
   const [editandoAgricultorId, setEditandoAgricultorId] = useState<string | null>(null);
   const [itemAberto, setItemAberto] = useState<Pendente | null>(null);
   const [gerando, setGerando] = useState(false);
@@ -84,6 +113,33 @@ export function RocaApp() {
     });
     return parar;
   }, []);
+
+  // Grava a pesagem em andamento a cada mudança (saco, preço, desconto...). localStorage grava na hora.
+  useEffect(() => {
+    try {
+      const vazio = sacos.length === 0 && !pesoSaco && !editandoPesagemId && !precoKg && !agricultorId;
+      if (vazio) {
+        localStorage.removeItem(CHAVE_RASCUNHO);
+        return;
+      }
+      const r: RascunhoPesagem = {
+        agricultorId,
+        data,
+        precoKg,
+        pesoSaco,
+        sacos,
+        pctDesconto,
+        tara,
+        motivo,
+        observacao,
+        editandoPesagemId,
+        salvo_em: new Date().toISOString(),
+      };
+      localStorage.setItem(CHAVE_RASCUNHO, JSON.stringify(r));
+    } catch {
+      /* sem armazenamento: segue sem rascunho */
+    }
+  }, [agricultorId, data, precoKg, pesoSaco, sacos, pctDesconto, tara, motivo, observacao, editandoPesagemId]);
 
   const agricultor = agricultores.find(a => a.id === agricultorId);
   const totais = useMemo(
@@ -307,6 +363,16 @@ export function RocaApp() {
 
       {aba === 'PESAGEM' && (
         <div className="p-4 space-y-4">
+          {recuperado && sacos.length > 0 && (
+            <div className="rounded-xl bg-emerald-100 text-emerald-900 px-4 py-3 text-[14px] font-semibold flex items-center justify-between gap-3">
+              <span>
+                Pesagem em andamento recuperada: {sacos.length} {sacos.length === 1 ? 'saco' : 'sacos'}. Continue de onde parou.
+              </span>
+              <button type="button" onClick={() => setRecuperado(false)} className="shrink-0 underline">
+                Ok
+              </button>
+            </div>
+          )}
           {editandoPesagemId && (
             <div className="rounded-xl bg-amber-100 text-amber-900 px-4 py-3 text-[14px] font-semibold flex items-center justify-between gap-3">
               Editando uma pesagem ainda não enviada.
