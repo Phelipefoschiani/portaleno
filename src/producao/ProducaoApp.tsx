@@ -87,6 +87,40 @@ interface Alvo {
   peso_unitario_kg?: number;
 }
 
+// Folha aberta e ainda não salva: fica gravada no celular a cada tecla.
+// Se a bateria acabar ou o app fechar, ao abrir de novo a folha volta do mesmo ponto.
+const CHAVE_RASCUNHO = 'eno_producao_rascunho_folha';
+interface RascunhoFolha {
+  alvo: Alvo;
+  editando: ApontamentoApp | null;
+  pacotes: string;
+  observacao: string;
+  lote: string;
+  fabricacao: string;
+  validade: string;
+}
+
+function lerRascunho(): RascunhoFolha | null {
+  try {
+    const raw = localStorage.getItem(CHAVE_RASCUNHO);
+    const r = raw ? JSON.parse(raw) : null;
+    return r && r.alvo && r.alvo.op_id ? r : null;
+  } catch {
+    return null;
+  }
+}
+
+function gravarRascunho(r: RascunhoFolha | null): void {
+  try {
+    if (r) localStorage.setItem(CHAVE_RASCUNHO, JSON.stringify(r));
+    else localStorage.removeItem(CHAVE_RASCUNHO);
+  } catch {
+    /* sem armazenamento: a folha só vale enquanto a tela estiver aberta */
+  }
+}
+
+const RASCUNHO_INICIAL = lerRascunho();
+
 /** Já lançado na OP pelo escritório: não pode mais ser alterado pelo celular. */
 const travado = (apt: ApontamentoApp) => !!apt.lancado_em;
 
@@ -101,14 +135,25 @@ export function ProducaoApp() {
   const [mensagem, setMensagem] = useState<Mensagem>(null);
 
   // Folha de apontamento (novo ou edição de um apontamento)
-  const [alvo, setAlvo] = useState<Alvo | null>(null);
-  const [editando, setEditando] = useState<ApontamentoApp | null>(null);
-  const [pacotes, setPacotes] = useState('');
-  const [observacao, setObservacao] = useState('');
+  const [alvo, setAlvo] = useState<Alvo | null>(RASCUNHO_INICIAL?.alvo ?? null);
+  const [editando, setEditando] = useState<ApontamentoApp | null>(RASCUNHO_INICIAL?.editando ?? null);
+  const [pacotes, setPacotes] = useState(RASCUNHO_INICIAL?.pacotes ?? '');
+  const [observacao, setObservacao] = useState(RASCUNHO_INICIAL?.observacao ?? '');
   const [erroFolha, setErroFolha] = useState('');
-  const [lote, setLote] = useState('');
-  const [fabricacao, setFabricacao] = useState('');
-  const [validade, setValidade] = useState('');
+  const [lote, setLote] = useState(RASCUNHO_INICIAL?.lote ?? '');
+  const [fabricacao, setFabricacao] = useState(RASCUNHO_INICIAL?.fabricacao ?? '');
+  const [validade, setValidade] = useState(RASCUNHO_INICIAL?.validade ?? '');
+  const [recuperada, setRecuperada] = useState(!!RASCUNHO_INICIAL);
+
+  // Grava a folha a cada mudança; folha fechada ou salva apaga o rascunho
+  useEffect(() => {
+    gravarRascunho(alvo ? { alvo, editando, pacotes, observacao, lote, fabricacao, validade } : null);
+  }, [alvo, editando, pacotes, observacao, lote, fabricacao, validade]);
+
+  // O nome de quem aponta fica guardado enquanto é digitado
+  useEffect(() => {
+    guardarOperador(operador.trim());
+  }, [operador]);
 
   const recarregar = async () => {
     setOps(await listarOPsLocais());
@@ -150,6 +195,7 @@ export function ProducaoApp() {
     setFabricacao(hojeLocal());
     setValidade(op.data_validade || '');
     setErroFolha('');
+    setRecuperada(false);
   };
 
   const abrirEdicao = (apt: ApontamentoApp) => {
@@ -173,11 +219,19 @@ export function ProducaoApp() {
     setFabricacao(apt.data_fabricacao || hojeLocal());
     setValidade(apt.data_validade || '');
     setErroFolha('');
+    setRecuperada(false);
   };
 
   const fecharFolha = () => {
     setAlvo(null);
     setEditando(null);
+    setRecuperada(false);
+  };
+
+  // Toque fora da folha com algo digitado pergunta antes, para não perder o que foi preenchido
+  const tocarFora = () => {
+    if (pacotes.trim() && !window.confirm('Fechar sem salvar? O que foi digitado será perdido.')) return;
+    fecharFolha();
   };
 
   const salvarApontamento = async () => {
@@ -572,7 +626,7 @@ export function ProducaoApp() {
 
       {/* Folha de apontamento */}
       {alvo && (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/60" onClick={fecharFolha}>
+        <div className="fixed inset-0 z-40 flex items-end bg-black/60" onClick={tocarFora}>
           <div
             role="dialog"
             aria-modal="true"
@@ -581,6 +635,11 @@ export function ProducaoApp() {
             className="w-full max-h-[92dvh] overflow-y-auto rounded-t-3xl bg-papel text-eno-950 px-5 pt-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-[0_-20px_60px_-20px_rgba(0,0,0,0.6)]"
           >
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-eno-900/20" />
+            {recuperada && (
+              <div className="mb-4 rounded-xl bg-ouro/20 px-4 py-3 text-[14px] font-semibold text-eno-900">
+                Apontamento em andamento recuperado. Confira e salve.
+              </div>
+            )}
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="font-mono text-[12px] text-st-aguardando">{alvo.op_numero}</div>
