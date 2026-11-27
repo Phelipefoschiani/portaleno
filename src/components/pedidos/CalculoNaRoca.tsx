@@ -34,6 +34,8 @@ import {
   criarCalculoNaRocaELancarPedidoCompra,
   definirPagamentoCalculoRoca,
   excluirCalculoNaRoca,
+  atualizarCalculoNaRoca,
+  motivoNaoEditarCalculo,
   proximoNumeroTicketRoca,
   calcularDescontoPesagem,
   pesosDoCalculo,
@@ -277,8 +279,35 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
     }
   };
 
+  // Pesagem que está sendo editada (null = nova pesagem)
+  const [editandoCalculo, setEditandoCalculo] = useState<CalculoNaRoca | null>(null);
+
+  // Abrir a mesma tela da pesagem, já preenchida, para corrigir (vale para as que vieram do app da roça)
+  const abrirModalEdicao = (item: CalculoNaRoca, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const motivo = motivoNaoEditarCalculo(item);
+    if (motivo) {
+      alert(motivo);
+      return;
+    }
+    setEditandoCalculo(item);
+    setParceiroId(item.fornecedor_id);
+    setDataPesagem(formatarDataBR(item.data));
+    setPesadorResponsavel(item.pesador_responsavel || '');
+    setPrecoPorKg(String(item.preco_por_kg).replace('.', ','));
+    setObservacoes(item.observacoes || '');
+    setDescontoPctInput(item.desconto_percentual ? String(item.desconto_percentual).replace('.', ',') : '');
+    setDescontoTaraInput(item.desconto_tara_kg ? String(item.desconto_tara_kg).replace('.', ',') : '');
+    setMotivoDesconto(item.motivo_desconto || '');
+    setSacosForm((item.sacos || []).map((s, idx) => ({ ...s, numero: idx + 1 })));
+    setPesoSacoInput('');
+    setEditandoSacoNumero(null);
+    setModalNovo(true);
+  };
+
   // Abrir modal novo
   const abrirModalNovo = () => {
+    setEditandoCalculo(null);
     setSacosForm([]);
     setPesoSacoInput('');
     setEditandoSacoNumero(null);
@@ -316,6 +345,52 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
       alert('O desconto não pode zerar o peso líquido da pesagem.');
       return;
     }
+    // Edição: mesma pesagem, mesmo ticket e mesmo pedido de compra; só os valores mudam
+    if (editandoCalculo) {
+      // Se o agricultor da pesagem não está no cadastro desta tela, mantém o que veio nela
+      const agr = agricultores.find(a => a.id === parceiroId);
+      const atualizado: CalculoNaRoca = {
+        ...editandoCalculo,
+        data: paraISO(dataPesagem) || editandoCalculo.data,
+        ...(agr
+          ? {
+              fornecedor_id: agr.id,
+              fornecedor_nome: agr.nome_completo,
+              fornecedor_propriedade: agr.nome_propriedade,
+              fornecedor_cidade_uf: agr.endereco ? `${agr.endereco.municipio}/${agr.endereco.uf}` : '',
+              fornecedor_cpf_cnpj: agr.cpf_cnpj,
+              fornecedor_chave_pix: agr.chave_pix,
+              local_pesagem: agr.id === editandoCalculo.fornecedor_id ? editandoCalculo.local_pesagem : localAutomatico,
+            }
+          : {}),
+        pesador_responsavel: pesadorResponsavel,
+        preco_por_kg: precoKg,
+        preco_por_tonelada: precoKg * 1000,
+        sacos: sacosForm,
+        total_sacos: totaisForm.totalSacos,
+        peso_total_kg: totaisForm.pesoTotal,
+        peso_medio_saco_kg: totaisForm.pesoMedio,
+        valor_total_estimado: totaisForm.valorTotal,
+        peso_bruto_kg: totaisForm.pesoBruto,
+        desconto_percentual: totaisForm.descontoPct || undefined,
+        desconto_tara_kg: totaisForm.descontoTara || undefined,
+        desconto_kg: totaisForm.desconto,
+        motivo_desconto: totaisForm.desconto > 0 ? (motivoDesconto.trim() || undefined) : undefined,
+        observacoes: observacoes.trim() || undefined,
+      };
+      const res = atualizarCalculoNaRoca(atualizado);
+      if (!res.sucesso) {
+        alert(res.mensagem);
+        return;
+      }
+      setCalculos(carregarCalculosNaRoca());
+      setModalNovo(false);
+      setEditandoCalculo(null);
+      setMensagemAviso(res.mensagem);
+      setTimeout(() => setMensagemAviso(null), 6000);
+      return;
+    }
+
     const ticketId = proximoNumeroTicketRoca(carregarCalculosNaRoca());
     const calculoId = `roca_${Date.now()}`;
     const pedidoId = `ped_roca_${Date.now()}`;
@@ -952,6 +1027,22 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
+                        <button
+                          type="button"
+                          onClick={e => abrirModalEdicao(item, e)}
+                          className="w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-md border border-linha-forte text-tinta-2"
+                          aria-label={`Editar pesagem ${item.numero_ticket}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={e => handleExcluirCalculo(item.id, e)}
+                          className="w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-md border border-st-vencido/40 text-st-vencido"
+                          aria-label={`Cancelar pesagem ${item.numero_ticket}`}
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </button>
                       </div>
                     </li>
                   );
@@ -1025,6 +1116,14 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                             </button>
                             <button
                               type="button"
+                              onClick={e => abrirModalEdicao(item, e)}
+                              className="inline-flex items-center gap-1 h-7 px-2 rounded-[5px] text-tinta-2 hover:bg-papel-3 text-[12px] font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ouro"
+                              title="Editar esta pesagem (sacos, preço, desconto, agricultor)"
+                            >
+                              <Pencil className="w-3.5 h-3.5" /> Editar
+                            </button>
+                            <button
+                              type="button"
                               onClick={e => handleExcluirCalculo(item.id, e)}
                               className="inline-flex items-center gap-1 h-7 px-2 rounded-[5px] text-st-vencido hover:bg-st-vencido-bg text-[12px] font-semibold transition-colors cursor-pointer"
                               title="Cancelar esta pesagem (sai da lista e o pedido de compra não pago é removido)"
@@ -1058,7 +1157,9 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                 </div>
                 <div>
                   <h3 className="font-bold text-sm sm:text-base text-white">
-                    Nova Pesagem de Mandioca na Roça (Saco a Saco)
+                    {editandoCalculo
+                      ? `Editar pesagem ${editandoCalculo.numero_ticket}`
+                      : 'Nova Pesagem de Mandioca na Roça (Saco a Saco)'}
                   </h3>
                   <p className="text-[11px] text-cinza">
                     Lançamento de pesagem individual na colheita • {EMPRESA.razao}
@@ -1481,7 +1582,10 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
               <div className="pt-4 border-t border-linha flex items-center justify-between max-sm:sticky max-sm:-bottom-4 max-sm:z-10 max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:pb-4 max-sm:bg-papel max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center max-sm:[&>button]:min-h-11">
                 <button
                   type="button"
-                  onClick={() => setModalNovo(false)}
+                  onClick={() => {
+                    setModalNovo(false);
+                    setEditandoCalculo(null);
+                  }}
                   className="px-5 py-2.5 rounded-md bg-papel-3/60 hover:bg-linha text-tinta-2 font-bold text-xs transition-colors cursor-pointer"
                 >
                   Cancelar
@@ -1493,7 +1597,7 @@ export function CalculoNaRocaComponent({ onNavigate }: Props) {
                   className="px-6 py-2.5 rounded-md bg-eno-900 hover:bg-eno-950 disabled:opacity-50 text-white font-bold text-xs transition-all flex items-center gap-2 cursor-pointer shadow-md"
                 >
                   <FileCheck className="w-4 h-4" />
-                  <span>Salvar Pesagem & Gerar Pedido de Compra</span>
+                  <span>{editandoCalculo ? 'Salvar alterações' : 'Salvar Pesagem & Gerar Pedido de Compra'}</span>
                 </button>
               </div>
             </form>

@@ -546,6 +546,45 @@ export function estornarPagamentoCalculoRoca(calculoId: string): { sucesso: bool
  * - Caso contrário, o pedido de compra gerado é removido junto (com títulos e entrada de estoque estornados).
  */
 export function excluirCalculoNaRoca(calculoId: string): { sucesso: boolean; mensagem: string } {
+  return excluirCalculoNaRocaInterno(calculoId);
+}
+
+/**
+ * Motivo para não editar a pesagem (ou null se pode). Só edita enquanto o pagamento não foi definido,
+ * porque depois disso já existe título/despesa no Financeiro com o valor antigo.
+ */
+export function motivoNaoEditarCalculo(calculo: CalculoNaRoca): string | null {
+  if (calculo.situacao_pagamento && calculo.situacao_pagamento !== 'PENDENTE_DEFINICAO') {
+    return 'Esta pesagem já tem pagamento definido. Estorne o pagamento antes de editar.';
+  }
+  const pedido = carregarPedidosCompra().find(p => p.id === calculo.pedido_compra_id);
+  if (pedido?.status_pedido === 'Pago') {
+    return 'O pedido de compra desta pesagem já está pago. Estorne o pagamento antes de editar.';
+  }
+  return null;
+}
+
+/** Grava a pesagem editada e atualiza o pedido de compra ligado a ela (mesmo ticket e mesmo pedido). */
+export function atualizarCalculoNaRoca(editado: CalculoNaRoca): { sucesso: boolean; mensagem: string } {
+  const atual = carregarCalculosNaRoca().find(c => c.id === editado.id);
+  if (!atual) return { sucesso: false, mensagem: 'Pesagem não encontrada.' };
+  const motivo = motivoNaoEditarCalculo(atual);
+  if (motivo) return { sucesso: false, mensagem: motivo };
+
+  criarCalculoNaRocaELancarPedidoCompra({
+    ...atual,
+    ...editado,
+    // O que identifica a pesagem não muda na edição
+    id: atual.id,
+    numero_ticket: atual.numero_ticket,
+    pedido_compra_id: atual.pedido_compra_id,
+    situacao_pagamento: atual.situacao_pagamento,
+    criado_em: atual.criado_em,
+  });
+  return { sucesso: true, mensagem: `Pesagem ${atual.numero_ticket} atualizada, junto com o pedido de compra.` };
+}
+
+function excluirCalculoNaRocaInterno(calculoId: string): { sucesso: boolean; mensagem: string } {
   const calculos = carregarCalculosNaRoca();
   const calculo = calculos.find(c => c.id === calculoId);
   if (!calculo) return { sucesso: false, mensagem: 'Pesagem não encontrada.' };
