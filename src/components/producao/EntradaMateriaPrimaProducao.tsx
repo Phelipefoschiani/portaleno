@@ -311,7 +311,7 @@ export function EntradaMateriaPrimaProducao() {
     setAviso({
       tipo: res.entradaEstoque ? 'ok' : 'erro',
       texto: res.entradaEstoque
-        ? `Entrada gravada: ${fmt(res.entradaEstoque.quantidade)} ${res.entradaEstoque.unidade} de ${mp.nome}, lote ${lote.trim()}. Conta de ${moeda(valorTotal)} lançada no Contas a Pagar para ${formatarDataBR(vencimento)}.`
+        ? `Entrada gravada: ${fmt(res.entradaEstoque.quantidade)} ${res.entradaEstoque.unidade} de ${mp.nome}${res.entradaEstoque.perda_percentual ? ` (${fmt(res.entradaEstoque.quantidade_comprada || 0)} comprados, menos ${fmt(res.entradaEstoque.perda_percentual)}% de casca e destopo)` : ""}, lote ${lote.trim()}. Conta de ${moeda(valorTotal)} lançada no Contas a Pagar para ${formatarDataBR(vencimento)}.`
         : `Conta lançada no Contas a Pagar, mas a unidade "${unidade}" não converte para a unidade de ${mp.nome} (${mp.unidade_medida}), então o estoque e o lote não entraram. Avise o administrativo.`
     });
     limpar();

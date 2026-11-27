@@ -12,7 +12,8 @@ import {
   converterQuantidade,
   normalizarUnidade,
   MateriaPrimaEstoque,
-  ReceitaIndustrial
+  ReceitaIndustrial,
+  perdaNaEntrada
 } from './produtosData';
 
 import {
@@ -125,6 +126,8 @@ export interface RegistroEntradaMateriaPrima {
   nf_entrada_id?: string;
   data: string;
   lote_mp_id?: string; // lote criado no controle de lotes de MP
+  quantidade_comprada?: number; // peso comprado antes da perda (casca/destopo), na unidade da MP
+  perda_percentual?: number; // % descontado na entrada
 }
 
 /**
@@ -155,8 +158,13 @@ export function integrarEntradaMateriaPrima(params: {
   const mp = localizarMateriaPrimaCadastrada(params.descricaoItem, materias, params.materiaPrimaId);
   if (!mp) return null;
 
-  const qtdConvertida = converterQuantidade(Number(params.quantidade) || 0, params.unidade, mp.unidade_medida);
-  if (qtdConvertida === null || qtdConvertida <= 0) return null;
+  const qtdComprada = converterQuantidade(Number(params.quantidade) || 0, params.unidade, mp.unidade_medida);
+  if (qtdComprada === null || qtdComprada <= 0) return null;
+  // Perda na entrada (ex.: mandioca comprada na roça perde ~40% em casca e destopo até virar descascada).
+  // O valor pago continua o mesmo, então o custo por kg que entra no estoque sobe na mesma proporção.
+  const perda = perdaNaEntrada(mp);
+  const qtdConvertida = parseFloat((qtdComprada * (1 - perda / 100)).toFixed(3));
+  if (qtdConvertida <= 0) return null;
 
   const estoqueAnterior = Math.max(0, Number(mp.estoque_atual) || 0);
   const custoAnterior = Number(mp.custo_medio_unitario) || 0;
@@ -226,7 +234,9 @@ export function integrarEntradaMateriaPrima(params: {
     valor_total: valor,
     nf_entrada_id: nfId,
     data,
-    lote_mp_id: loteMp?.id
+    lote_mp_id: loteMp?.id,
+    quantidade_comprada: perda > 0 ? qtdComprada : undefined,
+    perda_percentual: perda > 0 ? perda : undefined
   };
 }
 

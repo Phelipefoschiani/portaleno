@@ -424,7 +424,11 @@ export function efetivarPedidoCompra(pedidoId: string, dados: DadosEfetivacaoCom
       ? 'lançado no Contas a Pagar'
       : 'adiantamento lançado como Despesa e saldo no Contas a Pagar';
   const msgEstoque = pedido.entrada_estoque
-    ? ` Estoque de "${pedido.entrada_estoque.materia_prima_nome}" atualizado (+${pedido.entrada_estoque.quantidade.toLocaleString('pt-BR')} ${pedido.entrada_estoque.unidade}).`
+    ? ` Estoque de "${pedido.entrada_estoque.materia_prima_nome}" atualizado (+${pedido.entrada_estoque.quantidade.toLocaleString('pt-BR')} ${pedido.entrada_estoque.unidade}${
+        pedido.entrada_estoque.perda_percentual
+          ? `, já descontados ${pedido.entrada_estoque.perda_percentual.toLocaleString('pt-BR')}% de perda sobre ${(pedido.entrada_estoque.quantidade_comprada || 0).toLocaleString('pt-BR')} ${pedido.entrada_estoque.unidade} comprados`
+          : ''
+      }).`
     : '';
   return {
     sucesso: true,

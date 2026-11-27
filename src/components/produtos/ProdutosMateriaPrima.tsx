@@ -11,6 +11,7 @@ import { formatarMoeda } from '../../data/financeiroData';
 import { ModalFolha, Secao, Campo, form, BotaoIcone, BotaoCartao, Aviso, FaixaNumerosProdutos } from './kitProdutos';
 import {
   MateriaPrimaEstoque,
+  perdaNaEntrada,
   carregarMateriaPrima,
   calcularStatusMateriaPrima,
   salvarMateriaPrima,
@@ -54,7 +55,8 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
     custo_medio_unitario: 0,
     fornecedor_principal: '',
     fornecedor_id: '',
-    localizacao_patio: ''
+    localizacao_patio: '',
+    perda_entrada_percentual: 0
   });
 
   const recarregar = () => {
@@ -112,7 +114,8 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
       custo_medio_unitario: 0,
       fornecedor_principal: '',
       fornecedor_id: '',
-      localizacao_patio: ''
+      localizacao_patio: '',
+      perda_entrada_percentual: 0
     });
     setModalAberto(true);
   };
@@ -129,7 +132,8 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
       custo_medio_unitario: item.custo_medio_unitario,
       fornecedor_principal: item.fornecedor_principal,
       fornecedor_id: fornecedoresDaMateriaPrima(item)[0]?.id || '',
-      localizacao_patio: item.localizacao_patio
+      localizacao_patio: item.localizacao_patio,
+      perda_entrada_percentual: perdaNaEntrada(item)
     });
     setModalAberto(true);
   };
@@ -567,6 +571,17 @@ export function ProdutosMateriaPrima({ onNavigate }: Props) {
               </Campo>
               <Campo rotulo="Custo médio (R$)" className="sm:col-span-3">
                 <CampoNumero step="0.01" min={0} value={formData.custo_medio_unitario} onChange={(n) => setFormData({ ...formData, custo_medio_unitario: n })} className={form.campoNumero} />
+              </Campo>
+              <Campo
+                rotulo="Perda na entrada (%)"
+                className="sm:col-span-6"
+                ajuda={
+                  formData.perda_entrada_percentual > 0
+                    ? `Comprou 1.000 ${formData.unidade_medida || 'KG'} na roça: entram ${(1000 * (1 - Math.min(99, formData.perda_entrada_percentual) / 100)).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} no estoque. Ex.: casca e destopo da mandioca descascada.`
+                    : 'Compra entra no estoque com o mesmo peso comprado. Use para mandioca descascada (casca e destopo, em geral 40%).'
+                }
+              >
+                <CampoNumero step="any" min={0} max={99} value={formData.perda_entrada_percentual} onChange={(n) => setFormData({ ...formData, perda_entrada_percentual: n })} className={form.campoNumero} />
               </Campo>
               <Campo rotulo="Localização no pátio / silos" className="sm:col-span-6">
                 <input

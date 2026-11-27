@@ -87,6 +87,21 @@ export interface MateriaPrimaEstoque {
   fornecedor_principal: string;
   localizacao_patio: string;
   status: 'NORMAL' | 'REPOSICAO_NECESSARIA' | 'CRITICO';
+  /** % que se perde entre o peso comprado e o que entra no estoque (ex.: casca e destopo da mandioca descascada). */
+  perda_entrada_percentual?: number;
+}
+
+/** Perda padrão de casca e destopo: mandioca comprada na roça rende cerca de 60% descascada. */
+export const PERDA_PADRAO_DESCASCADA = 40;
+
+/** % de perda aplicada na entrada por compra. Sem valor cadastrado: 40% para mandioca descascada, 0 para o resto. */
+export function perdaNaEntrada(mp: Pick<MateriaPrimaEstoque, 'nome' | 'perda_entrada_percentual'>): number {
+  const v = Number(mp.perda_entrada_percentual);
+  if (mp.perda_entrada_percentual !== undefined && mp.perda_entrada_percentual !== null && Number.isFinite(v)) {
+    return Math.min(99, Math.max(0, v));
+  }
+  const nome = (mp.nome || '').toLowerCase();
+  return nome.includes('descascad') ? PERDA_PADRAO_DESCASCADA : 0;
 }
 
 export interface ItemFichaTecnica {
