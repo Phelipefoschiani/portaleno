@@ -10,7 +10,8 @@ import {
   leituraAtual,
   metricasMaquinas,
   chaveMes,
-  numSitio
+  numSitio,
+  quemEstaLogado
 } from '../../data/sitioControleData';
 import { PropsAba, Folha, Campo, Segmentado, ErroBox, BotaoAcao, inputCls, moeda, fmtNum, rotuloMes } from './ui';
 
@@ -26,7 +27,7 @@ export function FormApontamento({ estado, aplicar, onFechar }: { estado: Control
     horimetroInicial: primeira ? String(leituraAtual(estado, primeira.id) || '') : '',
     horimetroFinal: '',
     horas: '',
-    operador: '',
+    operador: quemEstaLogado(),
     atividade: '',
     talhao: '',
     observacao: ''
@@ -275,7 +276,11 @@ export function AbaHoras({ estado, mes, aplicar }: PropsAba) {
                     {a.horimetroFinal !== undefined && a.horimetroFinal !== null
                       ? `${fmtNum(a.horimetroInicial, 1)} → ${fmtNum(a.horimetroFinal, 1)}`
                       : 'horas informadas'}
-                    {a.operador ? ` · ${a.operador}` : ''}
+                    {a.operador ? ` · Operou: ${a.operador}` : ''}
+                  </div>
+                  <div className="text-[11px] text-cinza-claro truncate">
+                    Lançado por <strong className="font-bold text-cinza">{a.lancado_por || 'sem registro'}</strong>
+                    {a.lancado_em ? ` · ${formatarDataBR(a.lancado_em.slice(0, 10))} ${new Date(a.lancado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
                   </div>
                 </div>
                 <div className="text-lg font-black tabular-nums text-emerald-900 shrink-0">{fmtNum(a.horas, 1)} h</div>

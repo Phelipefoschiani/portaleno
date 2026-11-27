@@ -118,6 +118,9 @@ export interface ApontamentoHoras {
   talhao?: string;
   observacao?: string;
   origemLegado?: boolean; // veio das horas lançadas junto do abastecimento (versão anterior)
+  // Quem lançou no sistema (preenchido automaticamente ao salvar)
+  lancado_por?: string;
+  lancado_em?: string;
 }
 
 export interface ControleSitioState {
@@ -502,7 +505,7 @@ function semAutoria(d: DespesaSitio): Omit<DespesaSitio, 'lancado_por' | 'lancad
 }
 
 /** Quem está usando o sistema agora (nome de login). */
-function quemEstaLogado(): string {
+export function quemEstaLogado(): string {
   const s = obterSessao();
   return s?.nome || s?.usuario || '';
 }
@@ -513,9 +516,12 @@ function quemEstaLogado(): string {
  */
 function marcarAutoria(novo: ControleSitioCompleto): ControleSitioCompleto {
   const anteriores = new Map<string, DespesaSitio>();
+  const horasAnteriores = new Set<string>();
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SITIO_DESPESAS);
-    if (raw) (JSON.parse(raw)?.despesas as DespesaSitio[] | undefined)?.forEach(d => anteriores.set(d.id, d));
+    const salvo = raw ? JSON.parse(raw) : null;
+    (salvo?.despesas as DespesaSitio[] | undefined)?.forEach(d => anteriores.set(d.id, d));
+    (salvo?.apontamentos as ApontamentoHoras[] | undefined)?.forEach(a => horasAnteriores.add(a.id));
   } catch {
     /* sem histórico anterior: todos entram como novos */
   }
@@ -532,7 +538,11 @@ function marcarAutoria(novo: ControleSitioCompleto): ControleSitioCompleto {
     }
     return { ...d, lancado_por: d.lancado_por ?? antes.lancado_por, lancado_em: d.lancado_em ?? antes.lancado_em, editado_por: quem, editado_em: agora };
   });
-  return { ...novo, despesas };
+  // Horas de máquina: apontamento novo ganha "lançado por" (antigos ficam sem, não dá para saber quem foi)
+  const apontamentos = novo.apontamentos.map(a =>
+    horasAnteriores.has(a.id) || a.lancado_por ? a : { ...a, lancado_por: quem, lancado_em: agora }
+  );
+  return { ...novo, despesas, apontamentos };
 }
 
 export function salvarControleSitio(dados: ControleSitioState): void {

@@ -19,6 +19,14 @@ const SELO: Record<MovimentoSitio, { rotulo: string; cls: string }> = {
   DESPESA: { rotulo: 'Despesa', cls: 'bg-amber-100 text-amber-900' }
 };
 
+/** Papel de quem aparece no campo "responsável", conforme o tipo do lançamento. */
+export function papelDoResponsavel(mov: MovimentoSitio): string {
+  if (mov === 'COMPRA') return 'Comprou';
+  if (mov === 'ABASTECIMENTO') return 'Abasteceu';
+  if (mov === 'POSTO') return 'Abasteceu no posto';
+  return 'Comprou / usou';
+}
+
 function rotuloLinha(d: DespesaSitio): string {
   const mov = movimentoDe(d);
   if (mov === 'DESPESA') return ROTULO_CATEGORIA[categoriaDe(d)];
@@ -61,9 +69,17 @@ export function ListaLancamentos({ itens, vazio }: { itens: DespesaSitio[]; vazi
                   <div className="mt-0.5 text-sm font-bold text-tinta truncate">{d.nomeDespesa}</div>
                   {(d.maquinaTrator && d.maquinaTrator !== 'Geral' && mov !== 'COMPRA') || d.responsavel ? (
                     <div className="text-xs text-cinza truncate">
-                      {[mov !== 'COMPRA' && d.maquinaTrator !== 'Geral' ? d.maquinaTrator : '', d.responsavel].filter(Boolean).join(' · ')}
+                      {[
+                        mov !== 'COMPRA' && d.maquinaTrator !== 'Geral' ? d.maquinaTrator : '',
+                        d.responsavel ? `${papelDoResponsavel(mov)}: ${d.responsavel}` : ''
+                      ].filter(Boolean).join(' · ')}
                     </div>
                   ) : null}
+                  <div className="text-[11px] text-cinza-claro truncate">
+                    Lançado por <strong className="font-bold text-cinza">{d.lancado_por || 'sem registro'}</strong>
+                    {d.lancado_em ? ` · ${formatarDataBR(d.lancado_em.slice(0, 10))} ${new Date(d.lancado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                    {d.editado_por ? ` · editado por ${d.editado_por}` : ''}
+                  </div>
                 </div>
                 <div className="text-right shrink-0">
                   {consumo ? (
@@ -133,13 +149,13 @@ export function DetalheLancamento({ d, onFechar }: { d: DespesaSitio; onFechar: 
             <Linha k="Máquina" v={d.maquinaTrator && d.maquinaTrator !== 'Geral' ? d.maquinaTrator : undefined} />
             <Linha k="Leitura" v={d.leituraMedidor ? fmtNum(d.leituraMedidor, 1) : undefined} />
             <Linha k="Horas (legado)" v={d.horasTrabalhadas ? `${d.horasTrabalhadas} h` : undefined} />
-            <Linha k="Operador / resp." v={d.responsavel} />
+            <Linha k={papelDoResponsavel(mov)} v={d.responsavel} />
             <Linha k="Fornecedor" v={d.fornecedor || nota?.emitente} />
             <Linha k="Pagamento" v={d.formaPagamento || nota?.formaPagamento} />
             <Linha k="Situação" v={d.situacao === 'A_PAGAR' ? `A pagar · vence ${formatarDataBR(d.vencimento)}` : d.situacao === 'PAGO' ? 'Pago' : undefined} />
             <Linha k="Observação" v={d.observacao || nota?.observacoes} />
-            <Linha k="Lançado por" v={d.lancado_por || d.responsavel ? `${d.lancado_por || d.responsavel}${d.lancado_em ? ` · ${formatarDataBR(d.lancado_em.slice(0, 10))}` : ''}` : undefined} />
-            <Linha k="Editado por" v={d.editado_por ? `${d.editado_por}${d.editado_em ? ` · ${formatarDataBR(d.editado_em.slice(0, 10))}` : ''}` : undefined} />
+            <Linha k="Lançado no sistema por" v={`${d.lancado_por || 'sem registro'}${d.lancado_em ? ` · ${formatarDataBR(d.lancado_em.slice(0, 10))} ${new Date(d.lancado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}`} />
+            <Linha k="Editado por" v={d.editado_por ? `${d.editado_por}${d.editado_em ? ` · ${formatarDataBR(d.editado_em.slice(0, 10))} ${new Date(d.editado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}` : undefined} />
           </dl>
           {nota?.numero && (
             <div className="mt-4 rounded-2xl bg-papel-2 border border-linha p-4">

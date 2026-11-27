@@ -17,7 +17,8 @@ import {
   tanqueDe,
   movimentoDe,
   chaveMes,
-  numSitio
+  numSitio,
+  quemEstaLogado
 } from '../../data/sitioControleData';
 import {
   PropsAba,
@@ -62,7 +63,8 @@ export function FormCompra({
     formaPagamento: 'PIX',
     situacao: 'PAGO' as SituacaoPagamento,
     vencimento: somarDias(hojeISO(), 30),
-    observacao: ''
+    observacao: '',
+    responsavel: quemEstaLogado()
   });
   const [erro, setErro] = useState<string | null>(null);
   const tanque = tanqueDe(estado, f.combustivel);
@@ -121,6 +123,9 @@ export function FormCompra({
           <input className={inputCls} value={f.numeroNF} onChange={e => setF({ ...f, numeroNF: e.target.value })} placeholder="Nº da NF" />
         </Campo>
       </div>
+      <Campo rotulo="Quem comprou">
+        <input className={inputCls} value={f.responsavel} onChange={e => setF({ ...f, responsavel: e.target.value })} placeholder="Nome de quem comprou" />
+      </Campo>
       <Campo rotulo="Fornecedor / distribuidora">
         <input className={inputCls} value={f.fornecedor} onChange={e => setF({ ...f, fornecedor: e.target.value })} placeholder="Ex.: Posto Rota do Agro" />
       </Campo>
@@ -166,7 +171,7 @@ export function FormAbastecimento({
     combustivel: (primeira?.combustivel || 'DIESEL') as TipoCombustivel,
     litros: '',
     leitura: '',
-    operador: '',
+    operador: quemEstaLogado(),
     observacao: '',
     valorTotal: '',
     posto: '',

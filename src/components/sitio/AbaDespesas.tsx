@@ -13,7 +13,8 @@ import {
   categoriaDe,
   ehGasto,
   chaveMes,
-  numSitio
+  numSitio,
+  quemEstaLogado
 } from '../../data/sitioControleData';
 import { PropsAba, Folha, Campo, ErroBox, BlocoPagamento, BotaoAcao, inputCls, moeda, rotuloMes } from './ui';
 import { ListaLancamentos } from './ListaLancamentos';
@@ -32,7 +33,7 @@ export function FormDespesa({ estado, aplicar, onFechar }: { estado: ControleSit
     formaPagamento: 'PIX',
     situacao: 'PAGO' as SituacaoPagamento,
     vencimento: somarDias(hojeISO(), 30),
-    responsavel: '',
+    responsavel: quemEstaLogado(),
     observacao: ''
   });
   const [erro, setErro] = useState<string | null>(null);
@@ -122,7 +123,7 @@ export function FormDespesa({ estado, aplicar, onFechar }: { estado: ControleSit
         }
       />
       <Campo rotulo="Responsável">
-        <input className={inputCls} value={f.responsavel} onChange={e => setF({ ...f, responsavel: e.target.value })} placeholder="Quem lançou (opcional)" />
+        <input className={inputCls} value={f.responsavel} onChange={e => setF({ ...f, responsavel: e.target.value })} placeholder="Quem comprou ou usou" />
       </Campo>
       <ErroBox erro={erro} />
     </Folha>
